@@ -7,12 +7,53 @@ import Testing
 @MainActor
 @Suite("Web search truncation status")
 struct WebSearchTruncationStatusTests {
+    @Test func nativeLineLimitResetsWhenTheSameTextViewExpandsOrIsReused() throws {
+        let view = TranscriptTextView(wraps: true)
+        let text = NSAttributedString(string: String(repeating: "Complete retained snippet. ", count: 6))
+        view.set(text, identity: "snippet", visibleLineLimit: 2)
+        #if os(macOS)
+        let container = try #require(view.textContainer)
+        #else
+        let container = view.textContainer
+        #endif
+        #expect(container.maximumNumberOfLines == 2)
+        #expect(container.lineBreakMode == .byTruncatingTail)
+
+        // The exact string and identity stay the same when Find expands the preview. The native
+        // line limit must reset even if the attributed-text update itself can be skipped.
+        view.set(text, identity: "snippet")
+        #expect(container.maximumNumberOfLines == 0)
+        #expect(container.lineBreakMode == .byWordWrapping)
+        view.set(text, identity: "another-card", visibleLineLimit: 2)
+        view.set(text, identity: "ordinary-output")
+        #expect(container.maximumNumberOfLines == 0, "a reused text view does not inherit the snippet cap")
+    }
+
     @Test func truncatedResultsShowStatusWithoutChangingRows() throws {
         try Self.verifyResultsStatus()
     }
 
     @Test func truncatedAnswerWithoutCitationsStillShowsStatus() throws {
         try Self.verifyAnswerStatus()
+    }
+
+    @Test func webResultSnippetKeepsFullFindSourceAndExpandsForSelectedMatch() throws {
+        let snippet = String(repeating: "ordinary description words ", count: 6) + "TAILMARK"
+        let compact = try Self.card(kind: "results", truncated: false, snippet: snippet)
+        let preview = try #require(compact.sections.first { $0.id?.hasSuffix(":web-0:snippet") == true })
+        #expect(preview.text.string == snippet, "the snippet source remains complete for Find")
+        #expect(preview.visibleLineLimit == 2, "the ordinary result preview uses two visible lines")
+        #expect(preview.contentHeight > preview.frame.height, "the fixture has text beyond the compact preview")
+
+        let selected = TranscriptHighlight(query: "TAILMARK",
+                                           options: .init(includeTools: true),
+                                           current: .init(entryId: "a-turn-web-search-results-complete",
+                                                          section: .tool("web-call-results-complete"), occurrence: 0),
+                                           rows: ["a-turn-web-search-results-complete"])
+        let expanded = try Self.card(kind: "results", truncated: false, snippet: snippet, highlight: selected)
+        let found = try #require(expanded.sections.first { $0.id?.hasSuffix(":web-0:snippet") == true })
+        #expect(found.visibleLineLimit == nil && found.frame.height == found.contentHeight,
+                "selecting a hidden snippet match expands the source so Find can reveal it")
     }
 
     static func verifyResultsStatus() throws {
@@ -54,7 +95,8 @@ struct WebSearchTruncationStatusTests {
                 "the indicator does not change answer text")
     }
 
-    private static func card(kind: String, truncated: Bool) throws -> TranscriptPart.Tool {
+    private static func card(kind: String, truncated: Bool, snippet: String = "A concise guide.",
+                             highlight: TranscriptHighlight = .init()) throws -> TranscriptPart.Tool {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let suffix = "\(kind)-\(truncated ? "truncated" : "complete")"
@@ -75,7 +117,7 @@ struct WebSearchTruncationStatusTests {
                 "count": .number(1), "truncated": .bool(truncated),
                 "results": .array([.object([
                     "title": .string("Concurrency guide"), "url": .string("https://example.com/swift"),
-                    "snippet": .string("A concise guide."),
+                    "snippet": .string(snippet),
                 ])]),
             ])
             : .object([
@@ -87,8 +129,9 @@ struct WebSearchTruncationStatusTests {
         var turn = AssistantTurn(id: turnId, timestamp: Date(timeIntervalSince1970: 1))
         turn.tools = [tool]
         turn.isStreaming = true
-        let layout = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
-            .layout(.entry(.assistant(turn)), width: 500)
+        var builder = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
+        builder.highlight = highlight
+        let layout = builder.layout(.entry(.assistant(turn)), width: 500)
         return try #require(layout.parts.compactMap { placed -> TranscriptPart.Tool? in
             if case let .tool(tool) = placed.part { return tool }
             return nil

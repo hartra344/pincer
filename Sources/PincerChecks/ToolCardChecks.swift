@@ -156,6 +156,14 @@ private func checkWebSearchCard(_ call: ToolActivity, label: String) {
     if label == "demo" {
         check(web.truncated && call.result?.contains("\"truncated\": true") == true,
               "demo: the Gateway-shaped result preserves its explicit truncation flag")
+        if let snippet = web.results.first?.snippet {
+            check(snippet.count == 181 && snippet.hasSuffix("…")
+                  && p.searchTexts.contains(where: { $0.hasSuffix(snippet) })
+                  && web.copyText == web.results.map { "\($0.title)\n\($0.url.absoluteString)" }.joined(separator: "\n"),
+                  "demo: the long snippet stays available to Find while result Copy remains title/URL only")
+        } else {
+            check(false, "demo: the long first web-search result keeps its capped snippet")
+        }
         let linkActions = AccessibilityText.linkActionsWithWebHosts(web.results.map {
             .init(text: $0.title, url: $0.url, webHost: $0.url.host(percentEncoded: false))
         })

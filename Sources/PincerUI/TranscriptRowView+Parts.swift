@@ -1919,14 +1919,18 @@ final class TranscriptToolSectionView: TranscriptBaseView {
     }
 
     func configure(_ section: TranscriptPart.Tool.Section, row: TranscriptRowLayout, resetScroll: Bool) {
-        self.contentHeight = section.contentHeight
+        // A clamped preview keeps all source text in TextKit for Find, but sizes its native document
+        // to the visible frame so the hidden remainder cannot become an inner scroll surface.
+        self.contentHeight = section.visibleLineLimit == nil ? section.contentHeight : section.frame.height
         self.searchMatchBottom = section.searchMatchBottom
         self.textView.copyItems = row.copyItems
-        self.textView.set(section.text, identity: "\(row.id):\(section.id ?? section.title)")
+        self.textView.set(section.text, identity: "\(row.id):\(section.id ?? section.title)",
+                          visibleLineLimit: section.visibleLineLimit)
         #if os(macOS)
         if resetScroll { self.scroller.scrollToStart() }
         #else
-        self.textView.isScrollEnabled = section.contentHeight > section.frame.height + 0.5
+        self.textView.isScrollEnabled = section.visibleLineLimit == nil
+            && section.contentHeight > section.frame.height + 0.5
         if resetScroll { self.textView.contentOffset = .zero }
         #endif
         self.scrollToSearchMatch(height: section.frame.height)

@@ -21,7 +21,7 @@ struct TranscriptUIKitHostedTests {
         let context: TranscriptContext
     }
 
-    static func makeHost() async -> Host {
+    static func makeHost(size: CGSize = CGSize(width: 390, height: 844)) async -> Host {
         let scratch = ScratchDefaults()
         let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
         let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
@@ -31,7 +31,7 @@ struct TranscriptUIKitHostedTests {
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
         let coordinator = TranscriptList.Coordinator(context: context)
         let view = coordinator.makeCollectionView()
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
         view.frame = window.bounds
         window.addSubview(view)
         window.isHidden = false
@@ -60,6 +60,98 @@ struct TranscriptUIKitHostedTests {
     @Test func webSearchTruncationStatusReachesUIKitTranscriptLayout() throws {
         try WebSearchTruncationStatusTests.verifyResultsStatus()
         try WebSearchTruncationStatusTests.verifyAnswerStatus()
+    }
+
+    @Test func webSearchSnippetUsesAtMostTwoVisibleLinesAtCompactWidth() async throws {
+        let host = await Self.makeHost(size: CGSize(width: 360, height: 844))
+        let turnID = "snippet-lines-turn-\(UUID().uuidString)"
+        let toolID = "snippet-lines-tool-\(UUID().uuidString)"
+        let snippet = try #require(DemoGateway.toolCardsSearchResults.first?.snippet,
+                                   "the native fixture uses the realistic long snippet already seeded in Try the Demo")
+        let tool = ToolActivity(
+            id: toolID, name: "web_search", arguments: "{}", result: "search results",
+            details: .object([
+                "kind": .string("results"), "provider": .string("brave"),
+                "results": .array([.object([
+                    "title": .string("Guide"), "url": .string("https://docs.example/guide"),
+                    "siteName": .string("docs.example"), "snippet": .string(snippet),
+                ])]),
+            ]),
+            isError: false, isRunning: false)
+        var turn = AssistantTurn(id: turnID, timestamp: Date(timeIntervalSince1970: 1))
+        turn.text = ["Search source follows."]
+        turn.tools = [tool]
+        turn.isStreaming = true
+        host.context.disclosure.set("steps:\(turnID)", expanded: true)
+        host.context.disclosure.set("tool:\(toolID)", expanded: true)
+        host.coordinator.update(rows: [.entry(.assistant(turn))], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+
+        let row = try #require(host.coordinator.controller.rows.first)
+        let rowLayout = host.coordinator.renderer.layout(for: row, width: host.view.bounds.width)
+        let toolParts = rowLayout.parts.compactMap { placed -> TranscriptPart.Tool? in
+            guard case let .tool(toolPart) = placed.part else { return nil }
+            return toolPart
+        }
+        let toolPart = try #require(toolParts.first, "the expanded web_search card is in the actual transcript row")
+        let visibleCell = try #require(host.view.cellForItem(at: IndexPath(item: 0, section: 0)))
+        func descendants(_ root: UIView) -> [UIView] {
+            [root] + root.subviews.flatMap(descendants)
+        }
+        let displayedSnippet = try #require(WebSearch.parse(tool.details)?.results.first?.snippet,
+                                            "the native view retains the complete parsed snippet, including its clipping ellipsis")
+        let snippetSections = toolPart.sections.filter { $0.text.string.contains(displayedSnippet) }
+        #expect(!snippetSections.isEmpty,
+                "the complete capped snippet remains in the rendered source used by Find")
+        // Locate the native TextKit view by the exact retained snippet instead of assuming title, site and
+        // snippet share one section. This supports either a combined section or a split compact layout.
+        let snippetViews = descendants(visibleCell).compactMap { $0 as? TranscriptTextView }
+            .filter { ($0.accessibilityValue ?? "").contains(displayedSnippet) }
+        let renderedTextViews = descendants(visibleCell).compactMap { $0 as? TranscriptTextView }
+
+        func isVisible(_ value: String) -> Bool {
+            renderedTextViews.contains { candidate in
+                let text = candidate.accessibilityValue ?? ""
+                let characterRange = (text as NSString).range(of: value)
+                guard characterRange.location != NSNotFound else { return false }
+                let layoutManager = candidate.layoutManager
+                let textContainer = candidate.textContainer
+                layoutManager.ensureLayout(for: textContainer)
+                let glyphRange = layoutManager.glyphRange(forCharacterRange: characterRange, actualCharacterRange: nil)
+                let visibleRange = layoutManager.glyphRange(forBoundingRect: candidate.bounds, in: textContainer)
+                return NSIntersectionRange(glyphRange, visibleRange).length > 0
+            }
+        }
+        #expect(isVisible("Guide") && isVisible("docs.example"),
+                "the linked title and site remain visibly rendered across the result sections")
+        let textView = try #require(snippetViews.first,
+                                    "the actual UIKit text view retains the complete capped snippet")
+        #expect(snippetViews.count == 1, "the visible result renders the snippet in one native text view")
+        let text = textView.accessibilityValue ?? ""
+        let snippetRange = (text as NSString).range(of: displayedSnippet)
+        #expect(snippetRange.location != NSNotFound)
+        #expect(textView.bounds.width > 0 && textView.bounds.width < 360,
+                "the snippet view is laid out at the compact host's actual content width")
+
+        // Count only line fragments intersecting the snippet's glyphs and visible text container bounds.
+        // Header/site line fragments in a combined section do not count against the two-line snippet limit.
+        let layoutManager = textView.layoutManager
+        let textContainer = textView.textContainer
+        layoutManager.ensureLayout(for: textContainer)
+        let snippetGlyphs = layoutManager.glyphRange(forCharacterRange: snippetRange, actualCharacterRange: nil)
+        let visibleGlyphs = layoutManager.glyphRange(forBoundingRect: textView.bounds, in: textContainer)
+        let visibleSnippetGlyphs = NSIntersectionRange(snippetGlyphs, visibleGlyphs)
+        var visibleSnippetLines = 0
+        layoutManager.enumerateLineFragments(forGlyphRange: visibleSnippetGlyphs) { _, _, _, lineGlyphs, _ in
+            if NSIntersectionRange(lineGlyphs, visibleSnippetGlyphs).length > 0 {
+                visibleSnippetLines += 1
+            }
+        }
+        #expect(visibleSnippetLines > 0, "the snippet has visible native TextKit line fragments")
+        #expect(visibleSnippetLines <= 2,
+                "the compact preview shows at most two snippet lines; got \(visibleSnippetLines)")
+        #expect(!textView.isScrollEnabled, "the result preview does not require a nested scroll gesture")
     }
 
     @Test func loggedOutBadgeContrastMeetsLightAndDarkFormSurfaces() throws {
