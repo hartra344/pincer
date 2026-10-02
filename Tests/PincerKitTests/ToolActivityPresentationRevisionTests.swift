@@ -40,6 +40,6 @@ struct ToolActivityPresentationRevisionTests {
 
     private static func tool(id: String, status: Int) -> ToolActivity {
         ToolActivity(id: id, name: "web_fetch", arguments: #"{"url":"https://example.com/page"}"#,
-                     result: "page", details: ["status": status], isError: false, isRunning: false)
+                     result: "page", details: ["status": .number(Double(status))], isError: false, isRunning: false)
     }
 }
