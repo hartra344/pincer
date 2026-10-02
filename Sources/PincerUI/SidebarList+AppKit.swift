@@ -43,6 +43,9 @@ struct SidebarList: NSViewRepresentable {
         /// NSOutlineView won't expand or collapse a row without an outline cell, so headers
         /// report one only while we change their expansion.
         private var allowsHeaderOutlineCell = false
+        /// A keyboard-focused header occupies the native selected row, but never changes the
+        /// Gateway's selected chat. Mouse selection continues to reject headers.
+        private var keyboardFocusedHeaderID: String?
         private var theme = AppTheme()
         private var timer: Timer?
         private var headers: [String: SidebarModel.Header] { self.controller.headers }
@@ -89,6 +92,10 @@ struct SidebarList: NSViewRepresentable {
             outline.target = self
             outline.doubleAction = #selector(self.openClickedInNewWindow)
             outline.commandClick = { [weak self] row in self?.openInNewWindow(row: row) ?? false }
+            outline.keyboardCommand = { [weak self, weak outline] event in
+                guard let self, let outline else { return .pass }
+                return self.keyboardCommand(event, in: outline)
+            }
 
             let scroll = NSScrollView()
             scroll.documentView = outline
@@ -113,6 +120,7 @@ struct SidebarList: NSViewRepresentable {
 
         func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions, theme: AppTheme) {
             self.actions = actions
+            if self.controller.selectedKey != selectedKey { self.keyboardFocusedHeaderID = nil }
             self.controller.selectedKey = selectedKey
             if theme != self.theme {
                 self.theme = theme
@@ -121,6 +129,9 @@ struct SidebarList: NSViewRepresentable {
             guard let outline else { return }
             if let update = self.controller.accept(model: model) {
                 self.rebuildIndex()
+                if let focused = self.keyboardFocusedHeaderID, self.headers[focused] == nil {
+                    self.keyboardFocusedHeaderID = nil
+                }
                 self.programmatic {
                     if update.isInitial || SidebarModel.structureChanged(old: update.old, new: model) {
                         self.controller.markLoaded()
@@ -214,6 +225,23 @@ struct SidebarList: NSViewRepresentable {
 
         private func syncSelection() {
             guard let outline else { return }
+            if let focused = self.keyboardFocusedHeaderID {
+                let row = self.nodes[focused].map { outline.row(forItem: $0) } ?? -1
+                guard row >= 0 else {
+                    self.keyboardFocusedHeaderID = nil
+                    // The focused header may have disappeared or become hidden inside a collapsed parent.
+                    return self.syncSelection()
+                }
+                if row != outline.selectedRow {
+                    guard let keyboardOutline = outline as? SidebarOutlineView else { return }
+                    self.programmatic {
+                        keyboardOutline.allowsKeyboardHeaderSelection = true
+                        defer { keyboardOutline.allowsKeyboardHeaderSelection = false }
+                        outline.selectRowIndexes([row], byExtendingSelection: false)
+                    }
+                }
+                return
+            }
             let row = self.controller.selectionTarget().flatMap { self.nodes[$0] }.map { outline.row(forItem: $0) } ?? -1
             guard row != outline.selectedRow else { return }
             self.programmatic {
@@ -283,6 +311,7 @@ struct SidebarList: NSViewRepresentable {
         func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
             guard let node = item as? Node else { return false }
             return self.entries[node.id] != nil
+                || ((outlineView as? SidebarOutlineView)?.allowsKeyboardHeaderSelection == true && self.headers[node.id] != nil)
         }
 
         /// Headers draw their own always-visible chevron (#239). The native one only appears on
@@ -308,12 +337,57 @@ struct SidebarList: NSViewRepresentable {
         func outlineViewSelectionDidChange(_ notification: Notification) {
             guard !self.controller.isProgrammatic, let outline else { return }
             let node = outline.selectedRow >= 0 ? outline.item(atRow: outline.selectedRow) as? Node : nil
+            if let node, self.headers[node.id] != nil {
+                self.keyboardFocusedHeaderID = node.id
+                return
+            }
+            self.keyboardFocusedHeaderID = nil
             guard let key = self.controller.userSelected(node.flatMap { self.entries[$0.id] }) else {
                 // Clicking empty space doesn't close the open chat.
                 self.syncSelection()
                 return
             }
             self.actions.select(key)
+        }
+
+        /// Native outline row navigation is unchanged, except that it may land on a header.
+        /// Disclosure keys and + are handled only when the selected row is a keyboard-focused header.
+        private func keyboardCommand(_ event: NSEvent, in outline: SidebarOutlineView) -> SidebarOutlineView.KeyboardHandling {
+            let node = outline.selectedRow >= 0 ? outline.item(atRow: outline.selectedRow) as? Node : nil
+            let focusedHeader = node.flatMap { self.headers[$0.id] }
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+
+            switch event.keyCode {
+            case 126, 125: // Up / Down: allow native row navigation to land on headers.
+                return modifiers.isEmpty ? .nativeNavigation : .pass
+            case 123, 124: // Left / Right
+                guard modifiers.isEmpty else { return .pass }
+                guard let node, focusedHeader != nil, let headerNode = self.nodes[node.id] else {
+                    return .nativeNavigation
+                }
+                if event.keyCode == 123 {
+                    if outline.isItemExpanded(headerNode) { self.toggle(node.id) }
+                    return .handled
+                }
+                if !outline.isItemExpanded(headerNode) {
+                    self.toggle(node.id)
+                    return .handled
+                }
+                return .nativeNavigation
+            case 36, 76: // Return / keypad Enter
+                guard modifiers.isEmpty, let node, focusedHeader != nil else { return .pass }
+                self.toggle(node.id)
+                return .handled
+            default:
+                break
+            }
+
+            // The literal plus is local to the focused header. It does not replace the app's
+            // user-configurable New Chat shortcut (⌘N) or intercept composer input.
+            guard let node, let header = focusedHeader,
+                  event.characters == "+", modifiers == .shift else { return .pass }
+            header.addAction(self.actions)?()
+            return .handled
         }
 
         func outlineViewItemDidExpand(_ notification: Notification) {
@@ -470,9 +544,30 @@ struct SidebarList: NSViewRepresentable {
 
 /// An outline that can keep an expandable row's disclosure triangle out of sight.
 private final class SidebarOutlineView: NSOutlineView {
+    enum KeyboardHandling {
+        case handled
+        case nativeNavigation
+        case pass
+    }
+
     var hidesOutlineCell: ((Int) -> Bool)?
     /// Handles a ⌘-click on a row; true when it did, so the selection stays put.
     var commandClick: ((Int) -> Bool)?
+    var keyboardCommand: ((NSEvent) -> KeyboardHandling)?
+    var allowsKeyboardHeaderSelection = false
+
+    override func keyDown(with event: NSEvent) {
+        switch self.keyboardCommand?(event) ?? .pass {
+        case .handled:
+            return
+        case .nativeNavigation:
+            self.allowsKeyboardHeaderSelection = true
+            defer { self.allowsKeyboardHeaderSelection = false }
+            super.keyDown(with: event)
+        case .pass:
+            super.keyDown(with: event)
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

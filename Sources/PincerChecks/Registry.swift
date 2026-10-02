@@ -201,6 +201,7 @@ enum Suites {
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
         Section("Sidebar reveal (demo)") { await runDemoSidebarReveal() },
+        Section("Sidebar header interactions (demo)") { await runDemoSidebarHeaderInteractions() },
         Section("MCP servers (demo)") { await runDemoMCP() },
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },
