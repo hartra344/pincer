@@ -23,7 +23,7 @@ If another Pincer command already uses the keys, Pincer asks before moving the s
 
 **Show/Hide Sidebar** (<kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd>) is in the **View** menu. On iPad it's listed as **Toggle Sidebar** and can be changed. On a Mac it's the system's own menu item, so it isn't listed and its keys can't go to another command. It's also in the [command palette](../../guides/command-palette-and-navigation/). On iPad, when the sidebar is hidden, the **Show Sidebar** button at the top left of the chat brings it back.
 
-Quick Capture's shortcut works from any app, so it's set separately in **Settings → General → Quick Capture**.
+Quick Capture's shortcut works from any app, so it's set separately in **Settings → General → Quick Capture**. New demo replies show that shortcut while it is enabled, or point to the menu while it is off. The picker's <kbd>⌘</kbd> <kbd>J</kbd> and <kbd>Tab</kbd> keys are fixed.
 
 ## App
 

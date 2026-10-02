@@ -27,9 +27,14 @@ func runDemoShortcutTips() async {
     let shortcuts = ShortcutStore.shared
     let oldPalette = shortcuts.combo(for: .commandPalette)
     let oldFind = shortcuts.combo(for: .findInChat)
+    let capture = QuickCaptureSettings()
+    let oldEnabled = capture.defaults.object(forKey: QuickCaptureSettings.enabledKey)
+    let oldCapture = capture.defaults.object(forKey: QuickCaptureSettings.shortcutKey)
     defer {
         shortcuts.set(oldPalette, for: .commandPalette)
         shortcuts.set(oldFind, for: .findInChat)
+        capture.defaults.set(oldEnabled, forKey: QuickCaptureSettings.enabledKey)
+        capture.defaults.set(oldCapture, forKey: QuickCaptureSettings.shortcutKey)
     }
     let gateway = GatewayStore(profile: .demo())
     gateway.start()
@@ -41,22 +46,26 @@ func runDemoShortcutTips() async {
     await chat.load()
     shortcuts.set(KeyCombo("p", [.control, .option]), for: .commandPalette)
     shortcuts.set(KeyCombo("f", [.control, .option]), for: .findInChat)
+    capture.isEnabled = true
+    capture.shortcut = HotKeyShortcut(keyCode: 12, modifiers: [.control, .option])
     let before = chat.entries.count
     await chat.send("hello")
     let customDone = await waitFor("customized demo shortcut reply", timeout: 30) { !chat.isRunning && chat.entries.count > before + 1 }
     if customDone, case let .assistant(turn)? = chat.entries.last {
-        check(turn.body.contains("⌃⌥P") && turn.body.contains("⌃⌥F")
+        check(turn.body.contains("⌃⌥P") && turn.body.contains("⌃⌥F") && turn.body.contains("⌃⌥Q")
               && !turn.body.contains("⌘K") && !turn.body.contains("⌘F"),
               "actual demo reply uses the current shortcut snapshot")
     } else { check(false, "customized demo shortcut reply completed") }
     shortcuts.set(nil, for: .commandPalette)
     shortcuts.set(nil, for: .findInChat)
+    capture.isEnabled = false
     let second = chat.entries.count
     await chat.send("hello again")
     let clearedDone = await waitFor("cleared demo shortcut reply", timeout: 30) { !chat.isRunning && chat.entries.count > second + 1 }
     if clearedDone, case let .assistant(turn)? = chat.entries.last {
         check(!turn.body.contains("⌘K") && !turn.body.contains("⌘F")
-              && !turn.body.contains("⌃⌥P") && !turn.body.contains("⌃⌥F")
+              && !turn.body.contains("⌃⌥P") && !turn.body.contains("⌃⌥F") && !turn.body.contains("⌃⌥Q")
+              && !turn.body.contains("⌃⇧Space")
               && turn.body.contains("command palette") && turn.body.contains("Japan trip"),
               "actual next demo reply drops cleared shortcuts and retains action guidance")
     } else { check(false, "cleared demo shortcut reply completed") }
