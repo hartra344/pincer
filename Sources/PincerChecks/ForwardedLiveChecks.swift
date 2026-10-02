@@ -255,9 +255,21 @@ private func runDemoForwardedSenderRefresh() async {
     check(chat.message(withId: offlineOnly.id)?.plainText == "An offline-only cached note",
           "offline-only cache rows stay available before refresh")
 
+#if DEBUG
+    let refreshWasPending = chat.forwardedSenderRefreshPending
+    ForwardedSenderRefreshDiagnostics.reset(gatewayID: gateway.id, sessionKey: key)
+#endif
     gateway.appIsActive = true
     await chat.load()
     await gateway.startHeadlessFill(sessionKey: key, agentId: "main").value
+#if DEBUG
+    let refreshEvents = ForwardedSenderRefreshDiagnostics.events(gatewayID: gateway.id, sessionKey: key)
+    let refreshOrdinals = refreshEvents.map(\.ordinal)
+    check((!refreshWasPending || !refreshEvents.isEmpty) && refreshEvents.count <= 40,
+          "a pending demo sender refresh records a bounded phase trace, including typed early aborts")
+    check(zip(refreshOrdinals, refreshOrdinals.dropFirst()).allSatisfy { $0.0 < $0.1 },
+          "demo sender refresh phase trace preserves event order")
+#endif
     await TranscriptCache.flush(gatewayId: gateway.id, root: root)
     let repaired = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key, root: root)
     let repairedIntro = repaired?.items.first { $0.transcriptId == DemoGateway.kikoIntroId }
@@ -282,6 +294,10 @@ private func runDemoForwardedSenderRefresh() async {
         let offlineOnlyRetained = repaired?.items.contains(where: { $0.id == offlineOnly.id }) ?? false
         let uniqueIds = Set(ids).count
         print("  forwarded refresh diagnostics: persistedPending=\(pending), persistedItems=\(repaired?.items.count ?? 0), retained=\(repaired?.retained ?? false), complete=\(repaired?.complete ?? false), ids=\(ids.count)/\(uniqueIds), offlineOnly=\(offlineOnlyRetained), intro=\(itemSummary(repairedIntro)), thanks=\(itemSummary(repairedThanks)), openIntro=\(itemSummary(openIntro)), chatItems=\(chatState.items), chatPending=\(chatState.pending), chatCompleted=\(chatState.completed), chatLoaded=\(chatState.loaded), headlessFills=\(chatState.fills), historyRequests=\(historyRequests)")
+#if DEBUG
+        let recentEvents = refreshEvents.suffix(12).map { "\($0.ordinal):\($0.phase)" }.joined(separator: "; ")
+        print("  forwarded refresh phases: retained=\(refreshEvents.count)/40, recent=\(recentEvents)")
+#endif
     }
     check(persistedRepairPassed,
           "older same-id messages are repaired with Kiko's sender metadata")
