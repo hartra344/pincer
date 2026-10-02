@@ -56,6 +56,8 @@ Only gateways that are connected add rows, so you won't see chats you can't open
 
 Click a row to open that chat in Pincer's main window, on the right gateway. Approvals and questions aren't answered from the menu. The chat shows the full command, its folder and any warning, so you can decide there. You can also answer approvals from [notifications](../approvals-and-notifications/).
 
+Rows with a pet show the chat and agent name without repeating the agent's emoji. Rows without a pet keep their emoji and reserve the same leading column, so the text stays aligned.
+
 ## Gateway status
 
 Each saved gateway is listed in the same order as the rail, with one of these:
