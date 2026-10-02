@@ -20,16 +20,19 @@ struct WebSearchTruncationStatusTests {
         let truncated = try Self.card(kind: "results", truncated: true)
         let complete = try Self.card(kind: "results", truncated: false)
 
+        let body = try #require(truncated.sections.first { $0.id?.hasSuffix(":web-0") == true })
+        let completeBody = try #require(complete.sections.first { $0.id?.hasSuffix(":web-0") == true })
+        #expect(body.text.string.contains("Concurrency guide"))
+        #expect(completeBody.text.string.contains("Concurrency guide"))
+        #expect(Self.resultLinks(truncated) == [URL(string: "https://example.com/swift")!],
+                "the produced result body has the expected attributed link")
+        #expect(Self.resultLinks(complete) == [URL(string: "https://example.com/swift")!])
+
         #expect(Self.visibleLabels(truncated).contains(status))
         #expect(truncated.notes.contains { $0.text == status }, "VoiceOver receives the status too")
         #expect(!Self.visibleLabels(complete).contains(status))
         #expect(!complete.notes.contains { $0.text == status })
-        let body = try #require(truncated.sections.first { $0.id == "web-call:web-0" })
-        #expect(body.text.string.contains("Concurrency guide"))
-        #expect(body.text.attribute(.link, at: 0, effectiveRange: nil) as? URL == URL(string: "https://example.com/swift"))
         #expect(Self.resultRows(truncated) == Self.resultRows(complete), "the status must not alter result rows or links")
-        #expect(Self.resultLinks(truncated) == [URL(string: "https://example.com/swift")!],
-                "the search result remains an attributed link when flagged")
         #expect(Self.resultLinks(truncated) == Self.resultLinks(complete))
     }
 
@@ -38,12 +41,15 @@ struct WebSearchTruncationStatusTests {
         let truncated = try Self.card(kind: "answer", truncated: true)
         let complete = try Self.card(kind: "answer", truncated: false)
 
+        #expect(truncated.sections.contains { $0.text.string == "A concise answer." },
+                "the answer body remains present without citations")
+        #expect(complete.sections.contains { $0.text.string == "A concise answer." },
+                "the complete answer control still renders without citations")
+
         #expect(Self.visibleLabels(truncated).contains(status))
         #expect(truncated.notes.contains { $0.text == status }, "VoiceOver receives the status even without citations")
         #expect(!Self.visibleLabels(complete).contains(status))
         #expect(!complete.notes.contains { $0.text == status })
-        #expect(truncated.sections.contains { $0.text.string == "A concise answer." },
-                "the answer body remains present without citations")
         #expect(truncated.sections.map { $0.text.string } == complete.sections.map { $0.text.string },
                 "the indicator does not change answer text")
     }
@@ -51,12 +57,15 @@ struct WebSearchTruncationStatusTests {
     private static func card(kind: String, truncated: Bool) throws -> TranscriptPart.Tool {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let key = "agent:main:web-search-truncation"
+        let suffix = "\(kind)-\(truncated ? "truncated" : "complete")"
+        let toolId = "web-call-\(suffix)"
+        let turnId = "turn-web-search-\(suffix)"
+        let key = "agent:main:web-search-truncation-\(suffix)"
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
         let disclosure = TranscriptDisclosure()
-        disclosure.set("steps:turn-web-search-truncation", expanded: true)
-        disclosure.set("tool:web-call", expanded: true)
+        disclosure.set("steps:\(turnId)", expanded: true)
+        disclosure.set("tool:\(toolId)", expanded: true)
         let context = TranscriptContext(gateway: gateway, disclosure: disclosure,
                                         agent: AgentSummary(id: "main", name: "Main"), sessionKey: key,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
@@ -73,9 +82,9 @@ struct WebSearchTruncationStatusTests {
                 "kind": .string(kind), "provider": .string("brave"), "query": .string("swift"),
                 "truncated": .bool(truncated), "content": .string("A concise answer."),
             ])
-        let tool = ToolActivity(id: "web-call", name: "web_search", arguments: #"{"query":"swift"}"#,
+        let tool = ToolActivity(id: toolId, name: "web_search", arguments: #"{"query":"swift"}"#,
                                 result: "search output", details: payload, isError: false, isRunning: false)
-        var turn = AssistantTurn(id: "turn-web-search-truncation", timestamp: Date(timeIntervalSince1970: 1))
+        var turn = AssistantTurn(id: turnId, timestamp: Date(timeIntervalSince1970: 1))
         turn.tools = [tool]
         turn.isStreaming = true
         let layout = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
@@ -94,11 +103,11 @@ struct WebSearchTruncationStatusTests {
     }
 
     private static func resultRows(_ card: TranscriptPart.Tool) -> [String] {
-        card.sections.map { ($0.id ?? "") + "\u{0}" + $0.text.string }
+        card.sections.filter { $0.id?.hasSuffix(":web-0") == true }.map(\.text.string)
     }
 
-    private static func resultLinks(_ card: TranscriptPart.Tool) -> [URL?] {
-        card.sections.map { section in
+    private static func resultLinks(_ card: TranscriptPart.Tool) -> [URL] {
+        card.sections.compactMap { section in
             guard section.text.length > 0 else { return nil }
             return section.text.attribute(.link, at: 0, effectiveRange: nil) as? URL
         }
