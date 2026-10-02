@@ -1,5 +1,9 @@
 import Foundation
+#if DEBUG
+@testable import PincerKit
+#else
 import PincerKit
+#endif
 
 // Skills browser + effective tools inspector (#36): pure helpers and the models against a fake
 // request, then the demo and a (mock) Gateway end to end.
@@ -96,6 +100,7 @@ func runDemoSkills(_ gateway: GatewayStore) async {
         let saved = await skills.setApiKey(notion, transientKey)
         check(saved == .done("Saved the API key for notion") && skills.skill(key: "notion")?.apiKeyIsSet == true
               && skills.skill(key: "notion")?.state == .ready, "demo pasted API key satisfies the skill requirement (#505)")
+        #if DEBUG
         do {
             let report = try await gateway.connection.request(Skills.statusMethod, [:])
             let writeOnly = try await Task.detached {
@@ -105,6 +110,7 @@ func runDemoSkills(_ gateway: GatewayStore) async {
         } catch {
             check(false, "demo skill key status responds without returning secret text (#506)")
         }
+        #endif
         if let keyed = skills.skill(key: "notion") {
             _ = await skills.setApiKey(keyed, "")
             check(skills.skill(key: "notion")?.apiKeyIsSet == false && skills.skill(key: "notion")?.state == .needsSetup,
