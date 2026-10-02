@@ -25,6 +25,9 @@ struct WebSearchTruncationStatusTests {
         #expect(!Self.visibleLabels(complete).contains(status))
         #expect(!complete.notes.contains { $0.text == status })
         #expect(Self.resultRows(truncated) == Self.resultRows(complete), "the status must not alter result rows or links")
+        #expect(Self.resultLinks(truncated) == [URL(string: "https://example.com/swift")!],
+                "the search result remains an attributed link when flagged")
+        #expect(Self.resultLinks(truncated) == Self.resultLinks(complete))
     }
 
     static func verifyAnswerStatus() throws {
@@ -84,5 +87,12 @@ struct WebSearchTruncationStatusTests {
 
     private static func resultRows(_ card: TranscriptPart.Tool) -> [String] {
         card.sections.map { ($0.id ?? "") + "\u{0}" + $0.text.string }
+    }
+
+    private static func resultLinks(_ card: TranscriptPart.Tool) -> [URL?] {
+        card.sections.map { section in
+            guard section.text.length > 0 else { return nil }
+            return section.text.attribute(.link, at: 0, effectiveRange: nil) as? URL
+        }
     }
 }

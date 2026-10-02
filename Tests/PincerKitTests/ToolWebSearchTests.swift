@@ -104,6 +104,25 @@ struct ToolWebSearchTests {
         #expect(!web.results.contains { $0.title.contains("<<<") || ($0.snippet ?? "").contains("<<<") })
     }
 
+    @Test func upstreamShapedTruncationFlagIsOptionalAndPreserved() throws {
+        let rows: [DemoGateway.WebSearchSeed] = [
+            .init(title: "Shortened description", url: "https://example.com/search", snippet: "A bounded provider description…",
+                  published: nil, siteName: "example.com"),
+        ]
+        let complete = DemoGateway.webSearchResult(query: "q", tookMs: 12, results: rows)
+        let shortened = DemoGateway.webSearchResult(query: "q", tookMs: 12, results: rows, truncated: true)
+        #expect(complete.details["truncated"] == nil && !complete.text.contains("\"truncated\""),
+                "upstream omits the optional field when output is complete")
+        #expect(shortened.details["truncated"]?.bool == true && shortened.text.contains("\"truncated\": true"))
+        #expect(try #require(WebSearch.parse(shortened.details)).truncated)
+
+        let answer = WebSearch.parse(.object([
+            "kind": .string("answer"), "provider": .string("brave"), "content": .string("Short answer"),
+            "truncated": .bool(true),
+        ]))
+        #expect(answer?.kind == .answer && answer?.truncated == true)
+    }
+
     @Test func detailsTrimmingKeepsAtMostTenRowsAndCapsSnippets() throws {
         let rows: [JSONValue] = (0..<25).map {
             .object(["title": .string(Self.envelope("T\($0)")), "url": .string("https://e.example.com/\($0)"),
