@@ -37,5 +37,28 @@ struct DemoAgentsSettingsVisibilityTests {
             renderStyle: scratch.defaults.string(forKey: AvatarPreferences.renderStyleKey) ?? "")
         #expect(seed == AvatarStyle.identitySeed(name: identity.name, agentId: agent.id))
         #expect(style == AvatarStyle.seeded(from: seed))
+
+        // Exercise the same local selection and rendered-style path as the Pet picker without
+        // leaving an asynchronous Gateway prefs write behind in this fixture.
+        gateway.stop()
+        let stopped = await eventually(timeout: .seconds(10)) { !gateway.state.isConnected }
+        try #require(stopped, "demo Gateway did not stop before the local Pet selection")
+        defer { gateway.queuedAvatarChoices = [:] }
+
+        gateway.setAvatarCreature(.cat, for: agent.id)
+        let selectedStyle = AvatarSettings.style(
+            for: agent,
+            seed: gateway.avatarSeed(for: agent),
+            creature: gateway.avatarCreature(for: agent.id)?.rawValue ?? "",
+            renderStyle: scratch.defaults.string(forKey: AvatarPreferences.renderStyleKey) ?? "")
+        #expect(selectedStyle.creature == .cat)
+
+        gateway.setAvatarCreature(nil, for: agent.id)
+        let restoredStyle = AvatarSettings.style(
+            for: agent,
+            seed: gateway.avatarSeed(for: agent),
+            creature: gateway.avatarCreature(for: agent.id)?.rawValue ?? "",
+            renderStyle: scratch.defaults.string(forKey: AvatarPreferences.renderStyleKey) ?? "")
+        #expect(restoredStyle == style, "Auto restores the seeded Pet after a local choice is cleared")
     }
 }
