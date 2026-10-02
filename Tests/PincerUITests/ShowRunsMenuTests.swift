@@ -1,0 +1,150 @@
+import CoreGraphics
+import Observation
+import SwiftUI
+import Testing
+@testable import PincerKit
+@testable import PincerUI
+
+/// #424: the chat menu should offer Runs only when its own chat has run activity, while an
+/// already-open Runs panel must keep its close action available after that activity ends.
+@MainActor
+@Suite("Show Runs menu", .serialized)
+struct ShowRunsMenuTests {
+    private static let selectedKey = "agent:main:main"
+    private static let paneKey = "agent:main:dashboard:notes"
+
+    @Observable
+    private final class Presentation {
+        var isPresented: Bool
+
+        init(isPresented: Bool = false) { self.isPresented = isPresented }
+    }
+
+    private struct Host: View {
+        @Bindable var presentation: Presentation
+        let gateway: GatewayStore
+        let sessionKey: String
+
+        var body: some View {
+            ShowRunsButton(isPresented: self.$presentation.isPresented)
+                .environment(self.gateway)
+                .environment(\.chatWindowKey, self.sessionKey)
+                .buttonStyle(.plain)
+                .frame(width: 180, height: 44)
+                .background(Color.clear)
+        }
+    }
+
+    @Test func emptySplitPaneDoesNotBorrowRunsFromTheSelectedChat() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.setSession(self.helper(key: "agent:main:subagent:selected-run", parent: Self.selectedKey),
+                           for: "agent:main:subagent:selected-run")
+        gateway.selectedKey = Self.selectedKey
+
+        #expect(gateway.hasRuns(sessionKey: Self.selectedKey))
+        #expect(!gateway.hasRuns(sessionKey: Self.paneKey))
+        let pixels = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey)
+        #expect(pixels == 0,
+                "The pane's explicit chat has no runs; activity in the main selected chat must not create a Show Runs item")
+    }
+
+    @Test func completedHelperKeepsShowRunsAvailableForItsPane() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.selectedKey = Self.selectedKey
+        gateway.setSession(self.helper(key: "agent:main:subagent:finished", parent: Self.paneKey),
+                           for: "agent:main:subagent:finished")
+
+        #expect(gateway.subagentTree(rootKey: Self.paneKey).count == 1)
+        #expect(try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey) > 0,
+                "A completed helper is still useful history in the Runs panel")
+    }
+
+    @Test func timelineOnlyRunKeepsShowRunsAvailable() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.selectedKey = Self.selectedKey
+        let changed = gateway.runTimelineState.apply(agent: .object([
+            "runId": .string("timeline-only"),
+            "seq": .number(1),
+            "stream": .string("lifecycle"),
+            "sessionKey": .string(Self.paneKey),
+            "data": .object(["phase": .string("start")]),
+        ]), receivedAt: Date(), sessionKey: Self.paneKey)
+        #expect(changed)
+        gateway.runTimelineRevision &+= 1
+        #expect(gateway.hasRuns(sessionKey: Self.paneKey))
+
+        #expect(try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey) > 0,
+                "A streamed timeline lane is sufficient even without a listed helper session")
+    }
+
+    @Test func presentedIdleRunsKeepsTheHideControl() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.selectedKey = Self.selectedKey
+
+        let showPixels = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey)
+        let hidePixels = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey, isPresented: true)
+        #expect(showPixels == 0, "No activity means the closed menu omits Show Runs")
+        #expect(hidePixels > 0, "An already-presented Runs panel keeps a visible way to close it")
+    }
+
+    private func gateway(scratch: ScratchDefaults) -> GatewayStore {
+        GatewayStore(
+            profile: GatewayProfile(name: "Runs menu fixture", url: "ws://127.0.0.1:1", authMode: .none),
+            defaults: scratch.defaults,
+            identity: UIFixtures.identity())
+    }
+
+    private func helper(key: String, parent: String) -> SessionRow? {
+        SessionRow(.object([
+            "key": .string(key),
+            "label": .string("Finished helper"),
+            "spawnedBy": .string(parent),
+            "parentSessionKey": .string(parent),
+            "status": .string("done"),
+        ]))
+    }
+
+    private static func visiblePixels(gateway: GatewayStore, sessionKey: String,
+                                      isPresented: Bool = false) throws -> Int
+    {
+        let presentation = Presentation(isPresented: isPresented)
+        let renderer = ImageRenderer(content: Host(presentation: presentation, gateway: gateway, sessionKey: sessionKey))
+        renderer.scale = 1
+        renderer.isOpaque = false
+        let image = try #require(renderer.cgImage, "SwiftUI should render the actual ShowRunsButton layout")
+        return Self.nontransparentPixelCount(in: image)
+    }
+
+    private static func nontransparentPixelCount(in image: CGImage) -> Int {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data else { return 0 }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        return (0..<(width * height)).reduce(into: 0) { count, pixel in
+            if bytes[pixel * 4 + 3] > 8 { count += 1 }
+        }
+    }
+}
+
+#if os(iOS)
+extension TranscriptUIKitHostedTests {
+    @Test func showRunsMenuUsesTheExplicitChatWindowContext() throws {
+        try ShowRunsMenuTests().emptySplitPaneDoesNotBorrowRunsFromTheSelectedChat()
+    }
+}
+#endif
