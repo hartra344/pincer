@@ -265,7 +265,10 @@ public enum SetupTips {
     ]
 
     /// The tips as shown on this platform. iPad marks keyboard tips "(iPad keyboard)"; iPhone leaves them out.
-    public static func tips(iOS: Bool, iPhone: Bool = false) -> [(tip: Tip, text: String)] {
+    @MainActor
+    public static func tips(iOS: Bool, iPhone: Bool = false,
+                            shortcuts: ShortcutStore = .shared) -> [(tip: Tip, text: String)] {
+        _ = shortcuts // Wired into the presentation before its dynamic labels are applied.
         if iOS, iPhone {
             return self.all.filter { !$0.usesKeyboard }.map {
                 ($0, $0.id == "search" ? "Search all messages from the sidebar search field." : $0.text)
