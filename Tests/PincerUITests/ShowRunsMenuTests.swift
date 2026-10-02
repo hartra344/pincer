@@ -38,6 +38,8 @@ struct ShowRunsMenuTests {
     }
 
     @Test func emptySplitPaneDoesNotBorrowRunsFromTheSelectedChat() throws {
+        #expect(Self.nontransparentPixelCount(in: Self.transparentImage()) == 0,
+                "The pixel counter recognizes a known transparent render as empty")
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gateway = self.gateway(scratch: scratch)
@@ -163,11 +165,24 @@ struct ShowRunsMenuTests {
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
                                           | CGBitmapInfo.byteOrder32Big.rawValue),
               let data = context.data else { return 0 }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
         return (0..<(width * height)).reduce(into: 0) { count, pixel in
             if bytes[pixel * 4 + 3] > 8 { count += 1 }
         }
+    }
+
+    private static func transparentImage() -> CGImage {
+        let width = 4
+        let height = 4
+        let context = CGContext(data: nil, width: width, height: height,
+                                bitsPerComponent: 8, bytesPerRow: width * 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                                    | CGBitmapInfo.byteOrder32Big.rawValue)!
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()!
     }
 }
 
