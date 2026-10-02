@@ -205,6 +205,7 @@ enum Suites {
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
+        Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
 
     /// Against a (mock) Gateway, first half.
