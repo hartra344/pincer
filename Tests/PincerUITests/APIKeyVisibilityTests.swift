@@ -70,6 +70,10 @@ struct APIKeyVisibilityTests {
             !($0 is NSSecureTextField) && !$0.isHidden && $0.isEditable && $0.stringValue == editor.text
         })
         #expect(!(plain.cell is NSSecureTextFieldCell), "Reveal uses a plain cell rather than suppressing secure-field bullets")
+        let plainEditor = try #require(plain.currentEditor() as? NSTextView)
+        #expect(!plainEditor.isAutomaticSpellingCorrectionEnabled && !plainEditor.isAutomaticTextReplacementEnabled,
+                "Revealing an API key must not allow spelling or text replacement to change its bytes")
+        #expect(!plainEditor.isAutomaticQuoteSubstitutionEnabled && !plainEditor.isAutomaticDashSubstitutionEnabled)
         #expect(plain.currentEditor()?.selectedRange == NSRange(location: 4, length: 3),
                 "Reveal preserves focus and the editor selection")
         #expect(button.accessibilityLabel() != revealLabel)
