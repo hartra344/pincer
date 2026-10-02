@@ -127,10 +127,20 @@ struct TranscriptUIKitHostedTests {
         host.coordinator.update(rows: Self.rows(count: 3000, salt: "k1"), context: host.context, insets: (0, 0))
         await Self.idle(host)
         _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.adopted > 0 }
-        let open = TranscriptText.measureStats
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > offBefore, "open: the worker measured rows")
         #expect(host.coordinator.premeasureStats.adopted > 0)
-        #expect(open.memoHits > 0, "open: warmed rows reuse the worker's sizes")
+        let rowWidth = max(0, host.view.bounds.width - host.view.safeAreaInsets.left - host.view.safeAreaInsets.right)
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: rowWidth)
+        let hasWarmVisibleRow = host.coordinator.visibleRows.map { visible in
+            visible.contains { index in
+                guard index < host.coordinator.controller.rows.count,
+                      let keys = host.coordinator.renderer.premeasureBodies(for: host.coordinator.controller.rows[index]),
+                      !keys.isEmpty
+                else { return false }
+                return keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }
+            }
+        } ?? false
+        #expect(hasWarmVisibleRow, "open: a native visible row reuses its worker-premeasured sizes")
 
         // Every row is eligible text/markdown, so the budget for main-thread layouts is zero.
         let rowsBefore = host.coordinator.visibleRows
@@ -145,7 +155,7 @@ struct TranscriptUIKitHostedTests {
         await Self.idle(host)
         let jumped = host.coordinator.premeasureStats
         let far = Self.scrollSteps(host, 40)
-        print("\nTranscriptPremeasure UIKit scroll (3000 rows): open mainLayouts \(open.mainLayouts) memoHits \(open.memoHits); "
+        print("\nTranscriptPremeasure UIKit scroll (3000 rows): a visible row was worker-warmed \(hasWarmVisibleRow); "
             + "scroll near window: mainLayouts \(near.mainLayouts) memoHits \(near.memoHits); "
             + "after jump: offloaded \(offloadedBeforeJump) -> \(jumped.offloaded), scroll mainLayouts \(far.mainLayouts) memoHits \(far.memoHits); "
             + "premeasureStats \(host.coordinator.premeasureStats)")
