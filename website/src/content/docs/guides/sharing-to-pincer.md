@@ -36,6 +36,8 @@ A link that's already in your note or the shared text isn't added again. That's 
 
 Some items can't be sent. The **Sharing** section tells you why:
 
+Before connecting, Pincer checks files against the selected gateway's last reported upload limits. Warnings label a saved limit **last known limit**. Once connected, the current limits replace the saved ones. Changing the gateway prepares the shared files again using that gateway's limits.
+
 | Message | What it means |
 | --- | --- |
 | "*name* is larger than the Gateway allows (*limit*)." | The file is over the gateway's attachment limit. It's left out, and the rest is sent. |
@@ -55,7 +57,7 @@ There's nothing new to pair. The extension connects as the same device you alrea
 ## Privacy
 
 - What you share goes only to the gateway you pick, with the same connection rules as the app (`wss://` and certificate pinning).
-- It isn't stored anywhere else. Pincer only remembers which gateway and chat you picked.
+- It isn't stored anywhere else. Pincer remembers your gateway and chat choices and the gateway's upload limits.
 - The extension never creates its own device key.
 - On macOS, the extension is sandboxed with outgoing network access only.
 

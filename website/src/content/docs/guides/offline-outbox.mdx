@@ -21,6 +21,8 @@ When Pincer isn't connected to the gateway, the composer still works for text me
 
 Attachments queue with their message. Pincer saves a copy of each file in the outbox, so a queued photo or document goes out with its message when you reconnect, even after quitting Pincer. See [Attachments in the outbox](#attachments-in-the-outbox).
 
+Queued image rows show a small thumbnail once Pincer prepares it in the background. The original attachment stays in the outbox and is what Pincer sends.
+
 While you're offline, Pincer checks each attachment against the upload limits your gateway reported the last time you were connected, and saved for later. A file that's too big is refused in the composer with the usual message, for example **photo.heic is larger than the Gateway allows (5 MB, last known limit).** You find out before you queue it. If Pincer has never connected to that gateway, it doesn't know the limits and accepts the file.
 
 Limits can change. If the gateway's limits have dropped since you queued a message and an attachment is now over the limit, the message isn't sent. It's marked **Failed** with the reason, for example **Failed — photo.jpg is larger than this Gateway accepts (5 MB).** Retrying can't help, so it offers **Delete** only.

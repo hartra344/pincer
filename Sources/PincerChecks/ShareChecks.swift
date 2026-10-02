@@ -177,7 +177,9 @@ func runShareChecks() async {
     ]))
     check(!model.canSend, "can't send before connecting")
     model.connect()
-    let ready = await waitFor("share model ready") { model.phase == .ready }
+    let ready = await waitFor("share model ready with prepared attachments") {
+        model.phase == .ready && !model.isPreparingAttachments
+    }
     check(ready, "share model connects to the demo gateway (\(model.phase))")
     guard ready else { model.disconnect(); return }
     check(!model.chats.isEmpty && !model.chats.contains { $0.isSubagent }, "chats listed (\(model.chats.count))")

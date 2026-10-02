@@ -354,6 +354,9 @@ extension ChatStore {
             self.items.append(item)
             self.trackLiveReply(item)
         }
+        if let key = item.idempotencyKey {
+            self.releaseCommittedOutboxImagePreviews([key])
+        }
         self.recoverCappedMessages()
         if let key = item.idempotencyKey { self.gateway?.reconcileOutbox(committedKeys: [key]) }
         if item.thinkingText != nil { self.sawThinking = true }

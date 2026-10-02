@@ -138,7 +138,11 @@ public final class GatewayStore: Identifiable {
 
     /// Messages written while offline or that failed to send, across this Gateway's chats.
     public internal(set) var outbox = Outbox() {
-        didSet { if self.outbox != oldValue { self.outboxChanged(from: oldValue) } }
+        didSet {
+            guard self.outbox != oldValue else { return }
+            self.outboxEligibleHeads = nil
+            self.outboxChanged(from: oldValue)
+        }
     }
     /// Attachment bytes of outbox entries, kept for the current launch only.
     @ObservationIgnored var outboxAttachments: [String: [OutgoingAttachment]] = [:]
@@ -146,6 +150,10 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    /// Entries visited while building the cached per-session heads; reset by performance checks.
+    @ObservationIgnored var outboxHeadScanVisits = 0
+    /// First auto-sendable entry per session for this outbox snapshot. Nil means not built yet.
+    @ObservationIgnored var outboxEligibleHeads: [String: String]?
     /// The task `start()` reads the saved outbox in; tests await it instead of polling `outboxRestored`.
     @ObservationIgnored var outboxLoadTask: Task<Void, Never>?
 

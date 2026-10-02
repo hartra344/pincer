@@ -55,10 +55,19 @@ public struct SharedContent: Hashable, Sendable {
     }
 
     /// Sizes files for the Gateway: images are downscaled, other files must already fit.
-    public func attachments(limits: UploadLimits) -> (attachments: [OutgoingAttachment], problems: [String]) {
+    public func attachments(limits: UploadLimits, isLastKnown: Bool = false) -> (attachments: [OutgoingAttachment], problems: [String]) {
+        self.attachments(limits: limits, isLastKnown: isLastKnown, shouldCancel: { false })
+    }
+
+    func attachments(
+        limits: UploadLimits,
+        isLastKnown: Bool,
+        shouldCancel: @Sendable () -> Bool) -> (attachments: [OutgoingAttachment], problems: [String])
+    {
         var attachments: [OutgoingAttachment] = []
         var problems: [String] = []
         for file in self.files {
+            if shouldCancel() { break }
             if file.isImage {
                 if let prepared = ImageCodec.prepareForUpload(file.data, fileName: file.name, maxBytes: limits.imageBytes) {
                     attachments.append(prepared)
@@ -67,7 +76,10 @@ public struct SharedContent: Hashable, Sendable {
                 }
             } else if file.data.count > limits.fileBytes {
                 let limit = ByteCountFormatter.string(fromByteCount: Int64(limits.fileBytes), countStyle: .file)
-                problems.append("\(file.name) is larger than the Gateway allows (\(limit)).")
+                let message = isLastKnown
+                    ? L("\(file.name) is larger than the Gateway allows (\(limit), last known limit).")
+                    : L("\(file.name) is larger than the Gateway allows (\(limit)).")
+                problems.append(message)
             } else {
                 attachments.append(OutgoingAttachment(
                     fileName: file.name,
@@ -76,6 +88,29 @@ public struct SharedContent: Hashable, Sendable {
             }
         }
         return (attachments, problems)
+    }
+}
+
+/// Serializes the Share extension's local image work away from the UI actor. A quick gateway
+/// switch cancels jobs that are still queued instead of starting overlapping decodes.
+actor SharedAttachmentPreparer {
+    static let shared = SharedAttachmentPreparer()
+
+    func prepare(
+        _ content: SharedContent,
+        livePolicy: UploadPolicy?,
+        observedPolicy: UploadPolicy?,
+        savedPolicyData: Data?,
+        probe: (@Sendable () -> Void)?) -> (attachments: [OutgoingAttachment], problems: [String])
+    {
+        guard !Task.isCancelled else { return ([], []) }
+        probe?()
+        guard !Task.isCancelled else { return ([], []) }
+        let savedPolicy = savedPolicyData.flatMap { try? JSONDecoder().decode(UploadPolicy.self, from: $0) }
+        let policy = livePolicy ?? observedPolicy ?? savedPolicy
+        return content.attachments(
+            limits: UploadLimits(policy: policy), isLastKnown: livePolicy == nil && policy != nil,
+            shouldCancel: { Task.isCancelled })
     }
 }
 
