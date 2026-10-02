@@ -88,6 +88,13 @@ public struct MessageSender: Hashable, Codable, Sendable {
         }
     }
 
+    /// Spoken author for a transcript row. Kept in Kit so checks can validate the same
+    /// attribution policy the native transcript renderer uses.
+    public func accessibilityAuthor(agents: [AgentSummary], receivingAgentId: String?) -> String {
+        let name = self.displayName(agents: agents)
+        return AccessibilityText.join([name, self.marker(agents: agents, receivingAgentId: receivingAgentId)])
+    }
+
     // MARK: Parsing
 
     public static let interSessionPromptPrefix = "[Inter-session message]"
