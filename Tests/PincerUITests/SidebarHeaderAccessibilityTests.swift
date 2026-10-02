@@ -18,8 +18,32 @@ struct SidebarHeaderAccessibilityTests {
     }
 
     @Test func plainGroupHeaderAddButtonNamesTheGroup() {
-        let header = self.header(.group("Home"), title: "Home", collapsed: false)
-        #expect(header.addAccessibilityLabel == "New chat in Home")
+        for group in ["Home", "Personal"] {
+            let header = self.header(.group(group), title: group, collapsed: false)
+            #expect(header.addAccessibilityLabel == "New chat in \(group)")
+            let collapsed = self.header(.group(group), title: group, collapsed: true)
+            #expect(collapsed.addAccessibilityLabel == header.addAccessibilityLabel)
+        }
+    }
+
+    @Test func groupLabelKeepsExistingNewChatTargets() {
+        var target = ""
+        let actions = SidebarActions(
+            select: { _ in },
+            newChat: { target = "agent:\($0)" },
+            newChatInGroup: { group, agent in target = "group:\(group):\(agent ?? "default")" },
+            rename: { _ in }, changeIcon: { _ in }, changeGroupIcon: { _ in }, pickColor: { _ in },
+            prompt: { _ in }, confirm: { _ in }, toggleThreads: { _ in }, setCollapsed: { _, _ in },
+            refresh: {}, openAutomations: {}
+        )
+
+        self.header(.group("Home"), title: "Home", collapsed: false, agent: "main").addAction(actions)?()
+        #expect(target == "agent:main")
+
+        var nested = self.header(.agentGroup(agent: "mochi", group: "Prep"), title: "Prep", collapsed: false, agent: "mochi")
+        nested.agentName = "Mochi"
+        nested.addAction(actions)?()
+        #expect(target == "group:Prep:mochi")
     }
 
     @Test func valueSpeaksDisclosureState() {
@@ -29,13 +53,15 @@ struct SidebarHeaderAccessibilityTests {
     }
 
     @Test func nestedGroupLabelDoesNotDependOnCollapsedState() {
-        var open = self.header(.agentGroup(agent: "mochi", group: "Prep"), title: "Prep", collapsed: false)
+        var open = self.header(.agentGroup(agent: "mochi", group: "Prep"), title: "Prep", collapsed: false, agent: "mochi")
         open.agentName = "Mochi"
         open.chatCount = 2
         var closed = open
-        closed = SidebarModel.Header(id: open.id, section: open.section, isCollapsed: true, newChatAgent: nil)
+        closed = self.header(.agentGroup(agent: "mochi", group: "Prep"), title: "Prep", collapsed: true, agent: "mochi")
         closed.agentName = "Mochi"
         closed.chatCount = 2
+        #expect(open.addAccessibilityLabel == "New chat in Prep with Mochi")
+        #expect(closed.addAccessibilityLabel == open.addAccessibilityLabel)
         #expect(open.subsectionAccessibilityLabel.contains("Prep"))
         #expect(!open.subsectionAccessibilityLabel.lowercased().contains("collapsed"))
         #expect(!closed.subsectionAccessibilityLabel.lowercased().contains("collapsed"))

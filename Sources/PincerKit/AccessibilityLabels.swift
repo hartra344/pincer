@@ -40,6 +40,11 @@ public enum AccessibilityText {
         L("New chat with \(agent)")
     }
 
+    /// Label for a plain group's "+" button: `New chat in Home`.
+    public static func newChatIn(group: String) -> String {
+        L("New chat in \(group)")
+    }
+
     /// Session Manager run status, spoken as the screen shows it: `Queued`, `Running`, `Done`, `Error`,
     /// `Stopped`, `Timed Out`, or `Interrupted` (case-insensitive; `failed` is `Failed`). Anything
     /// else, such as an already-joined status, is returned unchanged.

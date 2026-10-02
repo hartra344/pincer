@@ -54,6 +54,7 @@ struct SidebarModel: Equatable {
 
         var addAccessibilityLabel: String {
             if case .agent = self.section.kind { return AccessibilityText.newChatWith(agent: self.section.title) }
+            if case let .group(group) = self.section.kind { return AccessibilityText.newChatIn(group: group) }
             guard self.isSubsection else { return L("New chat") }
             return self.agentName.map { L("New chat in \(self.section.title) with \($0)") } ?? L("New chat in \(self.section.title)")
         }
