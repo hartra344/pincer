@@ -232,6 +232,8 @@ private final class APIKeyMacFieldView: NSStackView {
         self.detachesHiddenViews = false
 
         for field in [self.secureField, self.plainField] {
+            field.isEditable = true
+            field.isSelectable = true
             field.isBordered = true
             field.bezelStyle = .roundedBezel
             field.placeholderString = ""
