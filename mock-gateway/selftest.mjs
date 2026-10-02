@@ -3,6 +3,7 @@ import { startServer } from './server.mjs';
 // Ordered: the first sections share one server and later ones depend on the state they leave behind.
 const SECTIONS = [
   'chat',
+  'work-context',
   'file-edits',
   'tool-cards',
   'send-hooks',

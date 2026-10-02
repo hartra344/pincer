@@ -531,6 +531,7 @@ public final class GatewayStore: Identifiable {
         self.expectedPrefEchoes = [:]
         self.messageSubscriptionIdUnsupported = false
         self.replyToUnsupported = false
+        self.locationContextUnsupported = false
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
         self.sessionReactionsOff = false
@@ -1471,6 +1472,8 @@ public final class GatewayStore: Identifiable {
 
     /// This connection's Gateway rejected `chat.send`'s `replyToId`, so replies quote instead.
     public internal(set) var replyToUnsupported = false
+    /// This Gateway refused the optional location reference field; sends continue without it.
+    public internal(set) var locationContextUnsupported = false
     /// Channels whose `message.action` reactions failed as unsupported on this connection.
     @ObservationIgnored var reactionForwardingOff: Set<String> = []
     /// Chats already told a reaction didn't reach their channel on this connection.

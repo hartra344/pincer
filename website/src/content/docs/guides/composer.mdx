@@ -27,13 +27,13 @@ If you're offline, or a message can't be sent, it stays in the chat marked **Que
 
 ## Location context
 
-In app Settings, turn on **Include approximate location with messages** under **Location** (on macOS, in the **Conversation** tab). It starts off. Pincer asks for foreground location permission, then includes a recent approximate location and observation time as visible text in new chat messages and Quick Capture messages. The coordinates are rounded to a coarse area, with at least 2 km of reported uncertainty, even if the operating system supplies a precise fix.
+In app Settings, turn on **Share location context with the agent** under **Location** (on macOS, in the **Conversation** tab). It starts off. With permission, Pincer requests a one-time location while the app is active and sends a recent fix as agent context. The context is separate from your message text. Pincer keeps the coordinates supplied by the device and reports the provider's horizontal accuracy; system privacy settings may reduce precision.
 
-Location acquisition happens separately from sending. If permission is denied, the device cannot obtain a fix, or the last observation is more than five minutes old, the message sends without location. Settings shows the current permission or acquisition status and offers recovery. Pincer uses one-shot requests while the app is active and clears its location cache when it goes into the background.
+Location acquisition happens separately from sending. If permission is denied, the device cannot obtain a fix, or the last observation is more than five minutes old, the message sends without location. Settings shows the current permission or acquisition status and offers recovery. Pincer uses one-shot requests while the app is active and clears its location cache when it goes into the background. This requires OpenClaw 2026.9.6 or newer; if an older Gateway explicitly rejects the work-context field, Pincer sends the authored message without location and shows a compatibility notice.
 
-Slash commands, edits, and regenerated messages do not add a new location. Share extensions do not acquire location. Queued messages retain the context captured when you sent them, and retrying does not replace it with your new position. Turning sharing off clears the device-location cache and stops future captures; to remove context already in a queued message, delete that message and send it again with sharing off. Location text already received by the Gateway remains in that chat's history.
+Slash and bang commands, edits, and regenerated messages do not add a new location. Share extensions do not acquire location. Queued messages retain the context captured when you sent them, and retrying does not replace it with your new position. Turning sharing off clears the device-location cache and stops future captures; to remove context already in a queued message, delete that message and send it again with sharing off. The Gateway can retain context metadata in chat history, but Pincer displays the original authored message text.
 
-You can try the setting in the built-in demo; its canned reply quotes the location context along with your message.
+You can try the setting in the built-in demo; its canned reply can use the shared context while the user message remains unchanged.
 
 ## Replying to a message
 

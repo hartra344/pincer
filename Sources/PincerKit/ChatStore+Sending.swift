@@ -40,10 +40,10 @@ extension ChatStore {
     public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil,
                             requiresConnection: Bool = false, includeLocation: Bool = false) async -> SendOutcome
     {
-        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
-        if includeLocation { trimmed = gateway.locationContext?.message(trimmed) ?? trimmed }
+        let locationContext = includeLocation ? gateway.locationContext?.context(forMessage: trimmed) : nil
         let connected = gateway.state.isConnected
         let attachmentBytes = attachments.reduce(0) { $0 + $1.data.count }
         let persistsAttachments = !attachments.isEmpty && gateway.canPersistAttachments(bytes: attachmentBytes)
@@ -63,7 +63,7 @@ extension ChatStore {
         let createdAt = Date()
         var pending = ChatItem(role: .user, blocks: blocks, timestamp: createdAt, idempotencyKey: idempotencyKey, isPending: true)
         pending.outboxState = .queued
-        var entry = OutboxEntry(id: idempotencyKey, sessionKey: self.sessionKey, agentId: self.agentId, text: trimmed,
+        var entry = OutboxEntry(id: idempotencyKey, sessionKey: self.sessionKey, agentId: self.agentId, text: trimmed, locationContext: locationContext,
                                 createdAt: createdAt, hasAttachments: !attachments.isEmpty)
         if let replyTo {
             let preview = ReplyPreview(text: Replies.previewLine(replyTo.preview), senderLabel: replyTo.senderLabel)
@@ -141,29 +141,45 @@ extension ChatStore {
             Replies.quotedFallback(sender: entry.replyPreview?.senderLabel ?? "", preview: entry.replyPreview?.text ?? "",
                                    text: entry.text)
         }
-        func params(replying: Bool) -> [String: JSONValue] {
+        var replying = entry.replyToId != nil && !gateway.replyToUnsupported
+        var sharingLocation = entry.locationContext != nil && !gateway.locationContextUnsupported && !ChatWorkContext.isCommand(entry.text)
+        func params() -> [String: JSONValue] {
             ChatSendRequest.params(
                 sessionKey: self.sessionKey, agentId: entry.agentId ?? self.agentId, message: replying ? entry.text : (quoted ?? entry.text),
-                idempotencyKey: key, attachments: attachments, replyToId: replying ? entry.replyToId : nil)
+                idempotencyKey: key, attachments: attachments, replyToId: replying ? entry.replyToId : nil,
+                locationContext: sharingLocation ? entry.locationContext : nil)
         }
-        let replying = entry.replyToId != nil && !gateway.replyToUnsupported
+        // A schema rejection happens before acceptance. Changed params get a new persisted key;
+        // ambiguous network failures never rekey, so the Gateway still dedupes transport retries.
+        func rekeyRejectedRequest() {
+            let retryKey = UUID().uuidString.lowercased()
+            if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key }) {
+                self.items[index].idempotencyKey = retryKey
+            }
+            gateway.outboxAttachments[retryKey] = gateway.outboxAttachments.removeValue(forKey: key)
+            if !entry.attachments.isEmpty { gateway.moveOutboxAttachments(from: key, to: retryKey) }
+            gateway.outbox.rekey(id: key, to: retryKey)
+            key = retryKey
+        }
         do {
-            let result: JSONValue
-            do {
-                result = try await gateway.connection.request("chat.send", .object(params(replying: replying)), timeout: 60)
-            } catch where replying && Replies.isReplyToRejection(error) {
-                // An older Gateway: quote the original in the text instead, for this connection.
-                // Other params need another key; retries of this message reuse the new one.
-                gateway.replyToUnsupported = true
-                let retryKey = UUID().uuidString.lowercased()
-                if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key }) {
-                    self.items[index].idempotencyKey = retryKey
+            var result: JSONValue = .null
+            while true {
+                do {
+                    result = try await gateway.connection.request("chat.send", .object(params()), timeout: 60)
+                    break
+                } catch {
+                    if sharingLocation && ChatWorkContext.isUnsupported(error) {
+                        gateway.locationContextUnsupported = true
+                        sharingLocation = false
+                        rekeyRejectedRequest()
+                    } else if replying && Replies.isReplyToRejection(error) {
+                        gateway.replyToUnsupported = true
+                        replying = false
+                        rekeyRejectedRequest()
+                    } else {
+                        throw error
+                    }
                 }
-                gateway.outboxAttachments[retryKey] = gateway.outboxAttachments.removeValue(forKey: key)
-                if !entry.attachments.isEmpty { gateway.moveOutboxAttachments(from: key, to: retryKey) }
-                gateway.outbox.rekey(id: key, to: retryKey)
-                key = retryKey
-                result = try await gateway.connection.request("chat.send", .object(params(replying: false)), timeout: 60)
             }
             // Accepted: the row stays pending until the transcript commits it.
             if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key }) {

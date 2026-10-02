@@ -886,7 +886,7 @@ extension ChatStore {
         parsed.reserveCapacity(messages.count)
         var seen: [String: Int] = [:]
         for (index, message) in messages.enumerated() {
-            guard var item = ChatItem(message, fallbackIndex: fallbackBase + index) else { continue }
+            guard var item = ChatItem(message, fallbackIndex: fallbackBase + index, projectLegacyLocation: true) else { continue }
             let count = seen[item.id, default: 0]
             seen[item.id] = count + 1
             if count > 0 { item.id += "#\(count)" }
@@ -984,9 +984,11 @@ extension ChatStore {
             self.recoveryAttempted.remove(messageId)
             return
         }
-        guard result["ok"]?.bool == true, let message = result["message"],
-              let full = ChatItem(message, fallbackIndex: 0), !full.isCapped
-        else { return }
+        guard result["ok"]?.bool == true, let message = result["message"] else { return }
+        let parsed = await Task.detached(priority: .utility) {
+            ChatItem(message, fallbackIndex: 0, projectLegacyLocation: true)
+        }.value
+        guard let full = parsed, !full.isCapped else { return }
         self.fullMessages[messageId] = full
         guard let index = self.items.firstIndex(where: { $0.transcriptId == messageId && $0.isCapped }) else { return }
         self.items[index] = Self.restoring(full, over: self.items[index])

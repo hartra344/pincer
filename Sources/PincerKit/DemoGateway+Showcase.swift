@@ -48,8 +48,8 @@ extension DemoGateway {
         - \(findTip)
         - \(paletteTip), and **⌘1–⌘3** jump to pinned chats.
         - \(captureTip)
-        - Settings → **Location** can attach approximate location to new messages. It starts off; \
-        when enabled, this demo quotes the visible location context just like the rest of your message.
+        - Settings → **Location** can share your device location as context for the agent. It starts off; \
+        when enabled, the context stays separate from your message text and uses the device's reported accuracy.
         - Switch models, or pin, rename and group chats in the sidebar.
         """
     }
@@ -344,15 +344,19 @@ extension DemoGateway {
                 </svg>
                 ```
                 """)], id: "demo-main-gauge", ago: 15 * minute - 10),
+                Self.message("user", [Self.text("Find a coffee shop nearby.")], id: "demo-location-context-user",
+                    openclaw: ["workContext": ["snapshot": ["page": "Pincer location",
+                        "selection": "Device location: 42.360100, -71.058900 (reported accuracy ±18m, observed 2026-09-30T12:00:00Z)."]]], ago: 20),
+                Self.message("assistant", [Self.text("Using the fictional Boston location shared for this demo, I can look for coffee near Boston Common. Your location reference stays separate from your message.")],
+                    id: "demo-location-context-reply", ago: 15),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
                 is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
                 or send */compact*.
 
-                Settings → **Location** can add approximate context to messages. It starts off.
-                This fictional Boston example shows the format; it is not your device's location:
-
-                > Location context (approximate, shared by Pincer): 📍 42.36, -71.06 ±2000m; observed 2026-09-30T12:00:00Z
+                Settings → **Location** can share available device location with your assistant. It starts off.
+                Location travels separately from your message, so your chat bubbles stay clean.
+                The Boston example above is fictional; it is not your device's location.
                 """)], ago: 10),
             ])
         add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,

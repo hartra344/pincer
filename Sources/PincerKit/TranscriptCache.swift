@@ -44,7 +44,11 @@ public enum TranscriptCache {
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.version = try c.decode(Int.self, forKey: .version)
-            self.items = try c.decode([ChatItem].self, forKey: .items)
+            self.items = try c.decode([ChatItem].self, forKey: .items).map { item in
+                var projected = item
+                projected.projectLegacyLocationForDisplay()
+                return projected
+            }
             self.complete = try c.decode(Bool.self, forKey: .complete)
             self.activityMs = try c.decodeIfPresent(Double.self, forKey: .activityMs)
             self.retained = try c.decodeIfPresent(Bool.self, forKey: .retained) ?? false

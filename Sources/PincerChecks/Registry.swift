@@ -111,6 +111,7 @@ enum Suites {
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
             Section("Demo agent and model schema") { await runDemoAgentModelsSchemaChecks() },
             Section("Location context") { await runLocationContextChecks() },
+            Section("Location transport") { runLocationTransportChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -169,6 +170,7 @@ enum Suites {
     /// The built-in demo, first half.
     static let demoCore: [Section] = [
         Section("Built-in demo") { await runDemo() },
+        Section("Location transport (demo)") { await runDemoLocationTransportChecks() },
         Section("Demo message search with the cache off") { await checkDemoSearchWithoutCache() },
         Section("Shortcuts on the demo") { await runDemoIntents() },
         Section("Search track (demo)") { await runDemoSearchTrackChecks() },
@@ -240,6 +242,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, first half.
     static let liveCore: [LiveSection] = [
+        LiveSection("Location transport (live)") { url, token in await runLiveLocationTransportChecks(url: url, token: token) },
         LiveSection(title: { "Live against \($0)" }) { url, token in await runLive(url: url, token: token) },
     ]
 

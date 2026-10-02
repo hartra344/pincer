@@ -383,7 +383,8 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         return bare.isEmpty ? stored : bare
     }
 
-    public init?(_ json: JSONValue, fallbackIndex: Int) {
+    public init?(_ input: JSONValue, fallbackIndex: Int, projectLegacyLocation: Bool = false) {
+        let json = ChatWorkContext.projectForDisplay(input)
         let meta = json["__openclaw"]
         self.transcriptId = meta?["id"]?.text
         self.markerKind = meta?["kind"]?.text
@@ -428,7 +429,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.isCapped = recoverable && meta?["truncated"]?.bool == true
             && json["openclawMessageToolMirror"]?.bool != true
 
-        if let text = json["content"]?.string {
+        if let text = json["content"]?.string ?? (json["content"] == nil ? json["text"]?.string : nil) {
             self.blocks = text.isEmpty ? [] : [.text(text)]
         } else {
             self.blocks = (json["content"]?.array ?? []).compactMap(ContentBlock.parse)
@@ -439,6 +440,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
                 return .text(MessageSender.displayText(text, provenance: provenance))
             }.filter { if case let .text(text) = $0 { !text.isEmpty } else { true } }
         }
+        if projectLegacyLocation, self.role == .user, self.sender == nil { self.projectLegacyLocationForDisplay() }
         self.blocks += Self.mediaFactBlocks(meta?["media"], existing: self.blocks)
         if self.role == .assistant, self.sender == nil { self.readReplyTarget(json) }
         if self.blocks.isEmpty, self.role == .assistant, let errorMessage {

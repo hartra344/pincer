@@ -11,11 +11,19 @@ struct LocationSettingsSection: View {
 
     var body: some View {
         let model = self.app.locationContext
+        let selectedGateway = self.app.selectedGateway ?? self.app.gateways.first
         Section {
-            Toggle(L("Include approximate location with messages"), isOn: Binding(
+            Toggle(L("Share location context with the agent"), isOn: Binding(
                 get: { model.enabled }, set: { model.setEnabled($0) }))
             if model.enabled {
-                Label(self.status(model.status), systemImage: model.status == .ready ? "location.fill" : "location")
+                if selectedGateway?.locationContextUnsupported == true {
+                    Label(L("This Gateway does not support location context. Messages are still sent without location."),
+                          systemImage: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("location-context-gateway-unsupported")
+                }
+                Label(self.status(model.status, accuracy: model.snapshot?.accuracy),
+                      systemImage: model.status == .ready ? "location.fill" : "location")
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("location-context-status")
                 if model.status == .permissionRequired {
@@ -29,19 +37,21 @@ struct LocationSettingsSection: View {
         } header: {
             Text("Location", bundle: .module)
         } footer: {
-            Text("When enabled, new messages include an approximate location and its observation time as visible text. Pincer requests location only while the app is active, rounds it to a coarse area, and sends without it if no recent fix is available. Commands and edits do not add location. Turning this off stops future sharing; messages already queued keep their attached context.", bundle: .module)
+            Text("When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent.", bundle: .module)
         }
         .onAppear { model.refresh() }
     }
 
-    private func status(_ status: LocationContextModel.Status) -> String {
+    private func status(_ status: LocationContextModel.Status, accuracy: String?) -> String {
         switch status {
         case .off: L("Location sharing is off")
-        case .permissionRequired: L("Allow location access to include context")
+        case .permissionRequired: L("Allow location access to share context")
         case .denied: L("Location access is denied")
         case .restricted: L("Location access is restricted on this device")
-        case .locating: L("Getting approximate location…")
-        case .ready: L("Approximate location is ready")
+        case .locating: L("Getting device location…")
+        case .ready:
+            if let accuracy { L("Location context is ready to share · \(accuracy)") }
+            else { L("Location context is ready to share") }
         case .unavailable: L("Location is unavailable. Messages send without it.")
         }
     }

@@ -114,7 +114,7 @@ extension DemoGateway {
         var result: Row = [
             "sessionKey": .string(key),
             "sessionId": row["sessionId"] ?? .null,
-            "messages": .array(Array(transcript[start..<end])),
+            "messages": .array(transcript[start..<end].map(ChatWorkContext.projectForDisplay)),
             "totalMessages": JSONValue(transcript.count),
             "hasMore": .bool(start > 0),
             "thinkingLevel": "medium",
