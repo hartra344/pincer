@@ -411,7 +411,8 @@ indirect enum SidebarMenuItem {
 
 @MainActor
 enum SidebarMenus {
-    static func chat(_ row: SessionRow, gateway: GatewayStore, actions: SidebarActions) -> [SidebarMenuItem] {
+    static func chat(_ row: SessionRow, gateway: GatewayStore, organization: SidebarOrganization,
+                     actions: SidebarActions) -> [SidebarMenuItem] {
         func patch(_ fields: [String: JSONValue]) {
             Task { await gateway.patch(row.key, fields) }
         }
@@ -468,7 +469,7 @@ enum SidebarMenus {
             items.append(.action(L("Reset Icon"), image: "arrow.uturn.backward") { gateway.setIcon(nil, for: row.key) })
         }
         items += [
-            .submenu(L("Move to Group"), image: "folder", groups),
+            .submenu(self.groupMenuTitle(for: row, organization: organization), image: "folder", groups),
             .submenu(L("Color"), image: "paintpalette", colors),
             self.reasoning(row, gateway: gateway),
         ]
@@ -481,6 +482,10 @@ enum SidebarMenus {
             ]
         }
         return items
+    }
+
+    static func groupMenuTitle(for row: SessionRow, organization: SidebarOrganization) -> String {
+        row.isMain && organization == .agent ? L("Move to Group (shown in By Group)") : L("Move to Group")
     }
 
     private static func colorName(_ color: String) -> String {

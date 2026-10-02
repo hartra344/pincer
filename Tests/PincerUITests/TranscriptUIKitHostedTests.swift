@@ -53,6 +53,10 @@ struct TranscriptUIKitHostedTests {
         #expect(abs(host.view.verticalScrollIndicatorInsets.bottom - pillReserve) < 0.5)
     }
 
+    @Test func homeChatGroupMenuNamesTheOrganizationWhereTheGroupAppears() throws {
+        try SidebarHomeGroupMenuTests.verifyMenuCaptions()
+    }
+
     @Test func loggedOutBadgeContrastMeetsLightAndDarkFormSurfaces() throws {
         try LoggedOutBadgeContrastTests.verifyContrast()
     }

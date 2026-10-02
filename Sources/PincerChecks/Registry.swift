@@ -149,6 +149,7 @@ enum Suites {
         }
         sections += [
             Section("Sidebar section work") { runSidebarSectionWorkChecks() },
+            Section("Sidebar home chat group placement") { runSidebarHomeGroupMenuChecks() },
             Section("Shortcuts unread visibility") { await runIntentVisibilityChecks() },
             Section("Deep links & Handoff") { runDeepLinkChecks() },
             Section(nil) { runLocalizationChecks() },

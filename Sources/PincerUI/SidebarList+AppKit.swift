@@ -534,7 +534,9 @@ struct SidebarList: NSViewRepresentable {
             menu.removeAllItems()
             guard let outline, outline.clickedRow >= 0, let node = outline.item(atRow: outline.clickedRow) as? Node else { return }
             if let entry = self.entries[node.id] {
-                SidebarMenuBuilder.populate(menu, SidebarMenus.chat(entry.row, gateway: self.gateway, actions: self.actions))
+                SidebarMenuBuilder.populate(menu, SidebarMenus.chat(entry.row, gateway: self.gateway,
+                                                                     organization: self.gateway.organization,
+                                                                     actions: self.actions))
             } else if let header = self.headers[node.id] {
                 SidebarMenuBuilder.populate(menu, SidebarMenus.header(header.section, gateway: self.gateway, actions: self.actions))
             }
