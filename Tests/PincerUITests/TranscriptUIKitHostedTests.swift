@@ -242,7 +242,7 @@ struct TranscriptUIKitHostedTests {
         let width = max(1, host.view.bounds.width)
         let preparedIDs = Mutex(Set<String>())
         renderer.speechPreparationProbe = { id in
-            preparedIDs.withLock { $0.insert(id) }
+            _ = preparedIDs.withLock { $0.insert(id) }
         }
         host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
 
