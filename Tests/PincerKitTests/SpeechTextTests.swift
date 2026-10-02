@@ -129,6 +129,30 @@ struct SpeechTextTests {
         #expect(SpeechText.latestSpeakableReply(in: [items[1], items[2], error, pending]) == nil)
     }
 
+#if DEBUG
+    @Test func debugSpeakabilityCountersAreIsolatedByItemID() {
+        let firstID = "counter-first-\(UUID().uuidString)"
+        let secondID = "counter-second-\(UUID().uuidString)"
+        defer {
+            SpeechText.unregisterSpeakabilityDebugStats(tracking: firstID)
+            SpeechText.unregisterSpeakabilityDebugStats(tracking: secondID)
+        }
+        SpeechText.resetSpeakabilityDebugStats(tracking: firstID)
+        SpeechText.resetSpeakabilityDebugStats(tracking: secondID)
+        _ = SpeechText.speakableText(for: ChatItem(id: firstID, role: .assistant, blocks: [.text("First." )]))
+        _ = SpeechText.speakableText(for: ChatItem(id: secondID, role: .assistant, blocks: [.text("Second." )]))
+
+        SpeechText.resetSpeakabilityDebugStats(tracking: firstID)
+        let second = SpeechText.speakabilityDebugStats(for: secondID)
+        #expect(second.mainThreadNormalizations + second.offMainNormalizations == 1,
+                "resetting one tracked item does not erase a concurrent item's measurements")
+        SpeechText.unregisterSpeakabilityDebugStats(tracking: firstID)
+        let retained = SpeechText.speakabilityDebugStats(for: secondID)
+        #expect(retained.mainThreadNormalizations + retained.offMainNormalizations == 1,
+                "unregistering one tracked item leaves other measurements intact")
+    }
+#endif
+
     @Test func nonAssistantOrEmptyIsNotSpeakable() {
         #expect(SpeechText.speakableText(for: ChatItem(id: "u", role: .user, blocks: [.text("hello")])) == nil)
         #expect(SpeechText.speakableText(for: ChatItem(id: "t", role: .toolResult, blocks: [.text("output")])) == nil)

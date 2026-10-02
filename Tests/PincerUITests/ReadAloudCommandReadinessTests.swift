@@ -59,13 +59,14 @@ struct ReadAloudCommandReadinessTests {
         chat.items = [ChatItem(id: id, role: .assistant, blocks: [.text(prose)])]
         let state = ReadAloudChatState()
         SpeechText.resetSpeakabilityDebugStats(tracking: id)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
         state.bind(chat: chat, gateway: gateway)
 
         let enabled = await eventually { state.isEnabled }
         #expect(enabled, "the existing command remains available for assistant prose")
         #expect(state.lastReply?.id == id, "the command still targets the newest speakable reply")
         #expect(state.isEnabled && state.isEnabled, "repeated menu/shortcut validation stays enabled")
-        let stats = SpeechText.speakabilityDebugStats
+        let stats = SpeechText.speakabilityDebugStats(for: id)
         #expect(stats.mainThreadNormalizations == 0,
                 "menu and hardware-shortcut validation must consume prepared readiness instead of parsing a reply on main")
         #expect(stats.offMainNormalizations >= 1, "readiness was actually prepared on a worker")
@@ -84,6 +85,7 @@ struct ReadAloudCommandReadinessTests {
         let playback = ReadAloudController(clipPlayer: CommandTestClips(), localSpeaker: CommandTestSpeaker(), defaults: scratch.defaults)
         let state = ReadAloudChatState(controller: playback)
         SpeechText.resetSpeakabilityDebugStats(tracking: itemID)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: itemID) }
         state.bind(chat: chat, gateway: gateway)
         let firstReady = await eventually { state.lastReply?.text == "First body" }
         #expect(firstReady)
@@ -91,7 +93,7 @@ struct ReadAloudCommandReadinessTests {
         chat.items = [ChatItem(id: itemID, role: .assistant, blocks: [.text("Edited body")])]
         let editReady = await eventually { state.lastReply?.text == "Edited body" }
         #expect(editReady, "an edited body under the same ID replaces its prepared text")
-        let debugStats = SpeechText.speakabilityDebugStats
+        let debugStats = SpeechText.speakabilityDebugStats(for: itemID)
         #expect(debugStats.mainThreadNormalizations == 0)
         #expect(debugStats.offMainNormalizations >= 2, "both same-ID bodies were prepared off the UI thread")
         state.toggleLastReply()
