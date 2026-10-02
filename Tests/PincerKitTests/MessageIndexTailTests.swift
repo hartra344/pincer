@@ -137,6 +137,28 @@ struct MessageIndexTailTests {
         }
     }
 
+    @Test func userAppendRebuildsOnlyThePrecedingPairAndNewRow() async throws {
+        defer { try? FileManager.default.removeItem(at: self.root) }
+        let gateway = UUID()
+        try self.touchFile(gateway, key: self.key)
+        let index = MessageIndex.shared(gatewayId: gateway, root: self.root)
+        let old = (0..<1_000).map { n in
+            ChatItem(id: "boundary-\(n)", role: n.isMultiple(of: 2) ? .user : .assistant,
+                     blocks: [.text("boundary original \(n)")])
+        }
+        await index.index(sessionKey: self.key, snapshot: self.snapshot(old), fileMtime: Date(), change: .full(token: "t0"))
+        let updated = old + [ChatItem(id: "boundary-new", role: .user, blocks: [.text("boundary appended sentinel")])]
+        await index.index(sessionKey: self.key, snapshot: self.snapshot(updated), fileMtime: Date().addingTimeInterval(1),
+                          change: .tail(unchangedPrefix: old.count, baseToken: "t0", token: "t1"))
+        let stats = await index.lastIndexStats
+        #expect(stats.path == .tail)
+        #expect(stats.documentsBuilt == 3)
+        #expect(await index.indexedRows(sessionKey: self.key).count == 1_001)
+        #expect(try await index.search("original 0").isEmpty == false)
+        #expect(try await index.search("appended sentinel").isEmpty == false)
+        await MessageIndex.shutdown(root: self.root)
+    }
+
     @Test func editingTheLastItemMatchesFullIndexing() async throws {
         defer { try? FileManager.default.removeItem(at: self.root) }
         var generator = Generator(state: 2)

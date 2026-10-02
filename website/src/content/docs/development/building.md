@@ -10,6 +10,8 @@ description: Build Pincer for macOS and iOS, run the unit tests and self-checks,
 
 The SwiftUI macros only ship inside Xcode.app, so the Command Line Tools alone won't build the UI.
 
+Background transcript fills establish a complete cache fingerprint baseline before saving so the search index can update only the changed tail. Visible chat opens keep their nonblocking cache path. The `TranscriptCachePrefillTests` repro and offline prefill indexing checks measure the number of built search documents and verify that old and appended messages remain searchable; token or schema mismatches still require a full recovery pass.
+
 ## Quick build with SwiftPM
 
 ```sh
