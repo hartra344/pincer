@@ -106,6 +106,7 @@ enum Suites {
             Section("Device speech catalog") { await runDeviceSpeechCatalogChecks() },
             Section("Dictation target routing") { runDictationTargetChecks() },
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
+            Section("Demo agent and model schema") { await runDemoAgentModelsSchemaChecks() },
             Section("Location context") { await runLocationContextChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
@@ -130,6 +131,7 @@ enum Suites {
                 await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
             },
+            Section("Transcript prefill indexing") { await runTranscriptPrefillIndexChecks() },
             Section("Paged history probe") { runPagingProbeChecks() },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
@@ -209,6 +211,8 @@ enum Suites {
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
+        Section("Demo agent and model settings") { await runDemoAgentModelsPageChecks() },
+        Section("Transcript headless fill (demo, #299)") { await runDemoTranscriptHeadlessFillChecks() },
         Section("Resize streaming inputs (demo, #353)") { await runDemoResizeStreamingInputs() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },

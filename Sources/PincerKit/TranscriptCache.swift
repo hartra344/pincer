@@ -362,6 +362,7 @@ public enum TranscriptCache {
     /// With `newest`, a current-format transcript is read only as far back as the segments
     /// covering that many of its newest items (the snapshot then holds those, and possibly more).
     static func read(_ url: URL, gatewayId: UUID, root: URL? = Self.root, newest: Int? = nil,
+                     waitForWriterPrime: Bool = false,
                      priority: TaskPriority) async -> (snapshot: Snapshot?, outcome: LoadOutcome)
     {
         let quarantine = self.quarantineDirectory(gatewayId: gatewayId, root: root)
@@ -408,9 +409,18 @@ public enum TranscriptCache {
                         }
                         var layout = layout
                         layout.manifestDate = manifestDate
-                        // Not awaited: the writer may be busy saving other chats, and opening this one
-                        // must not wait for them (#563). `prime` skips a layout a newer save already set.
-                        Task.detached(priority: .utility) { await Writer.shared.prime(url, layout: layout) }
+                        let hasFullFingerprintCoverage = layout.fingerprintOffset == 0
+                            && layout.itemFingerprints.count == snapshot.items.count
+                            && layout.segments.allSatisfy { $0.fingerprint != nil }
+                        if waitForWriterPrime, hasFullFingerprintCoverage {
+                            // A headless prefill saves the full retained transcript immediately after
+                            // restore. Await its baseline so that save can safely derive a tail (#299).
+                            await Writer.shared.prime(url, layout: layout)
+                        } else {
+                            // Visible opens never wait behind the writer (#563). Partial window loads
+                            // also stay detached; they cannot establish a full-transcript baseline.
+                            Task.detached(priority: .utility) { await Writer.shared.prime(url, layout: layout) }
+                        }
                         return (snapshot, .loaded)
                     case let .unavailable(reason):
                         return (nil, .unavailable(reason))
@@ -600,11 +610,31 @@ public enum TranscriptCache {
                                   root: URL? = Self.root) async ->
         (items: [ChatItem], complete: Bool, outcome: LoadOutcome, forwardedSenderRefreshPending: Bool)
     {
+        await self.loadNewest(gatewayId: gatewayId, sessionKey: sessionKey, limit: limit, root: root,
+                              waitForWriterPrime: false)
+    }
+
+    /// `loadNewest` for a headless prefill. Unlike a visible chat restore, the background fill saves
+    /// the full retained transcript immediately after reading it, so it waits for a complete writer
+    /// baseline before returning. An incomplete fingerprint layout still uses the normal detached
+    /// prime and cannot be used as a full-transcript tail baseline.
+    package static func loadNewestForHeadlessFill(gatewayId: UUID, sessionKey: String, limit: Int,
+                                                   root: URL? = Self.root) async ->
+        (items: [ChatItem], complete: Bool, outcome: LoadOutcome, forwardedSenderRefreshPending: Bool)
+    {
+        await self.loadNewest(gatewayId: gatewayId, sessionKey: sessionKey, limit: limit, root: root,
+                              waitForWriterPrime: true)
+    }
+
+    private static func loadNewest(gatewayId: UUID, sessionKey: String, limit: Int, root: URL?,
+                                   waitForWriterPrime: Bool) async ->
+        (items: [ChatItem], complete: Bool, outcome: LoadOutcome, forwardedSenderRefreshPending: Bool)
+    {
         guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else {
             return ([], false, .missing, false)
         }
         let (snapshot, outcome) = await self.read(url, gatewayId: gatewayId, root: root, newest: max(limit, 0),
-                                                  priority: .userInitiated)
+                                                  waitForWriterPrime: waitForWriterPrime, priority: .userInitiated)
         guard let snapshot else { return ([], false, outcome, false) }
         return (Array(snapshot.items.suffix(max(limit, 0))), snapshot.complete, outcome,
                 snapshot.forwardedSenderRefreshPending)
@@ -797,9 +827,23 @@ public enum TranscriptCache {
 
         /// Tests: `prime` for this URL first suspends this long, standing in for a writer busy with saves.
         var primeDelaysForTesting: [URL: Duration] = [:]
+        /// Tests: counts primes as they enter the writer, so a prefill save can be ordered against
+        /// a suspended prime without an unbounded event wait.
+        var primeStartsForTesting: [URL: Int] = [:]
+        var trackedPrimeURLsForTesting: Set<URL> = []
 
         func delayPrimeForTesting(_ url: URL, by delay: Duration?) {
             self.primeDelaysForTesting[url] = delay
+        }
+
+        func primeStartCountForTesting(_ url: URL) -> Int {
+            self.trackedPrimeURLsForTesting.insert(url)
+            return self.primeStartsForTesting[url, default: 0]
+        }
+
+        func resetPrimeStartCountForTesting(_ url: URL) {
+            self.trackedPrimeURLsForTesting.remove(url)
+            self.primeStartsForTesting[url] = nil
         }
 
         func remove(_ url: URL) {
