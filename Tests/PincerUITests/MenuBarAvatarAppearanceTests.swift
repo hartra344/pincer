@@ -15,8 +15,9 @@ struct MenuBarAvatarAppearanceTests {
     }
 
     @Test func renderedPetMatchesPresentationSchemeInsteadOfApplicationAppearance() throws {
-        let previousAppearance = NSApp.appearance
-        defer { NSApp.appearance = previousAppearance }
+        let application = NSApplication.shared
+        let previousAppearance = application.appearance
+        defer { application.appearance = previousAppearance }
         let light = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
         let style = AvatarStyle(creature: .cat)
@@ -25,19 +26,23 @@ struct MenuBarAvatarAppearanceTests {
         let side: CGFloat = 16
         let scale: CGFloat = 2
 
-        NSApp.appearance = dark
-        let lightPresentation = MenuBarContent.petImage(style: style, state: state, colorScheme: .light,
-                                                        accent: accent, side: side, scale: scale)
-        let expectedLight = AvatarArt.still(style, state: state, dark: false, accent: accent, side: side, scale: scale)
-        let expectedDark = AvatarArt.still(style, state: state, dark: true, accent: accent, side: side, scale: scale)
-        #expect(self.png(lightPresentation) == self.png(expectedLight.map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }))
-        #expect(self.png(lightPresentation) != self.png(expectedDark.map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }))
+        application.appearance = dark
+        let lightPresentation = try #require(MenuBarContent.petImage(style: style, state: state, colorScheme: .light,
+                                                                     accent: accent, side: side, scale: scale))
+        let expectedLight = try #require(AvatarArt.still(style, state: state, dark: false, accent: accent, side: side, scale: scale))
+        let expectedDark = try #require(AvatarArt.still(style, state: state, dark: true, accent: accent, side: side, scale: scale))
+        let lightPNG = try #require(self.png(lightPresentation))
+        let expectedLightPNG = try #require(self.png(NSImage(cgImage: expectedLight, size: NSSize(width: side, height: side))))
+        let expectedDarkPNG = try #require(self.png(NSImage(cgImage: expectedDark, size: NSSize(width: side, height: side))))
+        #expect(lightPNG == expectedLightPNG)
+        #expect(lightPNG != expectedDarkPNG)
 
-        NSApp.appearance = light
-        let darkPresentation = MenuBarContent.petImage(style: style, state: state, colorScheme: .dark,
-                                                       accent: accent, side: side, scale: scale)
-        #expect(self.png(darkPresentation) == self.png(expectedDark.map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }))
-        #expect(self.png(darkPresentation) != self.png(expectedLight.map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }))
+        application.appearance = light
+        let darkPresentation = try #require(MenuBarContent.petImage(style: style, state: state, colorScheme: .dark,
+                                                                    accent: accent, side: side, scale: scale))
+        let darkPNG = try #require(self.png(darkPresentation))
+        #expect(darkPNG == expectedDarkPNG)
+        #expect(darkPNG != expectedLightPNG)
     }
 }
 #endif
