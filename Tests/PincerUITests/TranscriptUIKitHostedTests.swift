@@ -66,6 +66,10 @@ struct TranscriptUIKitHostedTests {
         try LoggedOutBadgeContrastTests.verifyContrast()
     }
 
+    @Test func webSearchLinkVoiceOverActionsNameHostWithoutSpeakingURL() async throws {
+        try await WebSearchLinkVoiceOverTests.verifyActions()
+    }
+
     static func assistant(_ id: String, text: String, streaming: Bool = false, at n: Int) -> TranscriptRow {
         let stamp = Date(timeIntervalSince1970: 1_700_000_000 + Double(n))
         var turn = AssistantTurn(id: id, timestamp: stamp)
