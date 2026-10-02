@@ -25,7 +25,11 @@ extension DemoGateway {
 
     /// Trigger words match anywhere in a message, so each tip names only its own.
     static func thingsToTry(usedTool: Bool, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F") -> String {
-        """
+        let findTip = findShortcut.map { "**\($0)** searches the chat — try \"onsen\" in *Japan trip*." }
+            ?? "Use **Find in Chat** to search — try \"onsen\" in *Japan trip*."
+        let paletteTip = paletteShortcut.map { "**\($0)** opens the command palette" }
+            ?? "Open the command palette from the toolbar"
+        return """
         ## Things to try
 
         - **tool** or **disk** runs a live tool call\(usedTool ? " (like the one above)" : "").
@@ -37,8 +41,8 @@ extension DemoGateway {
         - **long** streams a multi-page reply.
         - **fail** ends the run with an error.
         - Send **/compact**, or use **Compact Now** in the context ring.
-        - **⌘F** searches the chat — try "onsen" in *Japan trip*.
-        - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
+        - \(findTip)
+        - \(paletteTip), and **⌘1–⌘3** jump to pinned chats.
         - On a Mac, **⌃⇧Space** opens Quick Capture.
         - Settings → **Location** can attach approximate location to new messages. It starts off; \
         when enabled, this demo quotes the visible location context just like the rest of your message.

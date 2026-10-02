@@ -149,6 +149,7 @@ enum Suites {
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
+            Section("Current shortcut tips") { runShortcutTipsChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
@@ -193,6 +194,7 @@ enum Suites {
         Section("Agent avatars (demo)") { await runDemoAvatars() },
         Section("Agent avatar seed recovery (demo, #520)") { await runDemoAvatarSeedRecovery() },
         Section("Avatar choices per Gateway (demo, #518)") { await runDemoGatewayAvatarChoices() },
+        Section("Current shortcut tips (demo)") { await runDemoShortcutTips() },
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Outbox head scan (demo, #557)") { await runDemoOutboxHeadScanChecks() },
