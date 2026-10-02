@@ -17,6 +17,11 @@ struct SidebarHeaderAccessibilityTests {
         #expect(header.addAccessibilityLabel == "New chat with Mochi")
     }
 
+    @Test func plainGroupHeaderAddButtonNamesTheGroup() {
+        let header = self.header(.group("Home"), title: "Home", collapsed: false)
+        #expect(header.addAccessibilityLabel == "New chat in Home")
+    }
+
     @Test func valueSpeaksDisclosureState() {
         #expect(self.header(.agent("mochi"), title: "Mochi", collapsed: true).accessibilityValue == "Collapsed")
         #expect(self.header(.agent("mochi"), title: "Mochi", collapsed: false).accessibilityValue == "Expanded")
