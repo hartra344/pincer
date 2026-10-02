@@ -216,4 +216,117 @@ struct StreamingRenderingTests {
         _ = renderer.layout(for: .entry(.assistant(done)), width: 600)
         #expect(TranscriptText.liveMemoCount.rows == before)
     }
+
+    #if os(iOS)
+    @Test func uikitStreamingProbeMeasuresNativeTranscriptUpdates() async {
+        let host = await TranscriptUIKitHostedTests.makeHost()
+        let gateway = host.context.gateway
+
+        // Exercise and count the real off-main premeasure path on committed rows before measuring the live tail.
+        let warmRows = TranscriptUIKitHostedTests.rows(count: 160, salt: "uikit-stream-probe-warm")
+        let workerLayoutsBefore = TranscriptPremeasurer.offMainLayouts.withLock { $0 }
+        host.coordinator.update(rows: warmRows, context: host.context, insets: (0, 0))
+        await TranscriptUIKitHostedTests.idle(host)
+        let warmStats = host.coordinator.premeasureStats
+        let workerLayoutsDuringWarmup = TranscriptPremeasurer.offMainLayouts.withLock { $0 } - workerLayoutsBefore
+        #expect(warmStats.adopted > 0, "the hosted UIKit list should adopt off-main measurements for committed neighbors")
+
+        func context(for key: String, chat: ChatStore) -> TranscriptContext {
+            TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                              agent: AgentSummary(id: "probe", name: "Probe"), sessionKey: key,
+                              previewImage: { _ in }, saveFile: { _, _ in }, chat: chat)
+        }
+
+        func send(_ fields: [String: JSONValue], to chat: ChatStore, key: String, runID: String) {
+            var payload = fields
+            payload["runId"] = .string(runID)
+            payload["sessionKey"] = .string(key)
+            chat.handleChat(.object(payload))
+        }
+
+        func streamingBody(_ rows: [TranscriptRow]) -> String? {
+            guard let last = rows.last, case let .entry(.assistant(turn)) = last, turn.isStreaming else { return nil }
+            return turn.body
+        }
+
+        for bytes in [2_000, 10_000, 25_000] {
+            let key = "agent:probe:uikit-stream-\(bytes)"
+            let runID = "uikit-stream-\(bytes)"
+            let chat = gateway.chat(for: key)
+            let streamContext = context(for: key, chat: chat)
+            host.coordinator.update(rows: [], context: streamContext, insets: (0, 0))
+            host.view.layoutIfNeeded()
+            TranscriptText.resetMeasureStats()
+
+            send(["state": .string("status"), "phase": .string("starting_model")], to: chat, key: key, runID: runID)
+            let reply = StreamingProbe.reply(bytes: bytes)
+            let chunks = stride(from: 0, to: reply.count, by: 20).map { start in
+                let lower = reply.index(reply.startIndex, offsetBy: start)
+                let upper = reply.index(lower, offsetBy: min(20, reply.count - start))
+                return String(reply[lower..<upper])
+            }
+            var accumulated = ""
+            var currentBatchCosts: [Double] = []
+            var perTokenMS: [Double] = []
+            var publishMS: [Double] = []
+            var largestObservedBody = 0
+
+            for (index, chunk) in chunks.enumerated() {
+                let eventStart = ProbeMeter.threadCPU()
+                accumulated += chunk
+                send(["state": .string("delta"), "deltaText": .string(chunk),
+                      "message": StreamingProbe.assistant(accumulated)], to: chat, key: key, runID: runID)
+                currentBatchCosts.append(ProbeMeter.threadCPU() - eventStart)
+
+                let isPublish = (index + 1).isMultiple(of: 2) || index + 1 == chunks.count
+                guard isPublish else { continue }
+
+                let publishStart = ProbeMeter.threadCPU()
+                chat.flushLive()
+                let rows = TranscriptRow.rows(for: chat)
+                host.coordinator.update(rows: rows, context: streamContext, insets: (0, 0))
+                host.view.layoutIfNeeded()
+                let cost = ProbeMeter.threadCPU() - publishStart
+                publishMS.append(cost * 1_000)
+                let share = cost / Double(max(1, currentBatchCosts.count))
+                perTokenMS.append(contentsOf: currentBatchCosts.map { ($0 + share) * 1_000 })
+                currentBatchCosts.removeAll(keepingCapacity: true)
+
+                guard let body = streamingBody(rows), let last = rows.last else {
+                    Issue.record("UIKit publish did not produce a visible live assistant row for \(bytes) bytes")
+                    continue
+                }
+                let bodyBytes = body.utf8.count
+                #expect(bodyBytes > largestObservedBody, "the live transcript body should grow at each publish")
+                largestObservedBody = bodyBytes
+                #expect(host.coordinator.rowTop(rows.count - 1) != nil)
+                #expect(host.view.cellForItem(at: IndexPath(item: rows.count - 1, section: 0)) != nil,
+                        "the updated live row should be hosted by a native collection-view cell")
+                #expect((host.coordinator.controller.heights[last.id]?.value ?? 0) > 0,
+                        "the UIKit coordinator should have geometry for the live row")
+            }
+
+            let maxToken = perTokenMS.max() ?? 0
+            let meanToken = perTokenMS.reduce(0, +) / Double(max(1, perTokenMS.count))
+            let maxPublish = publishMS.max() ?? 0
+            let layoutCount = TranscriptText.measureStats.mainLayouts
+            print("\nUIKit streaming \(bytes) B: body \(largestObservedBody) B, tokens \(perTokenMS.count), "
+                + "mean/max token CPU \(String(format: "%.3f", meanToken))/\(String(format: "%.3f", maxToken)) ms, "
+                + "max publish CPU \(String(format: "%.3f", maxPublish)) ms, main text layouts \(layoutCount), "
+                + "warm committed-row premeasure offloaded/adopted \(warmStats.offloaded)/\(warmStats.adopted), "
+                + "worker layouts during warmup +\(workerLayoutsDuringWarmup)")
+            #expect(largestObservedBody == reply.utf8.count, "the probe should measure the complete requested body")
+            #expect(!perTokenMS.isEmpty && !publishMS.isEmpty)
+            #expect(layoutCount > 0, "the native update path should measure the growing markdown row")
+
+            send(["state": .string("final"), "message": StreamingProbe.assistant(accumulated)],
+                 to: chat, key: key, runID: runID)
+            chat.flushLive()
+            let finalRows = TranscriptRow.rows(for: chat)
+            host.coordinator.update(rows: finalRows, context: streamContext, insets: (0, 0))
+            host.view.layoutIfNeeded()
+            TranscriptText.endLive(row: "live-\(runID)")
+        }
+    }
+    #endif
 }
