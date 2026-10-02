@@ -13,9 +13,8 @@ enum TranscriptWebSearchAccessibility {
 }
 
 extension TranscriptLayoutBuilder {
-    /// A web_search result as a link list: each title opens its page, under it the site and the start
-    /// of the snippet. An answer shows its text, then its sources. Each entry is one section whose text
-    /// is exactly `WebSearch.searchTexts`, so Find matches what's drawn.
+    /// A web_search result as a link list: each title opens its page, under it the site and a compact
+    /// snippet preview. The complete snippet remains searchable. An answer shows its text, then sources.
     func webSearch(_ web: WebSearch, durationMs: Int?, tool: ToolActivity, into card: inout ToolCardBuild) {
         var badges: [(String, TranscriptPart.Tool.Tone, String)] = []
         if let provider = web.provider { badges.append((provider, .strongFill, L("Provider \(provider)"))) }
@@ -45,8 +44,7 @@ extension TranscriptLayoutBuilder {
         case .results:
             for (index, result) in web.results.enumerated() {
                 if index > 0 { card.y += 8 }
-                self.linkSection("\(tool.id):web-\(index)", result.text, link: result.url, titleLength: result.title.utf16.count,
-                                 accessibilityHost: result.url.host(percentEncoded: false), tool: tool, into: &card)
+                self.webResultSection("\(tool.id):web-\(index)", result, tool: tool, into: &card)
             }
         case .answer:
             if let answer = web.answer {
@@ -88,7 +86,22 @@ extension TranscriptLayoutBuilder {
         }
     }
 
-    /// `text` with its first `titleLength` UTF-16 units as the link, then the meta line (dimmer) and snippet.
+    private func webResultSection(_ id: String, _ result: WebSearch.Result, tool: ToolActivity,
+                                  into card: inout ToolCardBuild)
+    {
+        let header = "\(result.title)\n\(result.metaLine)"
+        self.linkSection(id, header, link: result.url, titleLength: result.title.utf16.count,
+                         accessibilityHost: result.url.host(percentEncoded: false), tool: tool, into: &card)
+
+        guard let snippet = result.snippet, !snippet.isEmpty else { return }
+        card.y += 4
+        let lineHeight = TranscriptStyle.lineHeight(self.style.caption)
+        let text = TranscriptText.plain(snippet, font: self.style.caption, color: TranscriptColors.secondary)
+        card.y += self.textSection("\(id):snippet", text, tool: tool, x: card.x, width: card.inner,
+                                   maxHeight: lineHeight * 2, visibleLineLimit: 2, into: &card)
+    }
+
+    /// `text` with its first `titleLength` UTF-16 units as the link, then the meta line (dimmer).
     private func linkSection(_ id: String, _ text: String, link: URL, titleLength: Int, accessibilityHost: String? = nil,
                              tool: ToolActivity,
                              into card: inout ToolCardBuild)

@@ -329,13 +329,18 @@ extension TranscriptLayoutBuilder {
     }
 
     func textSection(_ id: String, _ string: NSAttributedString, tool: ToolActivity, x: CGFloat, width: CGFloat,
-                             maxHeight: CGFloat, searchable: Bool = true, into card: inout ToolCardBuild) -> CGFloat
+                             maxHeight: CGFloat, searchable: Bool = true, visibleLineLimit: Int? = nil,
+                             into card: inout ToolCardBuild) -> CGFloat
     {
         var (text, match) = searchable ? self.marks.mark(string, .tool(tool.id)) : (string, nil)
         var searchMatch: NSRange?
         if searchable, card.search != nil { (text, searchMatch) = card.search!.mark(text) }
         let contentHeight = TranscriptText.size(text, width: width).height
-        let visible = min(contentHeight, maxHeight)
+        // A selected match in the clamped source expands it so Find can reveal text past the preview.
+        let hasSelectedMatch = match != nil || searchMatch != nil
+        let lineLimit = hasSelectedMatch ? nil : visibleLineLimit
+        let effectiveMaxHeight = visibleLineLimit != nil && hasSelectedMatch ? .greatestFiniteMagnitude : maxHeight
+        let visible = min(contentHeight, effectiveMaxHeight)
         if let match {
             card.matchY = card.y + min(self.marks.lineBottom(of: match, in: text, width: width), visible)
         }
@@ -346,7 +351,8 @@ extension TranscriptLayoutBuilder {
         }
         card.sections.append(.init(title: "", titleY: 0, text: text,
                                    frame: CGRect(x: x, y: card.y, width: width, height: visible),
-                                   contentHeight: contentHeight, id: id, searchMatchBottom: searchBottom))
+                                   contentHeight: contentHeight, visibleLineLimit: lineLimit,
+                                   id: id, searchMatchBottom: searchBottom))
         return visible
     }
 
