@@ -44,7 +44,7 @@ The menu works with Pincer's main window closed, and it keeps up to date while P
 - **Running** lists chats with a reply in progress, newest first. Up to 5 rows.
 - **Unread** lists unread chats, newest first. Up to 8 rows.
 
-With **Animated avatars** on in [Settings → Appearance](../agent-avatars/#settings), each row starts with a small still pet for its agent, posed for the row: waiting for approval for approvals, asking a question for questions, thinking for running chats and idle for unread ones. It doesn't animate. With avatars off, rows are text only. The menu bar icon itself stays a plain symbol.
+With **Animated avatars** on in [Settings → Appearance](../agent-avatars/#settings), each row starts with a small still pet for its agent, posed for the row: waiting for approval for approvals, asking a question for questions, thinking for running chats and idle for unread ones. It doesn't animate. The pets follow the menu’s light or dark appearance even when Pincer’s window theme is fixed. With avatars off, rows are text only. The menu bar icon itself stays a plain symbol.
 
 Helper (subagent) runs and archived chats aren't listed. A chat shows up only once. If it has an approval or question waiting it's under **Needs You**, otherwise under **Running** if a reply is in progress, otherwise under **Unread**. A chat with two approvals gets two rows.
 

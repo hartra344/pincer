@@ -47,6 +47,7 @@ struct MenuBarContent: View {
     var clock = MenuBarClock.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage(AvatarSettings.animatedKey) private var petsOn = true
 
     var body: some View {
@@ -127,12 +128,21 @@ struct MenuBarContent: View {
         else { return nil }
         let agent = gateway.agents.first { $0.id == agentId } ?? AgentSummary(id: agentId, name: agentId.capitalized)
         let style = AvatarSettings.style(for: agent, in: gateway)
-        let side = Self.petSide
+        return Self.petImage(style: style, state: item.pose, colorScheme: self.colorScheme,
+                             accent: TranscriptColors.tint.cgColor, side: Self.petSide,
+                             scale: NSScreen.main?.backingScaleFactor ?? 2)
+    }
+
+    /// Renders the menu's still pet. The color-scheme input is the presentation appearance; kept
+    /// explicit so the bitmap result can be checked against both light and dark artwork.
+    @MainActor
+    static func petImage(style: AvatarStyle, state: AvatarState, colorScheme: ColorScheme,
+                         accent: CGColor, side: CGFloat, scale: CGFloat) -> NSImage?
+    {
+        let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
         var image: NSImage?
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
-            let dark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let scale = NSScreen.main?.backingScaleFactor ?? 2
-            image = AvatarArt.still(style, state: item.pose, dark: dark, accent: TranscriptColors.tint.cgColor, side: side, scale: scale)
+        appearance?.performAsCurrentDrawingAppearance {
+            image = AvatarArt.still(style, state: state, dark: colorScheme == .dark, accent: accent, side: side, scale: scale)
                 .map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }
         }
         return image

@@ -57,6 +57,8 @@ private func checkForwardedExchange(_ gateway: GatewayStore, _ chat: ChatStore, 
         check(kiko.body == intro?.plainText, "\(label): Kiko's group holds only her message")
         check(kiko.sender?.marker(agents: agents, receivingAgentId: "main") == "from Kiko’s chat" && kiko.sender?.canOpenSource == true,
               "\(label): “from Kiko’s chat” marker opens her chat")
+        check(kiko.sender?.accessibilityAuthor(agents: agents, receivingAgentId: "main") == "Kiko, forwarded",
+              "\(label): VoiceOver names the actual forwarded sender once")
         check(kiko.model == nil, "\(label): Kiko's message isn't credited to \(claw)'s model (\(kiko.model ?? "nil"))")
     }
     check(gateway.sessions.contains { $0.key == "agent:kiko:main" }, "\(label): Kiko's source chat exists")
