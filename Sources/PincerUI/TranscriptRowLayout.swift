@@ -65,6 +65,8 @@ enum TranscriptPart {
             /// Visible frame of the text inside the card; the text scrolls when it's taller.
             let frame: CGRect
             let contentHeight: CGFloat
+            /// Optional native TextKit line cap for a compact preview; the stored source stays complete.
+            var visibleLineLimit: Int? = nil
             /// Identifies the text view's content when the title is empty.
             var id: String?
             /// Bottom of the line holding the current card-search match, from the top of the text.

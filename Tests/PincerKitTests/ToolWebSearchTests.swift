@@ -123,6 +123,24 @@ struct ToolWebSearchTests {
         #expect(answer?.kind == .answer && answer?.truncated == true)
     }
 
+    @Test func displayedSnippetLimitDoesNotReplaceTheSearchSourceText() throws {
+        let fullSnippet = String(repeating: "A long result description remains available to search. ", count: 5)
+        let web = try #require(WebSearch.parse(.object([
+            "kind": .string("results"), "provider": .string("brave"),
+            "results": .array([.object([
+                "title": .string("Guide"), "url": .string("https://docs.example/guide"),
+                "siteName": .string("docs.example"), "snippet": .string(fullSnippet),
+            ])]),
+        ])))
+        let result = try #require(web.results.first)
+        #expect(result.snippet?.count == WebSearch.Limits.snippetShown + 1 && result.snippet?.hasSuffix("…") == true,
+                "the existing payload limit retains its appended clipping ellipsis")
+        #expect(web.searchTexts == [result.text] && web.searchTexts[0].hasSuffix(result.snippet ?? ""),
+                "the complete capped result text remains available to Find when the view visually clamps it")
+        #expect(web.copyText == "Guide\nhttps://docs.example/guide",
+                "web result Copy remains the title and URL, independent of its visual snippet clamp")
+    }
+
     @Test func detailsTrimmingKeepsAtMostTenRowsAndCapsSnippets() throws {
         let rows: [JSONValue] = (0..<25).map {
             .object(["title": .string(Self.envelope("T\($0)")), "url": .string("https://e.example.com/\($0)"),

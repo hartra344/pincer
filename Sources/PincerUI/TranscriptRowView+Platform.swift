@@ -276,8 +276,14 @@ final class TranscriptTextView: NSTextView {
 
     /// Shows `text`. `identity` is the row it belongs to: selection survives updates to the same
     /// row (a streaming reply) and clears when the view is reused for another one.
-    func set(_ text: NSAttributedString, identity: String) {
+    func set(_ text: NSAttributedString, identity: String, visibleLineLimit: Int? = nil) {
         self.applyLinkColor()
+        if let container = self.textContainer, container.maximumNumberOfLines != (visibleLineLimit ?? 0) {
+            container.maximumNumberOfLines = visibleLineLimit ?? 0
+            container.lineBreakMode = visibleLineLimit == nil ? .byWordWrapping : .byTruncatingTail
+            self.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: self.backing.length),
+                                                 actualCharacterRange: nil)
+        }
         guard text !== self.shown || identity != self.identity else { return }
         let selection = self.selectedRange()
         let sameRow = identity == self.identity
@@ -460,8 +466,14 @@ final class TranscriptTextView: UITextView, UITextViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func set(_ text: NSAttributedString, identity: String) {
+    func set(_ text: NSAttributedString, identity: String, visibleLineLimit: Int? = nil) {
         self.applyLinkColor()
+        if self.textContainer.maximumNumberOfLines != (visibleLineLimit ?? 0) {
+            self.textContainer.maximumNumberOfLines = visibleLineLimit ?? 0
+            self.textContainer.lineBreakMode = visibleLineLimit == nil ? .byWordWrapping : .byTruncatingTail
+            self.layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: self.backing.length),
+                                                actualCharacterRange: nil)
+        }
         guard text !== self.shown || identity != self.identity else { return }
         let selection = self.selectedRange
         let sameRow = identity == self.identity
