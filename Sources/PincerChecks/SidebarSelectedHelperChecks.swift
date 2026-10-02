@@ -13,8 +13,8 @@ func runSidebarSelectedHelperChecks() {
     let helper = "agent:main:subagent:briefing"
     let snapshot: JSONValue = ["sessions": [
         ["key": "agent:main:main", "updatedAt": 1],
-        ["key": automation, "label": "Briefing", "updatedAt": 2],
-        ["key": helper, "label": "Briefing helper", "spawnedBy": "\(automation):run:run1", "updatedAt": 3],
+        ["key": .string(automation), "label": "Briefing", "updatedAt": 2],
+        ["key": .string(helper), "label": "Briefing helper", "spawnedBy": .string("\(automation):run:run1"), "updatedAt": 3],
     ]]
     gateway.applySnapshot(snapshot)
 
