@@ -1400,9 +1400,15 @@ public final class GatewayStore: Identifiable {
         return await self.resolveQuestion(prompt, params)
     }
 
+    /// Sends a secure-form answer. Returns an error message to show on the card, or nil once it's answered.
+    public func answerSecureForm(_ prompt: QuestionPrompt, answers: [String: String]) async -> String? {
+        guard let params = prompt.secureFormResolvePayload(answers: answers) else { return "Every field needs a value." }
+        return await self.resolveQuestion(prompt, params)
+    }
+
     /// Skips the prompt; the agent is told the user declined to answer.
     public func skipQuestion(_ prompt: QuestionPrompt) async -> String? {
-        await self.resolveQuestion(prompt, ["id": .string(prompt.id), "cancel": true])
+        await self.resolveQuestion(prompt, prompt.cancelPayload)
     }
 
     private func resolveQuestion(_ prompt: QuestionPrompt, _ params: JSONValue) async -> String? {

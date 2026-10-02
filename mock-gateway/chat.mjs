@@ -4,7 +4,7 @@ import { noteApprovalForLogs, noteChatForLogs } from './logs.mjs';
 import { markSubagentAborted, simulateSpawn } from './subagents.mjs';
 import { liveFileEditCall } from './file-edits.mjs';
 import { rowModel } from './catalog.mjs';
-import { simulateQuestion } from './questions.mjs';
+import { simulateQuestion, simulateSecureFormQuestion } from './questions.mjs';
 import { makeSessionRow } from './seed.mjs';
 import { broadcastSessionChanged, broadcastSessionMessage, markRunEnded, markRunStarted, updateSessionRow } from './session-list.mjs';
 import { largeImageBlocks } from './large-media.mjs';
@@ -291,7 +291,10 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
     }
 
     let answered = null;
-    if (/\bask\b/i.test(String(text ?? ''))) {
+    if (/\bsecure form\b|\blogin\b|\bsign in\b/i.test(String(text ?? ''))) {
+      answered = await simulateSecureFormQuestion(state, run, sessionKey, row);
+      if (run.aborted) return;
+    } else if (/\bask\b/i.test(String(text ?? ''))) {
       answered = await simulateQuestion(state, run, sessionKey, row);
       if (run.aborted) return;
     }

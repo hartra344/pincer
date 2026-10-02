@@ -274,8 +274,7 @@ public struct MenuBarInbox: Equatable, Sendable {
         }
         for input in connected {
             for prompt in input.questions where prompt.isAnswerable(at: now) {
-                let first = prompt.questions.first
-                let text = first.map { $0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? $0.header : $0.question } ?? ""
+                let text = prompt.promptText ?? ""
                 let (item, key) = needsYouItem(input, id: prompt.id, kind: .question,
                                                text: "Question: \(Self.truncated(text))", sessionKey: prompt.sessionKey, agentId: prompt.agentId)
                 needsYou.append(item)
