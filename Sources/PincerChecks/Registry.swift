@@ -66,6 +66,7 @@ enum Suites {
             Section("Transcript") { await runTranscriptChecks() },
             Section("Streaming clock adjustment") { runStreamingClockChecks() },
             Section("Streaming transcript saves") { runStreamingSaveChecks() },
+            Section("Streaming cadence") { runStreamingCadenceChecks() },
             Section("Models") { runModelChecks() },
             Section("Exec approvals") { runExecApprovalChecks() },
             Section("Approval notification actions") { runApprovalNotificationActionChecks() },

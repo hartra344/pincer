@@ -64,6 +64,8 @@ The tests are hermetic:
 swift test --filter StreamingProbe
 ```
 
+Text-growth transcript publishes are capped at 60 Hz; status and terminal updates remain immediate. A paired 25 KB streaming probe measured similar per-publish p95 main-actor elapsed time at 30 and 60 Hz (about 2.1 ms), while the summed publish time was about 87% higher at 60 Hz. The cap is fixed and does not track the display refresh rate; a 120 Hz display does not imply 120 Hz transcript updates.
+
 CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. The hosted UIKit suite also resizes a native transcript from 390 to 600 points and back, checking measured row widths, row tops, collection content geometry, and the reader’s anchored row and screen position. It also verifies settling and measured visible rows through UIKit’s public scroll-to-top delegate callback; this is separate from testing a physical status-bar gesture. To run those rendering suites locally:
 
 ```sh

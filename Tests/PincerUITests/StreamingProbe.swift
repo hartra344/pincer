@@ -13,8 +13,8 @@ import AppKit
 ///
 /// ONE PLACE TO EDIT for a build with the coalescer: set `ProbeShim.flush` to `{ $0.flushLive() }`.
 /// With `nil` (baseline) every token is treated as a publish. With a closure, a publish (flush + layout +
-/// text set) fires only when simulated time (token i at i/60 s) crosses the next 1/30 s boundary,
-/// and once more at the end.
+/// text set) fires only when simulated time (token i at i/60 s) crosses the cadence boundary, then once
+/// at the end only if the last delta was not already published.
 @MainActor
 enum ProbeShim {
     static let flush: ((ChatStore) -> Void)? = { $0.flushLive() }
@@ -51,15 +51,18 @@ struct StreamingProbe {
     struct Result {
         var bytes: Int
         var tokens: Int
+        var cadenceHz: Int
         var publishes: [Double] = []
         /// Text views re-set per publish (identity-equal parts are skipped): the deterministic measure of
         /// per-publish work, since only the growing tail should change.
         var textSets: [Int] = []
         var totalMs = 0.0
+        var publishTotalMs = 0.0
         var counts: String?
+        var finalText = ""
     }
 
-    func run(bytes: Int) -> Result {
+    func run(bytes: Int, cadenceHz: Int = 30) -> Result {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
@@ -77,12 +80,15 @@ struct StreamingProbe {
         #endif
 
         let text = Self.reply(bytes: bytes)
+        // Live Markdown skips the shared committed-text caches. A distinct row key also keeps this
+        // cadence sample independent of every earlier probe invocation.
+        let runId = "run_probe_\(UUID().uuidString)"
         let chars = Array(text)
         var chunks: [String] = []
         var i = 0
         while i < chars.count { chunks.append(String(chars[i..<min(i + 20, chars.count)])); i += 20 }
 
-        var result = Result(bytes: bytes, tokens: chunks.count)
+        var result = Result(bytes: bytes, tokens: chunks.count, cadenceHz: cadenceHz)
         let clock = ContinuousClock()
         func ms(_ d: Duration) -> Double {
             Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15
@@ -126,35 +132,42 @@ struct StreamingProbe {
 
         func event(_ fields: [String: JSONValue]) {
             var payload = fields
-            payload["runId"] = "run_probe"
+            payload["runId"] = .string(runId)
             payload["sessionKey"] = .string(Self.key)
             chat.handleChat(.object(payload))
         }
         event(["state": "status", "phase": "starting_model"])
 
         var acc = ""
-        var nextBoundary = 1.0 / 30
+        var nextFrame = 1
+        var pendingSincePublish = false
         for (index, chunk) in chunks.enumerated() {
             acc += chunk
-            var cost = ms(clock.measure {
+            let eventCost = ms(clock.measure {
                 event(["state": "delta", "deltaText": .string(chunk), "message": Self.assistant(acc)])
             })
-            let t = Double(index + 1) / 60
-            if ProbeShim.flush == nil || t >= nextBoundary {
+            result.totalMs += eventCost
+            let elapsedTicks = index + 1
+            if ProbeShim.flush == nil || elapsedTicks * cadenceHz >= nextFrame * 60 {
                 let p = publish()
                 result.publishes.append(p)
                 result.textSets.append(sets)
-                cost += p
-                while nextBoundary <= t { nextBoundary += 1.0 / 30 }
+                result.publishTotalMs += p
+                result.totalMs += p
+                pendingSincePublish = false
+                while nextFrame * 60 <= elapsedTicks * cadenceHz { nextFrame += 1 }
+            } else {
+                pendingSincePublish = true
             }
-            result.totalMs += cost
         }
-        if ProbeShim.flush != nil {
+        if ProbeShim.flush != nil, pendingSincePublish {
             let p = publish()
             result.publishes.append(p)
             result.textSets.append(sets)
+            result.publishTotalMs += p
             result.totalMs += p
         }
+        result.finalText = chat.live?.text ?? ""
         result.counts = ProbeShim.cacheCounts?()
         return result
     }
@@ -237,10 +250,10 @@ struct StreamingProbe {
         """)
         // Baseline (no coalescer) is expected to be slow; the checks only apply once flush is wired.
         guard ProbeShim.flush != nil else { return }
-        // Deterministic: publishes follow simulated time (30 Hz at 60 tok/s), so there's one per two tokens
-        // plus the trailing flush, whatever the machine's speed.
+        // Deterministic: publishes follow the requested simulated cadence, independent of machine speed.
         for (kb, r) in results.sorted(by: { $0.key < $1.key }) {
-            #expect(abs(r.publishes.count - (r.tokens / 2 + 1)) <= 1, "\(kb) KB: \(r.publishes.count) publishes for \(r.tokens) tokens")
+            let expected = Int(ceil(Double(r.tokens) * Double(r.cadenceHz) / 60))
+            #expect(r.publishes.count == expected, "\(kb) KB: \(r.publishes.count) publishes at \(r.cadenceHz) Hz for \(r.tokens) tokens")
         }
         #if os(macOS)
         // Deterministic flatness: each publish re-sets only the text parts that changed (the growing tail),
@@ -258,6 +271,37 @@ struct StreamingProbe {
         if ProcessInfo.processInfo.environment["PINCER_FRAME_BUDGET"] == "1" {
             let limit = PerfBudget.limit(.milliseconds(8.3))
             #expect(Duration.seconds(p25 / 1000) <= limit, "p95 publish at 25 KB \(p25) ms, budget \(limit)")
+        }
+    }
+
+    @Test func pairedThirtyAndSixtyHzCadenceAt25KB() {
+        let thirty = self.run(bytes: 25_000, cadenceHz: 30)
+        let sixty = self.run(bytes: 25_000, cadenceHz: 60)
+        func p95(_ result: Result) -> Double { Self.p95(result.publishes) }
+        func maximum(_ result: Result) -> Double { result.publishes.max() ?? 0 }
+        func summary(_ result: Result) -> String {
+            "\(result.cadenceHz) Hz: \(result.publishes.count) publishes, p95 \(String(format: "%.2f", p95(result))) ms, " +
+                "max \(String(format: "%.2f", maximum(result))) ms, publish total \(String(format: "%.2f", result.publishTotalMs)) ms, " +
+                "event+publish total \(String(format: "%.2f", result.totalMs)) ms, max text sets \(result.textSets.max() ?? 0), " +
+                "final UTF-8 bytes \(result.finalText.utf8.count)"
+        }
+        print("\nStreaming cadence pair (25 KB, 60 chunks/s):\n\(summary(thirty))\n\(summary(sixty))\n")
+
+        let expectedText = Self.reply(bytes: 25_000)
+        #expect(thirty.finalText == expectedText)
+        #expect(sixty.finalText == expectedText)
+        #expect(thirty.tokens == sixty.tokens)
+        #expect(thirty.publishes.count == Int(ceil(Double(thirty.tokens) / 2)))
+        #expect(sixty.publishes.count == sixty.tokens)
+        #expect(sixty.publishTotalMs >= 0 && thirty.publishTotalMs >= 0)
+        #if os(macOS)
+        #expect((thirty.textSets.max() ?? 0) <= 3)
+        #expect((sixty.textSets.max() ?? 0) <= 3)
+        #endif
+        if ProcessInfo.processInfo.environment["PINCER_FRAME_BUDGET"] == "1" {
+            let limit = PerfBudget.limit(.milliseconds(8.3))
+            let p95 = Duration.seconds(Self.p95(sixty.publishes) / 1000)
+            #expect(p95 <= limit, "60 Hz publish p95 \(p95) exceeds the 120 Hz frame budget \(limit)")
         }
     }
 }
