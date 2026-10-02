@@ -73,6 +73,7 @@ enum Suites {
             Section(nil) { await checkAgentManagement() },
             Section(nil) { checkSubagents() },
             Section(nil) { checkForwardedMessages() },
+            Section("Bridged row authors") { checkBridgedHeaderAuthors() },
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
             Section(nil) { await checkDeviceManagement() },

@@ -736,6 +736,10 @@ private func checkTelegramReplyShapes(_ chat: ChatStore, idPrefix: String, label
     await chat.load()
     let loaded = await waitFor("\(label) telegram history") { chat.items.contains { $0.plainText.hasPrefix("Dr. Alvarez") } }
     check(loaded, "\(label): bridged Telegram chat loads")
+    let mayaMessages = chat.items.filter { $0.role == .user }
+    check(!mayaMessages.isEmpty && mayaMessages.allSatisfy {
+        $0.senderName(you: "Device Owner", agent: "Claw", agents: []) == "Maya"
+    }, "\(label): every seeded Telegram user row resolves to Maya instead of the device owner")
     let clinic = chat.items.first { $0.role == .assistant && $0.plainText.hasPrefix("Dr. Alvarez") }
     let dentist = chat.items.first { $0.role == .assistant && $0.plainText.hasPrefix("Your dentist appointment") }
     let pickup = chat.items.first { $0.role == .assistant && $0.plainText.contains("Friday pickup") }
