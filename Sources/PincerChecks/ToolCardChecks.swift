@@ -130,6 +130,10 @@ private func checkWebSearchCard(_ call: ToolActivity, label: String) {
           "\(label): web_search titles, snippets and sites are unwrapped http(s) links")
     check(web.results.contains { $0.snippet == nil } && web.results.contains { $0.published != nil } && web.results.contains { $0.siteName != nil },
           "\(label): web_search rows vary: no snippet, dated, site name")
+    if label == "demo" {
+        check(web.truncated && call.result?.contains("\"truncated\": true") == true,
+              "demo: the Gateway-shaped result preserves its explicit truncation flag")
+    }
     check(Array(p.searchTexts.suffix(web.results.count)) == web.results.map(\.text) && !p.searchTexts.contains { $0.contains("\"kind\"") },
           "\(label): web_search Find strings are the drawn rows")
     check(p.output?.durationMs == 640 && call.result?.contains("<<<EXTERNAL_UNTRUSTED_CONTENT") == true,

@@ -57,6 +57,11 @@ struct TranscriptUIKitHostedTests {
         try SidebarHomeGroupMenuTests.verifyMenuCaptions()
     }
 
+    @Test func webSearchTruncationStatusReachesUIKitTranscriptLayout() throws {
+        try WebSearchTruncationStatusTests.verifyResultsStatus()
+        try WebSearchTruncationStatusTests.verifyAnswerStatus()
+    }
+
     @Test func loggedOutBadgeContrastMeetsLightAndDarkFormSurfaces() throws {
         try LoggedOutBadgeContrastTests.verifyContrast()
     }

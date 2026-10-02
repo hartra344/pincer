@@ -12903,6 +12903,16 @@
         }
       }
     },
+    "Search output was truncated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search output was truncated"
+          }
+        }
+      }
+    },
     "Search Settings": {
       "localizations": {
         "en": {

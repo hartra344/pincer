@@ -42,7 +42,7 @@ extension DemoGateway {
     """
     static let toolCardsSearchResults: [WebSearchSeed] = [
         WebSearchSeed(title: "Authorization — Model Context Protocol", url: "https://modelcontextprotocol.io/specification/draft/basic/authorization",
-                      snippet: "MCP servers that use HTTP transports SHOULD conform to OAuth 2.1. A server that needs a token answers 401 with a WWW-Authenticate header pointing at its protected resource metadata.",
+                      snippet: "MCP servers that use HTTP transports SHOULD conform to OAuth 2.1. A server that needs a token answers 401 with a WWW-Authenticate header pointing at its protected resource metadata, where the client discovers authorization and token endpoints before beginning a browser-based flow.",
                       published: "2026-07-18", siteName: "modelcontextprotocol.io"),
         WebSearchSeed(title: "Connecting MCP servers | OpenClaw", url: "https://docs.openclaw.example/mcp/connecting",
                       snippet: "Servers that use OAuth report authorization required until you run openclaw mcp auth <server>.",
@@ -154,7 +154,7 @@ extension DemoGateway {
     /// The `kind: "results"` payload of upstream's `web_search`: the tool result text is
     /// `JSON.stringify(payload, null, 2)` and `details` is the payload itself.
     static func webSearchResult(provider: String = "brave", query: String, tookMs: Int,
-                                results: [WebSearchSeed]) -> (text: String, details: JSONValue)
+                                results: [WebSearchSeed], truncated: Bool = false) -> (text: String, details: JSONValue)
     {
         var salt = 0
         func wrap(_ text: String) -> String {
@@ -171,12 +171,14 @@ extension DemoGateway {
         }
         let external: [(String, JSONValue)] = [("untrusted", .bool(true)), ("source", "web_search"),
                                                ("wrapped", .bool(true)), ("provider", .string(provider))]
-        let payload: [(String, JSONValue)] = [
+        var payload: [(String, JSONValue)] = [
             ("kind", "results"), ("provider", .string(provider)), ("query", .string(query)),
             ("count", .number(Double(results.count))), ("tookMs", .number(Double(tookMs))),
             ("results", .array(rows.map { .object(Dictionary(uniqueKeysWithValues: $0)) })),
             ("externalContent", .object(Dictionary(uniqueKeysWithValues: external))),
         ]
+        // Upstream only emits this optional field when some search output was shortened or omitted.
+        if truncated { payload.append(("truncated", .bool(true))) }
         var text = "{\n"
         for (index, (key, value)) in payload.enumerated() {
             let rendered: String
@@ -236,7 +238,8 @@ extension DemoGateway {
             return Self.message("toolResult", [Self.text(text)], ago: ago, extra: extra)
         }
         let fetchURL = "https://docs.openclaw.example/mcp/connecting"
-        let search = Self.webSearchResult(query: Self.toolCardsSearchQuery, tookMs: 640, results: Self.toolCardsSearchResults)
+        let search = Self.webSearchResult(query: Self.toolCardsSearchQuery, tookMs: 640, results: Self.toolCardsSearchResults,
+                                          truncated: true)
         return [
             Self.message("user", [Self.text("Check the MCP servers. Era looks stuck.")], ago: start),
             Self.message("assistant", [
