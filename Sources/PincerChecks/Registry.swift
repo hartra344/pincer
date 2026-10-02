@@ -65,6 +65,7 @@ enum Suites {
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
             Section("Streaming transcript saves") { runStreamingSaveChecks() },
+            Section("Streaming cadence") { runStreamingCadenceChecks() },
             Section("Models") { runModelChecks() },
             Section("Exec approvals") { runExecApprovalChecks() },
             Section("Approval notification actions") { runApprovalNotificationActionChecks() },
