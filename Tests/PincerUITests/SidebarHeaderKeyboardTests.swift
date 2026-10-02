@@ -44,19 +44,24 @@ struct SidebarHeaderKeyboardTests {
         before.nextKeyView = outline
         outline.nextKeyView = after
         after.nextKeyView = before
-        let window = NSWindow(contentRect: root.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 520, height: 360),
+                              styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.autorecalculatesKeyViewLoop = false
         window.contentView = root
-        window.orderBack(nil)
+        window.makeKeyAndOrderFront(nil)
         defer { window.close() }
         window.displayIfNeeded()
         outline.layoutSubtreeIfNeeded()
 
         let headerRow = outline.row(forItem: outline.item(atRow: 0))
         #expect(headerRow == 0)
+        let headerItem = try #require(outline.item(atRow: headerRow))
+        #expect(outline.delegate?.outlineView?(outline, shouldSelectItem: headerItem) == false,
+                "mouse-driven selection continues to reject section headers")
         #expect(outline.selectedRow == outline.row(forItem: outline.item(atRow: 1)),
                 "the current chat remains selected before keyboard focus moves")
-        #expect(window.makeFirstResponder(before))
+        #expect(window.makeFirstResponder(before), "the preceding control accepts keyboard focus")
         window.sendEvent(Self.key("\t", code: 48, in: window))
         #expect(window.firstResponder === outline, "Tab enters the sidebar through the native key-view loop")
 
@@ -64,15 +69,30 @@ struct SidebarHeaderKeyboardTests {
         #expect(outline.selectedRow == headerRow, "the header can take keyboard focus without selecting a chat")
         #expect(effects.selected.isEmpty, "focusing a header never changes the selected chat")
 
+        let refreshedSection = SidebarSection(id: "Mochi", title: "Mochi refreshed", emoji: nil,
+                                              channels: [], kind: .agent("mochi"))
+        let refreshedHeader = SidebarModel.Header(id: header.id, section: refreshedSection,
+                                                  isCollapsed: false, newChatAgent: "mochi")
+        let refreshed = SidebarModel(groups: [.init(header: refreshedHeader, entries: [entry])])
+        coordinator.update(model: refreshed, selectedKey: key, actions: Self.actions(effects), theme: AppTheme())
+        #expect(outline.selectedRow == headerRow, "a still-present header keeps keyboard focus through row reconfiguration")
+        #expect(effects.selected.isEmpty)
+
         window.sendEvent(Self.key("\u{F702}", code: 123, in: window)) // Left collapses.
         #expect(effects.collapsed.last?.collapsed == true)
         window.sendEvent(Self.key("\u{F703}", code: 124, in: window)) // Right expands.
         #expect(effects.collapsed.last?.collapsed == false)
+        window.sendEvent(Self.key("\u{F701}", code: 125, in: window)) // Down follows native outline navigation to the chat.
+        #expect(outline.selectedRow == 1)
+        #expect(effects.selected == [key])
+        window.sendEvent(Self.key("\u{F700}", code: 126, in: window)) // Up returns to the header.
+        #expect(outline.selectedRow == headerRow)
+        #expect(effects.selected == [key], "returning to a header does not change chat selection")
         window.sendEvent(Self.key("\r", code: 36, in: window)) // Return toggles.
         #expect(effects.collapsed.last?.collapsed == true)
         window.sendEvent(Self.key("+", code: 24, modifiers: [.shift], in: window))
         #expect(effects.newChats == ["mochi"], "Shift-+ invokes only the focused header's + action")
-        #expect(effects.selected.isEmpty)
+        #expect(effects.selected == [key], "keyboard header commands preserve the selected chat")
     }
 
     private final class Effects {

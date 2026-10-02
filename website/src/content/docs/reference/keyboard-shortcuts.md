@@ -67,6 +67,10 @@ See [Command palette & navigation](../../guides/command-palette-and-navigation/)
 
 On the message search page, <kbd>Esc</kbd> goes back to the palette only when you opened it from there. Opened with <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> or from the sidebar, it closes.
 
+## Sidebar headers on macOS
+
+With keyboard focus in the sidebar, **Up** and **Down** move through chats and section headers. Focusing a header keeps the current chat open. **Left** collapses a focused header, **Right** expands it, and **Return** toggles it. Type **+** (Shift and the plus key) on a header with a **+** action to open its contextual New Chat action. The app’s customizable **New Chat** shortcut still works normally.
+
 ## Transcript
 
 **Previous Message** and **Next Message** move to the neighboring message in the focused chat and can be changed in Keyboard Shortcuts settings. On macOS they also move keyboard focus into the transcript, with a focus ring on that message. The rest work there while the transcript has focus. See [Accessibility](../../guides/accessibility/#keyboard).
