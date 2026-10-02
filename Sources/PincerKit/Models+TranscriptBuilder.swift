@@ -6,13 +6,16 @@ import UniformTypeIdentifiers
 /// A tool invocation paired with its result, rendered as one card.
 public struct ToolActivity: Identifiable, Hashable, Sendable {
     public let id: String
-    public var name: String
-    public var arguments: String? { didSet { self.derive() } }
-    public var result: String? { didSet { self.derive() } }
+    public var name: String { didSet { self.presentationCacheRevision = UUID() } }
+    public var arguments: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
+    public var result: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     /// `details` of the result, trimmed to what a file-edit diff reads. See `ToolFileEdit.parse`.
-    public var details: JSONValue? { didSet { self.durationMs = Self.duration(details) } }
-    public var isError: Bool
-    public var isRunning: Bool
+    public var details: JSONValue? { didSet { self.durationMs = Self.duration(details); self.presentationCacheRevision = UUID() } }
+    public var isError: Bool { didSet { self.presentationCacheRevision = UUID() } }
+    public var isRunning: Bool { didSet { self.presentationCacheRevision = UUID() } }
+    /// Opaque presentation-cache identity. Copies retain it; mutations rotate it.
+    /// It is intentionally excluded from semantic equality and hashing.
+    public private(set) var presentationCacheRevision: UUID
     /// One-line hint (command, path, query) for the collapsed card. Derived once, not per render.
     public private(set) var summary: String?
     /// How long the call took, from `details` (`durationMs` for exec, `tookMs` for web tools). Derived when details are set.
@@ -33,7 +36,36 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         self.durationMs = Self.duration(details)
         self.isError = isError
         self.isRunning = isRunning
+        self.presentationCacheRevision = UUID()
         self.derive()
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+            && lhs.name == rhs.name
+            && lhs.arguments == rhs.arguments
+            && lhs.result == rhs.result
+            && lhs.details == rhs.details
+            && lhs.isError == rhs.isError
+            && lhs.isRunning == rhs.isRunning
+            && lhs.summary == rhs.summary
+            && lhs.durationMs == rhs.durationMs
+            && lhs.spawnedSessionKey == rhs.spawnedSessionKey
+            && lhs.spawnLabel == rhs.spawnLabel
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.id)
+        hasher.combine(self.name)
+        hasher.combine(self.arguments)
+        hasher.combine(self.result)
+        hasher.combine(self.details)
+        hasher.combine(self.isError)
+        hasher.combine(self.isRunning)
+        hasher.combine(self.summary)
+        hasher.combine(self.durationMs)
+        hasher.combine(self.spawnedSessionKey)
+        hasher.combine(self.spawnLabel)
     }
 
     /// Scalar `details` keys other cards read: exec's exit status and web_fetch's response.

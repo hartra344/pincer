@@ -106,6 +106,29 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
           "\(label): header duration derives from durationMs / tookMs (\(calls.map { $0.durationMs ?? -1 }))")
     let fetch = ToolCallPresentation.make(calls[5])
     check(fetch.kind == .webFetch && fetch.output?.status == "200", "\(label): web_fetch status is 200 (\(fetch.output?.status ?? "nil"))")
+    if label == "demo" {
+        let seededFetch = calls[5]
+        let reconstructedFetch = ToolActivity(
+            id: seededFetch.id, name: seededFetch.name, arguments: seededFetch.arguments,
+            result: seededFetch.result, details: seededFetch.details,
+            isError: seededFetch.isError, isRunning: seededFetch.isRunning
+        )
+        let copiedFetch = seededFetch
+        check(seededFetch.presentationCacheRevision != reconstructedFetch.presentationCacheRevision
+              && copiedFetch.presentationCacheRevision == seededFetch.presentationCacheRevision
+              && seededFetch == reconstructedFetch
+              && seededFetch.hashValue == reconstructedFetch.hashValue
+              && Set([seededFetch, reconstructedFetch]).count == 1,
+              "demo: reconstructed web_fetch snapshots retain semantic identity while copies keep the presentation revision")
+
+        var updatedFetch = reconstructedFetch
+        updatedFetch.details = ["status": 503]
+        let updatedPresentation = ToolCallPresentation.make(updatedFetch)
+        check(updatedFetch.presentationCacheRevision != reconstructedFetch.presentationCacheRevision
+              && updatedFetch != reconstructedFetch
+              && updatedPresentation.output?.status == "503",
+              "demo: changing seeded web_fetch details rotates presentation identity and updates its status")
+    }
 
     // A live run stores the whole result envelope; the card still shows just the text.
     var live = calls[0]

@@ -186,6 +186,34 @@ struct TranscriptListControllerTests {
         #expect(controller.index["u-u5"] == 5)
     }
 
+    @Test func rebuiltEqualToolRowsDoNotInvalidateTheTranscript() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, _, _) = self.make(scratch)
+        func tool() -> ToolActivity {
+            ToolActivity(id: "cache-tool", name: "exec", arguments: #"{"command":"echo"}"#,
+                         result: "alpha", isError: false, isRunning: false)
+        }
+        func row(_ tool: ToolActivity) -> TranscriptRow {
+            var turn = AssistantTurn(id: "cache-turn", timestamp: Date(timeIntervalSince1970: 1))
+            turn.tools = [tool]
+            return .entry(.assistant(turn))
+        }
+        let original = tool()
+        var rebuilt = tool()
+        #expect(original.presentationCacheRevision != rebuilt.presentationCacheRevision)
+        #expect(row(original) == row(rebuilt))
+        #expect(controller.accept([row(original)], contextChanged: false) == .initial)
+        #expect(controller.accept([row(rebuilt)], contextChanged: false) == .unchanged)
+
+        let oldIds = controller.rows.map(\.id)
+        #expect(controller.accept([row(rebuilt), Self.user(1)], contextChanged: false)
+                == .rows(changed: IndexSet(), oldIds: oldIds))
+        rebuilt.result = "bravo"
+        #expect(controller.accept([row(rebuilt), Self.user(1)], contextChanged: false)
+                == .rows(changed: IndexSet(integer: 0), oldIds: nil))
+    }
+
     @Test func pendingSendJumpsToTheBottom() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }

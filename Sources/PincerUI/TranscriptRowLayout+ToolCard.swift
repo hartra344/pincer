@@ -34,7 +34,7 @@ enum ToolPresentationCache {
     }
 
     private static func entry(for tool: ToolActivity) -> Box {
-        let key = "\(tool.id)|\(tool.arguments?.utf8.count ?? -1)|\(tool.result?.utf8.count ?? -1)|\(tool.isError)|\(tool.isRunning)|\(tool.details != nil)" as NSString
+        let key = tool.presentationCacheRevision.uuidString as NSString
         if let cached = self.cache.object(forKey: key) { return cached }
         let box = Box(ToolCallPresentation.make(tool, limit: TranscriptMetrics.toolOutputLimit))
         self.cache.setObject(box, forKey: key)
