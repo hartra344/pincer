@@ -32,7 +32,8 @@ private struct APIKeyIOSField: UIViewRepresentable {
     let onSubmit: () -> Void
     @Environment(\.isEnabled) private var isEnabled
 
-    func makeUIView(context: Context) -> UITextField {
+    func makeUIView(context: Context) -> APIKeyIOSFieldView {
+        let view = APIKeyIOSFieldView()
         let field = UITextField()
         field.isEnabled = self.isEnabled
         field.isSecureTextEntry = true
@@ -55,22 +56,24 @@ private struct APIKeyIOSField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
 
-        let visibility = UIButton(type: .system)
-        visibility.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
-        visibility.accessibilityIdentifier = "api-key-visibility"
-        visibility.addTarget(context.coordinator, action: #selector(Coordinator.toggleVisibility), for: .touchUpInside)
-        field.rightView = visibility
-        field.rightViewMode = .always
-        context.coordinator.updateVisibilityButton(visibility)
+        view.textField = field
+        view.visibilityButton.accessibilityIdentifier = "api-key-visibility"
+        view.visibilityButton.addTarget(context.coordinator, action: #selector(Coordinator.toggleVisibility), for: .touchUpInside)
+        context.coordinator.field = field
+        context.coordinator.updateVisibilityButton(view.visibilityButton)
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return field
+        view.addArrangedSubview(field)
+        view.addArrangedSubview(view.visibilityButton)
+        return view
     }
 
-    func updateUIView(_ field: UITextField, context: Context) {
+    func updateUIView(_ view: APIKeyIOSFieldView, context: Context) {
+        guard let field = view.textField else { return }
         context.coordinator.parent = self
+        context.coordinator.field = field
         field.isEnabled = self.isEnabled
         if field.text != self.text { field.text = self.text }
-        context.coordinator.updateVisibilityButton(field.rightView as? UIButton)
+        context.coordinator.updateVisibilityButton(view.visibilityButton)
         context.coordinator.applySecureEntry(to: field)
     }
 
@@ -79,6 +82,7 @@ private struct APIKeyIOSField: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: APIKeyIOSField
+        weak var field: UITextField?
         init(_ parent: APIKeyIOSField) { self.parent = parent }
 
         func updateVisibilityButton(_ button: UIButton?) {
@@ -110,7 +114,29 @@ private struct APIKeyIOSField: UIViewRepresentable {
             }
         }
 
-        @objc func toggleVisibility() { self.parent.isRevealed.toggle() }
+        @objc func toggleVisibility() {
+            self.preserveSelectionWhileToggling()
+            self.parent.isRevealed.toggle()
+        }
+
+        private func preserveSelectionWhileToggling() {
+            guard let field = self.field else { return }
+            let wasFirstResponder = field.isFirstResponder
+            let selection = field.selectedTextRange.map {
+                (start: field.offset(from: field.beginningOfDocument, to: $0.start),
+                 end: field.offset(from: field.beginningOfDocument, to: $0.end))
+            }
+            DispatchQueue.main.async { [weak field] in
+                guard let field else { return }
+                if wasFirstResponder { _ = field.becomeFirstResponder() }
+                if let selection,
+                   let start = field.position(from: field.beginningOfDocument, offset: selection.start),
+                   let end = field.position(from: field.beginningOfDocument, offset: selection.end)
+                {
+                    field.selectedTextRange = field.textRange(from: start, to: end)
+                }
+            }
+        }
         @objc func changed(_ field: UITextField) { self.parent.text = field.text ?? "" }
 
         func textFieldShouldReturn(_ field: UITextField) -> Bool {
@@ -119,6 +145,29 @@ private struct APIKeyIOSField: UIViewRepresentable {
             return true
         }
     }
+}
+
+@MainActor
+private final class APIKeyIOSFieldView: UIStackView {
+    let visibilityButton = UIButton(type: .system)
+    var textField: UITextField?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.axis = .horizontal
+        self.alignment = .center
+        self.distribution = .fill
+        self.spacing = 4
+        self.visibilityButton.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
+        self.visibilityButton.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        self.visibilityButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        self.visibilityButton.contentHorizontalAlignment = .center
+        self.visibilityButton.contentVerticalAlignment = .center
+        self.visibilityButton.setContentHuggingPriority(.required, for: .horizontal)
+        self.visibilityButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 }
 #else
 import AppKit
