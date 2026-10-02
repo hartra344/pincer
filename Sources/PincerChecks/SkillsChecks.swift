@@ -92,9 +92,19 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     check(Set(skills.skills.map(\.state)) == Set(SkillState.allCases), "demo covers every state")
     check(skills.skill(key: "video-frames")?.primaryReason == "Missing binary: ffmpeg", "demo missing binary")
     if let notion = skills.skill(key: "notion") {
-        let saved = await skills.setApiKey(notion, "sk-demo_MiXeD-123+/=:@.")
+        let transientKey = "sk-demo_MiXeD-123+/=:@."
+        let saved = await skills.setApiKey(notion, transientKey)
         check(saved == .done("Saved the API key for notion") && skills.skill(key: "notion")?.apiKeyIsSet == true
               && skills.skill(key: "notion")?.state == .ready, "demo pasted API key satisfies the skill requirement (#505)")
+        do {
+            let report = try await gateway.request(Skills.statusMethod, [:])
+            let writeOnly = try await Task.detached {
+                try JSONEncoder().encode(report).range(of: Data(transientKey.utf8)) == nil
+            }.value
+            check(writeOnly, "demo key visibility remains local to the editor: saved skill status never returns key text (#506)")
+        } catch {
+            check(false, "demo skill key status responds without returning secret text (#506)")
+        }
         if let keyed = skills.skill(key: "notion") {
             _ = await skills.setApiKey(keyed, "")
             check(skills.skill(key: "notion")?.apiKeyIsSet == false && skills.skill(key: "notion")?.state == .needsSetup,
