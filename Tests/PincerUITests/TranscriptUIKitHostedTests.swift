@@ -237,5 +237,112 @@ struct TranscriptUIKitHostedTests {
         #expect(window.range.count > visible.count, "the window reaches past the screen")
         #expect(visible.upperBound == 399, "a new list opens at the latest message")
     }
+
+    @Test func widthRoundTripRebuildsUIKitGeometryAndKeepsTheReadingAnchor() async throws {
+        let host = await Self.makeHost()
+        let window = try #require(host.view.window)
+        let rows = Self.rows(count: 240, salt: "width-roundtrip")
+        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
+        await Self.idle(host)
+
+        let initialWidth = host.view.bounds.width
+        #expect(initialWidth > 40)
+        let anchorRow = 100
+        guard let anchorTop = host.coordinator.rowTop(anchorRow) else {
+            Issue.record("the initial layout did not provide an anchor row")
+            return
+        }
+        host.view.contentOffset.y = anchorTop + 18
+        host.coordinator.controller.readerScrolled(movingUp: true)
+        guard case let .row(anchorID, _) = host.coordinator.controller.anchor,
+              let anchoredIndex = host.coordinator.controller.index[anchorID],
+              let initialAnchorTop = host.coordinator.rowTop(anchoredIndex) else {
+            Issue.record("the hosted viewport did not establish a row anchor")
+            return
+        }
+        let anchorScreenY = initialAnchorTop - host.view.contentOffset.y
+
+        func resize(to width: CGFloat) async {
+            window.frame.size.width = width
+            host.view.frame = window.bounds
+            window.layoutIfNeeded()
+            host.view.layoutIfNeeded()
+            await Self.idle(host)
+            Self.expectConsistentGeometry(host, width: width)
+            guard let top = host.coordinator.rowTop(anchoredIndex) else {
+                Issue.record("the anchor row lost its content position at width \(width)")
+                return
+            }
+            #expect(abs((top - host.view.contentOffset.y) - anchorScreenY) < 1,
+                    "resizing to \(width) moved the anchored row on screen")
+            guard case let .row(currentAnchorID, currentOffset) = host.coordinator.controller.anchor else {
+                Issue.record("resizing changed the reader's anchor kind")
+                return
+            }
+            #expect(currentAnchorID == anchorID, "resizing changed the reader's anchor row")
+            #expect(abs(currentOffset - anchorScreenY) < 0.5, "resizing changed the anchor offset")
+        }
+
+        await resize(to: 600)
+        await resize(to: initialWidth)
+    }
+
+    @Test func scrollToTopDelegateSettlesMeasuredRowsAtTheTop() async {
+        let host = await Self.makeHost()
+        host.coordinator.update(rows: Self.rows(count: 240, salt: "scroll-to-top"),
+                                context: host.context, insets: (0, 0))
+        await Self.idle(host)
+        #expect((host.coordinator.visibleRows?.lowerBound ?? 0) > 0)
+        #expect(host.coordinator.scrollViewShouldScrollToTop(host.view))
+        #expect(host.coordinator.isScrolling, "the native delegate marks the scroll-to-top transition active")
+        // Model UIKit's completed offset, then invoke its public delegate callback. This is not
+        // an automated OS status-bar gesture.
+        host.view.contentOffset.y = -host.view.adjustedContentInset.top
+        host.coordinator.scrollViewDidScrollToTop(host.view)
+        await Self.idle(host)
+        #expect(!host.coordinator.isScrolling)
+        #expect(host.coordinator.controller.anchor == .top)
+        #expect(host.coordinator.visibleRows?.lowerBound == 0)
+        Self.expectConsistentGeometry(host, width: host.view.bounds.width)
+    }
+
+    static func expectConsistentGeometry(_ host: Host, width: CGFloat) {
+        let coordinator = host.coordinator
+        let effectiveWidth = coordinator.controller.host?.layoutWidth ?? 0
+        #expect(abs(effectiveWidth - width) < 0.5, "the coordinator must use the resized viewport width")
+
+        var expectedTop: CGFloat = 0
+        for row in coordinator.controller.rows.indices {
+            guard let top = coordinator.rowTop(row),
+                  let height = coordinator.controller.heights[coordinator.controller.rows[row].id]?.value else {
+                Issue.record("row \(row) is missing cached geometry")
+                return
+            }
+            #expect(abs(top - expectedTop) < 0.5, "row \(row) has an inconsistent cached top")
+            expectedTop = top + height
+            if row + 1 < coordinator.controller.rows.count { expectedTop += TranscriptLayout.rowSpacing }
+        }
+        #expect(abs(host.view.contentSize.height - expectedTop) < 0.5,
+                "UICollectionView content size should match the coordinator's row geometry")
+
+        guard let visible = coordinator.visibleRows else {
+            Issue.record("the hosted collection view has no visible rows")
+            return
+        }
+        for row in visible {
+            let item = coordinator.controller.rows[row]
+            guard let height = coordinator.controller.heights[item.id],
+                  let attributes = host.view.collectionViewLayout.layoutAttributesForItem(
+                    at: IndexPath(item: row, section: 0)) else {
+                Issue.record("visible row \(row) is missing its measured layout")
+                continue
+            }
+            #expect(height.isCurrent(at: width), "visible row \(row) was not measured at the resized width")
+            guard let top = coordinator.rowTop(row) else { continue }
+            #expect(abs(attributes.frame.minY - top) < 0.5)
+            #expect(abs(attributes.frame.width - width) < 0.5)
+            #expect(abs(attributes.frame.height - height.value) < 0.5)
+        }
+    }
 }
 #endif
