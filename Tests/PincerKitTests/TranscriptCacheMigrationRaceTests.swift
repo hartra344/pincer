@@ -5,6 +5,55 @@ import Testing
 @Suite("Transcript cache migration write ordering")
 @MainActor
 struct TranscriptCacheMigrationRaceTests {
+    @Test func unchangedLegacyManifestStillMigratesAndKeepsRefreshMarker() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let gateway = UUID()
+        let sessionKey = "agent:main:main"
+        let writer = TranscriptCache.Writer(writeOptions: .atomic)
+        var oldRow = ChatItem(id: "legacy-row", role: .assistant, blocks: [.text("Keep this cached reply")],
+                              timestamp: Date(timeIntervalSince1970: 3))
+        oldRow.transcriptId = oldRow.id
+        let original = TranscriptCache.Snapshot(items: [oldRow], complete: true, activityMs: 11)
+        let manifestURL = try #require(TranscriptCache.file(gatewayId: gateway, sessionKey: sessionKey, root: temp.url))
+        let seed = await writer.write(original, to: manifestURL)
+        await writer.drain()
+        try #require(seed.modified != nil || seed.unchanged)
+
+        let seededRead = try #require(await TranscriptCache.load(gatewayId: gateway, sessionKey: sessionKey, root: temp.url))
+        #expect(seededRead.version == TranscriptCache.Snapshot.currentVersion)
+        var manifest = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [String: Any])
+        let segmentNames = (manifest["segments"] as? [[String: Any]] ?? []).compactMap { $0["file"] as? String }
+        try #require(!segmentNames.isEmpty)
+        try #require(segmentNames.allSatisfy {
+            FileManager.default.isReadableFile(atPath: V8.segmentsDirectory(manifestURL).appendingPathComponent($0).path)
+        })
+        manifest["version"] = 9
+        manifest.removeValue(forKey: "forwardedSenderRefreshPending")
+        try JSONSerialization.data(withJSONObject: manifest).write(to: manifestURL, options: .atomic)
+        let oldMeta = TranscriptCache.Meta(complete: true, activityMs: 11, version: 9, retained: false)
+        try JSONEncoder().encode(oldMeta).write(to: manifestURL.appendingPathExtension("meta"), options: .atomic)
+
+        let gate = MigrationWriteGate()
+        let restored = await TranscriptCache.read(
+            manifestURL, gatewayId: gateway, root: temp.url,
+            legacyManifestMigrationWriteObserver: { phase in
+                switch phase {
+                case .beforeEnqueue: break
+                case .finished: await gate.markFinished()
+                }
+            }, migrationWriter: writer, priority: .utility)
+        try #require(restored.outcome == .migrated(from: 9))
+        await gate.waitUntilFinished()
+
+        let diskManifest = try #require(try JSONDecoder().decode(TranscriptCache.Manifest.self, from: Data(contentsOf: manifestURL)))
+        let migrated = try #require(await TranscriptCache.load(gatewayId: gateway, sessionKey: sessionKey, root: temp.url))
+        #expect(diskManifest.version == TranscriptCache.Snapshot.currentVersion)
+        #expect(diskManifest.forwardedSenderRefreshPending)
+        #expect(migrated.items.first?.plainText == "Keep this cached reply")
+        #expect(migrated.forwardedSenderRefreshPending)
+    }
+
     @Test func delayedLegacyMigrationCannotOverwriteAuthoritativeSenderRefresh() async throws {
         let temp = TempDir()
         defer { temp.remove() }
