@@ -24,6 +24,9 @@ struct WebSearchTruncationStatusTests {
         #expect(truncated.notes.contains { $0.text == status }, "VoiceOver receives the status too")
         #expect(!Self.visibleLabels(complete).contains(status))
         #expect(!complete.notes.contains { $0.text == status })
+        let body = try #require(truncated.sections.first { $0.id == "web-call:web-0" })
+        #expect(body.text.string.contains("Concurrency guide"))
+        #expect(body.text.attribute(.link, at: 0, effectiveRange: nil) as? URL == URL(string: "https://example.com/swift"))
         #expect(Self.resultRows(truncated) == Self.resultRows(complete), "the status must not alter result rows or links")
         #expect(Self.resultLinks(truncated) == [URL(string: "https://example.com/swift")!],
                 "the search result remains an attributed link when flagged")
@@ -39,6 +42,8 @@ struct WebSearchTruncationStatusTests {
         #expect(truncated.notes.contains { $0.text == status }, "VoiceOver receives the status even without citations")
         #expect(!Self.visibleLabels(complete).contains(status))
         #expect(!complete.notes.contains { $0.text == status })
+        #expect(truncated.sections.contains { $0.text.string == "A concise answer." },
+                "the answer body remains present without citations")
         #expect(truncated.sections.map { $0.text.string } == complete.sections.map { $0.text.string },
                 "the indicator does not change answer text")
     }
@@ -49,7 +54,10 @@ struct WebSearchTruncationStatusTests {
         let key = "agent:main:web-search-truncation"
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
-        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+        let disclosure = TranscriptDisclosure()
+        disclosure.set("steps:turn-web-search-truncation", expanded: true)
+        disclosure.set("tool:web-call", expanded: true)
+        let context = TranscriptContext(gateway: gateway, disclosure: disclosure,
                                         agent: AgentSummary(id: "main", name: "Main"), sessionKey: key,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
         let payload: JSONValue = kind == "results"

@@ -131,8 +131,8 @@ private func checkWebSearchCard(_ call: ToolActivity, label: String) {
     check(web.results.contains { $0.snippet == nil } && web.results.contains { $0.published != nil } && web.results.contains { $0.siteName != nil },
           "\(label): web_search rows vary: no snippet, dated, site name")
     if label == "demo" {
-        check(web.truncated && web.results.first?.snippet?.hasSuffix("…") == true,
-              "demo: upstream truncation is represented by the shortened provider snippet")
+        check(web.truncated && call.result?.contains("\"truncated\": true") == true,
+              "demo: the Gateway-shaped result preserves its explicit truncation flag")
     }
     check(Array(p.searchTexts.suffix(web.results.count)) == web.results.map(\.text) && !p.searchTexts.contains { $0.contains("\"kind\"") },
           "\(label): web_search Find strings are the drawn rows")
