@@ -12,6 +12,9 @@ private func diffLines(_ edit: ToolFileEdit?) -> [String] {
     edit?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } ?? []
 }
 
+private let demoDeleteCallID = "call_demo_delete_retry_adapter"
+private let demoDeletePath = "src/net/retry-legacy-adapter.ts"
+
 @MainActor
 func checkToolDiffs() {
     print("Tool diffs")
@@ -44,9 +47,17 @@ func checkToolDiffs() {
           "multi-hunk, multi-file apply_patch")
     let deleteOne = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch"]))
     let deleteTwo = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": "*** Begin Patch\n*** Delete File: a.txt\n*** Delete File: b.txt\n*** End Patch"]))
-    check(deleteOne?.deletionsLabel == "1 file deleted" && deleteTwo?.deletionsLabel == "2 files deleted"
-          && deleteOne?.accessibilitySummary.contains("1 file deleted") == true,
-          "header-only delete reads \"N files deleted\" (\(deleteOne?.deletionsLabel ?? "nil"), \(deleteTwo?.deletionsLabel ?? "nil"))")
+    check(deleteOne?.statusLabel == "Deleted" && deleteOne?.deletionsLabel == nil
+          && deleteOne?.accessibilitySummary == "Deleted old.txt"
+          && deleteTwo?.deletionsLabel == "2 files deleted",
+          "single header-only delete relies on its badge; multi-delete keeps its count")
+    let mixedDelete = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": "*** Begin Patch\n*** Delete File: old.txt\n*** Add File: new.txt\n+new\n*** End Patch"]))
+    check(mixedDelete?.statusLabel == "Patch" && mixedDelete?.deletionsLabel == "1 file deleted",
+          "mixed patch keeps the header-only deleted-file count beside the generic Patch badge")
+    let headerOnlyDelete = "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch"
+    check(ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": headerOnlyDelete]), isError: true) == nil
+          && ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": headerOnlyDelete])) != nil,
+          "only a successful header-only deletion produces a diff card")
     check(ToolFileEdit.parse(toolName: "edit", arguments: "{\"path\":") == nil
           && ToolFileEdit.parse(toolName: "exec", arguments: toolArgs(["command": "ls"])) == nil
           && ToolFileEdit.parse(toolName: "edit", arguments: toolArgs(["path": "a", "oldText": "x", "newText": "y"]), isError: true) == nil,
@@ -84,7 +95,10 @@ private let retryFixKey = "agent:coder:dashboard:retry-fix"
 @MainActor
 private func checkRetryFixChat(_ chat: ChatStore, label: String, editHasReceipt: Bool) async {
     await chat.load()
-    let loaded = await waitFor("\(label) retry-fix history") { tools(chat).count >= 3 }
+    let loaded = await waitFor("\(label) retry-fix history") {
+        let calls = tools(chat)
+        return calls.count >= 3 && (label != "demo" || calls.contains { $0.id == demoDeleteCallID })
+    }
     let calls = tools(chat)
     check(loaded && calls.prefix(3).map(\.name) == ["edit", "write", "apply_patch"],
           "\(label): retry-fix chat has edit, write, apply_patch (\(calls.map(\.name)))")
@@ -118,6 +132,15 @@ private func checkRetryFixChat(_ chat: ChatStore, label: String, editHasReceipt:
           && patch?.unifiedText.contains("--- a/src/net/legacy-retry.ts\n+++ /dev/null") == true,
           "\(label): patch unified text marks the add and the delete")
     check(!calls.contains { $0.name == "edit" && $0.isError }, "\(label): no failed file edits")
+    if label == "demo" {
+        let deletion = calls.first { $0.id == demoDeleteCallID }
+        let deleteEdit = deletion?.fileEdit
+        check(deleteEdit?.statusLabel == "Deleted" && deleteEdit?.files.count == 1
+              && deleteEdit?.files.first?.operation == .delete && deleteEdit?.deletionsLabel == nil
+              && deleteEdit?.accessibilitySummary == "Deleted retry-legacy-adapter.ts"
+              && deletion?.arguments?.contains(demoDeletePath) == true,
+              "demo: a loaded single-file header-only delete shows its Deleted badge/path without a duplicate count")
+    }
 }
 
 @MainActor

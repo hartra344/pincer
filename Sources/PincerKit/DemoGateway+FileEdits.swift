@@ -10,8 +10,10 @@ extension DemoGateway {
     static let fileEditsEditCall = "call_demo_edit_retry"
     static let fileEditsWriteCall = "call_demo_write_test"
     static let fileEditsPatchCall = "call_demo_patch_client"
+    static let fileEditsDeleteCall = "call_demo_delete_retry_adapter"
 
     static let fileEditsRetryPath = "src/net/retry.ts"
+    static let fileEditsDeletePath = "src/net/retry-legacy-adapter.ts"
     static let fileEditsOld = """
         } catch (error) {
           attempt += 1;
@@ -84,6 +86,12 @@ extension DemoGateway {
     *** End Patch
     """
 
+    static let fileEditsDeletePatch = """
+    *** Begin Patch
+    *** Delete File: src/net/retry-legacy-adapter.ts
+    *** End Patch
+    """
+
     static func seedFileEditsTranscript() -> [JSONValue] {
         let minute = 60.0, hour = 3600.0
         let start = 5 * hour
@@ -131,8 +139,16 @@ extension DemoGateway {
                     "deleted": ["src/net/legacy-retry.ts"],
                 ],
             ]),
+            Self.message("assistant", [
+                Self.text("The old compatibility adapter is no longer used."),
+                Self.toolCall(Self.fileEditsDeleteCall, "apply_patch", ["input": .string(Self.fileEditsDeletePatch)]),
+            ], ago: start + 30),
+            result(Self.fileEditsDeleteCall, "apply_patch", """
+            Success. Updated the following files:
+            D \(Self.fileEditsDeletePath)
+            """, ago: start + 28),
             Self.message("assistant", [Self.text("""
-            \(Self.fileEditsPreview) `retry.test.ts` covers both cases, and `legacy-retry.ts` is gone.
+            \(Self.fileEditsPreview) `retry.test.ts` covers both cases, and the old retry helpers are gone.
             """)], ago: start),
         ]
     }
