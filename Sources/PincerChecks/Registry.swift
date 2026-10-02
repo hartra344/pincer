@@ -193,6 +193,7 @@ enum Suites {
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
+        Section("Resize streaming inputs (demo, #353)") { await runDemoResizeStreamingInputs() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },

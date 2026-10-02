@@ -56,7 +56,7 @@ struct ScrollToBottomTests {
         _ = await TranscriptPrefetchProbe.spinUntilIdle(cap: 20)
         Self.keepAlive.append((window, coordinator))
         let host = PanelSlideProbe.Host(coordinator: coordinator, scroll: scroll, window: window,
-                                        table: scroll.documentView as! NSTableView)
+                                        table: scroll.documentView as! NSTableView, context: context)
         return (host, context)
     }
 
