@@ -13,7 +13,13 @@ struct SidebarSplitPaneTests {
             profile: GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none),
             defaults: scratch.defaults,
             identity: UIFixtures.identity())
-        gateway.applySnapshot(Fixtures.json(#"{"sessions":[{"key":"agent:main:main","label":"Main"},{"key":"agent:main:dashboard:notes","label":"Notes"},{"key":"agent:main:dashboard:other","label":"Other"}]}"#))
+        gateway.applySnapshot(.object([
+            "sessions": .array([
+                .object(["key": .string("agent:main:main"), "label": .string("Main")]),
+                .object(["key": .string("agent:main:dashboard:notes"), "label": .string("Notes")]),
+                .object(["key": .string("agent:main:dashboard:other"), "label": .string("Other")]),
+            ]),
+        ]))
         gateway.selectedKey = "agent:main:main"
         gateway.openInSplit("agent:main:dashboard:notes")
 
