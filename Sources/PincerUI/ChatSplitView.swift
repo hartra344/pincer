@@ -1,6 +1,15 @@
 import PincerKit
 import SwiftUI
 
+struct SidebarSplitPaneObservation: Equatable {
+    let gatewayID: UUID
+    let sessionKey: String?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.sessionKey == rhs.sessionKey
+    }
+}
+
 /// The main window's split view (#48): the selected chat on the left and a second chat on the right.
 /// While the split shows, each side has a header of its own with the chat's controls (#427), and the
 /// side that last had focus is the one menu commands act on (#404). The left chat keeps its place in
@@ -16,6 +25,7 @@ struct ChatSplitHost: ViewModifier {
     func body(content: Content) -> some View {
         GeometryReader { proxy in
             let visibleKey = proxy.size.width >= Self.minWidth * 2 + 1 ? self.splitKey : nil
+            let observation = SidebarSplitPaneObservation(gatewayID: self.gateway.id, sessionKey: visibleKey)
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     if self.splitKey != nil, let key = self.gateway.selectedKey {
@@ -36,7 +46,7 @@ struct ChatSplitHost: ViewModifier {
                         .frame(width: max(Self.minWidth, proxy.size.width * self.clampedFraction(proxy.size.width)))
                 }
             }
-            .onChange(of: visibleKey, initial: true) { _, key in self.sidebarSplitKey = key }
+            .onChange(of: observation, initial: true) { _, value in self.sidebarSplitKey = value.sessionKey }
             .onDisappear { self.sidebarSplitKey = nil }
         }
         // Picking the right-hand chat in the sidebar moves it left, and the chat it replaces right.

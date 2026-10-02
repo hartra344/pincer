@@ -9,6 +9,13 @@ import AppKit
 @Suite
 @MainActor
 struct SidebarSplitPaneTests {
+    @Test func splitPaneObservationTracksGatewayWhenSessionKeysMatch() {
+        let firstGateway = SidebarSplitPaneObservation(gatewayID: UUID(), sessionKey: "agent:main:main")
+        let secondGateway = SidebarSplitPaneObservation(gatewayID: UUID(), sessionKey: "agent:main:main")
+
+        #expect(firstGateway != secondGateway)
+    }
+
     @Test func actualSidebarModelMarksTheChatShownInTheRightPane() throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
