@@ -685,7 +685,10 @@ extension GatewayStore {
 
     /// The locally mirrored character currently shown for this agent.
     public func avatarCreature(for agentId: String) -> AvatarCreature? {
-        AvatarCreature(rawValue: self.defaults.string(forKey: AvatarPreferences.creatureKey(for: agentId)) ?? "")
+        if let queued = self.queuedAvatarChoices[agentId] {
+            return queued.flatMap(AvatarCreature.init(rawValue:))
+        }
+        return self.avatarChoices[agentId].flatMap(AvatarCreature.init(rawValue:))
     }
 
     /// Records the seed of every agent without one, in one push. Never overwrites a seed. Before this

@@ -7,9 +7,9 @@ import Testing
 @MainActor
 @Suite("Avatar choices per Gateway")
 struct AvatarGatewayScopeTests {
-    private func gateway(_ name: String, defaults: UserDefaults) -> GatewayStore {
+    private func gateway(_ name: String, defaults: UserDefaults, id: UUID = UUID()) -> GatewayStore {
         GatewayStore(
-            profile: GatewayProfile(name: name, url: "ws://127.0.0.1:1", authMode: .none),
+            profile: GatewayProfile(id: id, name: name, url: "ws://127.0.0.1:1", authMode: .none),
             defaults: defaults,
             identity: UIFixtures.identity())
     }
@@ -40,6 +40,9 @@ struct AvatarGatewayScopeTests {
         #expect(AvatarSettings.style(for: homeAgent, in: home, defaults: scratch.defaults).creature == .cat,
                 "the Home agent page keeps its selected creature after Work chooses another")
         #expect(AvatarSettings.style(for: workAgent, in: work, defaults: scratch.defaults).creature == .owl)
+
+        #expect(scratch.defaults.string(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
+                "new selections must not overwrite the legacy global character")
     }
 
     @Test func settingsRowsAreScopedToEachGatewayAgentPair() {
@@ -52,7 +55,36 @@ struct AvatarGatewayScopeTests {
 
         let rows = AvatarSettingsSection.settingRows(for: [home, work])
         #expect(rows.count == 2, "Settings must expose one choice for each Gateway's copy of main")
-        #expect(rows.allSatisfy { $0.gateways.count == 1 }, "each row edits only its owning Gateway")
-        #expect(Set(rows.flatMap(\.gateways).map(\.id)) == Set([home.id, work.id]))
+        #expect(Set(rows.map(\.gateway.id)) == Set([home.id, work.id]), "each row edits only its owning Gateway")
+        #expect(Set(rows.map { $0.gateway.profile.name }) == Set(["Home", "Work"]))
+        #expect(Set(rows.map(\.id)) == Set(["\(home.id.uuidString):main", "\(work.id.uuidString):main"]))
+    }
+
+    @Test func clearingToAutoAndReopeningKeepsChoicesGatewayScoped() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let homeID = UUID()
+        let workID = UUID()
+        scratch.defaults.set("cat", forKey: AvatarPreferences.creatureKey(for: "main"))
+        let home = self.gateway("Home", defaults: scratch.defaults, id: homeID)
+        let work = self.gateway("Work", defaults: scratch.defaults, id: workID)
+
+        #expect(home.avatarChoices["main"] == "cat", "a profile without saved choices imports the legacy device value once")
+        work.avatarChoices["main"] = "owl"
+        #expect(home.avatarCreature(for: "main") == .cat)
+        #expect(work.avatarCreature(for: "main") == .owl)
+
+        home.setAvatarCreature(nil, for: "main")
+        #expect(home.avatarCreature(for: "main") == nil, "Auto clears the Home override")
+        #expect(work.avatarCreature(for: "main") == .owl, "clearing Home does not change Work")
+
+        // Simulate the Gateway accepting the queued Auto choice before reopening its profile.
+        home.avatarChoices["main"] = nil
+        home.queuedAvatarChoices = [:]
+
+        let reopenedHome = self.gateway("Home", defaults: scratch.defaults, id: homeID)
+        let reopenedWork = self.gateway("Work", defaults: scratch.defaults, id: workID)
+        #expect(reopenedHome.avatarCreature(for: "main") == nil)
+        #expect(reopenedWork.avatarCreature(for: "main") == .owl)
     }
 }
