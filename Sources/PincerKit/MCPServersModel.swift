@@ -42,11 +42,11 @@ public final class MCPServersModel {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var observingSaves = false
 
-    init(settings: GatewaySettingsModel, connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?,
+    init(settings: GatewaySettingsModel, request: @escaping Request, hello: @escaping @MainActor () -> GatewayHello?,
          sessionKey: @escaping @MainActor () -> String?, allowsWritesWithoutAdmin: Bool)
     {
         self.settings = settings
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = request
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
         self.sessionKey = sessionKey

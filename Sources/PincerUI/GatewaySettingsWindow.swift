@@ -22,7 +22,7 @@ struct GatewaySettingsOpener {
     /// MCP Servers, on the server's page when this transcript tool id resolves to a configured server,
     /// else on the list. When the config hasn't loaded yet it's loaded first (up to a second).
     @MainActor
-    func mcpServer(_ gateway: GatewayStore, name: String, sessionKey: String? = nil) {
+    func mcpServer(_ gateway: GatewayStore, name: String, sessionKey: String) {
         guard gateway.settings.hasLoaded else {
             Task { @MainActor in
                 var finished = false
@@ -42,13 +42,10 @@ struct GatewaySettingsOpener {
     }
 
     @MainActor
-    private func openResolved(_ gateway: GatewayStore, name: String, sessionKey: String?) {
+    private func openResolved(_ gateway: GatewayStore, name: String, sessionKey: String) {
         guard gateway.settings.hasLoaded else { return self(gateway, at: .mcpServers) }
-        let servers = gateway.mcp.servers
-        let match = MCPToolServerResolver.resolve(toolName: name, effectiveTools: nil,
-                                                  configuredServerNames: servers.map(\.name))
-        let configured = match.flatMap { serverName in servers.first { $0.name == serverName } }
-        self(gateway, at: .mcpServers, routes: configured.map { [.mcpServer($0.name)] } ?? [])
+        let serverName = gateway.mcpServerName(forToolName: name, sessionKey: sessionKey)
+        self(gateway, at: .mcpServers, routes: serverName.map { [.mcpServer($0)] } ?? [])
     }
 }
 

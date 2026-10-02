@@ -30,6 +30,14 @@ struct MCPToolServerResolverTests {
 
         #expect(MCPToolServerResolver.resolve(toolName: "foo-bar-2__search", effectiveTools: effective,
                                               configuredServerNames: ["foo.bar", "foo-bar"]) == "foo-bar")
+        // The unsuffixed safe ID collides with the other server's exact configured name.
+        #expect(MCPToolServerResolver.resolve(toolName: "foo-bar__search", effectiveTools: effective,
+                                              configuredServerNames: ["foo.bar", "foo-bar"]) == "foo.bar")
+        #expect(MCPToolServerResolver.resolve(toolName: "mcp__foo-bar__search", effectiveTools: effective,
+                                              configuredServerNames: ["foo.bar", "foo-bar"]) == "foo.bar")
+        // If the original server was removed after the snapshot, don't fall through to the survivor.
+        #expect(MCPToolServerResolver.resolve(toolName: "foo-bar__search", effectiveTools: effective,
+                                              configuredServerNames: ["foo-bar"]) == nil)
     }
 
     @Test func coldSessionKeepsSafeNameFallback() {
