@@ -152,7 +152,9 @@ public enum SessionManager {
     /// Formats a bulk failure row, using the session key until a known title is available.
     public static func bulkFailureSummary(_ failure: SessionBulkOutcome.Failure,
                                           sessionTitle: String?) -> String {
-        "\(failure.key): \(failure.message)"
+        let title = sessionTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayedTitle = title.flatMap { $0.isEmpty ? nil : $0 } ?? failure.key
+        return "\(displayedTitle): \(failure.message)"
     }
 
     /// Whether `sessions.recover` applies: a Gateway restart tombstoned the session.
@@ -455,6 +457,8 @@ public final class SessionManagerModel {
     public private(set) var actionError: String?
     /// Per-key failures of the last bulk action.
     public private(set) var lastFailures: [SessionBulkOutcome.Failure] = []
+    /// Titles captured from the bulk action's immutable targets for failed rows.
+    public private(set) var lastFailureTitles: [String: String] = [:]
     /// The message `sessions.rewind` cut, for the composer.
     public private(set) var lastEditorText: String?
 
@@ -693,7 +697,8 @@ public final class SessionManagerModel {
             }
         }
         self.apply(archived: archived, to: Set(outcome.succeeded))
-        self.finish(outcome, verb: archived ? "Archived" : "Unarchived")
+        let failureTitles = await Self.failureTitles(outcome.failed, targets: targets)
+        self.finish(outcome, verb: archived ? "Archived" : "Unarchived", failureTitles: failureTitles)
         await self.onSessionsChanged()
         return outcome
     }
@@ -742,7 +747,8 @@ public final class SessionManagerModel {
                 outcome.failed.append(.init(key: row.key, message: Self.message(error)))
             }
         }
-        self.finish(outcome, verb: "Deleted")
+        let failureTitles = await Self.failureTitles(outcome.failed, targets: targets)
+        self.finish(outcome, verb: "Deleted", failureTitles: failureTitles)
         await self.onSessionsChanged()
         return outcome
     }
@@ -815,6 +821,7 @@ public final class SessionManagerModel {
         self.lastMessage = nil
         self.actionError = nil
         self.lastFailures = []
+        self.lastFailureTitles = [:]
         self.lastEditorText = nil
     }
 
@@ -920,8 +927,23 @@ public final class SessionManagerModel {
         if self.busy.isEmpty { self.isWorking = false }
     }
 
-    private func finish(_ outcome: SessionBulkOutcome, verb: String) {
+    private static func failureTitles(_ failures: [SessionBulkOutcome.Failure],
+                                      targets: [SessionRow]) async -> [String: String] {
+        guard !failures.isEmpty else { return [:] }
+        return await Task.detached(priority: .utility) {
+            let failedKeys = Set(failures.map(\.key))
+            var titles: [String: String] = [:]
+            for row in targets where failedKeys.contains(row.key) {
+                let title = row.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !title.isEmpty { titles[row.key] = title }
+            }
+            return titles
+        }.value
+    }
+
+    private func finish(_ outcome: SessionBulkOutcome, verb: String, failureTitles: [String: String]) {
         self.lastFailures = outcome.failed
+        self.lastFailureTitles = failureTitles
         if !outcome.succeeded.isEmpty || outcome.failed.isEmpty {
             self.lastMessage = SessionManager.bulkSummary(verb: verb, outcome)
         }
