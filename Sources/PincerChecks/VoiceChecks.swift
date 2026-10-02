@@ -299,6 +299,12 @@ private func voiceFollowUpChecks(profile: GatewayProfile, label: String) async {
         try await voice.setPersona(nil)
         try await patch(["voiceId": .null, "model": .null])
 
+        await voice.refresh()
+        check(voice.status?.provider == "openai"
+              && VoiceKeyRemovalPolicy.shouldExplainFallback(activeProvider: voice.status?.provider, removingProvider: "openai")
+              && !VoiceKeyRemovalPolicy.shouldExplainFallback(activeProvider: voice.status?.provider, removingProvider: "elevenlabs"),
+              "\(label): removal warnings follow the actual active provider, not the provider being edited")
+
         // Remove Key: config cleared, the secret deleted, the provider unconfigured.
         _ = try await connection.request("tts.setProvider", ["provider": "openai"])
         let outcome = try await voice.removeKey(provider: "elevenlabs")

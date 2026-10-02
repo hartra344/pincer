@@ -3,6 +3,13 @@ import Foundation
 // Gateway Voice setup (#459): provider badges, API key / model / voice / voice settings written through
 // `config.patch` (and `secrets.store.set`), a Test voice call, and the effective-config summary.
 
+public enum VoiceKeyRemovalPolicy {
+    /// Whether removing this provider's key changes the provider currently used for replies.
+    public static func shouldExplainFallback(activeProvider: String?, removingProvider: String) -> Bool {
+        activeProvider != nil && activeProvider == removingProvider
+    }
+}
+
 public enum TTSProviderBadge: Equatable, Sendable {
     case ready
     case needsKey

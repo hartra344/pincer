@@ -56,6 +56,7 @@ enum Suites {
             Section("Payload & identity") { runIdentityChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
+            Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
