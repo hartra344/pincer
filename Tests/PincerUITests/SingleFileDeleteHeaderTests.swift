@@ -49,7 +49,8 @@ struct SingleFileDeleteHeaderTests {
         #expect(fixture.edit.statusLabel == "Patch")
         #expect(fixture.edit.deletionsLabel == L("1 file deleted"),
                 "a mixed multi-file card keeps its single deleted-file count")
-        #expect(fixture.header.accessibilityText.contains(L("1 file deleted")))
+        #expect(fixture.header.accessibilityText.hasPrefix(fixture.edit.accessibilitySummary),
+                "the real mixed-patch header keeps its current accessibility summary")
     }
 
     @Test func listedRemovedLinesKeepTheirRealCount() throws {
