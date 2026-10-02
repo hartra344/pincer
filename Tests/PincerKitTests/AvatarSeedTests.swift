@@ -193,6 +193,17 @@ struct AvatarSeedStoreTests {
         #expect(AvatarStyle.seeded(from: homeSeed) != AvatarStyle.seeded(from: workSeed))
     }
 
+    @Test func sameAgentCharacterLookupUsesTheOwningGatewayChoice() {
+        defer { self.scratch.remove() }
+        let home = self.store("Home")
+        let work = self.store("Work")
+        home.avatarChoices["main"] = AvatarCreature.cat.rawValue
+        work.avatarChoices["main"] = AvatarCreature.owl.rawValue
+
+        #expect(home.avatarCreature(for: "main") == .cat)
+        #expect(work.avatarCreature(for: "main") == .owl)
+    }
+
     @Test func deletingAnAgentClearsItsSeedAndCreature() async {
         defer { self.scratch.remove() }
         let store = self.store()

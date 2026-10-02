@@ -156,7 +156,6 @@ struct ChatAgentAvatar: View {
 
     @AppStorage(AvatarSettings.animatedKey) private var enabled = true
     @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
-    @AppStorage private var creature: String
     @Environment(\.appTheme) private var theme
     @Environment(GatewayStore.self) private var gateway: GatewayStore?
 
@@ -165,7 +164,6 @@ struct ChatAgentAvatar: View {
         self.agent = agent
         self.size = size
         self.announces = announces
-        self._creature = AppStorage(wrappedValue: "", AvatarSettings.creatureKey(for: agent.id))
     }
 
     var body: some View {
@@ -175,9 +173,12 @@ struct ChatAgentAvatar: View {
             ChatAgentAvatarContent(
                 signals: self.chat.avatarSignals, agent: self.agent,
                 style: AvatarSettings.style(
-                    for: self.agent, seed: self.gateway?.avatarSeed(for: self.agent)
+                    for: self.agent,
+                    seed: self.gateway?.avatarSeed(for: self.agent)
                         ?? AvatarStyle.identitySeed(name: self.agent.name, agentId: self.agent.id),
-                    creature: self.creature, renderStyle: self.renderStyle),
+                    creature: self.gateway.map { $0.avatarCreature(for: self.agent.id)?.rawValue ?? "" }
+                        ?? UserDefaults.standard.string(forKey: AvatarSettings.creatureKey(for: self.agent.id)) ?? "",
+                    renderStyle: self.renderStyle),
                 size: self.size, announces: self.announces)
                 .equatable()
         } else {
@@ -273,8 +274,13 @@ enum AvatarSettings {
 
     /// The agent's style as currently set in defaults, seeded by the Gateway when given.
     @MainActor static func style(for agent: AgentSummary, in gateway: GatewayStore?, defaults: UserDefaults = .standard) -> AvatarStyle {
-        self.style(for: agent, seed: gateway?.avatarSeed(for: agent) ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
-                   creature: defaults.string(forKey: self.creatureKey(for: agent.id)) ?? "",
-                   renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
+        let creature = if let gateway {
+            gateway.avatarCreature(for: agent.id)?.rawValue ?? ""
+        } else {
+            defaults.string(forKey: self.creatureKey(for: agent.id)) ?? ""
+        }
+        return self.style(for: agent, seed: gateway?.avatarSeed(for: agent) ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
+                          creature: creature,
+                          renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
     }
 }

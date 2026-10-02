@@ -308,12 +308,18 @@ public enum AvatarPreferences {
         return map
     }
 
-    /// Writes a Gateway's changes onto this device's settings: entries it set or changed are
-    /// written and entries it dropped are cleared. Unchanged entries are left alone, so another
-    /// Gateway's newer choice isn't undone.
-    static func apply(_ map: [String: String], previous: [String: String], to defaults: UserDefaults) {
+    /// Mirrors a synced map into device defaults. Render style is device-wide; GatewayStore keeps
+    /// creature choices in its per-profile map and never writes them over the legacy global keys.
+    /// Callers without Gateway context retain the old creature mirror behavior.
+    static func apply(
+        _ map: [String: String],
+        previous: [String: String],
+        to defaults: UserDefaults,
+        gatewayId: UUID? = nil)
+    {
         for entry in Set(map.keys).union(previous.keys) where map[entry] != previous[entry] {
             if entry.hasPrefix(self.seedEntryPrefix) { continue }
+            guard entry == self.renderStyleEntry || gatewayId == nil else { continue }
             let key = entry == self.renderStyleEntry ? self.renderStyleKey : self.creatureKey(for: entry)
             if let value = map[entry] {
                 if defaults.string(forKey: key) != value { defaults.set(value, forKey: key) }

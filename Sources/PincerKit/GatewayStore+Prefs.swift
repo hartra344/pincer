@@ -683,6 +683,14 @@ extension GatewayStore {
             ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id)
     }
 
+    /// The locally mirrored character currently shown for this agent.
+    public func avatarCreature(for agentId: String) -> AvatarCreature? {
+        if let queued = self.queuedAvatarChoices[agentId] {
+            return queued.flatMap(AvatarCreature.init(rawValue:))
+        }
+        return self.avatarChoices[agentId].flatMap(AvatarCreature.init(rawValue:))
+    }
+
     /// Records the seed of every agent without one, in one push. Never overwrites a seed. Before this
     /// device's first sync they're only kept here: the first sync's merge writes them in its one
     /// write, with the Gateway's older seeds winning. After that it waits for this connection's
