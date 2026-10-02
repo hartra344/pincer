@@ -10,7 +10,8 @@ struct CompactFooterTests {
     @MainActor
     final class Actions: TranscriptRowActions {
         var readingAloud = false
-        var reactionsEnabled: Bool { true }
+        var readable = true
+        var reactionsEnabled = true
         var branchEntries: [TranscriptBranchEntry] { [] }
         var liveAvatar: TranscriptLiveAvatar? { nil }
 
@@ -37,7 +38,7 @@ struct CompactFooterTests {
         func isBookmarked(_ messageId: String) -> Bool { false }
         func readAloud(_ messageId: String) {}
         func isReadingAloud(_ messageId: String) -> Bool { self.readingAloud }
-        func canReadAloud(_ messageId: String) -> Bool { true }
+        func canReadAloud(_ messageId: String) -> Bool { self.readable }
         func toggleReaction(_ emoji: String, on messageId: String) {}
         func pickReaction(for messageId: String, from view: PView, rect: CGRect) {}
         func stepBranch(_ offset: Int) {}
@@ -66,7 +67,9 @@ struct CompactFooterTests {
         turn.textModelNames = ["claude-opus-4-8"]
         turn.textIds = ["compact-footer-message"]
         let row = TranscriptRow.entry(.assistant(turn))
-        let builder = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = true
+        let builder = TranscriptLayoutBuilder(context: context, settings: settings)
 
         func footer(_ width: CGFloat) throws -> (TranscriptRowLayout, TranscriptRowLayout.Placed, TranscriptFooterView) {
             let layout = builder.layout(row, width: width)
@@ -148,6 +151,89 @@ struct CompactFooterTests {
         #expect(compactView.detailsDrawFrame == compactDetailsFrame)
     }
 
+    @Test func compactFooterUsesOnePackedRowAtTypicalPhoneContentWidths() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+
+        let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let key = "agent:footer:single-action-row"
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
+                                        previewImage: { _ in }, saveFile: { _, _ in })
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        var turn = AssistantTurn(id: "compact-footer-single-action-row", timestamp: stamp)
+        turn.text = ["A reply with model and time metadata."]
+        turn.textTimestamps = [stamp]
+        turn.textModelNames = ["claude-opus-4-8"]
+        turn.textIds = ["compact-footer-single-action-row-message"]
+
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = false
+        var actions = Actions()
+        actions.reactionsEnabled = false
+        let builder = TranscriptLayoutBuilder(context: context, settings: settings)
+        for (rowWidth, expectedContentWidth) in [(356.0, 280.0), (406.0, 330.0)] {
+            let layout = builder.layout(.entry(.assistant(turn)), width: rowWidth)
+            let placed = try #require(layout.parts.first { if case .footer = $0.part { true } else { false } })
+            let footer = footerPart(placed.part)
+            let view = TranscriptFooterView(frame: placed.frame)
+            view.configure(placed.part, row: layout, actions: actions)
+            view.layoutContent()
+
+            let visibleButtons = view.subviews.compactMap { $0 as? TranscriptLabelButton }.filter { !$0.isHidden }
+            let actualActionRows = Set(visibleButtons.map { Int($0.frame.midY / footer.actionRowHeight) })
+            #expect(abs(placed.frame.width - expectedContentWidth) < 1,
+                    "fixture exercises the intended phone content width")
+            #expect(actualActionRows.count == 1, "Copy, Reply and Listen fit on one row at \(expectedContentWidth)pt")
+            #expect(footer.controlHeight == footer.actionRowHeight,
+                    "the row model reserves only the one action row the view uses")
+            #expect(footer.detailsFrame.minY == footer.controlHeight + 4,
+                    "metadata starts immediately after that packed action row")
+            #expect(placed.frame.height == footer.controlHeight + 4 + footer.detailsFrame.height,
+                    "the row's measured height matches its packed action and metadata geometry")
+        }
+    }
+
+    @Test func compactFooterReservesOnlyItsActualMetadataLines() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+
+        let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let key = "agent:footer:timestamp-only"
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
+                                        previewImage: { _ in }, saveFile: { _, _ in })
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        var turn = AssistantTurn(id: "compact-footer-timestamp-only", timestamp: stamp)
+        turn.text = ["A reply without recorded model metadata."]
+        turn.textTimestamps = [stamp]
+        turn.textIds = ["compact-footer-timestamp-only-message"]
+
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = false
+        let layout = TranscriptLayoutBuilder(context: context, settings: settings)
+            .layout(.entry(.assistant(turn)), width: 420)
+        let placed = try #require(layout.parts.first { if case .footer = $0.part { true } else { false } })
+        let footer = footerPart(placed.part)
+        let view = TranscriptFooterView(frame: placed.frame)
+        var actions = Actions()
+        actions.reactionsEnabled = false
+        view.configure(placed.part, row: layout, actions: actions)
+        view.layoutContent()
+
+        let captionHeight = max(TranscriptStyle.lineHeight(TranscriptStyle.shared.caption), 16)
+        #expect(footer.detailLines.count == 1)
+        #expect(Set(view.subviews.compactMap { $0 as? TranscriptLabelButton }.filter { !$0.isHidden }
+            .map { Int($0.frame.midY / footer.actionRowHeight) }).count == 1,
+                "the timestamp-only fixture also packs its visible actions into one row")
+        #expect(view.detailsDrawFrame.height == captionHeight,
+                "a timestamp-only footer draws one metadata line")
+        #expect(placed.frame.height == footer.controlHeight + 4 + captionHeight,
+                "the row height includes only its one metadata line")
+    }
+
     @Test func compactBranchAndBookmarkKeepTheirOwnControlRow() throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -168,8 +254,10 @@ struct CompactFooterTests {
         let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
                                         agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: chat)
-        let layout = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
-            .layout(.entry(.user(item)), width: 350)
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = true
+        let layout = TranscriptLayoutBuilder(context: context, settings: settings)
+            .layout(.entry(.user(item)), width: 260)
         let placed = try #require(layout.parts.first { if case .footer = $0.part { true } else { false } })
         let footer = footerPart(placed.part)
         #expect(footer.branch?.count == 2)
@@ -182,7 +270,10 @@ struct CompactFooterTests {
         #expect(footer.controlHeight >= branchTargetHeight + 4 + 2 * footer.actionRowHeight)
 
         let view = TranscriptFooterView(frame: placed.frame)
-        view.configure(placed.part, row: layout, actions: Actions())
+        let userActions = Actions()
+        userActions.readable = false
+        userActions.reactionsEnabled = settings.reactionsEnabled
+        view.configure(placed.part, row: layout, actions: userActions)
         view.layoutContent()
         let visible = view.subviews.compactMap { $0 as? TranscriptLabelButton }.filter { !$0.isHidden }
         #expect(Set(visible.map(\.accessibilityText)).isSuperset(of: ["Previous branch", "Branch 2 of 2", "Next branch",
@@ -217,6 +308,40 @@ struct CompactFooterTests {
         }
     }
 
+    @Test func listenReservationUsesPerMessageAssistantEligibility() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let key = "agent:footer:mixed-error"
+        let chat = gateway.chat(for: key)
+        var normal = ChatItem(id: "footer-normal-assistant", role: .assistant,
+                              blocks: [.text("A normal assistant message")], timestamp: Date())
+        normal.transcriptId = "footer-normal-message"
+        var failed = ChatItem(id: "footer-error-assistant", role: .assistant,
+                              blocks: [.text("A failed assistant message")], timestamp: Date())
+        failed.transcriptId = "footer-error-message"
+        failed.isError = true
+        chat.items = [normal, failed]
+
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
+                                        previewImage: { _ in }, saveFile: { _, _ in }, chat: chat)
+        let turn = try #require(TranscriptBuilder.build([normal, failed]).compactMap { entry -> AssistantTurn? in
+            if case let .assistant(turn) = entry { turn } else { nil }
+        }.first)
+        let layout = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
+            .layout(.entry(.assistant(turn)), width: 350)
+        let footers = layout.parts.compactMap { placed -> TranscriptPart.Footer? in
+            if case let .footer(footer) = placed.part { footer } else { nil }
+        }
+        #expect(footers.count == 2)
+        #expect(footers[0].actionFrames[.listen] != nil,
+                "a normal message keeps its Listen slot when a later message makes the aggregate turn an error")
+        #expect(footers[1].actionFrames[.listen] == nil,
+                "an errored message does not reserve Listen")
+    }
+
     private func footerPart(_ part: TranscriptPart) -> TranscriptPart.Footer {
         guard case let .footer(footer) = part else { fatalError("expected a footer part") }
         return footer
@@ -234,5 +359,18 @@ extension TranscriptUIKitLayoutTests {
     @Test func compactFooterKeepsBranchAndBookmarkTargetsSeparate() throws {
         try CompactFooterTests().compactBranchAndBookmarkKeepTheirOwnControlRow()
     }
+
+    @Test func compactFooterReservesOnlyItsActualMetadataLines() throws {
+        try CompactFooterTests().compactFooterReservesOnlyItsActualMetadataLines()
+    }
+
+    @Test func messageFooterGapTracksPackedActionRows() throws {
+        try CompactFooterTests().compactFooterUsesOnePackedRowAtTypicalPhoneContentWidths()
+    }
+
+    @Test func compactFooterListenReservationUsesPerMessageEligibility() throws {
+        try CompactFooterTests().listenReservationUsesPerMessageAssistantEligibility()
+    }
 }
+
 #endif

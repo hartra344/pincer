@@ -20,6 +20,10 @@ func runDemoFooterMetadataChecks() async {
         if case let .assistant(turn) = entry, !turn.text.isEmpty { return turn }
         return nil
     }
+    let userItems = chat.entries.compactMap { entry -> ChatItem? in
+        if case let .user(item) = entry { return item }
+        return nil
+    }
     check(!turns.isEmpty, "footer demo: committed assistant replies are present")
     check(turns.allSatisfy { turn in
         turn.textTimestamps.count == turn.text.count
@@ -30,4 +34,7 @@ func runDemoFooterMetadataChecks() async {
             && turn.textIds.allSatisfy { $0?.isEmpty == false }
             && !turn.isStreaming
     }, "footer demo: every reply retains full metadata and targets for Copy, Reply, Listen, and React")
+    check(userItems.contains { $0.plainText.contains("Sketch how the API rate limiter should work")
+        && $0.timestamp != nil && $0.model == nil },
+          "footer demo: the seeded user message supplies a timestamp without an assistant model")
 }
