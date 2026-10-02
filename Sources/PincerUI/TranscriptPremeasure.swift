@@ -359,6 +359,8 @@ final class TranscriptPremeasureDriver {
     #if DEBUG
     /// Row ids sent to the worker (bounded), for tests.
     private(set) var offloadedIds: Set<String> = []
+    /// Row ids whose worker results this driver accepted (bounded), for host-owned tests.
+    private(set) var adoptedIds: Set<String> = []
     #endif
 
     /// What to do with cold rows when the worker already holds `maxInFlight`.
@@ -594,6 +596,10 @@ final class TranscriptPremeasureDriver {
             if adopted {
                 self.stats.adopted += 1
                 warm.insert(result.rowId)
+                #if DEBUG
+                if self.adoptedIds.count >= 10_000 { self.adoptedIds.removeAll() }
+                self.adoptedIds.insert(result.rowId)
+                #endif
             } else {
                 self.stats.discardedStale += 1
             }
