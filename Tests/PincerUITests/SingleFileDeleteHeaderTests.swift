@@ -41,6 +41,17 @@ struct SingleFileDeleteHeaderTests {
         #expect(fixture.header.accessibilityText.contains(L("2 files deleted")))
     }
 
+    @Test func mixedPatchKeepsItsSingleDeletedFileCount() throws {
+        let fixture = try Self.card(patch: "*** Begin Patch\n*** Delete File: Sources/Old.swift\n*** Add File: Sources/New.swift\n+new file\n*** End Patch")
+        defer { fixture.scratch.remove() }
+
+        #expect(fixture.edit.files.map(\.operation) == [.delete, .add])
+        #expect(fixture.edit.statusLabel == "Patch")
+        #expect(fixture.edit.deletionsLabel == L("1 file deleted"),
+                "a mixed multi-file card keeps its single deleted-file count")
+        #expect(fixture.header.accessibilityText.contains(L("1 file deleted")))
+    }
+
     @Test func listedRemovedLinesKeepTheirRealCount() throws {
         let fixture = try Self.card(patch: "*** Begin Patch\n*** Delete File: Sources/Old.swift\n-first removed line\n-second removed line\n*** End Patch")
         defer { fixture.scratch.remove() }
@@ -91,7 +102,7 @@ struct SingleFileDeleteHeaderTests {
     private static func header(in view: TranscriptBaseView) -> TranscriptToolHeaderView? {
         for child in view.subviews {
             if let header = child as? TranscriptToolHeaderView { return header }
-            if let header = Self.header(in: child) { return header }
+            if let container = child as? TranscriptBaseView, let header = Self.header(in: container) { return header }
         }
         return nil
     }
