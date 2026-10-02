@@ -162,7 +162,7 @@ struct ChannelList: View {
     private var actions: SidebarActions {
         SidebarActions(
             select: { key in
-                self.gateway.selectedKey = key
+                self.app.open(Notifier.Target(gatewayId: self.gateway.id, sessionKey: key))
                 self.openChat()
             },
             newChat: { self.newChat = NewChatRequest(agentId: $0) },

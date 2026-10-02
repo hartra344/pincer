@@ -40,6 +40,7 @@ public final class AppModel {
     public private(set) var deviceIdForDisplay: String?
     public var selectedGatewayId: UUID? {
         didSet {
+            if oldValue != self.selectedGatewayId { self.cancelPendingExternalRoute() }
             // Shared so the Share extension starts on the same gateway.
             self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
             // A pending demo setup offer is only for while the demo stays selected.
@@ -159,6 +160,7 @@ public final class AppModel {
         self.notifier.isConnected = { [weak self] id in
             self?.gateways.first { $0.id == id }?.state.isConnected ?? false
         }
+        for gateway in self.gateways { self.installRouteCandidateObserver(for: gateway) }
     }
 
     /// Answers an approval on exactly the gateway the notification came from. Works before
@@ -185,6 +187,12 @@ public final class AppModel {
     }
 
     @ObservationIgnored private var started = false
+    /// One unresolved external route can wait while saved Gateways finish listing their chats.
+    @ObservationIgnored var pendingExternalRoute: PincerRoute?
+    @ObservationIgnored var pendingExternalRouteToken: UUID?
+    @ObservationIgnored var pendingExternalRouteTask: Task<Void, Never>?
+    /// Tests inject zero to exercise the timeout path without sleeping; production keeps a short bound.
+    @ObservationIgnored var pendingExternalRouteTimeout: Duration = .seconds(10)
     /// The device identity, read from the Keychain once and shared by every Gateway.
     @ObservationIgnored private var identity: DeviceIdentity?
 
@@ -226,6 +234,7 @@ public final class AppModel {
     }
 
     public func open(_ target: Notifier.Target) {
+        self.cancelPendingExternalRoute()
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
         // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
         if !target.sessionKey.isEmpty { gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey) }
@@ -299,6 +308,7 @@ public final class AppModel {
         store.appIsActive = self.appIsActive
         store.wireBookmarkSync()
         self.gateways.append(store)
+        self.installRouteCandidateObserver(for: store)
         self.persist()
         self.selectedGatewayId = store.id
         store.start()
@@ -324,6 +334,7 @@ public final class AppModel {
     public func update(_ profile: GatewayProfile, secret: String?, credentialsChanged: Bool) {
         guard let index = self.gateways.firstIndex(where: { $0.id == profile.id }) else { return }
         let old = self.gateways[index]
+        old.routeCandidatesDidChange = nil
         old.stop()
         // The new store reads the outbox this one leaves behind.
         old.retireOutbox()
@@ -337,6 +348,7 @@ public final class AppModel {
         store.appIsActive = self.appIsActive
         store.outboxRoot = old.outboxRoot
         self.gateways[index] = store
+        self.installRouteCandidateObserver(for: store)
         self.persist()
         store.start()
     }
@@ -344,6 +356,8 @@ public final class AppModel {
     public func remove(_ id: UUID) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
         let store = self.gateways.remove(at: index)
+        store.routeCandidatesDidChange = nil
+        self.retryPendingExternalRouteIfNeeded()
         SpotlightCenter.shared.forgetGateway(id)
         let push = self.push
         Task {
