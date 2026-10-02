@@ -76,7 +76,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var replyUnreadDecisions: [String: Int] = [:]
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     /// Compact exact tool-id to original server-name snapshots, scoped to this Gateway.
-    @ObservationIgnored var mcpToolServerIndexes = BoundedLRUCache<String, [String: String]>(countLimit: 16, costLimit: 64 * 1024)
+    @ObservationIgnored var mcpToolServerIndexes = BoundedLRUCache<String, MCPToolServerIndex>(countLimit: 16, costLimit: 64 * 1024)
     /// Latest in-flight effective snapshot per session; distinct entries are capped at 32.
     @ObservationIgnored var mcpToolServerReadVersions: [String: UInt64] = [:]
     @ObservationIgnored var mcpToolServerReadSequence: UInt64 = 0

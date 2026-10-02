@@ -655,8 +655,19 @@ extension GatewayStore {
     /// A genuinely uncached ID keeps the legacy safe-prefix fallback; a cached stale server does not.
     public func mcpServerName(forToolName toolName: String, sessionKey: String) -> String? {
         let index = self.mcpToolServerIndexes.value(for: sessionKey)
-        return MCPToolServerResolver.resolve(toolName: toolName, effectiveServerNames: index,
-                                             configuredServerNames: self.mcp.servers.map(\.name))
+        let configured = self.settings.config["mcp"]?["servers"]?.object ?? [:]
+        if let index {
+            for exactID in MCPToolServerResolver.exactIDs(for: toolName) {
+                if let entry = index.serversByToolID[exactID] {
+                    guard case let .server(name) = entry, configured[name] != nil else { return nil }
+                    return name
+                }
+            }
+            if !index.isComplete { return nil }
+        }
+        let names = self.mcp.servers.map(\.name)
+        return MCPToolServerResolver.resolve(toolName: toolName, effectiveIndex: nil,
+                                             configuredServerNames: names)
     }
 
     func beginEffectiveMCPToolRead(sessionKey: String) -> UInt64? {
@@ -677,13 +688,7 @@ extension GatewayStore {
         }.value
         guard self.mcpToolServerReadVersions[sessionKey] == version else { return }
         self.mcpToolServerReadVersions.removeValue(forKey: sessionKey)
-        let cost = index.reduce(0) { $0 + $1.key.utf8.count + $1.value.utf8.count }
-        if cost <= 64 * 1024 {
-            _ = self.mcpToolServerIndexes.insert(index, for: sessionKey, cost: cost)
-        } else {
-            // An oversized successful snapshot still invalidates the previous session mapping.
-            _ = self.mcpToolServerIndexes.insert([:], for: sessionKey, cost: 0)
-        }
+        _ = self.mcpToolServerIndexes.insert(index, for: sessionKey, cost: index.cost)
     }
 
     /// `message.action` calls the built-in demo received, oldest first (for checks; empty for real Gateways).
