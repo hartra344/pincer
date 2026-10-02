@@ -34,6 +34,8 @@ public struct DictationToggleRequest: Equatable, Sendable {
 @Observable
 public final class AppModel {
     public let locationContext: LocationContextModel
+    /// Display-name editing state shared by Settings windows and backed by this app's local defaults.
+    public let ownerNameDraft: OwnerNameDraft
     public private(set) var gateways: [GatewayStore] = []
     /// The device ID for Settings, only after the app has loaded or created its shared identity.
     /// Reading this value never touches the Keychain.
@@ -126,9 +128,23 @@ public final class AppModel {
         self.init(sharedDefaults: defaults, localDefaults: defaults, firstRunEnvironment: firstRunEnvironment)
     }
 
-    private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults, firstRunEnvironment: FirstRunModel.Environment = .live) {
+    /// Injects the display-name idle wait for deterministic hosted UI checks.
+    package convenience init(
+        defaults: UserDefaults,
+        ownerNameIdleWait: @escaping @Sendable (Duration) async -> Void
+    ) {
+        self.init(sharedDefaults: defaults, localDefaults: defaults, ownerNameIdleWait: ownerNameIdleWait)
+    }
+
+    private init(
+        sharedDefaults: UserDefaults,
+        localDefaults: UserDefaults,
+        firstRunEnvironment: FirstRunModel.Environment = .live,
+        ownerNameIdleWait: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    ) {
         self.sharedDefaults = sharedDefaults
         self.localDefaults = localDefaults
+        self.ownerNameDraft = OwnerNameDraft(defaults: localDefaults, wait: ownerNameIdleWait)
         let locationContext = LocationContextModel(defaults: localDefaults)
         self.locationContext = locationContext
         let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)

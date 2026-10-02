@@ -35,6 +35,23 @@ private final class OwnerNameDefaultsRecorder {
     }
 }
 
+private actor HeldOwnerNameWait {
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var released = false
+
+    func wait() async {
+        if self.released { return }
+        await withCheckedContinuation { self.waiters.append($0) }
+    }
+
+    func releaseAll() {
+        self.released = true
+        let waiters = self.waiters
+        self.waiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+}
+
 /// #661: typing into the actual iOS Display name field should not fan one defaults write out for
 /// every character to each open transcript's global settings observers.
 @MainActor
@@ -44,11 +61,11 @@ struct SettingsOwnerNameTypingProbe {
     }
 
     /// SwiftPM's hosted iOS test process dispatches these registered editing targets directly.
-    private static func editingChanged(_ field: UITextField) -> Int {
+    private static func editingChanged(_ field: UITextField, event: UIControl.Event = .editingChanged) -> Int {
         var invoked = 0
         for target in field.allTargets {
             guard let object = target.base as? NSObject else { continue }
-            for action in field.actions(forTarget: object, forControlEvent: .editingChanged) ?? [] {
+            for action in field.actions(forTarget: object, forControlEvent: event) ?? [] {
                 _ = object.perform(NSSelectorFromString(action), with: field)
                 invoked += 1
             }
@@ -56,10 +73,11 @@ struct SettingsOwnerNameTypingProbe {
         return invoked
     }
 
-    func displayNameTypingCoalescesGlobalDefaultsWritesAndPersistsExactText() async throws {
+    func displayNameTypingCoalescesAndDisappearFlushesExactText() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let app = AppModel(defaults: scratch.defaults)
+        let wait = HeldOwnerNameWait()
+        let app = AppModel(defaults: scratch.defaults, ownerNameIdleWait: { _ in await wait.wait() })
         let form = SettingsForm(sections: [.you]).environment(app).defaultAppStorage(scratch.defaults)
         let host = UIHostingController(rootView: form)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
@@ -84,18 +102,73 @@ struct SettingsOwnerNameTypingProbe {
             await Task.yield()
         }
 
-        #expect(await eventually { !recorder.changedValues.isEmpty },
-                "the actual owner-name write should reach UserDefaults.didChangeNotification")
-        #expect(recorder.changedValues.count <= 1,
-                "typing a name should coalesce defaults notifications instead of writing once per character (\(recorder.changedValues))")
-        #expect(await eventually(timeout: .seconds(2)) { scratch.defaults.string(forKey: "pincer.ownerName") == text },
-                "the debounced owner name must persist exactly after typing stops")
+        #expect(scratch.defaults.string(forKey: OwnerNameDraft.storageKey) == nil,
+                "typing remains local while the idle wait is held")
+        text = "Maya Chen "
+        field.text = text
+        #expect(Self.editingChanged(field) > 0)
+        await Task.yield()
+        text.append("2")
+        field.text = text
+        #expect(Self.editingChanged(field) > 0)
+        await Task.yield()
+        host.rootView = SettingsForm(sections: []).environment(app).defaultAppStorage(scratch.defaults)
+        #expect(await eventually { scratch.defaults.string(forKey: OwnerNameDraft.storageKey) == text },
+                "leaving the real section flushes its latest draft while idle commits are still held")
+        host.rootView = form
+        #expect(await eventually {
+            host.view.layoutIfNeeded()
+            return Self.fields(in: host.view).first?.text == text
+        }, "reopening Settings reads the persisted display name from the same app model")
+        #expect(recorder.changedValues == ["Maya Chen 2"],
+                "typing remains local, then section departure persists one completed name")
+        await wait.releaseAll()
+    }
+
+    func displayNameIdleAutosavePersistsOnlyLatestValue() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let wait = HeldOwnerNameWait()
+        let app = AppModel(defaults: scratch.defaults, ownerNameIdleWait: { _ in await wait.wait() })
+        let form = SettingsForm(sections: [.you]).environment(app).defaultAppStorage(scratch.defaults)
+        let host = UIHostingController(rootView: form)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true; window.rootViewController = nil }
+
+        let loaded = await eventually {
+            host.view.layoutIfNeeded()
+            return !Self.fields(in: host.view).isEmpty
+        }
+        #expect(loaded, "host the real You settings field for idle-save coverage")
+        let field = try #require(Self.fields(in: host.view).first)
+        let recorder = OwnerNameDefaultsRecorder(defaults: scratch.defaults)
+        defer { recorder.stop() }
+
+        var text = ""
+        for character in "Maya Chen" {
+            text.append(character)
+            field.text = text
+            #expect(Self.editingChanged(field) > 0)
+            await Task.yield()
+        }
+        #expect(scratch.defaults.string(forKey: OwnerNameDraft.storageKey) == nil,
+                "the held idle wait prevents premature persistence")
+        await wait.releaseAll()
+        #expect(await eventually { scratch.defaults.string(forKey: OwnerNameDraft.storageKey) == text },
+                "the actual field's idle autosave persists the final value")
+        #expect(recorder.changedValues == [text], "intermediate keystrokes produce no defaults notifications")
     }
 }
 
 extension TranscriptUIKitHostedTests {
     @Test func settingsOwnerNameTypingCoalescesDefaultsWrites() async throws {
-        try await SettingsOwnerNameTypingProbe().displayNameTypingCoalescesGlobalDefaultsWritesAndPersistsExactText()
+        try await SettingsOwnerNameTypingProbe().displayNameTypingCoalescesAndDisappearFlushesExactText()
+    }
+
+    @Test func settingsOwnerNameIdleAutosavesLatestValue() async throws {
+        try await SettingsOwnerNameTypingProbe().displayNameIdleAutosavePersistsOnlyLatestValue()
     }
 }
 #endif
