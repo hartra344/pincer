@@ -19173,6 +19173,26 @@
           }
         }
       }
+    },
+    "Show API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show API key"
+          }
+        }
+      }
+    },
+    "Hide API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide API key"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
