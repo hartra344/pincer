@@ -539,8 +539,11 @@ extension ChatStore {
               self.currentCacheState != self.savedState
         else { return }
         self.saveTask?.cancel()
+        let deadline = self.saveNow().addingTimeInterval(1)
+        let wait = self.waitForSaveDeadline
+        self.saveDeadline = deadline
         self.saveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
+            do { try await wait(deadline) } catch { return }
             guard !Task.isCancelled, let self, !self.isDehydrated else { return }
             await self.saveSnapshot()
         }
