@@ -92,6 +92,11 @@ public struct MessageSender: Hashable, Codable, Sendable {
     /// attribution policy the native transcript renderer uses.
     public func accessibilityAuthor(agents: [AgentSummary], receivingAgentId: String?) -> String {
         let name = self.displayName(agents: agents)
+        if self.kind == .agent, let receivingAgentId,
+           self.agentId != receivingAgentId, self.agent(in: agents) != nil
+        {
+            return AccessibilityText.join([name, L("forwarded", comment: "VoiceOver marker for a message sent from another known agent's chat")])
+        }
         return AccessibilityText.join([name, self.marker(agents: agents, receivingAgentId: receivingAgentId)])
     }
 
