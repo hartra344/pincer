@@ -268,11 +268,13 @@ public struct ToolFileEdit: Hashable, Sendable {
     /// "+3", "+3+" (at least 3), or nil when there's nothing or nothing known to show.
     public var additionsLabel: String? { Self.countLabel("+", self.additions, self.additionsBound) }
     /// "−1", "−12+" (at least 12), or nil.
-    /// A patch that only deletes files and lists no removed lines reads "1 file deleted" instead.
+    /// Header-only deletes have no removed-line count. A single-file patch already says "Deleted"
+    /// in its badge, while a multi-file patch needs this label to identify deleted files.
     public var deletionsLabel: String? {
         if let label = Self.countLabel("−", self.deletions, self.deletionsBound) { return label }
         let deleted = self.headerOnlyDeletedFileCount
         guard deleted > 0 else { return nil }
+        if self.kind == .patch, self.files.count == 1, self.files[0].operation == .delete { return nil }
         return deleted == 1 ? L("1 file deleted") : L("\(deleted) files deleted")
     }
 

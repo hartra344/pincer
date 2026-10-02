@@ -212,20 +212,24 @@ struct ToolFileEditTests {
         #expect(move.statusLabel == "Moved" && move.title == "Old.swift → New.swift" && move.directory == nil)
     }
 
-    /// #159: a header-only delete lists no removed lines, so the label says the file was deleted.
+    /// A single-file Deleted badge makes a separate “1 file deleted” count redundant.
     @Test func headerOnlyDeleteLabelsDeletedFiles() throws {
-        let one = try #require(Self.parse("apply_patch", ["input": "*** Begin Patch\n*** Delete File: a.txt\n*** End Patch"]))
-        #expect(one.deletionsLabel == "1 file deleted", "\(one.deletionsLabel ?? "nil")")
-        #expect(one.accessibilitySummary.contains("1 file deleted"), Comment(rawValue: one.accessibilitySummary))
+        let headerOnly = "*** Begin Patch\n*** Delete File: a.txt\n*** End Patch"
+        let one = try #require(Self.parse("apply_patch", ["input": headerOnly]))
+        #expect(Self.parse("apply_patch", ["input": headerOnly], isError: true) == nil)
+        #expect(one.statusLabel == "Deleted" && one.deletionsLabel == nil)
+        #expect(one.accessibilitySummary == "Deleted a.txt", Comment(rawValue: one.accessibilitySummary))
         let two = try #require(Self.parse("apply_patch", ["input": "*** Begin Patch\n*** Delete File: a.txt\n*** Delete File: b.txt\n*** End Patch"]))
         #expect(two.deletionsLabel == "2 files deleted", "\(two.deletionsLabel ?? "nil")")
+
+        let mixed = try #require(Self.parse("apply_patch", ["input": "*** Begin Patch\n*** Delete File: a.txt\n*** Add File: b.txt\n+new\n*** End Patch"]))
+        #expect(mixed.statusLabel == "Patch" && mixed.deletionsLabel == "1 file deleted")
     }
 
     @Test func deleteWithListedLinesKeepsCountLabel() throws {
         let patch = "*** Begin Patch\n*** Delete File: a.txt\n-one\n-two\n*** End Patch"
-        if let edit = Self.parse("apply_patch", ["input": patch]), edit.deletions > 0 {
-            #expect(edit.deletionsLabel == "−\(edit.deletions)")
-        }
+        let edit = try #require(Self.parse("apply_patch", ["input": patch]))
+        #expect(edit.deletions == 2 && edit.deletionsLabel == "−2")
     }
 
     @Test func plainUnifiedDiffPatch() throws {
