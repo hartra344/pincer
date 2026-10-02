@@ -213,7 +213,11 @@ extension TranscriptCache {
         guard !data.isEmpty else { return .corrupt("segment \(ref.file) is empty") }
         let segment: [ChatItem]
         do {
-            segment = try JSONDecoder().decode([ChatItem].self, from: data)
+            segment = try JSONDecoder().decode([ChatItem].self, from: data).map { item in
+                var projected = item
+                projected.projectLegacyLocationForDisplay()
+                return projected
+            }
         } catch {
             return .corrupt("segment \(ref.file) is not a transcript: \(self.describe(error))")
         }

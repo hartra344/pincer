@@ -674,7 +674,7 @@ struct ChatSessionMenu: View {
                 ShowRunsButton(isPresented: Binding(get: { self.showRuns }, set: {
                     self.willAct()
                     self.showRuns = $0
-                }))
+                }), sessionKey: row.key)
                 Divider()
                 Button(L("Reload"), systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: row.key).load(force: true) }

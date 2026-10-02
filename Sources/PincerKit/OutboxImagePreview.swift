@@ -268,7 +268,7 @@ extension ChatStore {
     }
 
     func outboxPreviewBlocks(for entry: OutboxEntry) -> [ContentBlock] {
-        var blocks: [ContentBlock] = entry.text.isEmpty ? [] : [.text(entry.text)]
+        var blocks: [ContentBlock] = entry.displayText.isEmpty ? [] : [.text(entry.displayText)]
         var seen = Set<UUID>()
         for attachment in entry.attachments {
             seen.insert(attachment.id)

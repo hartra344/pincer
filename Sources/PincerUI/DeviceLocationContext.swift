@@ -28,7 +28,7 @@ final class DeviceLocationContext: NSObject, LocationContextDriver, CLLocationMa
         if let manager = self.permissionManager { return manager }
         let manager = CLLocationManager()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+        manager.desiredAccuracy = kCLLocationAccuracyBest
         self.permissionManager = manager
         return manager
     }
@@ -51,7 +51,7 @@ final class DeviceLocationContext: NSObject, LocationContextDriver, CLLocationMa
         // one-shot request prevents a late callback from an old request borrowing a new generation.
         let manager = CLLocationManager()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyKilometer
+        manager.desiredAccuracy = kCLLocationAccuracyBest
         self.requestManager = manager
         self.request.withLock { $0 = LocationRequestToken(manager: ObjectIdentifier(manager), generation: generation) }
         manager.requestLocation()

@@ -354,6 +354,7 @@ extension ChatStore {
             self.items.append(item)
             self.trackLiveReply(item)
         }
+        self.scheduleLegacyLocationProjection(item)
         // A committed user message is a persistence boundary: search must see it while its
         // reply is still streaming. Later assistant output uses the bounded live-save window.
         if item.role == .user { self.flushScheduledSave() }
@@ -378,6 +379,44 @@ extension ChatStore {
             }
             run.tools.removeAll { committedToolIds.contains($0.id) }
             self.live = run
+        }
+    }
+
+    /// Legacy rows are rare; normal live messages pay a 256-character suffix check only.
+    /// Revision tokens prevent an old worker result replacing a newer event for the same ID.
+    /// Sixteen outstanding workers bound memory; overflow is cleaned by the existing worker history load.
+    private func scheduleLegacyLocationProjection(_ item: ChatItem) {
+        self.legacyLocationProjectionTokens.removeValue(forKey: item.id)
+        guard item.role == .user, item.sender == nil,
+              item.blocks.contains(where: { block in
+                  if case let .text(text) = block { return ChatWorkContext.mayHaveLegacyFooter(text) }
+                  return false
+              }) else { return }
+        guard self.legacyLocationProjectionWorkerCount < 16 else {
+            self.scheduleReload()
+            return
+        }
+        let token = UUID()
+        self.legacyLocationProjectionTokens[item.id] = token
+        self.legacyLocationProjectionWorkerCount += 1
+        let revision = self.contentRevision
+        Task { [weak self] in
+            let projected = await Task.detached(priority: .utility) {
+                var projected = item
+                projected.projectLegacyLocationForDisplay()
+                return projected
+            }.value
+            guard let self else { return }
+            self.legacyLocationProjectionWorkerCount -= 1
+            guard self.legacyLocationProjectionTokens[item.id] == token else { return }
+            self.legacyLocationProjectionTokens.removeValue(forKey: item.id)
+            guard let index = self.items.firstIndex(where: { $0.id == item.id }) else { return }
+            guard self.contentRevision == revision else {
+                self.scheduleLegacyLocationProjection(self.items[index])
+                return
+            }
+            // Finished text only; current row identity, media, reply fields and transport facts stay intact.
+            self.items[index].blocks = projected.blocks
         }
     }
 

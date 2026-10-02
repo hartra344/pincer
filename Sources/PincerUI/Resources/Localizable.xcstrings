@@ -18804,46 +18804,6 @@
         }
       }
     },
-    "Allow location access to include context": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow location access to include context"
-          }
-        }
-      }
-    },
-    "Approximate location is ready": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Approximate location is ready"
-          }
-        }
-      }
-    },
-    "Getting approximate location…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Getting approximate location…"
-          }
-        }
-      }
-    },
-    "Include approximate location with messages": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Include approximate location with messages"
-          }
-        }
-      }
-    },
     "Location access is denied": {
       "localizations": {
         "en": {
@@ -18860,16 +18820,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Location access is restricted on this device"
-          }
-        }
-      }
-    },
-    "Location context (approximate, shared by Pincer)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location context (approximate, shared by Pincer)"
           }
         }
       }
@@ -18900,16 +18850,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Location Settings"
-          }
-        }
-      }
-    },
-    "When enabled, new messages include an approximate location and its observation time as visible text. Pincer requests location only while the app is active, rounds it to a coarse area, and sends without it if no recent fix is available. Commands and edits do not add location. Turning this off stops future sharing; messages already queued keep their attached context.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When enabled, new messages include an approximate location and its observation time as visible text. Pincer requests location only while the app is active, rounds it to a coarse area, and sends without it if no recent fix is available. Commands and edits do not add location. Turning this off stops future sharing; messages already queued keep their attached context."
           }
         }
       }
@@ -19210,6 +19150,76 @@
           "stringUnit": {
             "state": "translated",
             "value": "Move to Group (shown in By Group)"
+          }
+        }
+      }
+    },
+    "Allow location access to share context": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow location access to share context"
+          }
+        }
+      }
+    },
+    "Getting device location…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getting device location…"
+          }
+        }
+      }
+    },
+    "Location context is ready to share": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location context is ready to share"
+          }
+        }
+      }
+    },
+    "Location context is ready to share · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location context is ready to share · %@"
+          }
+        }
+      }
+    },
+    "Share location context with the agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share location context with the agent"
+          }
+        }
+      }
+    },
+    "This Gateway does not support location context. Messages are still sent without location.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway does not support location context. Messages are still sent without location."
+          }
+        }
+      }
+    },
+    "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent."
           }
         }
       }

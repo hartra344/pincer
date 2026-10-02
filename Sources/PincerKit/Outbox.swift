@@ -35,6 +35,10 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     public var sessionKey: String
     public var agentId: String?
     public var text: String
+    /// Immutable send-time reference data, retained across retries and relaunch.
+    public let locationContext: LocationContextSnapshot?
+    /// Prepared once at construction/decode; legacy wire text stays intact.
+    public private(set) var displayText: String
     public var replyToId: String?
     public var replyPreview: ReplyPreview?
     public var createdAt: Date
@@ -62,6 +66,7 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         sessionKey: String,
         agentId: String? = nil,
         text: String,
+        locationContext: LocationContextSnapshot? = nil,
         replyToId: String? = nil,
         replyPreview: ReplyPreview? = nil,
         createdAt: Date,
@@ -75,6 +80,8 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.sessionKey = sessionKey
         self.agentId = agentId
         self.text = text
+        self.locationContext = ChatWorkContext.isCommand(text) ? nil : locationContext
+        self.displayText = text
         self.replyToId = replyToId
         self.replyPreview = replyPreview
         self.createdAt = createdAt
@@ -86,7 +93,7 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, sessionKey, agentId, text, replyToId, replyPreview, createdAt, state, attempts, hasAttachments, attachments, sendOnAnyNetwork
+        case id, sessionKey, agentId, text, locationContext, replyToId, replyPreview, createdAt, state, attempts, hasAttachments, attachments, sendOnAnyNetwork
     }
 
     public init(from decoder: Decoder) throws {
@@ -95,6 +102,8 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.sessionKey = try c.decode(String.self, forKey: .sessionKey)
         self.agentId = try c.decodeIfPresent(String.self, forKey: .agentId)
         self.text = try c.decode(String.self, forKey: .text)
+        self.locationContext = try c.decodeIfPresent(LocationContextSnapshot.self, forKey: .locationContext)
+        self.displayText = ChatWorkContext.legacyDisplayText(self.text)
         self.replyToId = try c.decodeIfPresent(String.self, forKey: .replyToId)
         self.replyPreview = try c.decodeIfPresent(ReplyPreview.self, forKey: .replyPreview)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
