@@ -36,7 +36,7 @@ struct DemoMCPState {
     static let account = "demo@pincer.app"
     static let redacted = "__OPENCLAW_REDACTED__"
 
-    static let seedConfig: JSONValue = [
+    static let seedConfig: JSONValue = DemoAgentModelsConfig.seed.mergingPatch([
         // Telegram sets a level with a per-account override, WhatsApp leaves it unset (default), Discord has no control.
         "channels": [
             "telegram": ["enabled": true, "reactionLevel": "minimal", "accounts": [
@@ -61,7 +61,7 @@ struct DemoMCPState {
         "sentry": ["url": "https://mcp.sentry.dev/sse", "transport": "sse", "enabled": false],
         "acme.docs": ["url": "https://mcp.acme.example/docs", "transport": "streamable-http"],
     ]],
-    ]
+    ])
 
     static let seedTools: [String: [String]] = [
         "filesystem": ["read_file", "write_file", "list_directory", "search_files"],
@@ -443,19 +443,21 @@ extension DemoGateway {
                 "legacyIssues": [], "hash": .string(self.mcp.hash)]
     }
 
-    private static let mcpConfigSchema: JSONValue = [
-        "schema": ["type": "object", "properties": [
-            "mcp": ["type": "object", "properties": [
+    private static let mcpConfigSchema: JSONValue = {
+        var properties = DemoAgentModelsConfig.schemaProperties
+        properties["mcp"] = ["type": "object", "properties": [
                 "servers": ["type": "object", "additionalProperties": ["type": "object"]],
-            ]],
-            "channels": ["type": "object", "properties": [
+            ]]
+        properties["channels"] = ["type": "object", "properties": [
                 "telegram": DemoGateway.reactionChannelSchema(accounts: true),
                 "whatsapp": DemoGateway.reactionChannelSchema(accounts: true),
                 "discord": ["type": "object", "properties": ["enabled": ["type": "boolean"]]],
-            ]],
-        ]],
-        "uiHints": [:], "version": "demo", "generatedAt": "2026-01-01T00:00:00Z",
-    ]
+            ]]
+        return [
+            "schema": ["type": "object", "properties": .object(properties)],
+            "uiHints": [:], "version": "demo", "generatedAt": "2026-01-01T00:00:00Z",
+        ]
+    }()
 
     private static let reactionLevelSchema: JSONValue = [
         "type": "string", "enum": ["off", "ack", "minimal", "extensive"],
