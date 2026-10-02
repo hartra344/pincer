@@ -333,6 +333,32 @@ private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> G
 func runDemoVoice() async {
     guard let gateway = await voiceConnect(GatewayProfile.demo(), "demo") else { return }
     defer { gateway.stop() }
+    let mainChat = gateway.chat(for: "agent:main:main")
+    await mainChat.load()
+    let demoReply = mainChat.items.first { $0.role == .assistant && !$0.isPending && !$0.isError }
+    let demoPrompt = mainChat.items.first { $0.role == .user }
+    check(demoReply.map { SpeechText.speakableText(for: $0) != nil } ?? false,
+          "demo transcript's assistant prose remains eligible for Read Aloud")
+    check(demoPrompt.map { SpeechText.speakableText(for: $0) == nil } ?? false,
+          "demo transcript's user messages are not eligible for Read Aloud")
+    if let demoReply {
+        var readiness = SpeechEligibilityCache()
+        let first = readiness.begin(messageID: demoReply.id)
+        let prepared = SpeechText.prepare(demoReply)
+        check(readiness.complete(first, with: prepared, sourceRevision: 1)
+              && readiness.value(messageID: demoReply.id)?.isEligible == true,
+              "demo assistant prose flows through the prepared eligibility cache")
+        var edited = demoReply
+        edited.blocks = [.text("```swift\nlet answer = 42\n```")]
+        readiness.invalidate(messageID: demoReply.id)
+        let revised = readiness.begin(messageID: demoReply.id)
+        let editedPrepared = SpeechText.prepare(edited)
+        check(readiness.complete(revised, with: editedPrepared, sourceRevision: 2)
+              && readiness.value(messageID: demoReply.id)?.isEligible == false,
+              "demo same-ID edits replace old Read Aloud eligibility")
+    } else {
+        check(false, "demo assistant fixture exists for prepared Read Aloud coverage")
+    }
     await readAloudCommandReadinessCheck(gateway)
     await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
@@ -344,7 +370,7 @@ func runDemoVoice() async {
 @MainActor
 private func readAloudCommandReadinessCheck(_ gateway: GatewayStore) async {
     let chat = gateway.chat(for: "agent:main:main")
-    await chat.load()
+    if !chat.hasLoaded { await chat.load() }
     let loaded = await waitFor("demo transcript for Read Aloud command", timeout: 8) { chat.hasLoaded || !chat.items.isEmpty }
     check(loaded, "demo: the selected chat has transcript content for the latest-reply command")
     guard loaded else { return }

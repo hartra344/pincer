@@ -139,6 +139,10 @@ protocol TranscriptRowActions: AnyObject {
     func isReadingAloud(_ messageId: String) -> Bool
     /// Whether the message has anything worth speaking.
     func canReadAloud(_ messageId: String) -> Bool
+    /// Row-aware Read Aloud lookup used by native controls so a completed preparation can refresh
+    /// only the transcript row that owns the message.
+    func canReadAloud(_ messageId: String, rowID: String) -> Bool
+    func readAloud(_ messageId: String, rowID: String)
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -161,6 +165,11 @@ protocol TranscriptRowActions: AnyObject {
     func deleteSend(_ id: String)
 }
 
+extension TranscriptRowActions {
+    func canReadAloud(_ messageId: String, rowID: String) -> Bool { self.canReadAloud(messageId) }
+    func readAloud(_ messageId: String, rowID: String) { self.readAloud(messageId) }
+}
+
 /// Lays out rows for the AppKit and UIKit lists and tells them when a row's layout is stale:
 /// its disclosure toggled, an image it shows loaded, a subagent run it links to appeared, or a
 /// setting or the text size changed.
@@ -168,9 +177,42 @@ protocol TranscriptRowActions: AnyObject {
 final class TranscriptRenderer: TranscriptRowActions {
     private struct Entry {
         let row: TranscriptRow
-        let layout: TranscriptRowLayout
+        var layout: TranscriptRowLayout
         var stamp: Int
+        var invalidated = false
     }
+
+    private struct SpeechJob {
+        let token: SpeechEligibilityCache.Token
+        var rowID: String
+        var layoutSerial: Int
+        let chat: ChatStore
+        var shouldStartPlayback: Bool
+        var task: Task<Void, Never>?
+    }
+
+    private struct PendingSpeechPreparation {
+        var rowID: String
+        var layoutSerial: Int
+        var shouldStartPlayback: Bool
+        let orderToken: UInt64
+    }
+
+    private struct PendingSpeechOrderEntry {
+        let messageID: String
+        let token: UInt64
+    }
+
+    private actor SpeechPreparationWorker {
+        func prepare(_ item: ChatItem, probe: (@Sendable (String) -> Void)?) -> SpeechEligibilityCache.Prepared? {
+            guard !Task.isCancelled else { return nil }
+            probe?(item.id)
+            guard !Task.isCancelled else { return nil }
+            return SpeechText.prepare(item)
+        }
+    }
+
+    private static let speechPreparationWorker = SpeechPreparationWorker()
 
     /// Layouts kept for rows; the least recently used go first. Heights of rows without one
     /// live in the list, so a dropped layout only costs a relayout when the row is next drawn.
@@ -183,6 +225,24 @@ final class TranscriptRenderer: TranscriptRowActions {
     private(set) var highlight = TranscriptHighlight()
     private var settings: TranscriptSettings
     private var cache: [String: Entry] = [:]
+    private var speechCache = SpeechEligibilityCache()
+    private var speechJobs: [String: SpeechJob] = [:]
+    private var speechWorkerCount = 0
+    // Retain only IDs and row coordinates while the worker is full; ChatStore remains the source
+    // of item snapshots. Both this queue and active jobs are bounded independently.
+    private var pendingSpeechPreparations: [String: PendingSpeechPreparation] = [:]
+    private var pendingSpeechOrder: [PendingSpeechOrderEntry] = []
+    private var pendingSpeechHead = 0
+    private var nextPendingSpeechOrderToken: UInt64 = 0
+    #if DEBUG
+    var pendingSpeechPreparationCount: Int { self.pendingSpeechPreparations.count }
+    var pendingSpeechPreparationOrderCount: Int { self.pendingSpeechOrder.count - self.pendingSpeechHead }
+    var activeSpeechPreparationCount: Int { self.speechWorkerCount }
+    #endif
+    #if DEBUG
+    /// A bounded test seam invoked on the worker before normalization; it never receives text.
+    var speechPreparationProbe: (@Sendable (String) -> Void)?
+    #endif
     private var imageRows: [String: Set<String>] = [:]
     private var imageStates: [String: ImageState] = [:]
     private var imageRefs: [String: ImageRef] = [:]
@@ -252,6 +312,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     isolated deinit {
+        for job in self.speechJobs.values { job.task?.cancel() }
         self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
         for observer in self.observers { NotificationCenter.default.removeObserver(observer) }
     }
@@ -308,7 +369,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             self.expand(for: reveal)
             stale.insert(reveal.entryId)
         }
-        for id in stale { self.cache[id] = nil }
+        self.markLayoutInvalidated(stale)
         self.onInvalidate?(stale, nil)
         return reveal?.entryId
     }
@@ -335,17 +396,22 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     /// The spoken label of a row already laid out, without building anything.
     func cachedLabel(for row: TranscriptRow) -> String? {
-        guard let entry = self.cache[row.id], entry.row == row else { return nil }
+        guard let entry = self.cache[row.id], !entry.invalidated, entry.row == row else { return nil }
         return entry.layout.accessibilityLabel
     }
 
     /// The row laid out at `width`, from cache when neither has changed.
     func layout(for row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         self.useStamp += 1
-        if var entry = self.cache[row.id], entry.layout.width == width, entry.row == row {
+        if var entry = self.cache[row.id], !entry.invalidated, entry.layout.width == width, entry.row == row {
             entry.stamp = self.useStamp
             self.cache[row.id] = entry
             return entry.layout
+        }
+        let previous = self.cache[row.id]
+        let rowContentChanged = previous.map { $0.row != row } ?? false
+        if rowContentChanged, let previous {
+            self.invalidateSpeechReadiness(for: previous.layout.messages.map(\.id))
         }
         let wasEvicted = self.cache[row.id] == nil
         self.layoutBuildCount += 1
@@ -355,7 +421,10 @@ final class TranscriptRenderer: TranscriptRowActions {
         }
         self.serial += 1
         layout.serial = self.serial
-        self.cache[row.id] = Entry(row: row, layout: layout, stamp: self.useStamp)
+        self.cache[row.id] = Entry(row: row, layout: layout, stamp: self.useStamp, invalidated: false)
+        if rowContentChanged {
+            self.invalidateSpeechReadiness(for: layout.messages.map(\.id))
+        }
         let loader = self.context.gateway.images
         for ref in layout.images {
             let key = ref.cacheKey
@@ -402,7 +471,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func hasLayout(for row: TranscriptRow, width: CGFloat) -> Bool {
-        guard let entry = self.cache[row.id] else { return false }
+        guard let entry = self.cache[row.id], !entry.invalidated else { return false }
         return entry.layout.width == width && entry.row == row
     }
 
@@ -418,7 +487,11 @@ final class TranscriptRenderer: TranscriptRowActions {
             .prefix(max(0, self.cache.count - target)).map(\.key)
         guard !victims.isEmpty else { return }
         let gone = Set(victims)
-        for id in victims { self.cache[id] = nil }
+        for id in victims {
+            if let entry = self.cache.removeValue(forKey: id) {
+                self.invalidateSpeechReadiness(for: entry.layout.messages.map(\.id))
+            }
+        }
         self.spawnRows.subtract(gone)
         for (key, rows) in self.imageRows {
             let left = rows.subtracting(gone)
@@ -442,6 +515,12 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func reset() {
+        for job in self.speechJobs.values { job.task?.cancel() }
+        self.speechJobs.removeAll()
+        self.pendingSpeechPreparations.removeAll()
+        self.pendingSpeechOrder.removeAll()
+        self.pendingSpeechHead = 0
+        self.speechCache.removeAll()
         self.cache.removeAll()
         self.imageRows.removeAll()
         self.imageStates.removeAll()
@@ -453,8 +532,26 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     private func invalidate(_ ids: Set<String>, keepInPlace: String? = nil) {
         guard !ids.isEmpty else { return }
-        for id in ids { self.cache[id] = nil }
+        self.markLayoutInvalidated(ids)
         self.onInvalidate?(ids, keepInPlace)
+    }
+
+    private func markLayoutInvalidated(_ ids: Set<String>) {
+        for id in ids {
+            guard var entry = self.cache[id] else { continue }
+            entry.invalidated = true
+            self.cache[id] = entry
+        }
+    }
+
+    private func invalidateSpeechReadiness(for messageIDs: [String]) {
+        for id in Set(messageIDs) {
+            self.speechCache.invalidate(messageID: id)
+            self.speechJobs[id]?.task?.cancel()
+            self.speechJobs[id] = nil
+            self.pendingSpeechPreparations[id] = nil
+        }
+        self.compactPendingSpeechOrderIfNeeded()
     }
 
     private func invalidateAll() {
@@ -725,19 +822,225 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.context.reply(messageId)
     }
 
-    private func speakableText(_ messageId: String) -> String? {
-        self.context.chat?.message(withId: messageId).flatMap(SpeechText.speakableText)
+    func canReadAloud(_ messageId: String) -> Bool {
+        guard let item = self.context.chat?.message(withId: messageId), item.role == .assistant,
+              !item.isPending, !item.isError,
+              let entry = self.speechCache.value(messageID: messageId) else { return false }
+        return entry.isEligible
     }
 
-    func canReadAloud(_ messageId: String) -> Bool { self.speakableText(messageId) != nil }
+    func canReadAloud(_ messageId: String, rowID: String) -> Bool {
+        guard let chat = self.context.chat,
+              let item = chat.message(withId: messageId),
+              item.role == .assistant, !item.isPending, !item.isError,
+              let entry = self.cache[rowID], !entry.invalidated else {
+            self.invalidateSpeechReadiness(for: [messageId])
+            return false
+        }
+        let row = entry.layout
+        if let prepared = self.speechCache.value(messageID: messageId) {
+            return prepared.isEligible
+        }
+        self.queueSpeechPreparation(item, chat: chat, messageID: messageId, rowID: rowID,
+                                    layoutSerial: row.serial, startPlayback: false)
+        return false
+    }
 
     func isReadingAloud(_ messageId: String) -> Bool { ReadAloudController.shared.isActive(messageId) }
 
     func readAloud(_ messageId: String) {
         let controller = ReadAloudController.shared
         if controller.isActive(messageId) { return controller.stop() }
-        guard let text = self.speakableText(messageId) else { return }
+        guard let item = self.context.chat?.message(withId: messageId), item.role == .assistant,
+              !item.isPending, !item.isError,
+              let value = self.speechCache.value(messageID: messageId), value.isEligible,
+              let text = value.speechText,
+              value.sourceRevision == self.context.chat?.contentRevision else { return }
         controller.start(messageId: messageId, text: text, gateway: self.context.gateway.voice)
+    }
+
+    func readAloud(_ messageId: String, rowID: String) {
+        let controller = ReadAloudController.shared
+        if controller.isActive(messageId) { controller.stop(); return }
+        guard let chat = self.context.chat,
+              let item = chat.message(withId: messageId),
+              item.role == .assistant, !item.isPending, !item.isError,
+              let entry = self.cache[rowID], !entry.invalidated else { return }
+        let row = entry.layout
+        if let value = self.speechCache.value(messageID: messageId) {
+            if !value.isEligible, value.sourceRevision == chat.contentRevision { return }
+            if value.isEligible, value.sourceRevision == chat.contentRevision, let text = value.speechText {
+                controller.start(messageId: messageId, text: text, gateway: self.context.gateway.voice)
+                return
+            }
+        }
+        self.queueSpeechPreparation(item, chat: chat, messageID: messageId, rowID: rowID,
+                                    layoutSerial: row.serial, startPlayback: true)
+    }
+
+    private func queueSpeechPreparation(_ item: ChatItem, chat: ChatStore, messageID: String,
+                                        rowID: String, layoutSerial: Int, startPlayback: Bool) {
+        if var job = self.speechJobs[messageID] {
+            job.rowID = rowID
+            job.layoutSerial = layoutSerial
+            job.shouldStartPlayback = job.shouldStartPlayback || startPlayback
+            self.speechJobs[messageID] = job
+            return
+        }
+        // A visible transcript can be long; bound both the number of retained item snapshots and
+        // the number of actor waiters created by a single renderer.
+        guard self.speechWorkerCount < 16 else {
+            self.deferSpeechPreparation(messageID: messageID, rowID: rowID,
+                                        layoutSerial: layoutSerial, startPlayback: startPlayback)
+            return
+        }
+        let token = self.speechCache.begin(messageID: messageID)
+        let revision = chat.contentRevision
+        #if DEBUG
+        let probe = self.speechPreparationProbe
+        #else
+        let probe: (@Sendable (String) -> Void)? = nil
+        #endif
+        self.speechWorkerCount += 1
+        let task = Task { [weak self, weak chat] in
+            let prepared = await Self.speechPreparationWorker.prepare(item, probe: probe)
+            guard let self else { return }
+            self.speechWorkerCount = max(0, self.speechWorkerCount - 1)
+            guard !Task.isCancelled, let prepared, let chat else {
+                self.drainPendingSpeechPreparations()
+                return
+            }
+            self.finishSpeechPreparation(prepared, token: token, messageID: messageID,
+                                         chat: chat, sourceRevision: revision)
+        }
+        self.speechJobs[messageID] = SpeechJob(token: token, rowID: rowID, layoutSerial: layoutSerial,
+                                               chat: chat, shouldStartPlayback: startPlayback, task: task)
+    }
+
+    private func deferSpeechPreparation(messageID: String, rowID: String, layoutSerial: Int,
+                                        startPlayback: Bool) {
+        if var pending = self.pendingSpeechPreparations[messageID] {
+            pending.rowID = rowID
+            pending.layoutSerial = layoutSerial
+            pending.shouldStartPlayback = pending.shouldStartPlayback || startPlayback
+            self.pendingSpeechPreparations[messageID] = pending
+            return
+        }
+        guard self.pendingSpeechPreparations.count < Self.layoutCacheLimit else { return }
+        self.nextPendingSpeechOrderToken &+= 1
+        let token = self.nextPendingSpeechOrderToken
+        self.pendingSpeechPreparations[messageID] = PendingSpeechPreparation(
+            rowID: rowID, layoutSerial: layoutSerial, shouldStartPlayback: startPlayback,
+            orderToken: token)
+        self.pendingSpeechOrder.append(PendingSpeechOrderEntry(messageID: messageID, token: token))
+        self.compactPendingSpeechOrderIfNeeded()
+    }
+
+    private func drainPendingSpeechPreparations() {
+        guard let chat = self.context.chat else {
+            self.pendingSpeechPreparations.removeAll()
+            self.pendingSpeechOrder.removeAll()
+            self.pendingSpeechHead = 0
+            return
+        }
+        while self.speechWorkerCount < 16, self.pendingSpeechHead < self.pendingSpeechOrder.count {
+            let pendingOrder = self.pendingSpeechOrder[self.pendingSpeechHead]
+            self.pendingSpeechHead += 1
+            let messageID = pendingOrder.messageID
+            guard let pending = self.pendingSpeechPreparations[messageID],
+                  pending.orderToken == pendingOrder.token else { continue }
+            self.pendingSpeechPreparations[messageID] = nil
+            guard
+                  let entry = self.cache[pending.rowID], !entry.invalidated,
+                  entry.layout.serial == pending.layoutSerial,
+                  entry.layout.messages.contains(where: { $0.id == messageID }),
+                  let item = chat.message(withId: messageID), item.role == .assistant,
+                  !item.isPending, !item.isError else { continue }
+            self.queueSpeechPreparation(item, chat: chat, messageID: messageID, rowID: pending.rowID,
+                                        layoutSerial: pending.layoutSerial,
+                                        startPlayback: pending.shouldStartPlayback)
+        }
+        self.compactPendingSpeechOrderIfNeeded()
+    }
+
+    private func compactPendingSpeechOrderIfNeeded() {
+        if self.pendingSpeechPreparations.isEmpty {
+            self.pendingSpeechOrder.removeAll(keepingCapacity: true)
+            self.pendingSpeechHead = 0
+            return
+        }
+        if self.pendingSpeechHead > 64, self.pendingSpeechHead * 2 >= self.pendingSpeechOrder.count {
+            self.pendingSpeechOrder.removeFirst(self.pendingSpeechHead)
+            self.pendingSpeechHead = 0
+        }
+        if self.pendingSpeechOrder.count > Self.layoutCacheLimit * 2 {
+            self.pendingSpeechOrder = self.pendingSpeechOrder.dropFirst(self.pendingSpeechHead).filter { entry in
+                self.pendingSpeechPreparations[entry.messageID]?.orderToken == entry.token
+            }
+            self.pendingSpeechHead = 0
+        }
+    }
+
+    private func finishSpeechPreparation(_ prepared: SpeechEligibilityCache.Prepared,
+                                         token: SpeechEligibilityCache.Token, messageID: String,
+                                         chat: ChatStore,
+                                         sourceRevision: Int) {
+        guard let job = self.speechJobs[messageID], job.token == token else { return }
+        self.speechJobs[messageID] = nil
+        defer { self.drainPendingSpeechPreparations() }
+        guard job.chat === chat else { return }
+        let rowID = job.rowID
+        let layoutSerial = job.layoutSerial
+        guard self.context.chat === chat, let current = chat.message(withId: messageID),
+              let rowEntry = self.cache[rowID], !rowEntry.invalidated else {
+            self.speechCache.invalidate(messageID: messageID)
+            return
+        }
+        guard rowEntry.layout.serial == layoutSerial else {
+            self.speechCache.invalidate(messageID: messageID)
+            if rowEntry.layout.messages.contains(where: { $0.id == messageID }) {
+                self.queueSpeechPreparation(current, chat: chat, messageID: messageID, rowID: rowID,
+                                            layoutSerial: rowEntry.layout.serial,
+                                            startPlayback: job.shouldStartPlayback)
+            }
+            return
+        }
+        guard chat.contentRevision == sourceRevision else {
+            self.speechCache.invalidate(messageID: messageID)
+            if let current = chat.message(withId: messageID),
+               let currentRow = self.cache[rowID]?.layout,
+               currentRow.messages.contains(where: { $0.id == messageID }) {
+                self.queueSpeechPreparation(current, chat: chat, messageID: messageID, rowID: rowID,
+                                            layoutSerial: currentRow.serial,
+                                            startPlayback: job.shouldStartPlayback)
+            }
+            return
+        }
+        guard self.speechCache.complete(token, with: prepared, sourceRevision: sourceRevision) else { return }
+        // Readiness changes a button's visibility, not packed geometry. Advance only the cached
+        // layout token so native cells reconfigure without rebuilding or measuring the body.
+        guard let readySerial = self.advanceReadinessLayoutSerial(rowID: rowID) else { return }
+        // Other preparations in the same row should finish against the token the cell now expects.
+        let jobIDs = self.speechJobs.compactMap { $0.value.rowID == rowID ? $0.key : nil }
+        for id in jobIDs {
+            self.speechJobs[id]?.layoutSerial = readySerial
+        }
+        let pendingIDs = self.pendingSpeechPreparations.compactMap { $0.value.rowID == rowID ? $0.key : nil }
+        for id in pendingIDs {
+            self.pendingSpeechPreparations[id]?.layoutSerial = readySerial
+        }
+        self.onInvalidate?(Set([rowID]), nil)
+        guard job.shouldStartPlayback, prepared.isEligible, let text = prepared.speechText,
+              chat.contentRevision == sourceRevision, self.context.chat === chat else { return }
+        ReadAloudController.shared.start(messageId: messageID, text: text, gateway: self.context.gateway.voice)
+    }
+
+    private func advanceReadinessLayoutSerial(rowID: String) -> Int? {
+        guard var entry = self.cache[rowID], !entry.invalidated else { return nil }
+        self.serial += 1
+        entry.layout.serial = self.serial
+        self.cache[rowID] = entry
+        return self.serial
     }
 
     func canBranch(from messageId: String) -> Bool { self.context.chat?.canBranch(from: messageId) ?? false }
