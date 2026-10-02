@@ -12,10 +12,10 @@ struct SettingsNoticeBanner<Content: View>: View {
     let wait: @MainActor (Duration) async -> Void
     let announce: @MainActor (String) -> Void
     let content: Content
-    var showsDismissButton = false
+    var showsDismissButton = true
 
     init(id: UUID, text: String, severity: SettingsNoticeSeverity, announces: Bool,
-         showsDismissButton: Bool = false,
+         showsDismissButton: Bool = true,
          dismiss: @escaping @MainActor () -> Void,
          wait: @escaping @MainActor (Duration) async -> Void = { duration in try? await Task.sleep(for: duration) },
          announce: @escaping @MainActor (String) -> Void = { AccessibilityAnnouncer.announce($0) },
@@ -40,7 +40,7 @@ struct SettingsNoticeBanner<Content: View>: View {
                 Button(action: self.dismiss) {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

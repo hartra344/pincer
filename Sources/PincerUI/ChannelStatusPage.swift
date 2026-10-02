@@ -265,7 +265,7 @@ struct ChannelStatusNoticeView: View {
 
     var body: some View {
         SettingsNoticeBanner(id: self.notice.id, text: self.notice.text, severity: self.notice.severity,
-                             announces: false, dismiss: self.dismiss, wait: self.wait, announce: self.announce) {
+                             announces: true, dismiss: self.dismiss, wait: self.wait, announce: self.announce) {
             Label(self.notice.text,
                   systemImage: self.notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .foregroundStyle(self.notice.isError ? Color.red : Color.green)
