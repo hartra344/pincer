@@ -10,11 +10,9 @@ struct ChannelList: View {
     @Environment(\.openAutomations) private var openAutomations
     @Environment(\.searchMessages) private var searchMessages
     @Environment(\.openChatWindow) private var openChatWindow
-#if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-#endif
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
+    var windowIsCompactWidth = false
     @State private var search = ""
     @State private var newChat: NewChatRequest?
     @State private var renaming: SessionRow?
@@ -165,7 +163,7 @@ struct ChannelList: View {
     private var shouldOfferSplitAction: Bool {
         #if os(iOS)
         SidebarSplitActionPolicy.shouldOffer(supportsSplitView: Self.hasSplitView,
-                                             isCompactWidth: self.horizontalSizeClass == .compact)
+                                             isCompactWidth: self.windowIsCompactWidth)
         #else
         SidebarSplitActionPolicy.shouldOffer(supportsSplitView: true, isCompactWidth: false)
         #endif
