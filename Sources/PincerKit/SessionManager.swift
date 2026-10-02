@@ -149,6 +149,12 @@ public enum SessionManager {
         return text
     }
 
+    /// Formats a bulk failure row, using the session key until a known title is available.
+    public static func bulkFailureSummary(_ failure: SessionBulkOutcome.Failure,
+                                          sessionTitle: String?) -> String {
+        "\(failure.key): \(failure.message)"
+    }
+
     /// Whether `sessions.recover` applies: a Gateway restart tombstoned the session.
     public static func isRecoverable(_ row: SessionRow) -> Bool {
         row.raw["restartRecoveryStatus"]?.text == "tombstoned"
