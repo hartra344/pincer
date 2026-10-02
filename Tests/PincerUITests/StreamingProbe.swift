@@ -139,7 +139,7 @@ struct StreamingProbe {
         event(["state": "status", "phase": "starting_model"])
 
         var acc = ""
-        var nextBoundary = 1.0 / Double(cadenceHz)
+        var nextFrame = 1
         var pendingSincePublish = false
         for (index, chunk) in chunks.enumerated() {
             acc += chunk
@@ -147,15 +147,15 @@ struct StreamingProbe {
                 event(["state": "delta", "deltaText": .string(chunk), "message": Self.assistant(acc)])
             })
             result.totalMs += eventCost
-            let t = Double(index + 1) / 60
-            if ProbeShim.flush == nil || t >= nextBoundary {
+            let elapsedTicks = index + 1
+            if ProbeShim.flush == nil || elapsedTicks * cadenceHz >= nextFrame * 60 {
                 let p = publish()
                 result.publishes.append(p)
                 result.textSets.append(sets)
                 result.publishTotalMs += p
                 result.totalMs += p
                 pendingSincePublish = false
-                while nextBoundary <= t { nextBoundary += 1.0 / Double(cadenceHz) }
+                while nextFrame * 60 <= elapsedTicks * cadenceHz { nextFrame += 1 }
             } else {
                 pendingSincePublish = true
             }
@@ -298,5 +298,10 @@ struct StreamingProbe {
         #expect((thirty.textSets.max() ?? 0) <= 3)
         #expect((sixty.textSets.max() ?? 0) <= 3)
         #endif
+        if ProcessInfo.processInfo.environment["PINCER_FRAME_BUDGET"] == "1" {
+            let limit = PerfBudget.limit(.milliseconds(8.3))
+            let p95 = Duration.seconds(Self.p95(sixty.publishes) / 1000)
+            #expect(p95 <= limit, "60 Hz publish p95 \(p95) exceeds the 120 Hz frame budget \(limit)")
+        }
     }
 }
