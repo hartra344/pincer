@@ -279,7 +279,7 @@ public enum SetupTips {
                 return iPhone && tip.id == "search"
                     ? L("Search all messages from the sidebar search field.") : tip.text
             }
-            switch tip.id {
+            return switch tip.id {
             case "palette":
                 if let paletteShortcut {
                     L("Press \(paletteShortcut) to jump to any chat, agent, model, or setting.")
