@@ -74,6 +74,7 @@ enum Suites {
             Section(nil) { checkForwardedMessages() },
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
+            Section("Settings notice lifetime") { runSettingsNoticeChecks() },
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section(nil) { await checkSessionManager() },

@@ -176,6 +176,12 @@ public final class PairingInboxModel {
     public struct Notice: Identifiable, Equatable, Sendable {
         public let id = UUID()
         public let text: String
+        public let severity: SettingsNoticeSeverity
+
+        public init(text: String, severity: SettingsNoticeSeverity = .info) {
+            self.text = text
+            self.severity = severity
+        }
     }
 
     public struct Limits: Hashable, Sendable {
@@ -417,7 +423,7 @@ public final class PairingInboxModel {
     public func approve(_ request: PairingRequest, notify: Bool = true, makeCommandOwner: Bool = false) async -> Bool {
         guard self.operations[request.id]?.isRunning != true else { return false }
         guard !request.isExpired() else {
-            self.notice = Notice(text: Self.expiredMessage)
+            self.notice = Notice(text: Self.expiredMessage, severity: .warning)
             return false
         }
         let params = Self.approveParams(request, notify: notify, makeCommandOwner: makeCommandOwner,
@@ -433,7 +439,7 @@ public final class PairingInboxModel {
             case "unavailable": notes.append("Approved, but they couldn't be made the command owner.")
             default: break
             }
-            if !notes.isEmpty { self.notice = Notice(text: notes.joined(separator: " ")) }
+            if !notes.isEmpty { self.notice = Notice(text: notes.joined(separator: " "), severity: .warning) }
             return true
         } catch {
             return await self.failed(request, error: error)
@@ -464,13 +470,13 @@ public final class PairingInboxModel {
         let message = Self.message(for: error)
         if Self.isStale(error) {
             self.remove(request)
-            self.notice = Notice(text: Self.staleMessage)
+            self.notice = Notice(text: Self.staleMessage, severity: .warning)
             await self.load()
             return true
         }
         if Self.isNotPairing(error) {
             self.operations[request.id] = nil
-            self.notice = Notice(text: message)
+            self.notice = Notice(text: message, severity: .warning)
             await self.load()
             return false
         }

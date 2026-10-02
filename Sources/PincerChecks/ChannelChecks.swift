@@ -209,6 +209,8 @@ func runLiveChannels(profile: GatewayProfile, admin: GatewayStore) async {
     // WhatsApp: start is skipped until linked; QR login links it; log out unlinks it again.
     let skipped = await channels.start(whatsappKey)
     check(!skipped && channels.notice?.isError == true, "start on logged-out WhatsApp is skipped (\(channels.notice?.text ?? "-"))")
+    check(channels.notice?.severity == .error && !SettingsNoticePolicy.shouldAutoDismiss(.error),
+          "settings notices demo: the logged-out channel error persists until dismissed")
     channels.startQRLogin(whatsappKey)
     let linked = await waitFor("mock WhatsApp linked", timeout: 30) { channels.state(of: whatsappKey) == .connected }
     check(linked, "mock QR login links WhatsApp (\(channels.qr.state(channel: "whatsapp", accountId: "default")))")

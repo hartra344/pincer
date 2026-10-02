@@ -165,6 +165,8 @@ func runDemoDevices(_ gateway: GatewayStore) async {
         check(approved && devices.paired.contains { $0.deviceId == ipad.deviceId } && devices.pendingCount == 1, "approve the iPad")
         let again = await devices.approve(ipad)
         check(again && devices.notice?.text == DeviceManagementModel.staleRequestMessage, "approving it again → already handled")
+        check(devices.notice?.severity == .warning && !SettingsNoticePolicy.shouldAutoDismiss(.warning),
+              "settings notices demo: stale device request warning persists until dismissed")
         devices.clearNotice()
     }
     if let upgrade {
