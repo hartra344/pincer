@@ -58,10 +58,10 @@ struct SidebarSplitPaneTests {
             $0.identifier == NSUserInterfaceItemIdentifier("sidebar-split-pane-indicator")
         }
         #expect(indicator?.isHidden == false)
-        #expect(cell.accessibilityHelp == L("Shown in right pane"))
+        #expect(cell.accessibilityHelp() == L("Shown in right pane"))
         cell.configure(selected, actions: self.actions())
         #expect(indicator?.isHidden == true)
-        #expect(cell.accessibilityHelp == nil)
+        #expect(cell.accessibilityHelp() == nil)
         #endif
     }
 
