@@ -232,6 +232,51 @@ struct ReplyTargetTests {
         #expect(quote.targetId == "u1" && quote.text == "first")
     }
 
+    @Test func transientAckIsHiddenWhenWhatsAppReactionLevelIsOff() {
+        let store = self.chat([Self.user("u1")], row: #"{"key":"agent:main:main","channel":"whatsapp","chatType":"direct"}"#)
+        let gateway = store.gateway!
+        gateway.settings.set(["messages", "ackReactionScope"], .string("all"))
+        gateway.settings.set(["messages", "ackReaction"], .string("👀"))
+        gateway.settings.set(["channels", "whatsapp", "reactionLevel"], .string("off"))
+        store.isRunning = true
+        #expect(store.ackMessageId == nil)
+    }
+
+    @Test func transientAckHonorsExplicitDisableSettingsAndInheritance() {
+        let items = [Self.user("u1")]
+        func target(_ config: JSONValue, channel: String? = "telegram", account: String? = "home") -> String? {
+            Reactions.ackTarget(items: items, isRunning: true, runId: "r1", agentReactions: [:],
+                                config: config, channel: channel, account: account)
+        }
+
+        #expect(target(["messages": ["ackReactionScope": "off"]]) == nil)
+        #expect(target(["messages": ["ackReactionScope": "none"]]) == nil)
+        #expect(target(["messages": ["ackReaction": "  \n"]]) == nil)
+        #expect(target(["channels": ["telegram": ["ackReaction": ""]]]) == nil)
+        #expect(target(["channels": ["telegram": ["accounts": ["home": ["ackReaction": ""]]],
+                                               "ackReaction": "👀"]]) == nil)
+        #expect(target(["channels": ["telegram": ["accounts": ["home": ["ackReaction": "✅"]]],
+                                               "ackReaction": ""]]) == "u1")
+        #expect(target(["channels": ["whatsapp": ["reactionLevel": "off"]]], channel: "whatsapp") == nil)
+        #expect(target(["channels": ["signal": ["accounts": ["home": ["reactionLevel": "off"]]],
+                                               "reactionLevel": "minimal"]], channel: "signal") == nil)
+        #expect(target(["channels": ["telegram": ["reactionLevel": "off"]]]) == "u1")
+    }
+
+    @Test func transientAckHonorsKnowableScopeMismatchOnly() {
+        let items = [Self.user("u1")]
+        func target(_ scope: String, chatType: String?) -> String? {
+            Reactions.ackTarget(items: items, isRunning: true, runId: "r1", agentReactions: [:],
+                                config: ["messages": ["ackReactionScope": .string(scope)]], chatType: chatType)
+        }
+        #expect(target("direct", chatType: "group") == nil)
+        #expect(target("direct", chatType: "direct") == "u1")
+        #expect(target("group-all", chatType: "direct") == nil)
+        #expect(target("group-all", chatType: "group") == "u1")
+        #expect(target("group-mentions", chatType: "group") == "u1")
+        #expect(target("direct", chatType: nil) == "u1")
+    }
+
     @Test func userQuotesStillWork() throws {
         let store = self.chat([Self.assistant("a1", "Disk status"),
                                Self.item(#"{"role":"user","content":[{"type":"text","text":"that"}],"__openclaw":{"id":"u1","replyToId":"a1"}}"#)])

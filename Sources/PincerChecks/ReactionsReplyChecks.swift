@@ -234,6 +234,17 @@ func checkReactionsReply() {
                               isRunning: true, runId: "r1", agentReactions: [:]) == nil, "never on older messages")
     check(Reactions.ackTarget(items: ackItems + [ChatItem(role: .user, blocks: [.text("new")], isPending: true)],
                               isRunning: true, runId: "r1", agentReactions: [:]) == nil, "a newer pending send → no 👀 on the old one")
+    check(Reactions.ackTarget(items: ackItems, isRunning: true, runId: "r1", agentReactions: [:],
+                              config: ["messages": ["ackReactionScope": "none"]]) == nil,
+          "explicit ACK scope none hides the temporary 👀")
+    check(Reactions.ackTarget(items: ackItems, isRunning: true, runId: "r1", agentReactions: [:],
+                              config: ["messages": ["ackReaction": ""]]) == nil,
+          "explicit empty effective ACK emoji hides the temporary 👀")
+    check(Reactions.ackTarget(items: ackItems, isRunning: true, runId: "r1", agentReactions: [:],
+                              config: ["messages": ["ackReactionScope": "direct"]], chatType: "group") == nil
+          && Reactions.ackTarget(items: ackItems, isRunning: true, runId: "r1", agentReactions: [:],
+                                 config: ["messages": ["ackReactionScope": "group-all"]], chatType: "direct") == nil,
+          "known direct/group scope mismatch hides the temporary 👀")
 }
 
 // MARK: Demo
@@ -694,6 +705,16 @@ func checkReplyTargets() {
     check(byId.target == .id("abc-123") && byId.text == "Recovered answer", "[[reply_to:id]] is extracted and stripped (\(byId))")
     let current = Replies.extractDirective("[[reply_to_current]] Ready")
     check(current.target == .current && current.text == "Ready", "[[reply_to_current]] is extracted and stripped")
+    let multiple = Replies.extractDirective("[[reply_to:first]] First [[reply_to:second]] second")
+    check(multiple.target == .id("first") && !multiple.text.contains("[[reply_to:") && multiple.text.contains("First") && multiple.text.contains("second"),
+          "multiple reply directives are stripped while the first target is retained")
+    let (streamDefaults, streamSuite) = scratchDefaults()
+    defer { streamDefaults.removePersistentDomain(forName: streamSuite) }
+    let streamGateway = GatewayStore(profile: .demo(), defaults: streamDefaults, identity: DeviceIdentity.loadOrCreate())
+    let streamChat = ChatStore(sessionKey: "agent:main:main", agentId: nil, gateway: streamGateway, headless: true)
+    streamChat.handleChat(["runId": "reply-check", "sessionKey": "agent:main:main", "seq": 0, "state": "delta",
+                           "deltaText": .string("[[reply_to:first]] First [[reply_to:second]] second")])
+    check(streamChat.live?.text == "First  second", "snapshotless stream removes every reply directive in a frame")
     check(Replies.extractDirective("[[ reply_to : 123 ]]ok").target == .id("123") && Replies.extractDirective("[[ reply_to : 123 ]]ok").text == "ok",
           "whitespace variants")
     let padded = Replies.extractDirective("[[reply_to:\nid\n ]]Visible reply")
@@ -739,7 +760,18 @@ func runDemoReplyTargets() async {
         gateway.stop()
         forgetLocalPrefs(gateway)
     }
-    await checkTelegramReplyShapes(gateway.chat(for: "agent:main:telegram:home:direct:5550142"), idPrefix: "demo-tg", label: "demo")
+    let chat = gateway.chat(for: "agent:main:telegram:home:direct:5550142")
+    await checkTelegramReplyShapes(chat, idPrefix: "demo-tg", label: "demo")
+    if let latestUser = chat.items.last(where: { $0.role == .user }) {
+        check(Reactions.ackTarget(items: [latestUser], isRunning: true, runId: "demo-ack", agentReactions: [:],
+                                  config: ["messages": ["ackReactionScope": "off"]],
+                                  channel: "telegram", account: "home") == nil
+              && Reactions.ackTarget(items: [latestUser], isRunning: true, runId: "demo-ack", agentReactions: [:],
+                                     channel: "telegram", account: "home") == latestUser.transcriptId,
+              "demo chat suppresses only an explicitly disabled ACK")
+    } else {
+        check(false, "demo chat has a latest user turn for ACK policy")
+    }
 }
 
 @MainActor

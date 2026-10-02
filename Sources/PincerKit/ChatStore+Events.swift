@@ -23,10 +23,13 @@ extension ChatStore {
             {
                 // The cumulative snapshot carries thinking and images as well as text.
                 let text = item.plainText
+                let hadPriorText = run.textUTF8Count > 0
                 if payload["replace"]?.bool == true {
                     run.text = text
                     run.textUTF8Count = text.utf8.count
                     run.isTextStreaming = !text.isEmpty
+                    run.pendingReplyDirective = nil
+                    run.replyLexicalState.reset()
                 } else if !text.isEmpty {
                     let textUTF8Count = text.utf8.count
                     let grew = textUTF8Count > run.textUTF8Count
@@ -43,6 +46,8 @@ extension ChatStore {
                         run.textUTF8Count = textUTF8Count
                     }
                 }
+                self.updatePendingReplyDirective(&run, delta: payload["deltaText"]?.string, snapshotText: text,
+                                                 establishLexicalContext: !hadPriorText && (payload["deltaText"]?.string?.isEmpty ?? true))
                 if let model = item.model {
                     run.model = model
                     run.provider = item.provider
@@ -55,13 +60,26 @@ extension ChatStore {
                 if !images.isEmpty { run.images = images }
             } else if let delta = payload["deltaText"]?.string {
                 if payload["replace"]?.bool == true {
-                    run.text = delta
-                    run.textUTF8Count = delta.utf8.count
-                    run.isTextStreaming = !delta.isEmpty
+                    run.replyLexicalState.reset()
+                    run.replyDirectiveLexBytes += delta.utf8.count
+                    _ = run.replyLexicalState.advance(delta)
+                    let parsed = delta.contains("[[") ? Replies.extractStreamingDirective(delta) : nil
+                    if parsed != nil { run.replyDirectiveParseBytes += delta.utf8.count }
+                    run.text = parsed?.target == nil ? delta : parsed?.text ?? delta
+                    run.textUTF8Count = run.text.utf8.count
+                    run.isTextStreaming = !run.text.isEmpty
+                    run.pendingReplyDirective = nil
+                    if let candidate = parsed?.pending, run.text.hasSuffix(candidate) {
+                        let start = run.text.utf8.count - candidate.utf8.count
+                        run.pendingReplyDirective = Replies.PendingDirective(
+                            text: candidate, startUTF8: start)
+                    }
                 } else if !delta.isEmpty {
+                    let previousCount = run.textUTF8Count
                     run.text += delta
                     run.textUTF8Count += delta.utf8.count
                     run.isTextStreaming = true
+                    self.filterReplyDirective(&run, delta: delta, previousCount: previousCount)
                 }
             }
             self.live = run
@@ -80,6 +98,156 @@ extension ChatStore {
         default:
             break
         }
+    }
+
+    private func updatePendingReplyDirective(_ run: inout LiveRun, delta: String?, snapshotText: String,
+                                             establishLexicalContext: Bool) {
+        let scanText = delta.flatMap { $0.isEmpty ? nil : $0 } ?? (establishLexicalContext ? snapshotText : nil)
+        if let scanText { run.replyDirectiveLexBytes += scanText.utf8.count }
+        let markers: [Replies.StreamMarker]
+        if let scanText {
+            markers = run.replyLexicalState.advance(scanText)
+            run.replyDirectiveLexBytes += run.replyLexicalState.lookaheadBytes
+        } else {
+            markers = []
+        }
+        if let pending = run.pendingReplyDirective {
+            let byteCount = snapshotText.utf8.count
+            if pending.startUTF8 <= byteCount {
+                let rest = snapshotText.utf8.dropFirst(pending.startUTF8)
+                let remainingCount = byteCount - pending.startUTF8
+                guard remainingCount <= 4_096 else {
+                    run.pendingReplyDirective = nil
+                    return
+                }
+                guard rest.prefix(pending.text.utf8.count).elementsEqual(pending.text.utf8) else {
+                    run.pendingReplyDirective = nil
+                    return
+                }
+                let candidate = String(decoding: rest, as: UTF8.self)
+                run.replyDirectiveParseBytes += remainingCount
+                if !candidate.contains("]]"), !candidate.contains("\n") {
+                    run.pendingReplyDirective = Replies.PendingDirective(text: candidate,
+                                                                         startUTF8: pending.startUTF8)
+                } else {
+                    run.pendingReplyDirective = nil
+                }
+            } else {
+                run.pendingReplyDirective = nil // A complete snapshot was already normalized by ChatItem.
+            }
+        }
+        guard let marker = markers.last else { return }
+        let candidate = Self.directiveCandidate(startUTF8: marker.startUTF8, in: scanText ?? "")
+        run.replyDirectiveParseBytes += candidate.utf8.count
+        let parsed = Replies.extractStreamingDirective(candidate)
+        guard let pending = parsed.pending, snapshotText.hasSuffix(pending) else { return }
+        let start = snapshotText.utf8.count - pending.utf8.count
+        run.pendingReplyDirective = Replies.PendingDirective(text: pending, startUTF8: start)
+    }
+
+    private func filterReplyDirective(_ run: inout LiveRun, delta: String, previousCount: Int) {
+        run.replyDirectiveLexBytes += delta.utf8.count
+        let markers = run.replyLexicalState.advance(delta)
+        run.replyDirectiveLexBytes += run.replyLexicalState.lookaheadBytes
+        var ranges: [Range<Int>] = []
+        var pendingConsumedByteCount = 0
+        if var pending = run.pendingReplyDirective {
+            let close = delta.range(of: "]]" )
+            let splitClose = pending.text.hasSuffix("]") && delta.hasPrefix("]")
+            if close != nil || splitClose {
+                let candidate = pending.text + (splitClose ? "]" : String(delta[..<close!.upperBound]))
+                if candidate.utf8.count <= 4_096 {
+                    run.replyDirectiveParseBytes += candidate.utf8.count
+                    let parsed = Replies.extractStreamingDirective(candidate)
+                    if let targetRange = parsed.targetRangeUTF8 {
+                        ranges.append((pending.startUTF8 + targetRange.lowerBound)..<(pending.startUTF8 + targetRange.upperBound))
+                    }
+                    pendingConsumedByteCount = splitClose ? 1 : String(delta[..<close!.upperBound]).utf8.count
+                }
+                run.pendingReplyDirective = nil
+            } else if pending.text.utf8.count + delta.utf8.count <= 4_096, markers.isEmpty {
+                pending.text += delta
+                run.pendingReplyDirective = pending
+                return
+            } else {
+                run.pendingReplyDirective = nil
+            }
+        }
+
+        var consumedThroughByte = pendingConsumedByteCount == 0 ? -1 : pendingConsumedByteCount
+        for marker in markers {
+            guard marker.startUTF8 >= consumedThroughByte else { continue }
+            let candidate = Self.directiveCandidate(startUTF8: marker.startUTF8, in: delta)
+            run.replyDirectiveParseBytes += candidate.utf8.count
+            let parsed = Replies.extractStreamingDirective(candidate)
+            consumedThroughByte = marker.startUTF8 + candidate.utf8.count
+            if let targetRange = parsed.targetRangeUTF8 {
+                let start = previousCount + marker.startUTF8 + targetRange.lowerBound
+                ranges.append(start..<(previousCount + marker.startUTF8 + targetRange.upperBound))
+            } else if let pending = parsed.pending, marker.startUTF8 == markers.last?.startUTF8, run.text.hasSuffix(pending) {
+                let start = run.text.utf8.count - pending.utf8.count
+                run.pendingReplyDirective = Replies.PendingDirective(text: pending, startUTF8: start)
+            }
+        }
+        if !ranges.isEmpty {
+            run.text = Self.removingReplyDirectives(ranges, from: run.text)
+            run.textUTF8Count = run.text.utf8.count
+            if var pending = run.pendingReplyDirective {
+                let tail = String(decoding: run.text.utf8.suffix(pending.text.utf8.count), as: UTF8.self)
+                if !tail.isEmpty, pending.text.hasPrefix(tail) {
+                    pending.text = tail
+                    pending.startUTF8 = run.text.utf8.count - tail.utf8.count
+                    run.pendingReplyDirective = pending
+                } else {
+                    run.pendingReplyDirective = nil
+                }
+            }
+        }
+    }
+
+    private static func directiveCandidate(startUTF8: Int, in text: String) -> String {
+        let prefix = startUTF8 < 0 ? "[" : ""
+        let offset = max(0, startUTF8)
+        let available = text.utf8.dropFirst(offset).prefix(4_096 - prefix.utf8.count)
+        let suffix = String(decoding: available, as: UTF8.self)
+        let candidate = prefix + suffix
+        guard let close = candidate.range(of: "]]" ) else { return candidate }
+        return String(candidate[..<close.upperBound])
+    }
+
+    private static func removingReplyDirectives(_ ranges: [Range<Int>], from text: String) -> String {
+        let bytes = text.utf8
+        var result = String()
+        result.reserveCapacity(text.utf8.count)
+        var cursor = 0
+        var leadingWhitespace = true
+        for range in ranges {
+            guard range.lowerBound >= cursor, range.upperBound <= bytes.count else { continue }
+            let start = Self.stringIndex(utf8Offset: cursor, in: text)
+            let end = Self.stringIndex(utf8Offset: range.lowerBound, in: text)
+            let between = text[start..<end]
+            result += between
+            if leadingWhitespace, !between.allSatisfy(\.isWhitespace) {
+                leadingWhitespace = false
+            }
+            var after = range.upperBound
+            while after < bytes.count,
+                  (bytes[bytes.index(bytes.startIndex, offsetBy: after)] == 0x20 || bytes[bytes.index(bytes.startIndex, offsetBy: after)] == 0x09) {
+                after += 1
+            }
+            if leadingWhitespace || after < bytes.count && bytes[bytes.index(bytes.startIndex, offsetBy: after)] == 0x0A {
+                cursor = after
+            } else {
+                cursor = range.upperBound
+            }
+        }
+        result += text[Self.stringIndex(utf8Offset: cursor, in: text)...]
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func stringIndex(utf8Offset: Int, in text: String) -> String.Index {
+        let index = text.utf8.index(text.utf8.startIndex, offsetBy: utf8Offset)
+        return String.Index(index, within: text)!
     }
 
     func handleAgent(_ payload: JSONValue) {

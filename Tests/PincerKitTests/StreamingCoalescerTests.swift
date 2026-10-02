@@ -116,6 +116,202 @@ struct StreamingCoalescerTests {
         }
     }
 
+    @Test func liveReplyStripsTransportDirectiveAndKeepsCodeLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let text = "[[reply_to:message-1]] Recovered `[[reply_to_current]]` response"
+            self.delta(chat, text, full: text)
+            #expect(self.liveText(chat) == "Recovered `[[reply_to_current]]` response")
+        }
+    }
+
+    @Test func multipleReplyDirectivesInOneFrameAreRemovedInOnePass() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let text = "[[reply_to:first]] First [[reply_to:second]] second"
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string(text)])
+            #expect(self.liveText(chat) == "First  second")
+        }
+    }
+
+    @Test func replyDirectiveAfterMultibytePrefixUsesUTF8Offsets() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let text = "🧭 [[reply_to_current]] Recovered"
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string(text)])
+            #expect(self.liveText(chat) == "🧭  Recovered")
+        }
+    }
+
+    @Test func liveReplyStripsDirectiveSplitAcrossSnapshotAndAppend() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "[[reply_to_current"
+            self.delta(chat, prefix, full: prefix)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]] Recovered response")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Recovered response")
+        }
+    }
+
+    @Test func replyDirectiveCloseDelimiterCanSplitAcrossFrames() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "[[reply_to_current]"
+            self.delta(chat, prefix, full: prefix)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("] Recovered response")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Recovered response")
+        }
+    }
+
+    @Test func pendingDirectiveOffsetTracksEarlierRemovalInSameFrame() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("[[reply_to_current]] Some [[reply_to:")])
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("second]] Reply")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Some  Reply")
+            #expect(chat.live?.pendingReplyDirective == nil)
+        }
+    }
+
+    @Test func splitReplyMarkerInsideInlineCodeRemainsLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "Use `[[reply_to_current"
+            self.delta(chat, prefix, full: prefix)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]]` literally")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Use `[[reply_to_current]]` literally")
+        }
+    }
+
+    @Test func splitReplyMarkerInsideFenceRemainsLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "```text\n[[reply_to_current"
+            self.delta(chat, prefix, full: prefix)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]]\n```")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "```text\n[[reply_to_current]]\n```")
+        }
+    }
+
+    @Test func replyMarkerInCodeOpenedByEarlierFramesRemainsLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.delta(chat, "```swift\n", full: "```swift\n")
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("[[reply_to_current")])
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]]\n```")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "```swift\n[[reply_to_current]]\n```")
+        }
+    }
+
+    @Test func replyMarkerInInlineCodeOpenedByEarlierFrameRemainsLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.delta(chat, "`", full: "`")
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("[[reply_to_current")])
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]]` literal")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "`[[reply_to_current]]` literal")
+        }
+    }
+
+    @Test func emptyInitialSnapshotDeltaStillEstablishesFenceContext() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.delta(chat, "", full: "```swift\n")
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("[[reply_to_current")])
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]]\n```")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "```swift\n[[reply_to_current]]\n```")
+        }
+    }
+
+    @Test func openingReplyMarkerSplitAcrossFramesIsStripped() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.delta(chat, "[", full: "[")
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("[reply_to_current]] Recovered response")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Recovered response")
+        }
+    }
+
+    @Test func snapshotlessReplaceStripsCompleteReplyDirective() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            self.chatEvent(chat, ["state": "delta", "replace": true,
+                                  "deltaText": .string("[[reply_to:message-1]] Recovered response")])
+            chat.flushLive()
+            #expect(self.liveText(chat) == "Recovered response")
+        }
+    }
+
+    @Test func oldLiteralMarkerDoesNotArmLaterCloseFrames() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "Use `[[reply_to_current]]` as literal syntax"
+            self.delta(chat, prefix, full: prefix)
+            let parsedBeforeClosers = chat.live?.replyDirectiveParseBytes
+            let lexedBeforeClosers = chat.live?.replyDirectiveLexBytes ?? 0
+            for _ in 0..<20 {
+                self.chatEvent(chat, ["state": "delta", "deltaText": .string("]] ")])
+            }
+            chat.flushLive()
+            #expect(chat.live?.pendingReplyDirective == nil)
+            #expect(chat.live?.replyDirectiveParseBytes == parsedBeforeClosers)
+            #expect(chat.live?.replyDirectiveLexBytes == lexedBeforeClosers + 60)
+            #expect(self.liveText(chat) == prefix + String(repeating: "]] ", count: 20))
+        }
+    }
+
+    @Test func manyUnrelatedMarkersDoNotCopyOrParseFrameSuffixes() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let frame = String(repeating: "[[ordinary]] and ]] ", count: 2_000)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string(frame)])
+            chat.flushLive()
+            #expect(chat.live?.replyDirectiveParseBytes == 0)
+            #expect((chat.live?.replyDirectiveLexBytes ?? 0) > frame.utf8.count,
+                    "the scan counter includes bounded prefix lookahead for each opener")
+            #expect((chat.live?.replyDirectiveLexBytes ?? .max) <= frame.utf8.count * 2,
+                    "lookahead remains linear in this large frame")
+            #expect(self.liveText(chat) == frame)
+        }
+    }
+
+    @Test func repeatedUnclosedReplyPrefixesHaveBoundedParseCost() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let frame = String(repeating: "[[reply_to:", count: 1_200)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string(frame)])
+            chat.flushLive()
+            #expect(self.liveText(chat) == frame)
+            #expect((chat.live?.replyDirectiveParseBytes ?? .max) <= frame.utf8.count + 4_096,
+                    "overlapping incomplete candidates do not reparse each remaining suffix")
+        }
+    }
+
     @Test func toolEventsFlushPendingTextImmediately() async {
         defer { self.scratch.remove() }
         await self.withInterval(5) {
