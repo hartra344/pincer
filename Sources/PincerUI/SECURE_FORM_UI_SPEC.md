@@ -1,6 +1,11 @@
 # Secure form question card spec
 
-Scope: this is the deferred SwiftUI card for `QuestionPrompt.kind == .secureForm`, to be implemented once full Xcode.app is available.
+> **Historical.** This spec was written while this environment had only Command Line
+> Tools (no Xcode.app), so the SwiftUI card couldn't be built here yet. It's since been
+> implemented in `SecureFormCardView.swift` following this spec closely; kept here as
+> design-rationale documentation, not as a to-do.
+
+Scope: the SwiftUI card for `QuestionPrompt.kind == .secureForm`.
 
 ## Placement and visual pattern
 
