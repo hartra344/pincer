@@ -273,8 +273,10 @@ enum AvatarSettings {
 
     /// The agent's style as currently set in defaults, seeded by the Gateway when given.
     @MainActor static func style(for agent: AgentSummary, in gateway: GatewayStore?, defaults: UserDefaults = .standard) -> AvatarStyle {
-        self.style(for: agent, seed: gateway?.avatarSeed(for: agent) ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
-                   creature: defaults.string(forKey: self.creatureKey(for: agent.id)) ?? "",
-                   renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
+        let creature = gateway?.avatarCreature(for: agent.id)?.rawValue
+            ?? defaults.string(forKey: self.creatureKey(for: agent.id)) ?? ""
+        return self.style(for: agent, seed: gateway?.avatarSeed(for: agent) ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
+                          creature: creature,
+                          renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
     }
 }

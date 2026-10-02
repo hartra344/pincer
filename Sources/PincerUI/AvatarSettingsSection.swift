@@ -9,10 +9,20 @@ struct AvatarSettingsSection: View {
     @AppStorage(AvatarSettings.animatedKey) private var enabled = true
     @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
 
-    /// Agents across connected Gateways, once each by id (the style is keyed by agent id).
-    private var agents: [AgentSummary] {
+    /// The settings rows, grouped by agent id. Kept as a projection so the row policy can be
+    /// exercised without constructing the full Settings window.
+    private var settingRows: [AvatarSettingsRow] {
+        Self.settingRows(for: self.app.gateways)
+    }
+
+    static func settingRows(for gateways: [GatewayStore]) -> [AvatarSettingsRow] {
         var seen = Set<String>()
-        return self.app.gateways.flatMap(\.agents).filter { seen.insert($0.id).inserted }
+        let agents = gateways.flatMap(\.agents).filter { seen.insert($0.id).inserted }
+        return agents.map { agent in
+            AvatarSettingsRow(agent: agent, gateways: gateways.filter { gateway in
+                gateway.agents.contains { $0.id == agent.id }
+            })
+        }
     }
 
     var body: some View {
@@ -27,9 +37,8 @@ struct AvatarSettingsSection: View {
                     Text("Plush", bundle: .module).tag(AvatarRenderStyle.plush.rawValue)
                 }
                 .pickerStyle(.segmented)
-                ForEach(self.agents) { agent in
-                    AvatarCharacterRow(agent: agent,
-                                       gateways: self.app.gateways.filter { $0.agents.contains { $0.id == agent.id } })
+                ForEach(self.settingRows) { row in
+                    AvatarCharacterRow(agent: row.agent, gateways: row.gateways)
                 }
             }
         } header: {
@@ -46,6 +55,13 @@ struct AvatarSettingsSection: View {
         guard let style = AvatarRenderStyle(rawValue: value) else { return }
         for gateway in self.app.gateways { gateway.setAvatarRenderStyle(style) }
     }
+}
+
+struct AvatarSettingsRow: Identifiable {
+    let agent: AgentSummary
+    let gateways: [GatewayStore]
+
+    var id: String { self.agent.id }
 }
 
 /// One agent's still preview and Character picker; used in Settings and on the agent's page.
@@ -92,6 +108,19 @@ struct AvatarCharacterRow: View {
 
     private func setCreature(_ value: String) {
         self.creature = value
-        for gateway in self.gateways { gateway.setAvatarCreature(AvatarCreature(rawValue: value), for: self.agent.id) }
+        Self.selectCreature(value, agentId: self.agent.id, gateways: self.gateways)
+    }
+
+    /// Applies the Gateway half of a picker choice. The view writes its local-first AppStorage
+    /// value before calling this; the explicit defaults parameter lets the test exercise that same
+    /// selection path without touching shared preferences.
+    static func selectCreature(
+        _ value: String,
+        agentId: String,
+        gateways: [GatewayStore],
+        defaults: UserDefaults? = nil)
+    {
+        defaults?.set(value, forKey: AvatarSettings.creatureKey(for: agentId))
+        for gateway in gateways { gateway.setAvatarCreature(AvatarCreature(rawValue: value), for: agentId) }
     }
 }
