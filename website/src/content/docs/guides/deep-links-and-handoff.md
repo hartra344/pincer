@@ -64,6 +64,8 @@ Pincer never adds a gateway from a link. Each device gives a gateway its own ID 
 
 If two saved gateways match equally, for example two gateways on one Mac, Pincer picks the one that has the chat, then the one you're using.
 
+On a cold launch, a link from another device may need the saved Gateways to connect and list their chats before Pincer can identify the right one. Pincer keeps that unresolved link briefly and retries as the Gateways become ready. Links that already match a saved Gateway still open immediately. If no match appears, Pincer shows the usual notice; opening a newer link replaces the pending one.
+
 ### The demo gateway
 
 Links to [demo](../../getting-started/try-the-demo/) chats use `gateway=demo`, because the demo's ID is different on every device, so they work anywhere. Opening one adds the demo gateway if you don't have it, and opens the demo chat. It's a handy way to try links without a real gateway.

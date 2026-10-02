@@ -239,6 +239,20 @@ public struct PincerRoute: Hashable, Sendable {
         }
     }
 
+    /// Whether the route names this Gateway directly by its saved identity or address. This keeps
+    /// known links synchronous while cold-launch discovery waits for session lists only when the
+    /// destination would otherwise be inferred from a provisional unique-chat match.
+    func directlyMatches(_ candidate: Candidate) -> Bool {
+        if case let .id(id) = self.gateway, id == candidate.id { return true }
+        guard self.gateway != .demo else { return candidate.isDemo }
+        if let host = self.gatewayHost, host == candidate.gatewayHost { return true }
+        if let url = self.gatewayURL, url == candidate.url { return true }
+        if let address = self.gatewayURL.flatMap(Self.addressKey),
+           address == candidate.url.flatMap(Self.addressKey) { return true }
+        return !Self.machineNames(url: self.gatewayURL, host: self.gatewayHost)
+            .isDisjoint(with: Self.machineNames(url: candidate.url, host: candidate.gatewayHost))
+    }
+
     /// Pure resolution against `candidates`. `resolveKey` maps aliases (e.g. `agent:x:main`) to
     /// a gateway's real key; identity by default. `verifySession: false` trusts the session key
     /// (for routes Pincer made itself, e.g. a notification for a chat not listed yet); links and
@@ -261,7 +275,7 @@ public struct PincerRoute: Hashable, Sendable {
         }
         guard let requested = self.sessionKey else { return .openGateway(match.id) }
         let key = resolveKey(match.id, requested)
-        if verifySession, let keys = match.sessionKeys, !keys.isEmpty, !keys.contains(key) {
+        if verifySession, let keys = match.sessionKeys, !keys.contains(key) {
             return .unknownSession(gatewayId: match.id, sessionKey: requested)
         }
         return .openChat(Notifier.Target(gatewayId: match.id, sessionKey: key), messageId: self.messageId)
@@ -272,7 +286,8 @@ public struct PincerRoute: Hashable, Sendable {
     public func resolve(in gateways: [GatewayStore], verifySession: Bool = true, preferring: UUID? = nil) -> Resolution {
         let candidates = gateways.map {
             Candidate(id: $0.id, isDemo: $0.profile.isDemo,
-                      sessionKeys: $0.sessions.isEmpty ? nil : Set($0.sessions.keys), url: $0.profile.url,
+                      sessionKeys: $0.hasSessionListSnapshot ? Set($0.sessions.keys) : nil,
+                      url: $0.profile.url,
                       gatewayHost: $0.gatewayHost)
         }
         return self.resolve(in: candidates, verifySession: verifySession, preferring: preferring) { id, key in

@@ -651,6 +651,10 @@ final class TranscriptSendStatusView: TranscriptBaseView {
 /// The line under a message: the branch switcher when its branches fork here, Copy, Reply and React, then details such as the time it was sent
 /// and its model.
 final class TranscriptFooterView: TranscriptBaseView {
+    /// Compact button slots are stable across the visible Copy/Copied and Listen/Stop states;
+    /// actual labels and accessibility text remain the localized button titles.
+    private static let compactCopySlotWidth: CGFloat = 80
+    private static let compactListenSlotWidth: CGFloat = 80
     private var footer: TranscriptPart.Footer?
     private let copyButton = TranscriptLabelButton()
     private let replyButton = TranscriptLabelButton()
@@ -763,6 +767,9 @@ final class TranscriptFooterView: TranscriptBaseView {
                 ? controls[index + 1].frame
                 : [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton].first { !$0.isHidden }?.frame
             guard let next else { continue }
+            // In compact rows the branch group owns its own 44pt row. Do not split a touch target
+            // at the midpoint of a control on the following action row.
+            guard abs(controls[index].frame.midY - next.midY) < max(controls[index].frame.height, next.height) / 2 else { continue }
             let mid = (controls[index].frame.maxX + next.minX) / 2
             frames[index].size.width = max(min(frames[index].maxX, mid) - frames[index].minX, 0)
             if index + 1 < controls.count {
@@ -863,7 +870,9 @@ final class TranscriptFooterView: TranscriptBaseView {
             self.copiedToken += 1
             self.showCopy()
         }
-        if old?.details != footer.details { self.redraw() }
+        if old?.details != footer.details || old?.compact != footer.compact || old?.detailsFrame != footer.detailsFrame {
+            self.redraw()
+        }
         #if os(macOS)
         self.toolTip = footer.details.isEmpty ? nil : footer.details
         #endif
@@ -914,7 +923,25 @@ final class TranscriptFooterView: TranscriptBaseView {
     /// Where the details start, after the buttons showing.
     private var detailsX: CGFloat = 0
 
+    /// Exact metadata bounds used by `draw(_:)`; exposed internally for hosted layout tests.
+    var detailsDrawFrame: CGRect {
+        guard let footer else { return .zero }
+        if footer.compact { return footer.detailsFrame }
+        let font = TranscriptStyle.shared.caption
+        return CGRect(x: self.detailsX, y: (self.bounds.height - TranscriptStyle.lineHeight(font)) / 2,
+                      width: max(self.bounds.width - self.detailsX, 0), height: TranscriptStyle.lineHeight(font))
+    }
+
     override func layoutContent() {
+        guard let footer else { return }
+        if footer.compact {
+            self.layoutCompact(footer)
+            return
+        }
+        self.bookmarkButton.hitOutset = CGSize(width: 8, height: 8)
+        for button in [self.copyButton, self.replyButton, self.listenButton, self.reactButton] {
+            button.hitOutset = .zero
+        }
         // The chevron's glyph is narrower than its box; this lines its ink up with the icons above and below.
         var x: CGFloat = self.previousBranchButton.isHidden ? 0 : -4
         var moved = false
@@ -939,13 +966,74 @@ final class TranscriptFooterView: TranscriptBaseView {
         }
     }
 
+    private func layoutCompact(_ footer: TranscriptPart.Footer) {
+        var moved = false
+        var branchX: CGFloat = self.previousBranchButton.isHidden ? 0 : -4
+        for button in self.branchControls where !button.isHidden {
+            let size = button.buttonSize
+            let frame = CGRect(x: branchX, y: (footer.branchRowHeight - size.height) / 2,
+                               width: size.width, height: size.height)
+            button.hitOutset = CGSize(width: max((Self.minimumTarget.width - size.width) / 2, 0),
+                                      height: max((Self.minimumTarget.height - size.height) / 2, 0))
+            if button.frame != frame { button.frame = frame; moved = true }
+            branchX = frame.maxX + (button === self.previousBranchButton || button === self.branchLabel ? 0 : 3)
+        }
+
+        let rowHeight = footer.actionRowHeight
+        let actionY = footer.branch == nil ? 0 : footer.branchRowHeight + 4
+        let actions = [self.bookmarkButton, self.copyButton, self.replyButton, self.listenButton, self.reactButton]
+            .filter { !$0.isHidden }
+        var x: CGFloat = 0
+        var row = 0
+        for button in actions {
+            let size = button.buttonSize
+            #if os(iOS)
+            let target: CGFloat = 44
+            button.hitOutset = CGSize(width: max((target - size.width) / 2, 0),
+                                      height: max((target - size.height) / 2, 0))
+            #else
+            button.hitOutset = button === self.bookmarkButton ? CGSize(width: 8, height: 8) : .zero
+            #endif
+            let reservedWidth: CGFloat
+            if button === self.copyButton {
+                reservedWidth = max(size.width, Self.compactCopySlotWidth)
+            } else if button === self.listenButton {
+                reservedWidth = max(size.width, Self.compactListenSlotWidth)
+            } else {
+                reservedWidth = size.width
+            }
+            let leftOutset = button.hitOutset.width
+            let rightOutset = button.hitOutset.width
+            var frameX = x + leftOutset
+            if x > 0, frameX + reservedWidth + rightOutset > self.bounds.width, row == 0 {
+                row = 1
+                x = 0
+                frameX = leftOutset
+            }
+            let y = actionY + CGFloat(row) * rowHeight + (rowHeight - size.height) / 2
+            let frame = CGRect(x: frameX, y: y, width: reservedWidth, height: size.height)
+            if button.frame != frame { button.frame = frame; moved = true }
+            x = frame.maxX + rightOutset + 10
+        }
+        if moved { self.redraw() }
+    }
+
     override func draw(_ rect: CGRect) {
         guard let footer, !footer.details.isEmpty else { return }
         let font = TranscriptStyle.shared.caption
-        let x = self.detailsX
-        singleLine(footer.details, font, TranscriptColors.tertiary)
-            .drawLine(at: CGPoint(x: x, y: (self.bounds.height - TranscriptStyle.lineHeight(font)) / 2),
-                      width: self.bounds.width - x, font: font)
+        if footer.compact {
+            let lineHeight = TranscriptStyle.lineHeight(font)
+            for (index, line) in footer.detailLines.prefix(2).enumerated() {
+                singleLine(line, font, TranscriptColors.tertiary)
+                    .drawLine(at: CGPoint(x: footer.detailsFrame.minX,
+                                          y: footer.detailsFrame.minY + CGFloat(index) * lineHeight),
+                              width: footer.detailsFrame.width, font: font)
+            }
+        } else {
+            let frame = self.detailsDrawFrame
+            singleLine(footer.details, font, TranscriptColors.tertiary)
+                .drawLine(at: frame.origin, width: frame.width, font: font)
+        }
     }
 
     #if os(macOS)
