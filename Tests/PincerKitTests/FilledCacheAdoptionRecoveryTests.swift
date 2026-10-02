@@ -38,8 +38,9 @@ struct FilledCacheAdoptionRecoveryTests {
         chat.items = [ChatItem(id: "fresh", role: .user, blocks: [.text("Unsaved message")], timestamp: .now)]
         chat.hasLoaded = true
         chat.scheduleSave()
+        let original = try #require(chat.saveTask)
         await chat.adoptFilledCache(afterOlderRead: { chat.isDehydrated = true })
-        #expect(chat.saveTask?.isCancelled == true,
-                "a store that stopped retaining content must not restart a cache write")
+        #expect(original.isCancelled, "dehydration cancels the queued cache write")
+        #expect(chat.saveTask == nil, "a store that stopped retaining content must not schedule a replacement write")
     }
 }

@@ -2,6 +2,12 @@
  * Pincer docs: Starlight mapped onto the switchboard tokens (tokens.css).
  * Contrast is verified against --sl-color-bg / bg-nav in both modes; see PR notes.
  */
+/* Pagefind's scoped checkmark styles animate width/height. Keep the checked state instant
+ * without competing with its generated Svelte selector specificity. */
+.pagefind-ui .pagefind-ui__filter-value.pagefind-ui__filter-value--checked::before {
+	transition: none !important;
+}
+
 :root {
 	--sl-font: var(--font-body);
 	--sl-font-mono: var(--font-mono);

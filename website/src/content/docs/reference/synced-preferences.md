@@ -33,6 +33,8 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.avatars` | [Avatar](../../guides/agent-avatars/#settings) characters picked for each agent, keyed by agent id, the **Style** (`pixel` or `plush`) under `@style`, and under `seed@<agentId>` the identity the agent's pet was first picked from, so a rename keeps the pet |
 
 :::note
+Character choices are scoped to each Gateway. Setting an agent to **Auto** clears its override on that Gateway without changing another Gateway’s agent with the same ID. Existing device-wide character choices are imported when a Gateway has no saved local avatar map; afterward its own map is authoritative.
+
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
 :::
 

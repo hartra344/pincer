@@ -9,10 +9,17 @@ struct AvatarSettingsSection: View {
     @AppStorage(AvatarSettings.animatedKey) private var enabled = true
     @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
 
-    /// Agents across connected Gateways, once each by id (the style is keyed by agent id).
-    private var agents: [AgentSummary] {
-        var seen = Set<String>()
-        return self.app.gateways.flatMap(\.agents).filter { seen.insert($0.id).inserted }
+    /// Kept as a projection so the row policy can be exercised without constructing the full Settings window.
+    private var settingRows: [AvatarSettingsRow] {
+        Self.settingRows(for: self.app.gateways)
+    }
+
+    static func settingRows(for gateways: [GatewayStore]) -> [AvatarSettingsRow] {
+        gateways.flatMap { gateway in
+            gateway.agents.map { agent in
+                AvatarSettingsRow(agent: agent, gateway: gateway)
+            }
+        }
     }
 
     var body: some View {
@@ -27,9 +34,8 @@ struct AvatarSettingsSection: View {
                     Text("Plush", bundle: .module).tag(AvatarRenderStyle.plush.rawValue)
                 }
                 .pickerStyle(.segmented)
-                ForEach(self.agents) { agent in
-                    AvatarCharacterRow(agent: agent,
-                                       gateways: self.app.gateways.filter { $0.agents.contains { $0.id == agent.id } })
+                ForEach(self.settingRows) { row in
+                    AvatarCharacterRow(agent: row.agent, gateways: [row.gateway], gatewayName: row.gateway.profile.name)
                 }
             }
         } header: {
@@ -48,20 +54,34 @@ struct AvatarSettingsSection: View {
     }
 }
 
+struct AvatarSettingsRow: Identifiable {
+    let agent: AgentSummary
+    let gateway: GatewayStore
+
+    var id: String { "\(self.gateway.id.uuidString):\(self.agent.id)" }
+}
+
 /// One agent's still preview and Character picker; used in Settings and on the agent's page.
 struct AvatarCharacterRow: View {
     let agent: AgentSummary
     /// Gateways that have this agent, which sync its character.
     let gateways: [GatewayStore]
+    var gatewayName: String? = nil
     var previewSize: CGFloat = 28
     @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
-    @AppStorage private var creature: String
 
-    init(agent: AgentSummary, gateways: [GatewayStore], previewSize: CGFloat = 28) {
+    private var creature: String {
+        guard let gateway = self.gateways.first else {
+            return UserDefaults.standard.string(forKey: AvatarSettings.creatureKey(for: self.agent.id)) ?? ""
+        }
+        return gateway.avatarCreature(for: self.agent.id)?.rawValue ?? ""
+    }
+
+    init(agent: AgentSummary, gateways: [GatewayStore], gatewayName: String? = nil, previewSize: CGFloat = 28) {
         self.agent = agent
         self.gateways = gateways
         self.previewSize = previewSize
-        self._creature = AppStorage(wrappedValue: "", AvatarSettings.creatureKey(for: agent.id))
+        self.gatewayName = gatewayName
     }
 
     private var style: AvatarStyle {
@@ -79,19 +99,42 @@ struct AvatarCharacterRow: View {
         } label: {
             self.label
         }
-        .accessibilityLabel(L("\(self.agent.name) character"))
+        .accessibilityLabel(self.gatewayName.map { L("\(self.agent.name) character, \($0)") }
+            ?? L("\(self.agent.name) character"))
     }
 
     private var label: some View {
         HStack(spacing: Theme.Spacing.md) {
             AgentAvatarView(state: .idle, style: self.style, size: self.previewSize, seed: self.agent.id)
                 .accessibilityHidden(true)
-            Text(self.agent.name)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(self.agent.name)
+                if let gatewayName = self.gatewayName {
+                    Text(gatewayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
     private func setCreature(_ value: String) {
-        self.creature = value
-        for gateway in self.gateways { gateway.setAvatarCreature(AvatarCreature(rawValue: value), for: self.agent.id) }
+        Self.selectCreature(value, agentId: self.agent.id, gateways: self.gateways)
+    }
+
+    /// Applies a picker choice to its owning Gateway. Passing defaults is reserved for a row without
+    /// Gateway context, which retains the historical device-local behavior.
+    static func selectCreature(
+        _ value: String,
+        agentId: String,
+        gateways: [GatewayStore],
+        defaults: UserDefaults? = nil)
+    {
+        if let defaults {
+            if gateways.isEmpty {
+                defaults.set(value, forKey: AvatarSettings.creatureKey(for: agentId))
+            }
+        }
+        for gateway in gateways { gateway.setAvatarCreature(AvatarCreature(rawValue: value), for: agentId) }
     }
 }

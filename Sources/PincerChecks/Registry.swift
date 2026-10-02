@@ -55,6 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
+            Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
@@ -87,6 +88,7 @@ enum Suites {
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Agent avatar signals") { runAvatarSignalChecks() },
+            Section("Avatar choices per Gateway") { runGatewayAvatarChoiceChecks() },
             Section("Agent reply targets") { checkReplyTargets() },
             Section("Reaction level") { checkReactionLevel() },
             Section("Gateway reactions") { checkGatewayReactions() },
@@ -191,6 +193,7 @@ enum Suites {
         Section("Rich rendering (demo)") { await runDemoRichRendering() },
         Section("Agent avatars (demo)") { await runDemoAvatars() },
         Section("Agent avatar seed recovery (demo, #520)") { await runDemoAvatarSeedRecovery() },
+        Section("Avatar choices per Gateway (demo, #518)") { await runDemoGatewayAvatarChoices() },
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Outbox head scan (demo, #557)") { await runDemoOutboxHeadScanChecks() },
