@@ -7,6 +7,7 @@ import SwiftUI
 /// the view tree whether or not the split shows, so opening or closing it doesn't reload it.
 struct ChatSplitHost: ViewModifier {
     let gateway: GatewayStore
+    @Binding var sidebarSplitKey: String?
     @AppStorage("pincer.splitFraction") private var fraction = 0.5
     @Environment(\.showsChatSplit) private var showsSplit
     @FocusedValue(\.chatPane) private var focusedPane
@@ -14,6 +15,7 @@ struct ChatSplitHost: ViewModifier {
 
     func body(content: Content) -> some View {
         GeometryReader { proxy in
+            let visibleKey = proxy.size.width >= Self.minWidth * 2 + 1 ? self.splitKey : nil
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
                     if self.splitKey != nil, let key = self.gateway.selectedKey {
@@ -34,6 +36,8 @@ struct ChatSplitHost: ViewModifier {
                         .frame(width: max(Self.minWidth, proxy.size.width * self.clampedFraction(proxy.size.width)))
                 }
             }
+            .onChange(of: visibleKey, initial: true) { _, key in self.sidebarSplitKey = key }
+            .onDisappear { self.sidebarSplitKey = nil }
         }
         // Picking the right-hand chat in the sidebar moves it left, and the chat it replaces right.
         .onChange(of: self.gateway.selectedKey) { old, new in

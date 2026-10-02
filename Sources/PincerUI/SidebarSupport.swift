@@ -219,7 +219,8 @@ struct SidebarModel: Equatable {
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
                     preview: showPreviews ? channel.row.preview : nil,
-                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth, groupName: groupName))
+                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth, groupName: groupName,
+                    isShownInSplitPane: SidebarSplitPaneMarker.isVisible(sessionKey: channel.row.key, splitKey: splitKey)))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -238,7 +239,8 @@ struct SidebarModel: Equatable {
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
                                          preview: showPreviews ? thread.preview : nil,
-                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth, groupName: groupName))
+                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth, groupName: groupName,
+                                         isShownInSplitPane: SidebarSplitPaneMarker.isVisible(sessionKey: thread.key, splitKey: splitKey)))
                 }
             }
             return entries
@@ -350,6 +352,15 @@ enum ChannelRowStyle {
         return nil
     }
 
+    static func accessibilityHint(for entry: SidebarModel.Entry) -> String? {
+        let group = entry.groupName.map { L("in \($0)") }
+        let split = entry.isShownInSplitPane ? L("Shown in right pane") : nil
+        let parts = [self.help(for: entry.row), group, split]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
     private static func origin(of row: SessionRow) -> String? {
         guard let origin = row.channel?.lowercased(),
               ["discord", "slack", "telegram", "imessage", "whatsapp"].contains(origin) else { return nil }
@@ -387,6 +398,7 @@ enum ChannelRowStyle {
     }
     #endif
 }
+
 
 // MARK: Menus
 

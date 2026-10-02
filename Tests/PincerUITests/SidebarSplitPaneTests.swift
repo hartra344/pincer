@@ -1,5 +1,8 @@
 import Foundation
 import Testing
+#if os(macOS)
+import AppKit
+#endif
 @testable import PincerKit
 @testable import PincerUI
 
@@ -34,5 +37,44 @@ struct SidebarSplitPaneTests {
         #expect(rightPane.isShownInSplitPane)
         #expect(!selected.isShownInSplitPane)
         #expect(!other.isShownInSplitPane)
+        #expect(ChannelRowStyle.accessibilityHint(for: rightPane) == L("Shown in right pane"))
+
+        let samePaneModel = SidebarModel.build(
+            gateway: gateway, search: "", collapsed: [], expandedThreads: [],
+            showSubagentRuns: false, showPreviews: false, splitKey: "agent:main:main")
+        let samePaneSelected = try #require(samePaneModel.groups.flatMap(\.allEntries)
+            .first { $0.row.key == "agent:main:main" })
+        #expect(samePaneSelected.isShownInSplitPane)
+
+        let hiddenModel = SidebarModel.build(
+            gateway: gateway, search: "", collapsed: [], expandedThreads: [],
+            showSubagentRuns: false, showPreviews: false, splitKey: nil)
+        #expect(hiddenModel.groups.flatMap(\.allEntries).allSatisfy { !$0.isShownInSplitPane })
+
+        #if os(macOS)
+        let cell = SidebarChatCell()
+        cell.configure(rightPane, actions: self.actions())
+        let indicator = Self.descendants(of: cell).first {
+            $0.identifier == NSUserInterfaceItemIdentifier("sidebar-split-pane-indicator")
+        }
+        #expect(indicator?.isHidden == false)
+        #expect(cell.accessibilityHelp == L("Shown in right pane"))
+        cell.configure(selected, actions: self.actions())
+        #expect(indicator?.isHidden == true)
+        #expect(cell.accessibilityHelp == nil)
+        #endif
     }
+
+    private func actions() -> SidebarActions {
+        SidebarActions(select: { _ in }, newChat: { _ in }, newChatInGroup: { _, _ in },
+                       rename: { _ in }, changeIcon: { _ in }, changeGroupIcon: { _ in }, pickColor: { _ in },
+                       prompt: { _ in }, confirm: { _ in }, toggleThreads: { _ in }, setCollapsed: { _, _ in },
+                       refresh: {}, openAutomations: {})
+    }
+
+    #if os(macOS)
+    private static func descendants(of view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(Self.descendants)
+    }
+    #endif
 }
