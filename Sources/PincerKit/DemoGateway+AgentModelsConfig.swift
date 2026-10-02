@@ -4,7 +4,7 @@ import Foundation
 enum DemoAgentModelsConfig {
     static let seed: JSONValue = [
         "agents": ["defaults": ["model": [
-            "primary": "\(DemoGateway.defaultModel.provider)/\(DemoGateway.defaultModel.model)",
+            "primary": .string("\(DemoGateway.defaultModel.provider)/\(DemoGateway.defaultModel.model)"),
         ]]],
         "models": ["mode": "merge"],
     ]
