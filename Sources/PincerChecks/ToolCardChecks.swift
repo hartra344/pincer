@@ -140,6 +140,7 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
     check(unwrapped?.text == "line one\nline two" && unwrapped?.exitCode == 0, "\(label): envelope result is unwrapped (\(unwrapped?.text ?? "nil"))")
 }
 
+@MainActor
 private func checkToolSyntaxContrast(_ calls: [ToolActivity], label: String) {
     let defaultPairs: [(UInt32, UInt32)] = [
         (0x0550AE, 0xFFFFFF), (0x953800, 0xFFFFFF), (0x116329, 0xFFFFFF),
