@@ -361,7 +361,8 @@ struct SidebarList: NSViewRepresentable {
             case 126, 125: // Up / Down: allow native row navigation to land on headers.
                 return modifiers.isEmpty ? .nativeNavigation : .pass
             case 123, 124: // Left / Right
-                guard modifiers.isEmpty, let node, focusedHeader != nil, let headerNode = self.nodes[node.id] else {
+                guard modifiers.isEmpty else { return .pass }
+                guard let node, focusedHeader != nil, let headerNode = self.nodes[node.id] else {
                     return .nativeNavigation
                 }
                 if event.keyCode == 123 {
