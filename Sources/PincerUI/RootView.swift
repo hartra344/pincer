@@ -599,7 +599,6 @@ struct SettingsForm: View {
     }
     #endif
     @Environment(AppModel.self) private var app
-    @AppStorage("pincer.ownerName") private var ownerName = ""
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @AppStorage(ReactionFeature.enabledKey) private var reactionsEnabled = ReactionFeature.defaultEnabled
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
@@ -630,13 +629,7 @@ struct SettingsForm: View {
     @ViewBuilder private func section(_ section: Section) -> some View {
         switch section {
         case .you:
-            SwiftUI.Section {
-                TextField(L("Display name"), text: self.$ownerName, prompt: Text(Owner.displayName))
-            } header: {
-                Text("You", bundle: .module)
-            } footer: {
-                Text("Your messages show under this name, whichever channel they came from.", bundle: .module)
-            }
+            OwnerNameSettingsSection()
         case .tips:
             TipsSettingsSection()
         case .readAloud:
