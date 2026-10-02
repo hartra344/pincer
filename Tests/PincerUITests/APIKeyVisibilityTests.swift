@@ -52,6 +52,7 @@ struct APIKeyVisibilityTests {
         #expect(button.isEnabled)
         #expect(Self.descendants(host).contains { $0 is NSSecureTextField })
         let secure = try #require(Self.descendants(host).compactMap { $0 as? NSSecureTextField }.first)
+        #expect(!secure.isHidden)
         try #require(window.makeFirstResponder(secure), "the fixture can focus the secure editor")
         secure.selectText(nil)
         let secureEditor = try #require(secure.currentEditor())
@@ -68,6 +69,7 @@ struct APIKeyVisibilityTests {
         let plain = try #require(Self.descendants(host).compactMap { $0 as? NSTextField }.first {
             !($0 is NSSecureTextField) && !$0.isHidden && $0.isEditable && $0.stringValue == editor.text
         })
+        #expect(!(plain.cell is NSSecureTextFieldCell), "Reveal uses a plain cell rather than suppressing secure-field bullets")
         #expect(plain.currentEditor()?.selectedRange == NSRange(location: 4, length: 3),
                 "Reveal preserves focus and the editor selection")
         #expect(button.accessibilityLabel() != revealLabel)
@@ -79,6 +81,7 @@ struct APIKeyVisibilityTests {
         #expect(secure.currentEditor()?.selectedRange == NSRange(location: 4, length: 3),
                 "Hide restores focus and selection to the secure editor")
         #expect(button.accessibilityLabel() == revealLabel)
+        #expect(editor.submissions == 0, "Show/hide never submits the key")
         let action = try #require(secure.action)
         #expect(secure.sendAction(action, to: secure.target))
         #expect(editor.submissions == 1, "Return submission still reaches the original callback")
@@ -138,6 +141,7 @@ struct APIKeyVisibilityTests {
                 && field.offset(from: hiddenSelection.start, to: hiddenSelection.end) == 3)
         #expect(button.accessibilityLabel == label)
         #expect(Self.descendants(host.view).compactMap { $0 as? UITextField }.first === field)
+        #expect(editor.submissions == 0, "Show/hide never submits the key")
         _ = field.delegate?.textFieldShouldReturn?(field)
         #expect(editor.submissions == 1)
         editor.disabled = true
