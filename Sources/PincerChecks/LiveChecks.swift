@@ -269,8 +269,7 @@ func runLive(url: String, token: String) async {
     // A second device: names set on it before syncing are uploaded, and renames flow both ways.
     let otherProfile = GatewayProfile(name: "Mock 2", url: url, authMode: .token)
     otherProfile.secret = token
-    // Its own defaults suite: parallel check runs share UserDefaults.standard, and the avatar
-    // check below reads the device settings this store writes.
+    // Its own defaults suite: parallel runs must not share this device's persisted preferences.
     let (otherDefaults, otherSuite) = scratchDefaults()
     defer { otherDefaults.removePersistentDomain(forName: otherSuite) }
     let other = GatewayStore(profile: otherProfile, defaults: otherDefaults)
@@ -299,19 +298,20 @@ func runLive(url: String, token: String) async {
         let iconCleared = await waitFor("icon clear") { gateway.customIcon(for: iconKey) == nil }
         check(iconCleared, "clearing a chat icon syncs")
     }
-    // Avatar characters and the Pixel/Plush style sync through `pincer.avatars`, and land in the
-    // device settings the views read.
+    // Characters stay in each Gateway's map; the Pixel/Plush style remains device-wide.
     gateway.setAvatarCreature(.cat, for: "main")
     gateway.setAvatarRenderStyle(.plush)
     let avatarSynced = await waitFor("avatar sync") {
         other.avatarChoices["main"] == "cat" && other.avatarChoices[AvatarPreferences.renderStyleEntry] == "plush"
     }
-    check(avatarSynced && otherDefaults.string(forKey: AvatarPreferences.creatureKey(for: "main")) == "cat"
+    check(avatarSynced && gateway.avatarCreature(for: "main") == .cat && other.avatarCreature(for: "main") == .cat
+          && otherDefaults.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil
           && otherDefaults.string(forKey: AvatarPreferences.renderStyleKey) == "plush",
           "avatar character and style sync through users.prefs")
     other.setAvatarCreature(nil, for: "main")
     let avatarCleared = await waitFor("avatar clear") { gateway.avatarChoices["main"] == nil }
-    check(avatarCleared && otherDefaults.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
+    check(avatarCleared && gateway.avatarCreature(for: "main") == nil && other.avatarCreature(for: "main") == nil
+          && otherDefaults.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
           "setting a character back to Auto syncs")
     gateway.setAvatarRenderStyle(.pixel)
     _ = await waitFor("avatar style reset") { other.avatarChoices[AvatarPreferences.renderStyleEntry] == "pixel" }
