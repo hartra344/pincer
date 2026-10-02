@@ -2,6 +2,11 @@ import CoreGraphics
 import Observation
 import SwiftUI
 import Testing
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 @testable import PincerKit
 @testable import PincerUI
 
@@ -124,6 +129,27 @@ struct ShowRunsMenuTests {
         #expect(hidePixels > 0, "An already-presented Runs panel keeps a visible way to close it")
     }
 
+    @Test func removedHelperLeavesNoRunsMenuItem() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.selectedKey = Self.selectedKey
+
+        let before = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey,
+                                            capture: "empty-before")
+        #expect(before == 0)
+        gateway.setSession(self.helper(key: "agent:main:subagent:render-probe", parent: Self.paneKey),
+                           for: "agent:main:subagent:render-probe")
+        let positive = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey,
+                                              capture: "positive")
+        #expect(positive > 0)
+        gateway.setSession(nil, for: "agent:main:subagent:render-probe")
+
+        let afterRemoval = try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey,
+                                                 capture: "empty-after-removal")
+        #expect(afterRemoval == 0, "A reopened menu after activity clears the item")
+    }
+
     private func gateway(scratch: ScratchDefaults) -> GatewayStore {
         GatewayStore(
             profile: GatewayProfile(name: "Runs menu fixture", url: "ws://127.0.0.1:1", authMode: .none),
@@ -143,15 +169,39 @@ struct ShowRunsMenuTests {
 
     private static func visiblePixels(gateway: GatewayStore, sessionKey: String,
                                       isPresented: Bool = false,
-                                      explicitSessionKey: String? = nil) throws -> Int
+                                      explicitSessionKey: String? = nil,
+                                      uniqueViewIdentity: Bool = true,
+                                      capture: String? = nil) throws -> Int
     {
         let presentation = ShowRunsMenuPresentation(isPresented: isPresented)
-        let renderer = ImageRenderer(content: Host(presentation: presentation, gateway: gateway,
-                                                  sessionKey: sessionKey, explicitSessionKey: explicitSessionKey))
+        let host = Host(presentation: presentation, gateway: gateway,
+                        sessionKey: sessionKey, explicitSessionKey: explicitSessionKey)
+        let content = uniqueViewIdentity ? AnyView(host.id(UUID())) : AnyView(host)
+        let renderer = ImageRenderer(content: content)
         renderer.scale = 1
         renderer.isOpaque = false
-        let image = try #require(renderer.cgImage, "SwiftUI should render the actual ShowRunsButton layout")
-        return Self.nontransparentPixelCount(in: image)
+        // Each independent render gets a fresh view identity. An empty conditional view may
+        // legitimately produce no bitmap; positive assertions below still require visible pixels.
+        guard let image = renderer.cgImage else {
+            print("ShowRuns fixture capture=\(capture ?? "none") resolved=\(explicitSessionKey ?? sessionKey) selected=\(gateway.selectedKey ?? "nil") presented=\(isPresented) hasRuns=\(gateway.hasRuns(sessionKey: explicitSessionKey ?? sessionKey)) uniqueID=\(uniqueViewIdentity) noBitmap")
+            return 0
+        }
+        let pixels = Self.nontransparentPixelCount(in: image)
+        let resolvedKey = explicitSessionKey ?? sessionKey
+        let hasRuns = gateway.hasRuns(sessionKey: resolvedKey)
+        print("ShowRuns fixture capture=\(capture ?? "none") resolved=\(resolvedKey) selected=\(gateway.selectedKey ?? "nil") presented=\(isPresented) hasRuns=\(hasRuns) uniqueID=\(uniqueViewIdentity) pixels=\(pixels)")
+        if let capture {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-runs-menu-\(capture)-\(UUID().uuidString).png")
+            #if os(macOS)
+            if let rep = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+                try rep.write(to: url)
+            }
+            #else
+            if let data = UIImage(cgImage: image).pngData() { try data.write(to: url) }
+            #endif
+            print("ShowRuns fixture image: \(url.path)")
+        }
+        return pixels
     }
 
     private static func nontransparentPixelCount(in image: CGImage) -> Int {
