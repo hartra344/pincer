@@ -274,11 +274,14 @@ private func runDemoForwardedSenderRefresh() async {
             let sender = String((item.sender?.agentId ?? "nil").prefix(40))
             return "\(id):\(sender)"
         }
+        let chatState = (items: chat.items.count, pending: chat.forwardedSenderRefreshPending,
+                         completed: chat.forwardedSenderRefreshCompleted, loaded: chat.hasLoaded,
+                         fills: gateway.headlessFillStarts[key, default: 0])
         let historyRequests = await gateway.connection.demoHistoryRequestCount(for: key)
         let pending = repaired.map { String($0.forwardedSenderRefreshPending) } ?? "missing"
         let offlineOnlyRetained = repaired?.items.contains(where: { $0.id == offlineOnly.id }) ?? false
         let uniqueIds = Set(ids).count
-        print("  forwarded refresh diagnostics: persistedPending=\(pending), persistedItems=\(repaired?.items.count ?? 0), retained=\(repaired?.retained ?? false), complete=\(repaired?.complete ?? false), ids=\(ids.count)/\(uniqueIds), offlineOnly=\(offlineOnlyRetained), intro=\(itemSummary(repairedIntro)), thanks=\(itemSummary(repairedThanks)), openIntro=\(itemSummary(openIntro)), chatItems=\(chat.items.count), chatPending=\(chat.forwardedSenderRefreshPending), chatCompleted=\(chat.forwardedSenderRefreshCompleted), chatLoaded=\(chat.hasLoaded), headlessFills=\(gateway.headlessFillStarts[key, default: 0]), historyRequests=\(historyRequests)")
+        print("  forwarded refresh diagnostics: persistedPending=\(pending), persistedItems=\(repaired?.items.count ?? 0), retained=\(repaired?.retained ?? false), complete=\(repaired?.complete ?? false), ids=\(ids.count)/\(uniqueIds), offlineOnly=\(offlineOnlyRetained), intro=\(itemSummary(repairedIntro)), thanks=\(itemSummary(repairedThanks)), openIntro=\(itemSummary(openIntro)), chatItems=\(chatState.items), chatPending=\(chatState.pending), chatCompleted=\(chatState.completed), chatLoaded=\(chatState.loaded), headlessFills=\(chatState.fills), historyRequests=\(historyRequests)")
     }
     check(persistedRepairPassed,
           "older same-id messages are repaired with Kiko's sender metadata")
