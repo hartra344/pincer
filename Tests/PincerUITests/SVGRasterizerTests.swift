@@ -8,6 +8,25 @@ import Testing
 struct SVGRasterizerTests {
     private let svg = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><rect width="400" height="200" fill="red"/></svg>"#.utf8)
 
+    #if os(iOS)
+    private actor StartGate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            guard !self.isOpen else { return }
+            await withCheckedContinuation { self.waiters.append($0) }
+        }
+
+        func open() {
+            self.isOpen = true
+            let waiters = self.waiters
+            self.waiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+    }
+    #endif
+
     @Test func rasterizesToFitBounds() async {
         let fitted = await SVGRasterizer.rasterize(self.svg, fitting: CGSize(width: 3000, height: 900))
         #expect(fitted?.width == 1800 && fitted?.height == 900)
@@ -23,6 +42,20 @@ struct SVGRasterizerTests {
         #expect(image?.width == 1200 && image?.height == 600)
         #expect(Self.centerPixelIsRed(image))
     }
+
+    #if os(iOS)
+    @Test func cancellationBeforeRasterizationStartsReturnsNil() async {
+        let gate = StartGate()
+        let task = Task {
+            await gate.wait()
+            return await SVGRasterizer.rasterize(self.svg)
+        }
+        task.cancel()
+        await gate.open()
+
+        #expect(await task.value == nil)
+    }
+    #endif
 
     private static func centerPixelIsRed(_ image: CGImage?) -> Bool {
         guard let image, image.bitsPerPixel >= 32, let bytes = image.dataProvider?.data as Data? else { return false }

@@ -22,8 +22,7 @@ package final class SVGRasterizationLifetime {
     ) {
         self.onTermination = onTermination
         let cancel = scheduleDeadline { [weak self] in
-            // Baseline seam: deadline delivery is wired by the bounded-lifetime fix.
-            _ = self
+            _ = self?.finish(.timedOut)
         }
         if self.outcome != nil {
             cancel()
