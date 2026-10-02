@@ -19,15 +19,17 @@ private final class LocationContextTestDriver: LocationContextDriver {
 @MainActor
 @Suite("Location context")
 struct LocationContextTests {
-    @Test func preparedSnapshotIsCoarseBoundedAndFreshnessChecked() throws {
+    @Test func preparedSnapshotKeepsProviderCoordinatesAccuracyAndFreshness() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let fix = LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
                               timestamp: now)
         let snapshot = try #require(LocationContextSnapshot.prepare(fix, now: now))
 
-        #expect(snapshot.context.contains("37.78, -122.42"))
-        #expect(snapshot.context.contains("±2000m"))
-        #expect(!snapshot.context.contains("37.7749") && !snapshot.context.contains("-122.4194"))
+        #expect(snapshot.coordinates == "37.774900, -122.419400")
+        #expect(snapshot.accuracy == "±18m")
+        #expect(snapshot.observed == now.formatted(.iso8601))
+        #expect(snapshot.context.contains(snapshot.coordinates))
+        #expect(snapshot.context.contains("reported accuracy ±18m"))
         #expect(snapshot.context.count < 180, "the disclosed location note stays bounded")
         #expect(snapshot.isFresh(at: now.addingTimeInterval(300)))
         #expect(!snapshot.isFresh(at: now.addingTimeInterval(300.001)))
@@ -47,8 +49,18 @@ struct LocationContextTests {
 
         let broadAccuracy = LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 4_000,
                                         timestamp: now)
-        #expect(LocationContextSnapshot.prepare(broadAccuracy, now: now)?.context.contains("±5600m") == true,
-                "quantization uncertainty is added to the device's reported accuracy")
+        #expect(LocationContextSnapshot.prepare(broadAccuracy, now: now)?.accuracy == "±4000m",
+                "the device's reported accuracy is preserved without a quantization margin")
+    }
+
+    @Test func locationSnapshotSurvivesOutboxCodableRoundTrip() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let fix = LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
+                              timestamp: now)
+        let snapshot = try #require(LocationContextSnapshot.prepare(fix, now: now))
+        let data = try JSONEncoder().encode(snapshot)
+        let restored = try JSONDecoder().decode(LocationContextSnapshot.self, from: data)
+        #expect(restored == snapshot, "queued context is stable across persistence and retry")
     }
 
     @Test func permissionAndLocationWorkWaitForForegroundOptIn() async throws {
@@ -74,14 +86,15 @@ struct LocationContextTests {
         await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
                                            timestamp: now), generation: generation, now: now)
         #expect(model.status == .ready && model.snapshot != nil)
-        let text = model.message("What is nearby?", now: now)
-        #expect(text.hasPrefix("What is nearby?\n\nLocation context (approximate, shared by Pincer):"))
-        #expect(model.message("/help", now: now) == "/help", "commands keep their original text")
+        let context = try #require(model.context(forMessage: "What is nearby?", now: now))
+        #expect(context.coordinates == "37.774900, -122.419400")
+        #expect(model.context(forMessage: "/help", now: now) == nil, "slash commands do not receive context")
+        #expect(model.context(forMessage: " !reset", now: now) == nil, "bang commands do not receive context")
 
         model.setActive(false)
         #expect(model.snapshot == nil && driver.stopCount > 0,
                 "backgrounding clears the prepared context and stops an in-flight location request")
-        #expect(model.message("ordinary text", now: now) == "ordinary text")
+        #expect(model.context(forMessage: "ordinary text", now: now) == nil)
     }
 
     @Test func sendingUsesCachedContextBeforeStartingARefresh() async throws {
@@ -98,8 +111,8 @@ struct LocationContextTests {
                                            timestamp: now.addingTimeInterval(-40)),
                                generation: generation, now: now)
         let requests = driver.requestedGenerations.count
-        let text = model.message("Find a nearby cafe.", now: now)
-        #expect(text.contains("37.78, -122.42"), "a recent cached fix is usable while it refreshes")
+        let context = try #require(model.context(forMessage: "Find a nearby cafe.", now: now))
+        #expect(context.coordinates == "37.774900, -122.419400", "a recent cached fix is usable while it refreshes")
         #expect(driver.requestedGenerations.count == requests,
                 "sending returns before platform acquisition setup, without waiting for a new fix")
         #expect(await eventually { driver.requestedGenerations.count == requests + 1 },
@@ -122,7 +135,7 @@ struct LocationContextTests {
                                            timestamp: now), generation: generation, now: now)
         #expect(!model.enabled && !scratch.defaults.bool(forKey: LocationContextModel.enabledKey))
         #expect(model.status == .off && model.snapshot == nil)
-        #expect(model.message("keep this exact", now: now) == "keep this exact")
+        #expect(model.context(forMessage: "keep this exact", now: now) == nil)
 
         let restored = LocationContextModel(defaults: scratch.defaults)
         #expect(!restored.enabled && restored.status == .off, "the opt-out survives model recreation")
@@ -176,7 +189,7 @@ struct LocationContextTests {
         #expect(model.snapshot != nil && model.status == .ready)
 
         driver.authorization = .denied
-        #expect(model.message("keep the user's text", now: now) == "keep the user's text")
+        #expect(model.context(forMessage: "keep the user's text", now: now) == nil)
         #expect(model.snapshot == nil && model.status == .denied,
                 "revoking permission clears the old fix before any message can disclose it")
     }
@@ -201,16 +214,20 @@ struct LocationContextTests {
 
         let defaultText = "No location by default \(UUID().uuidString)"
         #expect(await chat.sendMessage(defaultText) == .queued)
-        #expect(gateway.outbox.entries(for: key).last?.text == defaultText,
+        #expect(gateway.outbox.entries(for: key).last?.text == defaultText
+                && gateway.outbox.entries(for: key).last?.locationContext == nil,
                 "the default send path never appends opted-in context")
 
         let firstMarker = "first snapshot \(UUID().uuidString)"
         #expect(await chat.sendMessage(firstMarker, includeLocation: true) == .queued)
         let firstEntry = try #require(gateway.outbox.entries(for: key).last { $0.text.contains(firstMarker) })
-        #expect(firstEntry.text.contains("37.78, -122.42") && firstEntry.text.contains("Location context"))
+        #expect(firstEntry.text == firstMarker)
+        #expect(firstEntry.locationContext?.coordinates == "37.774900, -122.419400"
+                && firstEntry.locationContext?.accuracy == "±18m")
 
         #expect(await chat.sendMessage("  /help", includeLocation: true) == .queued)
-        #expect(gateway.outbox.entries(for: key).last?.text == "/help",
+        #expect(gateway.outbox.entries(for: key).last?.text == "/help"
+                && gateway.outbox.entries(for: key).last?.locationContext == nil,
                 "leading whitespace cannot route a command through location disclosure")
 
         model.setActive(false)
@@ -226,9 +243,50 @@ struct LocationContextTests {
         let entries = gateway.outbox.entries(for: key)
         let savedFirst = try #require(entries.first { $0.id == firstEntry.id })
         let savedSecond = try #require(entries.last { $0.text.contains(secondMarker) })
-        #expect(savedFirst.text.contains("37.78, -122.42") && !savedFirst.text.contains("51.50, -0.12"),
-                "a queued send keeps the exact coarse context the user saw when sending")
-        #expect(savedSecond.text.contains("51.50, -0.12") && !savedSecond.text.contains("37.78, -122.42"),
+        #expect(savedFirst.text == firstMarker
+                && savedFirst.locationContext?.coordinates == "37.774900, -122.419400",
+                "a queued send keeps its prepared location context separately from authored text")
+        #expect(savedSecond.text == secondMarker
+                && savedSecond.locationContext?.coordinates == "51.507200, -0.127600",
                 "a later location update applies only to later opted-in sends")
+    }
+
+    @Test func optedInLocationDoesNotRewriteAuthoredOrOptimisticMessageText() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = nil
+        let model = LocationContextModel(defaults: scratch.defaults)
+        let driver = LocationContextTestDriver(.authorized)
+        model.configure(driver: driver)
+        model.setActive(true)
+        model.setEnabled(true)
+        let generation = try #require(driver.requestedGenerations.last)
+        let now = Date()
+        await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
+                                           timestamp: now), generation: generation, now: now)
+        gateway.locationContext = model
+        let key = "agent:main:dashboard:location-display"
+        let chat = gateway.chat(for: key)
+        let authored = "Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"
+
+        #expect(await chat.sendMessage(authored, includeLocation: true) == .queued)
+        let entry = try #require(gateway.outbox.entries(for: key).last)
+        let optimistic = try #require(chat.items.last { $0.isPending })
+        #expect(entry.text == authored, "the queue retains only the user's authored message body")
+        #expect(entry.locationContext?.coordinates == "37.774900, -122.419400")
+        #expect(optimistic.plainText == authored, "the optimistic bubble keeps authored location prose verbatim")
+    }
+
+    @Test func projectedHistoryPreservesAuthoredLocationLookalikes() throws {
+        let authored = "Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"
+        let fixture = Fixtures.json(#"{"role":"user","content":"Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z","__openclaw":{"id":"projected-location","workContext":{"snapshot":{"page":"Pincer location","detail":{"coordinates":"37.7749, -122.4194","accuracy":"±18m","observed":"2026-10-02T12:00:00Z"}},"text":"Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"}}}"#)
+        let projected = try #require(ChatItem(fixture, fallbackIndex: 0))
+
+        #expect(projected.plainText == authored,
+                "history display uses the Gateway's metadata-backed original-text projection, not footer matching")
+
+        let ordinary = try #require(ChatItem(Fixtures.json(#"{"role":"user","content":"I pasted this location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z","__openclaw":{"id":"authored-location-lookalike"}}"#), fallbackIndex: 1))
+        #expect(ordinary.plainText == "I pasted this location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z")
     }
 }

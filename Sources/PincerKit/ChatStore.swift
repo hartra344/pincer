@@ -65,7 +65,7 @@ public enum ChatSendRequest {
         message: String,
         idempotencyKey: String,
         attachments: [OutgoingAttachment],
-        replyToId: String? = nil) -> [String: JSONValue]
+        replyToId: String? = nil, locationContext: LocationContextSnapshot? = nil) -> [String: JSONValue]
     {
         var params: [String: JSONValue] = ["sessionKey": .string(sessionKey)]
         if let agentId, SessionKey.agentId(from: sessionKey) == nil {
@@ -74,6 +74,9 @@ public enum ChatSendRequest {
         params["message"] = .string(message)
         params["idempotencyKey"] = .string(idempotencyKey)
         if let replyToId { params["replyToId"] = .string(replyToId) }
+        if let locationContext, !ChatWorkContext.isCommand(message) {
+            params["workContext"] = ChatWorkContext.location(locationContext)
+        }
         if !attachments.isEmpty {
             params["attachments"] = .array(attachments.map { attachment in
                 [
@@ -150,6 +153,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var outboxPreviewActiveKeys: Set<OutboxImagePreviewKey> = []
     @ObservationIgnored var outboxPreviewTask: Task<Void, Never>?
     @ObservationIgnored var outboxPreviewGeneration = 0
+    @ObservationIgnored var legacyLocationProjectionTokens: [String: UUID] = [:]
+    @ObservationIgnored var legacyLocationProjectionWorkerCount = 0
     @ObservationIgnored var outboxImagePreviewProbe: (@Sendable () -> Void)?
     @ObservationIgnored var hasPendingLive = false
     /// How many leading `entries` come from committed items; the rest is the live tail. `nil` until

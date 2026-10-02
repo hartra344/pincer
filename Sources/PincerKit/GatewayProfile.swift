@@ -100,6 +100,7 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     public var isDemo: Bool { self.url == DemoGateway.url || self.url == DemoGateway.noReplyToURL
             || self.url == DemoGateway.noSessionReactionsURL || self.url == DemoGateway.avatarPrefsReadFailureURL
             || self.url == DemoGateway.forwardedSenderRefreshURL
+            || self.url == DemoGateway.noWorkContextURL || self.url == DemoGateway.noWorkContextAndReplyToURL
     }
 
     /// `acceptsReplyTo: false` simulates an older Gateway that rejects `chat.send`'s `replyToId`.

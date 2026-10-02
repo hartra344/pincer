@@ -10,6 +10,8 @@ actor DemoGateway {
     static let url = "demo://pincer"
     /// The demo as an older Gateway that rejects `chat.send`'s `replyToId`, for checks.
     static let noReplyToURL = "demo://pincer?replyTo=off"
+    static let noWorkContextURL = "demo://pincer?workContext=off"
+    static let noWorkContextAndReplyToURL = "demo://pincer?workContext=off&replyTo=off"
     /// The demo as an older Gateway without `session.reactions.*`, for checks of the `users.prefs` fallback.
     static let noSessionReactionsURL = "demo://pincer?sessionReactions=off"
     /// One transient avatar-prefs read failure, for bootstrap recovery checks.
@@ -137,6 +139,7 @@ actor DemoGateway {
 
     /// Whether `chat.send` takes `replyToId`, like current Gateways.
     let acceptsReplyTo: Bool
+    let acceptsWorkContext: Bool
     /// Whether a finished reply turns its chat unread, like Gateways with openclaw/openclaw#155690.
     /// Released Gateways don't (#426); tests turn it off to play one.
     var repliesMarkUnread = true
@@ -150,10 +153,11 @@ actor DemoGateway {
     let hasSessionReactions: Bool
     var failsFirstAvatarPrefsRead: Bool
 
-    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false,
+    init(acceptsReplyTo: Bool = true, acceptsWorkContext: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false,
          seedsForwardedSenderRefreshHistory: Bool = false)
     {
         self.acceptsReplyTo = acceptsReplyTo
+        self.acceptsWorkContext = acceptsWorkContext
         self.hasSessionReactions = hasSessionReactions
         self.failsFirstAvatarPrefsRead = failsFirstAvatarPrefsRead
         self.prefs[Reactions.prefKey] = [

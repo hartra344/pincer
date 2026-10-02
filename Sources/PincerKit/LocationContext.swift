@@ -28,28 +28,32 @@ public struct LocationFix: Sendable {
     }
 }
 
-/// Contains only the coarse, disclosed context. Raw device coordinates are never persisted.
-public struct LocationContextSnapshot: Sendable, Equatable {
+/// A bounded, preformatted one-shot location context. It is carried as Gateway work context;
+/// the authored message remains a separate value and is what the transcript displays.
+public struct LocationContextSnapshot: Sendable, Equatable, Hashable, Codable {
     public static let maxAge: TimeInterval = 300
     public let timestamp: Date
     public let context: String
+    public let coordinates: String
+    public let accuracy: String
+    public let observed: String
 
-    /// Run on a worker: quantization, numeric formatting, and ISO date formatting happen once per fix.
+    /// Run on a worker: coordinate, accuracy, and ISO date formatting happen once per fix.
     public nonisolated static func prepare(_ fix: LocationFix, now: Date = .now) -> Self? {
         guard fix.latitude.isFinite, fix.longitude.isFinite, fix.accuracyMeters.isFinite,
               (-90...90).contains(fix.latitude), (-180...180).contains(fix.longitude),
               (0...50_000).contains(fix.accuracyMeters),
               fix.timestamp <= now, now.timeIntervalSince(fix.timestamp) <= Self.maxAge else { return nil }
-        // A 0.02-degree grid has cells at most ~2.2 km wide; a 2 km uncertainty covers rounding.
-        let latitude = (fix.latitude / 0.02).rounded() * 0.02
-        let longitude = (fix.longitude / 0.02).rounded() * 0.02
-        let coordinates = String(format: "%.2f, %.2f", locale: Locale(identifier: "en_US_POSIX"), latitude, longitude)
-        let accuracy = Int(max(2_000, fix.accuracyMeters + 1_600).rounded(.up))
+        let coordinates = String(format: "%.6f, %.6f", locale: Locale(identifier: "en_US_POSIX"),
+                                 fix.latitude, fix.longitude)
+        let accuracy = "±\(Int(fix.accuracyMeters.rounded(.up)))m"
         let observed = fix.timestamp.formatted(.iso8601)
-        let label = L("Location context (approximate, shared by Pincer)")
-        let observedLabel = L("observed")
+        let context = "Device location: \(coordinates) (reported accuracy \(accuracy), observed \(observed))."
         return Self(timestamp: fix.timestamp,
-                    context: "\(label): 📍 \(coordinates) ±\(accuracy)m; \(observedLabel) \(observed)")
+                    context: context,
+                    coordinates: coordinates,
+                    accuracy: accuracy,
+                    observed: observed)
     }
 
     public func isFresh(at now: Date) -> Bool {
@@ -119,6 +123,21 @@ public final class LocationContextModel {
 
     public func requestPermission() { self.refresh(requestPermission: true) }
 
+    /// Captures the latest eligible snapshot without changing authored text or waiting on Core Location.
+    /// Request setup is deferred so message sending never waits for the device location provider.
+    public func context(forMessage text: String, now: Date = .now) -> LocationContextSnapshot? {
+        guard let first = text.drop(while: { $0.isWhitespace }).first,
+              first != "/", first != "!" else { return nil }
+        guard self.enabled, self.active, self.driver?.authorization == .authorized else {
+            if self.enabled { self.refresh() }
+            return nil
+        }
+        let snapshot = self.snapshot
+        Task { @MainActor [weak self] in self?.refresh() }
+        guard let snapshot, snapshot.isFresh(at: now) else { return nil }
+        return snapshot
+    }
+
     private func refresh(requestPermission: Bool) {
         guard self.enabled, self.active, let driver else { return }
         switch driver.authorization {
@@ -166,19 +185,6 @@ public final class LocationContextModel {
         guard self.pendingGeneration == generation else { return }
         self.cancelRequest(clearSnapshot: false)
         self.status = .unavailable
-    }
-
-    /// Normal messages carry a visible, immutable snapshot into the outbox. Commands stay exact.
-    public func message(_ text: String, now: Date = .now) -> String {
-        guard self.enabled, self.active, self.driver?.authorization == .authorized else {
-            if self.enabled { self.refresh() }
-            return text
-        }
-        let snapshot = self.snapshot
-        // Keep Core Location request setup outside this synchronous send path.
-        Task { @MainActor [weak self] in self?.refresh() }
-        guard !text.hasPrefix("/"), let snapshot, snapshot.isFresh(at: now) else { return text }
-        return text + (text.isEmpty ? "" : "\n\n") + snapshot.context
     }
 
     private func cancelRequest(clearSnapshot: Bool) {

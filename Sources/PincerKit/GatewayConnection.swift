@@ -150,7 +150,8 @@ public actor GatewayConnection {
         self.profile = profile
         self.identity = identity
         self.demo = profile.isDemo ? DemoGateway(
-            acceptsReplyTo: profile.url != DemoGateway.noReplyToURL,
+            acceptsReplyTo: !profile.url.contains("replyTo=off"),
+            acceptsWorkContext: !profile.url.contains("workContext=off"),
             hasSessionReactions: profile.url != DemoGateway.noSessionReactionsURL,
             failsFirstAvatarPrefsRead: profile.url == DemoGateway.avatarPrefsReadFailureURL,
             seedsForwardedSenderRefreshHistory: profile.url == DemoGateway.forwardedSenderRefreshURL) : nil

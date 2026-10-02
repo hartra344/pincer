@@ -1,3 +1,4 @@
+import { validWorkContext, withWorkContext, projectWorkContextForDisplay } from './work-context.mjs';
 import { ADMIN_SCOPE } from './config.mjs';
 import { noteApprovalForLogs, noteChatForLogs } from './logs.mjs';
 import { markSubagentAborted, simulateSpawn } from './subagents.mjs';
@@ -14,7 +15,7 @@ import { DEFAULT_CONTEXT_TOKENS, broadcast, clone, imageBlock, makeMessage, nowM
 export const HISTORY_TEXT_MAX_CHARS = 8_000;
 
 export function projectForHistory(message, maxChars = HISTORY_TEXT_MAX_CHARS) {
-  const projected = clone(message);
+  const projected = clone(projectWorkContextForDisplay(message));
   // MOCK_HISTORY_NO_IDS=1: history without message ids, like a Gateway that doesn't stamp them.
   if (process.env.MOCK_HISTORY_NO_IDS === '1' && projected.__openclaw) delete projected.__openclaw.id;
   if (!Array.isArray(projected.content)) return projected;
@@ -198,7 +199,8 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
   const transcript = state.transcripts.get(sessionKey);
   if (!row || !transcript) return;
   try {
-    const content = [textBlock(String(text ?? ''))];
+    const prepared = withWorkContext(String(text ?? ''), params.workContext);
+    const content = [textBlock(prepared.text)];
     for (const attachment of attachments) {
       if (attachment?.content && String(attachment.mimeType ?? '').startsWith('image/')) {
         const artifactId = `upload-${shortId()}`;
@@ -210,7 +212,7 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
         content.push(imageBlock(artifactId, attachment.fileName ?? 'Uploaded image'));
       }
     }
-    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: `${params.idempotencyKey}:user`, ...replyMeta } });
+    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: `${params.idempotencyKey}:user`, ...replyMeta, ...prepared.facts } });
     transcript.push(userMsg);
     row.hasActiveRun = true;
     row.activeRunIds = [...new Set([...row.activeRunIds, run.runId])];
@@ -506,6 +508,12 @@ function dispatch(state, conn, msg) {
       // Gateways from before reply support reject the unknown property outright.
       if (process.env.MOCK_NO_REPLY_TO === '1' && Object.hasOwn(params, 'replyToId')) {
         return sendErr(conn, id, 'INVALID_REQUEST', "invalid chat.send params: at root: unexpected property 'replyToId'");
+      }
+      if (Object.hasOwn(params, 'workContext')) {
+        if (process.env.MOCK_NO_WORK_CONTEXT === '1') {
+          return sendErr(conn, id, 'INVALID_REQUEST', "invalid chat.send params: at root: unexpected property 'workContext'");
+        }
+        if (!validWorkContext(params.workContext)) return sendErr(conn, id, 'INVALID_REQUEST', 'invalid chat.send params: invalid workContext');
       }
       if (!params.idempotencyKey) return sendErr(conn, id, 'INVALID_REQUEST', 'idempotencyKey is required');
       if (!state.sessions.has(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
