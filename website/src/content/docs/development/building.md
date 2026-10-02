@@ -88,6 +88,18 @@ xcodebuild test -scheme PincerUITests-iOS \
 
 Use an available iPad simulator name from `xcrun simctl list devices available`.
 
+The iOS `StreamingRenderingTests` suite also prints a UIKit streaming baseline for 2, 10, and 25 KB markdown replies. It sends prepared events through `ChatStore`, flushes every two simulated tokens, and updates an actual hosted collection view. CPU windows cover event handling and synchronous native publishing; fixture setup and the run-loop yield between publishes are excluded. It checks the growing body, visible cell, row geometry, and a separate committed-row off-main premeasure warmup. There is no timing cutoff yet.
+
+On an iPhone 18 Pro / iOS 27 simulator in a Debug build, the baseline was:
+
+| Reply | Mean token CPU | Max token CPU | Max publish CPU |
+| --- | ---: | ---: | ---: |
+| 2 KB | 1.289 ms | 4.498 ms | 8.490 ms |
+| 10 KB | 1.485 ms | 3.463 ms | 6.623 ms |
+| 25 KB | 2.020 ms | 4.128 ms | 7.629 ms |
+
+These are simulated event/render costs, not physical-device timings or a measured network cadence. Run the `StreamingRenderingTests` command above to collect the table on another simulator.
+
 While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
 
 ## Self-checks
