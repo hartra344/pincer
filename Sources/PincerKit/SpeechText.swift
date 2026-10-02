@@ -1,7 +1,42 @@
 import Foundation
+import Synchronization
 
 /// Turns transcript markdown into text worth speaking.
 public enum SpeechText {
+#if DEBUG
+    struct SpeakabilityDebugStats: Sendable, Equatable {
+        var mainThreadNormalizations = 0
+        var offMainNormalizations = 0
+    }
+
+    private struct SpeakabilityDebugState: Sendable {
+        var trackedItemID: String?
+        var stats = SpeakabilityDebugStats()
+    }
+
+    private static let speakabilityDebug = Mutex(SpeakabilityDebugState())
+
+    /// Bounded, payload-free instrumentation for the actual Read Aloud eligibility path.
+    static var speakabilityDebugStats: SpeakabilityDebugStats {
+        self.speakabilityDebug.withLock { $0.stats }
+    }
+
+    static func resetSpeakabilityDebugStats(tracking itemID: String) {
+        self.speakabilityDebug.withLock { state in
+            state.trackedItemID = itemID
+            state.stats = SpeakabilityDebugStats()
+        }
+    }
+
+    private static func recordSpeakabilityNormalization(for item: ChatItem) {
+        self.speakabilityDebug.withLock { state in
+            guard state.trackedItemID == item.id else { return }
+            if Thread.isMainThread { state.stats.mainThreadNormalizations += 1 }
+            else { state.stats.offMainNormalizations += 1 }
+        }
+    }
+#endif
+
     public static func plain(fromMarkdown markdown: String) -> String {
         var text = MediaDirectives.extract(from: markdown).text.replacingOccurrences(of: "\r\n", with: "\n")
         text = self.removingBlocks(text)
@@ -100,7 +135,18 @@ public enum SpeechText {
     /// What Read Aloud speaks for `item`: an assistant message's text blocks, never tool or thinking content.
     public static func speakableText(for item: ChatItem) -> String? {
         guard item.role == .assistant, !item.isPending, !item.isError else { return nil }
+#if DEBUG
+        self.recordSpeakabilityNormalization(for: item)
+#endif
         let text = self.plain(fromMarkdown: item.plainText)
         return text.isEmpty ? nil : text
+    }
+
+    /// Prepares one message for the renderer cache. Call this from its off-main worker so both
+    /// normalization and the retained-string cost measurement stay away from the interaction path.
+    public static func prepare(_ item: ChatItem) -> SpeechEligibilityCache.Prepared {
+        let text = self.speakableText(for: item)
+        return SpeechEligibilityCache.Prepared(isEligible: text != nil, speechText: text,
+                                               utf8ByteCount: text?.utf8.count ?? 0)
     }
 }

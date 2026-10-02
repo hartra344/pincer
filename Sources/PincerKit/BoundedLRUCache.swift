@@ -41,6 +41,13 @@ public struct BoundedLRUCache<Key: Hashable, Value> {
         return true
     }
 
+    @discardableResult
+    public mutating func removeValue(for key: Key) -> Value? {
+        guard let entry = self.entries.removeValue(forKey: key) else { return nil }
+        self.totalCost -= entry.cost
+        return entry.value
+    }
+
     public mutating func removeAll() {
         self.entries.removeAll(keepingCapacity: true)
         self.totalCost = 0

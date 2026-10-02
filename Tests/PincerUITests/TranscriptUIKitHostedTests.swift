@@ -1,6 +1,7 @@
 #if os(iOS)
 import CoreGraphics
 import Foundation
+import Synchronization
 @testable import PincerKit
 import Testing
 import UIKit
@@ -156,6 +157,263 @@ struct TranscriptUIKitHostedTests {
 
     @Test func loggedOutBadgeContrastMeetsLightAndDarkFormSurfaces() throws {
         try LoggedOutBadgeContrastTests.verifyContrast()
+    }
+
+    @Test func visibleReadAloudEligibilityDoesNotNormalizeTheBodyOnMain() async throws {
+        let host = await Self.makeHost()
+        let messageID = "read-aloud-eligibility-\(UUID().uuidString)"
+        let body = String(repeating: "A **formatted reply** with `code` and a [source](https://example.test).\n\n", count: 80)
+        var item = ChatItem(id: messageID, role: .assistant, blocks: [.text(body)])
+        item.transcriptId = messageID
+        let chat = try #require(host.context.chat)
+        chat.items = [item]
+
+        SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        host.coordinator.update(rows: [Self.assistant(messageID, text: body, at: 1)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+
+        let cell = try #require(host.view.visibleCells.first)
+        func hasVisibleReadAloud(in root: UIView) -> Bool {
+            var pending = [root]
+            while let view = pending.popLast() {
+                if let button = view as? TranscriptLabelButton,
+                   button.accessibilityText == "Read Aloud", !button.isHidden { return true }
+                pending.append(contentsOf: view.subviews)
+            }
+            return false
+        }
+        let layoutBuildCountBeforeReadiness = host.coordinator.renderer.layoutBuildCount
+        let firstReady = await eventually(timeout: .seconds(3)) {
+            host.view.layoutIfNeeded()
+            return host.view.visibleCells.contains(where: hasVisibleReadAloud)
+        }
+        #expect(firstReady && hasVisibleReadAloud(in: cell), "normal assistant prose keeps the actual Listen button after preparation")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "visible-row and accessibility configuration should consume prepared eligibility rather than parse the body on main")
+        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+                "a visible cache miss is normalized once by the background worker")
+        #expect(host.coordinator.renderer.layoutBuildCount == layoutBuildCountBeforeReadiness,
+                "readiness refresh advances the native apply token without rebuilding row geometry")
+
+        host.view.reloadData()
+        host.view.layoutIfNeeded()
+        await Self.idle(host, cap: 10)
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "reconfiguring an unchanged visible item should reuse its eligibility")
+        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+                "reconfiguring an unchanged visible item should not repeat background normalization")
+
+        // A different row advances the chat's coarse revision, but the unchanged assistant source
+        // remains prepared; eligibility lookup must not re-normalize every visible reply.
+        let unrelatedID = "read-aloud-unrelated-\(UUID().uuidString)"
+        var unrelated = ChatItem(id: unrelatedID, role: .user, blocks: [.text("A separate question")])
+        unrelated.transcriptId = unrelatedID
+        chat.items = [item, unrelated]
+        host.coordinator.update(rows: [Self.assistant(messageID, text: body, at: 1), .entry(.user(unrelated))],
+                                context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+        #expect(host.view.visibleCells.contains(where: hasVisibleReadAloud),
+                "an unrelated row update keeps the existing assistant Listen action available")
+        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+                "an unrelated chat revision does not re-normalize the unchanged assistant body")
+
+        // A changed item under the same transcript id must not leave stale eligibility behind.
+        let codeOnly = "```swift\nlet answer = 42\n```"
+        item.blocks = [.text(codeOnly)]
+        chat.items = [item]
+        host.coordinator.update(rows: [Self.assistant(messageID, text: codeOnly, at: 2)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+        let codeReady = await eventually(timeout: .seconds(3)) {
+            host.view.layoutIfNeeded()
+            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 2
+        }
+        let codeCell = try #require(host.view.visibleCells.first)
+        #expect(codeReady && !hasVisibleReadAloud(in: codeCell), "code-only assistant content is not speakable")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "content changes should refresh eligibility off main")
+
+        item.blocks = [.text(body + "\n\nA restored answer.")]
+        chat.items = [item]
+        let restoredRow = Self.assistant(messageID, text: item.plainText, at: 3)
+        host.coordinator.update(rows: [restoredRow], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+        let restoredReady = await eventually(timeout: .seconds(3)) {
+            host.view.layoutIfNeeded()
+            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 3
+                && host.view.visibleCells.contains(where: hasVisibleReadAloud)
+        }
+        let restoredCell = try #require(host.view.visibleCells.first)
+        #expect(restoredReady && hasVisibleReadAloud(in: restoredCell), "restored prose is eligible again")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "restoring content must also use the prepared off-main eligibility")
+
+        // A style/context-wide reset drops both layout identity and readiness. If the store edits
+        // the same ID before the replacement row projection arrives, old prose must not leak back.
+        host.coordinator.renderer.reset()
+        item.blocks = [.text(codeOnly)]
+        chat.items = [item]
+        _ = host.coordinator.renderer.layout(for: restoredRow, width: max(1, host.view.bounds.width))
+        #expect(!host.coordinator.renderer.canReadAloud(messageID, rowID: restoredRow.id),
+                "a reset cannot reuse readiness after an edit made before the next row projection")
+    }
+
+    @Test func staleSameIDPreparationCannotRestoreSpeakabilityAfterAnEdit() async throws {
+        let host = await Self.makeHost()
+        let messageID = "read-aloud-stale-\(UUID().uuidString)"
+        let prose = String(repeating: "A finished assistant answer. ", count: 40)
+        let codeOnly = "```swift\nlet answer = 42\n```"
+        var item = ChatItem(id: messageID, role: .assistant, blocks: [.text(prose)])
+        item.transcriptId = messageID
+        let chat = try #require(host.context.chat)
+        chat.items = [item]
+
+        let entered = Mutex(false)
+        let release = DispatchSemaphore(value: 0)
+        let firstPreparation = Mutex(true)
+        host.coordinator.renderer.speechPreparationProbe = { _ in
+            let shouldHold = firstPreparation.withLock { first in
+                guard first else { return false }
+                first = false
+                return true
+            }
+            if shouldHold {
+                entered.withLock { $0 = true }
+                _ = release.wait(timeout: .now() + 4)
+            }
+        }
+        defer { release.signal() }
+        SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        host.coordinator.update(rows: [Self.assistant(messageID, text: prose, at: 1)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        let started = await eventually { entered.withLock { $0 } }
+        #expect(started, "the real renderer starts background preparation")
+
+        // The store now owns different content under the same transcript ID, while the native row
+        // still holds its old projection. This is the interval in which stale work must be rejected.
+        item.blocks = [.text(codeOnly)]
+        chat.items = [item]
+        release.signal()
+        let refreshed = await eventually(timeout: .seconds(4)) {
+            host.view.layoutIfNeeded()
+            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 2
+                && host.view.visibleCells.allSatisfy { cell in
+                    var pending: [UIView] = [cell]
+                    while let view = pending.popLast() {
+                        if let button = view as? TranscriptLabelButton,
+                           button.accessibilityText == "Read Aloud", !button.isHidden { return false }
+                        pending.append(contentsOf: view.subviews)
+                    }
+                    return true
+                }
+        }
+        #expect(refreshed, "a stale prose result is replaced by the current same-ID code-only result")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "stale completion and its retry never normalize on main")
+    }
+
+    @Test func boundedSpeechWorkerQueueEventuallyPreparesVisibleRowsAfterInvalidation() async throws {
+        let host = await Self.makeHost()
+        let chat = try #require(host.context.chat)
+        let count = 18
+        var items: [ChatItem] = []
+        var rows: [TranscriptRow] = []
+        for index in 0..<count {
+            let id = "read-aloud-queued-\(UUID().uuidString)-\(index)"
+            let text = "Finished assistant answer number \(index)."
+            var item = ChatItem(id: id, role: .assistant, blocks: [.text(text)])
+            item.transcriptId = id
+            items.append(item)
+            rows.append(Self.assistant(id, text: text, at: index))
+        }
+        chat.items = items
+        let renderer = host.coordinator.renderer
+        let width = max(1, host.view.bounds.width)
+        let preparedIDs = Mutex(Set<String>())
+        renderer.speechPreparationProbe = { id in
+            _ = preparedIDs.withLock { $0.insert(id) }
+        }
+        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
+
+        for (item, row) in zip(items, rows) {
+            _ = renderer.layout(for: row, width: width)
+            #expect(!renderer.canReadAloud(item.id, rowID: row.id), "a cold row waits for prepared eligibility")
+        }
+        #expect(renderer.pendingSpeechPreparationCount == count - 16,
+                "rows beyond the active worker cap enter the bounded FIFO")
+        #expect(renderer.pendingSpeechPreparationOrderCount <= TranscriptRenderer.layoutCacheLimit * 2,
+                "FIFO tombstones have a strict storage bound")
+
+        // Replace one deferred row under the same ID before it reaches the serial worker. Its stale
+        // queue token must not consume the replacement request.
+        let replacedIndex = count - 1
+        let replacedID = items[replacedIndex].id
+        let codeOnly = "```swift\nlet answer = 42\n```"
+        items[replacedIndex].blocks = [.text(codeOnly)]
+        chat.items = items
+        let replacementRow = Self.assistant(replacedID, text: codeOnly, at: count + 1)
+        rows[replacedIndex] = replacementRow
+        _ = renderer.layout(for: replacementRow, width: width)
+        #expect(!renderer.canReadAloud(replacedID, rowID: replacementRow.id),
+                "the replacement source queues after invalidating its earlier deferred request")
+
+        let allPrepared = await eventually(timeout: .seconds(8)) {
+            let allCurrentEligibility = zip(items, rows).enumerated().allSatisfy { indexedPair in
+                let eligible = renderer.canReadAloud(indexedPair.element.0.id, rowID: indexedPair.element.1.id)
+                return indexedPair.offset == replacedIndex ? !eligible : eligible
+            }
+            return allCurrentEligibility && renderer.activeSpeechPreparationCount == 0
+                && renderer.pendingSpeechPreparationCount == 0
+        }
+        #expect(allPrepared, "completed jobs drain the FIFO until every current visible row is prepared")
+        #expect(preparedIDs.withLock { $0.count == count },
+                "the replacement ID receives fresh work rather than being consumed by its stale FIFO token")
+        #expect(renderer.pendingSpeechPreparationCount == 0, "the bounded queue drains after worker completion")
+        #expect(!renderer.canReadAloud(replacedID, rowID: replacementRow.id),
+                "the current code-only replacement remains ineligible after its queue entry runs")
+    }
+
+    @Test func activePreparationRetargetsWhenTheSameRowGetsANewLayoutSerial() async throws {
+        let host = await Self.makeHost()
+        let messageID = "read-aloud-layout-serial-\(UUID().uuidString)"
+        let text = String(repeating: "A finished reply with a stable source. ", count: 20)
+        var item = ChatItem(id: messageID, role: .assistant, blocks: [.text(text)])
+        item.transcriptId = messageID
+        let chat = try #require(host.context.chat)
+        chat.items = [item]
+        let row = Self.assistant(messageID, text: text, at: 1)
+        let renderer = host.coordinator.renderer
+        let entered = Mutex(false)
+        let release = DispatchSemaphore(value: 0)
+        renderer.speechPreparationProbe = { _ in
+            entered.withLock { $0 = true }
+            _ = release.wait(timeout: .now() + 4)
+        }
+        defer { release.signal() }
+        SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        host.coordinator.update(rows: [row], context: host.context, insets: (0, 0))
+
+        _ = renderer.layout(for: row, width: 280)
+        #expect(!renderer.canReadAloud(messageID, rowID: row.id), "the row queues an initial preparation")
+        let started = await eventually { entered.withLock { $0 } }
+        #expect(started, "the worker is held before normalization")
+
+        _ = renderer.layout(for: row, width: 320)
+        #expect(!renderer.canReadAloud(messageID, rowID: row.id),
+                "same-source reconfiguration retargets the active job to the new layout serial")
+        release.signal()
+
+        let ready = await eventually(timeout: .seconds(4)) {
+            renderer.canReadAloud(messageID, rowID: row.id)
+        }
+        #expect(ready, "the valid worker result survives a geometry-only layout rebuild")
+        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+                "retargeting does not repeat normalization")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "the layout serial retry stays off main")
     }
 
     @Test func webSearchLinkVoiceOverActionsNameHostWithoutSpeakingURL() async throws {

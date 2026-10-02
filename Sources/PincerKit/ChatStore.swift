@@ -255,7 +255,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var cacheChecked = false
     /// Bumped whenever `items` actually changes, so saves can tell a real change from a refresh
     /// that fetched the same transcript again.
-    @ObservationIgnored var contentRevision = 0
+    @ObservationIgnored package var contentRevision = 0
     /// What the transcript cache holds, as of the last save or restore of this store.
     @ObservationIgnored var savedState: CacheState?
     /// The last restore couldn't read the cache (`.unavailable`); saving now would replace the
