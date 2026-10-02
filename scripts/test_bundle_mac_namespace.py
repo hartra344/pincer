@@ -55,39 +55,48 @@ else:
             for name in ("vtool", "codesign"):
                 self.write_tool(tools / name, "#!/bin/sh\nexit 0\n")
 
-            env = os.environ.copy()
-            env.pop("PINCER_DEV_NAMESPACE", None)
-            env.update({
-                "PATH": f"{tools}{os.pathsep}{env.get('PATH', '')}",
+            base_env = os.environ.copy()
+            base_env.pop("PINCER_DEV_NAMESPACE", None)
+            base_env.update({
+                "PATH": f"{tools}{os.pathsep}{base_env.get('PATH', '')}",
                 "PINCER_TEST_SWIFT_BIN": str(swift_bin),
-                "PINCER_BUNDLE_ROOT": str(root / "ordinary-build"),
                 "PINCER_SIGN_IDENTITY": "-",
             })
-            subprocess.run(
-                [str(repo / "scripts/bundle-mac.sh"), "debug"],
-                cwd=repo,
-                env=env,
-                check=True,
-                text=True,
-                capture_output=True,
-            )
-            production_info = self.read_info(root / "ordinary-build/Pincer.app/Contents/Info.plist")
+
+            def bundle(case: str, namespace: str | None) -> dict[str, object]:
+                env = base_env.copy()
+                env["PINCER_BUNDLE_ROOT"] = str(root / case)
+                if namespace is None:
+                    env.pop("PINCER_DEV_NAMESPACE", None)
+                else:
+                    env["PINCER_DEV_NAMESPACE"] = namespace
+                subprocess.run(
+                    [str(repo / "scripts/bundle-mac.sh"), "debug"],
+                    cwd=repo,
+                    env=env,
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                )
+                return self.read_info(root / case / "Pincer.app/Contents/Info.plist")
+
+            production_info = bundle("ordinary-build", None)
             self.assertEqual(production_info["CFBundleIdentifier"], "chat.pincer.mac")
             self.assertNotIn("PincerDevSuffix", production_info)
 
-            env["PINCER_DEV_NAMESPACE"] = "Desk_Work!"
-            env["PINCER_BUNDLE_ROOT"] = str(root / "namespaced-build")
-            subprocess.run(
-                [str(repo / "scripts/bundle-mac.sh"), "debug"],
-                cwd=repo,
-                env=env,
-                check=True,
-                text=True,
-                capture_output=True,
-            )
-            namespaced_info = self.read_info(root / "namespaced-build/Pincer.app/Contents/Info.plist")
+            namespaced_info = bundle("namespaced-build", "Desk_Work!")
             self.assertEqual(namespaced_info["CFBundleIdentifier"], "chat.pincer.mac.dev-desk-work")
             self.assertEqual(namespaced_info["PincerDevSuffix"], ".dev-desk-work")
+
+            for case, namespace in (("empty-build", ""), ("punctuation-build", "!!!")):
+                invalid_info = bundle(case, namespace)
+                self.assertEqual(invalid_info["CFBundleIdentifier"], "chat.pincer.mac")
+                self.assertNotIn("PincerDevSuffix", invalid_info)
+
+            long_name = "A" * 30
+            long_info = bundle("long-build", long_name)
+            self.assertEqual(long_info["CFBundleIdentifier"], f"chat.pincer.mac.dev-{'a' * 24}")
+            self.assertEqual(long_info["PincerDevSuffix"], f".dev-{'a' * 24}")
 
     @staticmethod
     def read_info(path: pathlib.Path) -> dict[str, object]:

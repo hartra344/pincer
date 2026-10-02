@@ -6,6 +6,18 @@ cd "$(dirname "$0")/.."
 CONFIG="${1:-release}"
 swift build -c "$CONFIG" --product PincerMacDev
 BIN="$(swift build -c "$CONFIG" --show-bin-path)/PincerMacDev"
+BASE_BUNDLE_ID="chat.pincer.mac"
+BUNDLE_ID="$BASE_BUNDLE_ID"
+DEV_SUFFIX=""
+if [ -n "${PINCER_DEV_NAMESPACE:-}" ]; then
+  # Keep this in sync with DevNamespace.sanitize: ASCII lowercase, collapse invalid runs,
+  # cap at 24 characters, then trim dashes introduced at the boundaries.
+  DEV_NAMESPACE="$(printf '%s' "$PINCER_DEV_NAMESPACE" | LC_ALL=C tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | cut -c1-24 | sed -E 's/^-+//; s/-+$//')"
+  if [ -n "$DEV_NAMESPACE" ]; then
+    DEV_SUFFIX=".dev-$DEV_NAMESPACE"
+    BUNDLE_ID="$BASE_BUNDLE_ID$DEV_SUFFIX"
+  fi
+fi
 BUILD_ROOT="${PINCER_BUNDLE_ROOT:-build}"
 APP="$BUILD_ROOT/Pincer.app"
 mkdir -p "$BUILD_ROOT"
@@ -30,7 +42,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleIdentifier</key><string>chat.pincer.mac</string>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
+  ${DEV_SUFFIX:+<key>PincerDevSuffix</key><string>$DEV_SUFFIX</string>}
   <key>CFBundleName</key><string>Pincer</string>
   <key>CFBundleDisplayName</key><string>Pincer</string>
   <key>CFBundleExecutable</key><string>Pincer</string>
