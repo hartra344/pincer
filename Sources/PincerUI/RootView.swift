@@ -490,7 +490,27 @@ struct SettingsForm: View {
     var speechCatalog: AppleDeviceSpeechCatalog = .shared
     #if os(macOS)
     /// Every tab hugs its content but never grows taller than this; longer tabs scroll.
-    var maxHeight = SettingsHeightCap.screenLimit()
+    let maxHeight: CGFloat
+    let maxHeightOverride: CGFloat?
+    let visibleScreenHeightProvider: @MainActor (NSScreen?) -> CGFloat?
+
+    @MainActor init(
+        sections: [Section], speechCatalog: AppleDeviceSpeechCatalog = .shared, maxHeight: CGFloat? = nil,
+        visibleScreenHeightProvider: @escaping @MainActor (NSScreen?) -> CGFloat? = { screen in
+            (screen ?? NSApp?.keyWindow?.screen ?? NSScreen.main)?.visibleFrame.height
+        }
+    ) {
+        self.sections = sections
+        self.speechCatalog = speechCatalog
+        self.maxHeightOverride = maxHeight
+        self.visibleScreenHeightProvider = visibleScreenHeightProvider
+        self.maxHeight = maxHeight ?? SettingsHeightCap.limit(visibleScreenHeight: visibleScreenHeightProvider(nil))
+    }
+    #else
+    init(sections: [Section], speechCatalog: AppleDeviceSpeechCatalog = .shared) {
+        self.sections = sections
+        self.speechCatalog = speechCatalog
+    }
     #endif
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
