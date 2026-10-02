@@ -119,6 +119,8 @@ struct SidebarModel: Equatable {
         var depth = 0
         /// Name of the nested group the chat sits in, if any.
         var groupName: String?
+        /// True when this chat is the one shown in the split view's right pane.
+        var isShownInSplitPane = false
     }
 
     struct Group: Equatable {
@@ -181,7 +183,7 @@ struct SidebarModel: Equatable {
     @MainActor
     static func build(gateway: GatewayStore, search: String, collapsed: Set<String>,
                       expandedThreads: Set<String>, showSubagentRuns: Bool,
-                      showPreviews: Bool) -> SidebarModel
+                      showPreviews: Bool, splitKey: String? = nil) -> SidebarModel
     {
         let selected = gateway.selectedKey
         let avatarsOn = AvatarSettings.isEnabled
