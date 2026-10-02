@@ -111,15 +111,10 @@ struct MenuBarContent: View {
         }
     }
 
-    private static let petSide: CGFloat = 16
-
     /// Text-only unless pets are on and the row's agent is known; a still pose, never animated.
-    @ViewBuilder private func rowLabel(_ item: MenuBarInbox.Item) -> some View {
-        if let image = self.petImage(for: item) {
-            Label { Text(item.title) } icon: { Image(nsImage: image) }
-        } else {
-            Text(item.title)
-        }
+    private func rowLabel(_ item: MenuBarInbox.Item) -> some View {
+        let image = self.petImage(for: item)
+        return MenuBarRowLabel(title: item.displayTitle(showingPet: image != nil), petImage: image)
     }
 
     private func petImage(for item: MenuBarInbox.Item) -> NSImage? {
@@ -129,7 +124,7 @@ struct MenuBarContent: View {
         let agent = gateway.agents.first { $0.id == agentId } ?? AgentSummary(id: agentId, name: agentId.capitalized)
         let style = AvatarSettings.style(for: agent, in: gateway)
         return Self.petImage(style: style, state: item.pose, colorScheme: self.colorScheme,
-                             accent: TranscriptColors.tint.cgColor, side: Self.petSide,
+                             accent: TranscriptColors.tint.cgColor, side: MenuBarRowLabel.iconSide,
                              scale: NSScreen.main?.backingScaleFactor ?? 2)
     }
 
@@ -158,6 +153,26 @@ struct MenuBarContent: View {
         let controller = QuickCaptureController.shared
         if controller.openWindow == nil { controller.openWindow = self.openWindow }
         controller.showMainWindow()
+    }
+}
+
+/// One menu row's icon and text. Kept separate so its real rendered column can be checked.
+struct MenuBarRowLabel: View {
+    static let iconSide: CGFloat = 16
+
+    let title: String
+    let petImage: NSImage?
+
+    var body: some View {
+        Label { Text(self.title) } icon: {
+            if let image = self.petImage {
+                Image(nsImage: image)
+            } else {
+                Color.clear
+                    .frame(width: Self.iconSide, height: Self.iconSide)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 #endif

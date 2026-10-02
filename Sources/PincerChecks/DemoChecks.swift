@@ -100,7 +100,7 @@ func runDemo() async {
     check(helloDone && gateway.pendingQuestions(for: key).isEmpty && gateway.approvals.count == approvalsBefore && chat.progressCard == nil,
           "a hello reply raises no question, approval or plan")
     if case let .assistant(turn)? = chat.entries.last {
-        check(turn.body.contains("onsen") && turn.body.contains("⌘K") && turn.body.contains("/compact"), "hello reply lists things to try")
+        check(turn.body.contains("onsen") && turn.body.contains("command palette") && turn.body.contains("/compact"), "hello reply lists things to try")
         // A tip read back as a message should trigger only what it describes (tool/disk/image match as substrings).
         func triggers(_ line: String) -> Set<String> {
             let lowered = line.lowercased()

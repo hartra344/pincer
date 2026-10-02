@@ -7,13 +7,14 @@ import UniformTypeIdentifiers
 extension DemoGateway {
     // MARK: Content
 
-    static func reply(to text: String, usedTool: Bool, note: String? = nil) -> String {
+    static func reply(to text: String, usedTool: Bool, note: String? = nil, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F",
+                      quickCaptureShortcut: String? = HotKeyShortcut.default.displayString) -> String {
         let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
         return """
         \(quoted.isEmpty ? "" : quoted + "\n\n")\(note.map { $0 + "\n\n" } ?? "")This is **Pincer's demo mode**, \
         so this reply is canned. Connect your own OpenClaw Gateway to chat with real agents.
 
-        \(Self.thingsToTry(usedTool: usedTool))
+        \(Self.thingsToTry(usedTool: usedTool, paletteShortcut: paletteShortcut, findShortcut: findShortcut, quickCaptureShortcut: quickCaptureShortcut))
 
         ```text
         streaming: ok · markdown: ok · tools: \(usedTool ? "ran" : "on request")
@@ -24,8 +25,15 @@ extension DemoGateway {
     // MARK: Demo showcase: tips
 
     /// Trigger words match anywhere in a message, so each tip names only its own.
-    static func thingsToTry(usedTool: Bool) -> String {
-        """
+    static func thingsToTry(usedTool: Bool, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F",
+                            quickCaptureShortcut: String? = HotKeyShortcut.default.displayString) -> String {
+        let findTip = findShortcut.map { "**\($0)** searches the chat — try \"onsen\" in *Japan trip*." }
+            ?? "Use **Find in Chat** to search — try \"onsen\" in *Japan trip*."
+        let paletteTip = paletteShortcut.map { "**\($0)** opens the command palette" }
+            ?? "Open the command palette from the toolbar"
+        let captureTip = quickCaptureShortcut.map { "On a Mac, **\($0)** opens Quick Capture." }
+            ?? "On a Mac, open **Quick Capture** from the menu."
+        return """
         ## Things to try
 
         - **tool** or **disk** runs a live tool call\(usedTool ? " (like the one above)" : "").
@@ -37,9 +45,9 @@ extension DemoGateway {
         - **long** streams a multi-page reply.
         - **fail** ends the run with an error.
         - Send **/compact**, or use **Compact Now** in the context ring.
-        - **⌘F** searches the chat — try "onsen" in *Japan trip*.
-        - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
-        - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - \(findTip)
+        - \(paletteTip), and **⌘1–⌘3** jump to pinned chats.
+        - \(captureTip)
         - Settings → **Location** can attach approximate location to new messages. It starts off; \
         when enabled, this demo quotes the visible location context just like the rest of your message.
         - Switch models, or pin, rename and group chats in the sidebar.

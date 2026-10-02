@@ -11,6 +11,7 @@ MCP (Model Context Protocol) servers give your agents extra tools, such as a fil
 
 - In [Gateway Settings](../gateway-settings/), choose **MCP Servers** in the sidebar, below **Plugins**. It works on macOS and iOS.
 - Press <kbd>⌘</kbd> <kbd>K</kbd> and choose **MCP Servers…**.
+- Choose **Open MCP Server** on a transcript tool card. When Pincer has read that chat's effective tools, the link uses the Gateway's exact tool ID to open the matching server, including names that share the same sanitized prefix. Otherwise it uses the existing name match and opens the server list when the server can't be resolved.
 
 Searching the sidebar for `mcp`, `oauth`, `stdio` or `sse` also finds it. The sidebar row shows how many changes are unsaved, and a dot when a server has an error or needs sign-in.
 

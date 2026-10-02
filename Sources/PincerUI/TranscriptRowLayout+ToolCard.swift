@@ -231,7 +231,7 @@ extension TranscriptLayoutBuilder {
             if ownRow { card.gap(8) }
             card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
                                        frame: CGRect(x: card.x, y: card.y, width: size.width, height: size.height),
-                                       action: .openMCPServer(server), spoken: title))
+                                       action: .openMCPServer(server, toolName: tool.name), spoken: title))
             if ownRow { card.y += size.height }
         }
         if hasRaw, !finding {

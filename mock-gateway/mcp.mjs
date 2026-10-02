@@ -238,14 +238,40 @@ function names(state, filter) {
   return Array.isArray(filter) ? all.filter((name) => filter.includes(name)) : all;
 }
 
+/**
+ * Assign model-facing server prefixes from the full configured declaration order before filtering
+ * to connected servers. This mirrors OpenClaw's gateway/server-methods/mcp-name.ts sanitizer.
+ */
+export function assignSafeMcpServerNames(serverNames) {
+  const usedNames = new Set();
+  const assignments = new Map();
+  for (const serverName of serverNames) {
+    const base = (serverName.trim().replace(/[^A-Za-z0-9_-]/g, '-') || 'mcp');
+    const providerSafe = /^[A-Za-z]/.test(base) ? base : `mcp-${base}`;
+    const boundedBase = providerSafe.slice(0, 30) || 'mcp';
+    let candidate = boundedBase;
+    let suffixNumber = 2;
+    while (usedNames.has(candidate.toLowerCase())) {
+      const suffix = `-${suffixNumber}`;
+      candidate = `${boundedBase.slice(0, Math.max(1, 30 - suffix.length))}${suffix}`;
+      suffixNumber += 1;
+    }
+    usedNames.add(candidate.toLowerCase());
+    assignments.set(serverName, candidate);
+  }
+  return assignments;
+}
+
 /** Tools of connected MCP servers, for tools.effective. */
 export function mcpEffectiveTools(state) {
   const tools = [];
-  for (const name of names(state)) {
+  const declaredNames = names(state);
+  const safeNames = assignSafeMcpServerNames(declaredNames);
+  for (const name of declaredNames) {
     const rt = mcpState(state).runtime.get(name);
     if (rt?.state !== 'connected') continue;
     for (const tool of rt.tools) {
-      tools.push({ server: name, tool, description: TOOL_DESCRIPTIONS[tool] ?? `${tool} (${name})`, ...(tool === 'call_service' ? { risk: 'medium' } : {}) });
+      tools.push({ server: name, safeServer: safeNames.get(name), tool, description: TOOL_DESCRIPTIONS[tool] ?? `${tool} (${name})`, ...(tool === 'call_service' ? { risk: 'medium' } : {}) });
     }
   }
   return tools;

@@ -368,4 +368,10 @@ struct MenuBarInboxAvatarTests {
         #expect(inbox.running.map(\.pose).allSatisfy { $0 == .thinking || { if case .tool = $0 { true } else { false } }($0) })
         #expect(inbox.unread.map(\.pose) == [.idle])
     }
+
+    @Test func petRowUsesHumanAgentNameWithoutRepeatingAgentEmoji() {
+        let item = T.build(T.gateway(sessions: [T.row("agent:main:unread", #""unread":true"#)])).unread[0]
+        #expect(item.displayTitle(showingPet: false) == "🦞 unread · Claw")
+        #expect(item.displayTitle(showingPet: true) == "unread · Claw")
+    }
 }

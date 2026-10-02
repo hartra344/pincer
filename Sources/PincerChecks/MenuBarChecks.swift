@@ -45,6 +45,12 @@ func runMenuBarInboxChecks() async {
               "needs you: approvals, then questions, expired left out (\(inbox.needsYou.map(\.title)))")
         check(inbox.running.map(\.title) == ["🦞 Busy · Claw"] && inbox.unread.map(\.title) == ["🦞 home-lab · Claw"],
               "running and unread deduped, subagent and archived rows left out")
+        check(inbox.needsYou.map { $0.displayTitle(showingPet: true) } == ["Approve: rm -rf ./build — Main · Forge", "Question: What do you want removed? — Asked · Claw"],
+              "pet rows retain approval and question text without duplicating agent emoji")
+        check(inbox.running.first?.displayTitle(showingPet: true) == "Busy · Claw"
+              && inbox.unread.first?.displayTitle(showingPet: true) == "home-lab · Claw"
+              && inbox.unread.first?.displayTitle(showingPet: false) == "🦞 home-lab · Claw",
+              "pet rows keep human names; text-only rows keep their original emoji")
         check(inbox.unreadCount == 4 && inbox.needsYouCount == 2 && inbox.badgeText == "6"
               && inbox.accessibilityLabel == "Pincer, 4 unread, 2 need you", "menu bar counts include deduped chats")
         check(inbox.needsYou.first?.target == Notifier.Target(gatewayId: home.id, sessionKey: "agent:coder:main")
@@ -101,6 +107,11 @@ func runMenuBarDemo() async {
     check(inbox.needsYou.count == 1 && seeded?.target == Notifier.Target(gatewayId: gateway.id, sessionKey: coderKey)
           && seeded?.title == "Approve: git push origin fix/login-timeout — 🛠️ Main · Forge",
           "the seeded approval needs you, in Forge's Main chat (\(inbox.needsYou.map(\.title)))")
+    check(seeded?.displayTitle(showingPet: true) == "Approve: git push origin fix/login-timeout — Main · Forge"
+          && inbox.unread.map { $0.displayTitle(showingPet: true) } == ["home-lab · Claw", "Paper digest · Scout"],
+          "demo menu pet titles keep approval details and human agent names without duplicate emoji")
+    check(inbox.unread.map { $0.displayTitle(showingPet: false) } == inbox.unread.map(\.title),
+          "demo menu text-only titles retain the original emoji")
     // Forge's Main is unread too, but it's listed once, under Needs You; the count still includes it.
     check(Set(inbox.unread.map(\.target.sessionKey)) == [homeLab, papers] && inbox.unreadCount == 3
           && inbox.unread.map(\.title) == ["🦞 home-lab · Claw", "🔭 Paper digest · Scout"],
