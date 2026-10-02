@@ -67,6 +67,11 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var replyUnreadDecisions: [String: Int] = [:]
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
+#if DEBUG
+    /// Counts actual parent-candidate derivations performed while building sidebar sections.
+    /// Used by a focused performance regression test; this is omitted from release builds.
+    @ObservationIgnored var sidebarParentCandidateDerivationCount = 0
+#endif
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
     @ObservationIgnored var subagentTrees: [String: SubagentTree] = [:]
     /// Streamed run activity, read through `runTimeline`; bumping the revision publishes it.

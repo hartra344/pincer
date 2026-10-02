@@ -84,6 +84,13 @@ public struct SidebarSection: Identifiable, Hashable, Sendable {
 extension GatewayStore {
     // MARK: Sidebar
 
+    private func sidebarParentCandidates(for row: SessionRow) -> [String] {
+#if DEBUG
+        self.sidebarParentCandidateDerivationCount += 1
+#endif
+        return row.parentCandidates
+    }
+
     public func agent(_ id: String) -> AgentSummary {
         self.agents.first { $0.id == id } ?? AgentSummary(id: id, name: id == "main" ? "Main" : id.capitalized)
     }
@@ -188,14 +195,14 @@ extension GatewayStore {
             }
             // Threads of a hidden session go with it rather than surfacing at the top level.
             return row.key == self.selectedKey
-                || (!hidden.contains(row.key) && !row.parentCandidates.contains(where: hidden.contains))
+                || (!hidden.contains(row.key) && !self.sidebarParentCandidates(for: row).contains(where: hidden.contains))
         }
         // Subagent sessions become threads under their parent, one level deep.
         let keys = Set(rows.map(\.key))
         var threads: [String: [SessionRow]] = [:]
         var topLevel: [SessionRow] = []
         for row in rows {
-            if query.isEmpty, let parent = row.parentCandidates.first(where: keys.contains) {
+            if query.isEmpty, let parent = self.sidebarParentCandidates(for: row).first(where: keys.contains) {
                 threads[parent, default: []].append(row)
             } else {
                 topLevel.append(row)
