@@ -180,8 +180,16 @@ extension ChatStore {
     func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
-        let loaded = await TranscriptCache.loadNewest(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                      limit: self.windowLimit + Self.windowExtension, root: self.cacheRoot)
+        let limit = self.windowLimit + Self.windowExtension
+        let loaded: (items: [ChatItem], complete: Bool, outcome: TranscriptCache.LoadOutcome,
+                     forwardedSenderRefreshPending: Bool)
+        if self.headless {
+            loaded = await TranscriptCache.loadNewestForHeadlessFill(
+                gatewayId: self.gatewayId, sessionKey: self.sessionKey, limit: limit, root: self.cacheRoot)
+        } else {
+            loaded = await TranscriptCache.loadNewest(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
+                                                      limit: limit, root: self.cacheRoot)
+        }
         let (windowed, moreInCache) = Self.window(loaded.items, limit: self.windowLimit)
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
