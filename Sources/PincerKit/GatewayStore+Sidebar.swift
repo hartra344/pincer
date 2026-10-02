@@ -84,6 +84,13 @@ public struct SidebarSection: Identifiable, Hashable, Sendable {
 extension GatewayStore {
     // MARK: Sidebar
 
+    private func sidebarParentCandidates(for row: SessionRow) -> [String] {
+#if DEBUG
+        self.sidebarParentCandidateDerivationCount += 1
+#endif
+        return row.parentCandidates
+    }
+
     public func agent(_ id: String) -> AgentSummary {
         self.agents.first { $0.id == id } ?? AgentSummary(id: id, name: id == "main" ? "Main" : id.capitalized)
     }
@@ -182,20 +189,25 @@ extension GatewayStore {
     public func sections(search: String = "") -> [SidebarSection] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
         let hidden = query.isEmpty ? Set(self.sortedRows.filter(self.isHiddenInSidebar).map(\.key)) : []
+        var parentCandidatesByKey: [String: [String]] = [:]
         let rows = self.sortedRows.filter { row in
             guard query.isEmpty else {
                 return row.title.lowercased().contains(query) || (row.preview?.lowercased().contains(query) ?? false)
             }
             // Threads of a hidden session go with it rather than surfacing at the top level.
-            return row.key == self.selectedKey
-                || (!hidden.contains(row.key) && !row.parentCandidates.contains(where: hidden.contains))
+            if row.key == self.selectedKey { return true }
+            guard !hidden.contains(row.key) else { return false }
+            let parents = self.sidebarParentCandidates(for: row)
+            parentCandidatesByKey[row.key] = parents
+            return !parents.contains(where: hidden.contains)
         }
         // Subagent sessions become threads under their parent, one level deep.
         let keys = Set(rows.map(\.key))
         var threads: [String: [SessionRow]] = [:]
         var topLevel: [SessionRow] = []
         for row in rows {
-            if query.isEmpty, let parent = row.parentCandidates.first(where: keys.contains) {
+            if query.isEmpty,
+               let parent = (parentCandidatesByKey[row.key] ?? self.sidebarParentCandidates(for: row)).first(where: keys.contains) {
                 threads[parent, default: []].append(row)
             } else {
                 topLevel.append(row)
