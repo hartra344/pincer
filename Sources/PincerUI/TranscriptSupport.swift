@@ -177,7 +177,7 @@ extension TranscriptRowActions {
 final class TranscriptRenderer: TranscriptRowActions {
     private struct Entry {
         let row: TranscriptRow
-        let layout: TranscriptRowLayout
+        var layout: TranscriptRowLayout
         var stamp: Int
         var invalidated = false
     }
@@ -1017,12 +1017,30 @@ final class TranscriptRenderer: TranscriptRowActions {
             return
         }
         guard self.speechCache.complete(token, with: prepared, sourceRevision: sourceRevision) else { return }
-        // Readiness changes a button's visibility, not the row's packed geometry. Keep the layout
-        // entry so the list can reconfigure this row without rebuilding or measuring its body.
+        // Readiness changes a button's visibility, not packed geometry. Advance only the cached
+        // layout token so native cells reconfigure without rebuilding or measuring the body.
+        guard let readySerial = self.advanceReadinessLayoutSerial(rowID: rowID) else { return }
+        // Other preparations in the same row should finish against the token the cell now expects.
+        let jobIDs = self.speechJobs.compactMap { $0.value.rowID == rowID ? $0.key : nil }
+        for id in jobIDs {
+            self.speechJobs[id]?.layoutSerial = readySerial
+        }
+        let pendingIDs = self.pendingSpeechPreparations.compactMap { $0.value.rowID == rowID ? $0.key : nil }
+        for id in pendingIDs {
+            self.pendingSpeechPreparations[id]?.layoutSerial = readySerial
+        }
         self.onInvalidate?(Set([rowID]), nil)
         guard job.shouldStartPlayback, prepared.isEligible, let text = prepared.speechText,
               chat.contentRevision == sourceRevision, self.context.chat === chat else { return }
         ReadAloudController.shared.start(messageId: messageID, text: text, gateway: self.context.gateway.voice)
+    }
+
+    private func advanceReadinessLayoutSerial(rowID: String) -> Int? {
+        guard var entry = self.cache[rowID], !entry.invalidated else { return nil }
+        self.serial += 1
+        entry.layout.serial = self.serial
+        self.cache[rowID] = entry
+        return self.serial
     }
 
     func canBranch(from messageId: String) -> Bool { self.context.chat?.canBranch(from: messageId) ?? false }

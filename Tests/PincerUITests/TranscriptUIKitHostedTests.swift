@@ -91,6 +91,7 @@ struct TranscriptUIKitHostedTests {
             }
             return false
         }
+        let layoutBuildCountBeforeReadiness = host.coordinator.renderer.layoutBuildCount
         let firstReady = await eventually(timeout: .seconds(3)) {
             host.view.layoutIfNeeded()
             return host.view.visibleCells.contains(where: hasVisibleReadAloud)
@@ -100,6 +101,8 @@ struct TranscriptUIKitHostedTests {
                 "visible-row and accessibility configuration should consume prepared eligibility rather than parse the body on main")
         #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
                 "a visible cache miss is normalized once by the background worker")
+        #expect(host.coordinator.renderer.layoutBuildCount == layoutBuildCountBeforeReadiness,
+                "readiness refresh advances the native apply token without rebuilding row geometry")
 
         host.view.reloadData()
         host.view.layoutIfNeeded()
