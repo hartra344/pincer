@@ -9,6 +9,10 @@ import AppKit
 @Suite("Logged Out badge contrast")
 struct LoggedOutBadgeContrastTests {
     @Test func loggedOutCalloutTextMeetsContrastOnFormSurfaces() throws {
+        try Self.verifyContrast()
+    }
+
+    static func verifyContrast() throws {
         let foreground = ChannelStatusPage.color(.loggedOut)
         let surfaces: [(String, NSColor)] = [("window", .windowBackgroundColor), ("control", .controlBackgroundColor)]
         for (appearanceName, scheme) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
@@ -69,6 +73,10 @@ import UIKit
 @Suite("Logged Out badge contrast")
 struct LoggedOutBadgeContrastTests {
     @Test func loggedOutCalloutTextMeetsContrastOnFormSurfaces() throws {
+        try Self.verifyContrast()
+    }
+
+    static func verifyContrast() throws {
         let foreground = ChannelStatusPage.color(.loggedOut)
         let surfaces: [(String, UIColor)] = [("grouped", .systemGroupedBackground),
                                              ("secondary grouped", .secondarySystemGroupedBackground)]

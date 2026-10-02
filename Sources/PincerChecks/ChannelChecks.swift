@@ -42,6 +42,9 @@ func checkChannelStatus() async {
           "Health issue ids map to accounts")
     check(ChannelAccountState.allCases.allSatisfy { !$0.label.isEmpty } && ChannelAccountState.loggedOut.label == "Logged Out",
           "every badge has a text label")
+    check(ChannelAccountState.loggedOut.symbol == "person.crop.circle.badge.xmark"
+          && ChannelAccountState.loggedOut.needsAttention && !ChannelAccountState.loggedOut.isHealthy,
+          "logged-out badge keeps its account icon and attention state")
 
     // The model against a scripted Gateway: reconnect is stop then start, with exactly {channel, accountId}.
     var calls: [(String, JSONValue)] = []
@@ -110,7 +113,11 @@ func runDemoChannels() async {
           && telegramError?.contains("409 Conflict") == true
           && telegramError?.contains("make sure that only one bot instance is running") == true,
           "demo Telegram keeps the complete 409 error available for disclosure (\(channels.state(of: telegramKey)))")
-    check(channels.state(of: whatsappKey) == .loggedOut && channels.canLogIn(whatsappKey), "demo WhatsApp logged out, QR login offered")
+    let loggedOutWhatsApp = channels.state(of: whatsappKey)
+    check(loggedOutWhatsApp == .loggedOut && channels.canLogIn(whatsappKey), "demo WhatsApp logged out, QR login offered")
+    check(loggedOutWhatsApp.label == "Logged Out" && loggedOutWhatsApp.symbol == "person.crop.circle.badge.xmark"
+          && loggedOutWhatsApp.needsAttention && !loggedOutWhatsApp.isHealthy,
+          "demo logged-out badge keeps its accessible identity and attention state")
     check(channels.attentionCount == 2, "demo attention: Telegram and WhatsApp (\(channels.attentionCount))")
     let telegramIssue = health.activeIssues.first { $0.channelAccount == telegramKey }
     check(telegramIssue?.offersReconnect == true && !health.activeIssues.contains { $0.channelAccount == whatsappKey },
