@@ -209,7 +209,7 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     let main = await manager.setArchived([mainKey], archived: true)
     let mainFailure = main.failed.first { $0.key == mainKey }
     let displayedMainFailure = mainFailure.map {
-        SessionManager.bulkFailureSummary($0, sessionTitle: manager.row($0.key)?.title)
+        SessionManager.bulkFailureSummary($0, sessionTitle: manager.lastFailureTitles[$0.key])
     }
     check(mainFailure?.message == "Cannot archive an agent's main session.", "demo protects main sessions")
     check(manager.row(mainKey)?.title == "Main"
