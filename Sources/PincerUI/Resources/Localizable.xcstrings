@@ -91,6 +91,16 @@
         }
       }
     },
+    "%@ character, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ character, %2$@"
+          }
+        }
+      }
+    },
     "%@ character": {
       "localizations": {
         "en": {

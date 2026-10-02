@@ -25,6 +25,8 @@ func runGatewayAvatarChoiceChecks() {
 @MainActor
 func runDemoGatewayAvatarChoices() async {
     let (defaults, suite) = scratchDefaults()
+    // Existing installs can have a legacy global choice. Auto must stay cleared after sync.
+    defaults.set("cat", forKey: AvatarPreferences.creatureKey(for: "main"))
     let home = GatewayStore(profile: .demo(), defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
     let work = GatewayStore(profile: .demo(), defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
     home.cacheRoot = nil
