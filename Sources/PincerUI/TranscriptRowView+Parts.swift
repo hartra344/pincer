@@ -1796,12 +1796,18 @@ extension TranscriptToolHeaderView {
                 right -= badgeWidth + 8
             }
             var placed: [(NSAttributedString, CGFloat)] = []
-            for count in counts {
-                guard right - count.lineWidth > nameX + 40 else { break }
-                placed.append((count, right - count.lineWidth))
-                right -= count.lineWidth + 6
+            let countGroupWidth = counts.reduce(CGFloat.zero) { $0 + $1.lineWidth }
+                + CGFloat(max(counts.count - 1, 0)) * 6
+            // Keep the +/- pair together. At narrow widths the filename can truncate more
+            // aggressively; showing only one side makes the diff summary misleading.
+            if !counts.isEmpty, right - countGroupWidth > nameX + 8 {
+                for (index, count) in counts.enumerated() {
+                    placed.append((count, right - count.lineWidth))
+                    right -= count.lineWidth
+                    if index < counts.count - 1 { right -= 6 }
+                }
+                right -= 2
             }
-            if !counts.isEmpty { right -= 2 }
             return (badgeRect, placed, right)
         }
         var layout = place(reserve: 0)
