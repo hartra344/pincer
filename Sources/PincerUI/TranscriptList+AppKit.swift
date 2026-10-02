@@ -343,7 +343,12 @@ struct TranscriptList: NSViewRepresentable {
             let item = DispatchWorkItem { [weak self] in
                 guard let self, self.freeze.isFrozen else { return }
                 let now = ProcessInfo.processInfo.systemUptime
-                if self.freeze.isQuiet(at: now) {
+                if self.observedWindow?.inLiveResize == true {
+                    // A user can pause with the resize handle down. Keep the old measured width
+                    // until AppKit ends the live resize; polling at the quiet interval avoids a
+                    // zero-delay loop if the didEnd notification is missed or the window detaches.
+                    self.scheduleThaw(after: TranscriptWidthFreeze.quietInterval)
+                } else if self.freeze.isQuiet(at: now) {
                     self.thawWidthNow()
                 } else {
                     self.scheduleThaw(after: self.freeze.remainingQuiet(at: now))
