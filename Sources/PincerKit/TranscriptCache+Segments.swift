@@ -265,6 +265,7 @@ extension TranscriptCache.Writer {
     func forgetLayout(_ url: URL) {
         self.layouts[url] = nil
         self.recency.removeAll { $0 == url }
+        self.resetPrimeStartCountForTesting(url)
     }
 
     private func remember(_ layout: Cache.Layout, for url: URL) {
@@ -289,6 +290,9 @@ extension TranscriptCache.Writer {
 
     /// Records what a load found so the first save after launch writes only what changed.
     func prime(_ url: URL, layout: Cache.Layout) async {
+        if self.trackedPrimeURLsForTesting.contains(url) {
+            self.primeStartsForTesting[url, default: 0] += 1
+        }
         if let delay = self.primeDelaysForTesting[url] { try? await Task.sleep(for: delay) }
         guard self.layouts[url] == nil, layout.manifestDate != nil else { return }
         self.remember(layout, for: url)
