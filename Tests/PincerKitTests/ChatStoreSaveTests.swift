@@ -100,6 +100,30 @@ struct ChatStoreSaveTests {
         self.temp.remove()
     }
 
+    @Test func committedUserMessageKeepsSearchAheadOfStreamingSaveWindow() async {
+        let (chat, gateway) = self.makeStore(headless: false)
+        let scheduler = ManualSaveScheduler()
+        chat.saveNow = { scheduler.now }
+        chat.waitForSaveDeadline = { try await scheduler.wait(until: $0) }
+        chat.hasLoaded = true
+        chat.items = V8.items(1)
+        let idleDeadline = scheduler.now.addingTimeInterval(1)
+        #expect(chat.saveDeadline == idleDeadline)
+        chat.live = LiveRun(runId: "searchable-send")
+        chat.items = V8.items(2)
+        #expect(chat.saveDeadline == idleDeadline,
+                "starting a run must not postpone an already queued one-second save")
+        chat.handleSessionMessage(["message": ["role": "user", "content": "remember searchable-send", "__openclaw": ["id": "search-user"]]])
+        #expect(chat.saveDeadline == scheduler.now,
+                "the committed user message is a persistence and search-index boundary")
+        chat.items = chat.items + V8.items(1, from: 3)
+        #expect(chat.saveDeadline == scheduler.now, "streamed output cannot postpone the user-message boundary")
+        chat.stopCaching()
+        await scheduler.waitUntilIdle()
+        TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url)
+        self.temp.remove()
+    }
+
     func manifest(_ gateway: GatewayStore) -> URL {
         TranscriptCache.file(gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url)!
     }
