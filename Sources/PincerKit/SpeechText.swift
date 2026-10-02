@@ -3,6 +3,18 @@ import Synchronization
 
 /// Turns transcript markdown into text worth speaking.
 public enum SpeechText {
+    /// A reply normalized for the Read Aloud command. The full spoken text is retained so the
+    /// command can start immediately after readiness is published.
+    public struct PreparedReply: Sendable, Equatable {
+        public let messageId: String
+        public let text: String
+
+        public init(messageId: String, text: String) {
+            self.messageId = messageId
+            self.text = text
+        }
+    }
+
 #if DEBUG
     struct SpeakabilityDebugStats: Sendable, Equatable {
         var mainThreadNormalizations = 0
@@ -140,5 +152,16 @@ public enum SpeechText {
 #endif
         let text = self.plain(fromMarkdown: item.plainText)
         return text.isEmpty ? nil : text
+    }
+
+    /// Prepares only the newest reply the command can read. Call this from a worker; each candidate
+    /// is normalized once, and cancellation stops the backward scan between messages.
+    public static func latestSpeakableReply(in items: [ChatItem]) -> PreparedReply? {
+        for item in items.reversed() {
+            if Task.isCancelled { return nil }
+            guard let text = self.speakableText(for: item) else { continue }
+            return PreparedReply(messageId: item.transcriptId ?? item.id, text: text)
+        }
+        return nil
     }
 }

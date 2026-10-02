@@ -10,28 +10,166 @@ import AppKit
 @MainActor
 @Observable
 final class ReadAloudChatState {
+    typealias ReplyPreparer = @Sendable ([ChatItem]) async -> SpeechText.PreparedReply?
+
     weak var chat: ChatStore?
     weak var gateway: GatewayStore?
+    private let controller: ReadAloudController
+    private let prepareReply: ReplyPreparer
     /// The window is frontmost and this chat is the one on screen; auto-read only speaks then.
     var isVisible = true
 
+    private(set) var preparedReply: SpeechText.PreparedReply?
+    @ObservationIgnored private var preparedRevision: Int?
+    @ObservationIgnored private var contextGeneration = 0
+    @ObservationIgnored private var pendingPreparation: PreparationRequest?
+    @ObservationIgnored private var activePreparation: Task<SpeechText.PreparedReply?, Never>?
+    @ObservationIgnored private var activePreparationID: UUID?
+    @ObservationIgnored private var activeRequest: PreparationRequest?
+
+    private struct PreparationRequest {
+        let chat: ChatStore
+        let snapshot: [ChatItem]
+        let revision: Int
+        let contextGeneration: Int
+    }
+
+    init(controller: ReadAloudController = .shared,
+         prepareReply: @escaping ReplyPreparer = { SpeechText.latestSpeakableReply(in: $0) })
+    {
+        self.controller = controller
+        self.prepareReply = prepareReply
+    }
+
     var lastReply: (id: String, text: String)? {
-        guard let chat else { return nil }
-        for item in chat.items.reversed() {
-            if let text = SpeechText.speakableText(for: item) { return (item.transcriptId ?? item.id, text) }
-        }
-        return nil
+        guard let chat, self.preparedRevision == chat.contentRevision,
+              let preparedReply = self.preparedReply else { return nil }
+        return (preparedReply.messageId, preparedReply.text)
     }
 
     /// Reads the newest reply, or stops if something is being read.
     func toggleLastReply() {
-        let controller = ReadAloudController.shared
-        if controller.isActive { controller.stop(); return }
+        if self.controller.isActive { self.controller.stop(); return }
         guard let reply = self.lastReply else { return }
-        controller.start(messageId: reply.id, text: reply.text, gateway: self.gateway?.voice)
+        self.controller.start(messageId: reply.id, text: reply.text, gateway: self.gateway?.voice)
     }
 
-    var isEnabled: Bool { ReadAloudController.shared.isActive || self.lastReply != nil }
+    var isEnabled: Bool { self.controller.isActive || self.lastReply != nil }
+
+    func bind(chat: ChatStore, gateway: GatewayStore) {
+        let changed = self.chat !== chat || self.gateway !== gateway
+        if changed, let oldChat = self.chat { self.clearAutoReadCallback(from: oldChat) }
+        self.chat = chat
+        self.gateway = gateway
+        guard changed else {
+            self.requestPreparation()
+            return
+        }
+
+        self.contextGeneration += 1
+        self.pendingPreparation = nil
+        self.preparedReply = nil
+        self.preparedRevision = nil
+        self.activePreparation?.cancel()
+        self.observeItems(in: chat, generation: self.contextGeneration)
+        self.requestPreparation()
+    }
+
+    func unbind() {
+        self.contextGeneration += 1
+        if let chat = self.chat { self.clearAutoReadCallback(from: chat) }
+        self.chat = nil
+        self.gateway = nil
+        self.pendingPreparation = nil
+        self.preparedReply = nil
+        self.preparedRevision = nil
+        self.activePreparation?.cancel()
+    }
+
+    private func clearAutoReadCallback(from chat: ChatStore) {
+        guard chat.onFinalAssistantReplyOwner === self else { return }
+        chat.onFinalAssistantReply = nil
+        chat.onFinalAssistantReplyOwner = nil
+    }
+
+    private func observeItems(in chat: ChatStore, generation: Int) {
+        withObservationTracking {
+            _ = chat.items
+        } onChange: { [weak self, weak chat] in
+            Task { @MainActor in
+                guard let self, let chat, self.chat === chat, self.contextGeneration == generation else { return }
+                self.observeItems(in: chat, generation: generation)
+                self.requestPreparation()
+            }
+        }
+    }
+
+    private func requestPreparation() {
+        guard let chat = self.chat else { return }
+        let revision = chat.contentRevision
+        if self.preparedRevision == revision || self.pendingPreparation?.revision == revision { return }
+        if let activeRequest = self.activeRequest,
+           activeRequest.chat === chat, activeRequest.revision == revision,
+           activeRequest.contextGeneration == self.contextGeneration { return }
+        if self.activePreparation != nil {
+            if self.pendingPreparation?.revision != revision {
+                self.pendingPreparation = PreparationRequest(chat: chat, snapshot: chat.items,
+                                                             revision: revision, contextGeneration: self.contextGeneration)
+                self.preparedReply = nil
+                self.preparedRevision = nil
+                self.activePreparation?.cancel()
+            }
+            return
+        }
+        self.pendingPreparation = PreparationRequest(chat: chat, snapshot: chat.items,
+                                                     revision: revision, contextGeneration: self.contextGeneration)
+        self.preparedReply = nil
+        self.preparedRevision = nil
+        self.startPendingPreparation()
+    }
+
+    private func startPendingPreparation() {
+        guard self.activePreparation == nil, let request = self.pendingPreparation else { return }
+        self.pendingPreparation = nil
+        guard self.chat === request.chat, self.contextGeneration == request.contextGeneration,
+              self.chat?.contentRevision == request.revision else {
+            self.requestPreparation()
+            return
+        }
+
+        let preparationID = UUID()
+        let snapshot = request.snapshot
+        let prepareReply = self.prepareReply
+        let worker = Task.detached(priority: .userInitiated) {
+            await prepareReply(snapshot)
+        }
+        self.activePreparationID = preparationID
+        self.activePreparation = worker
+        self.activeRequest = request
+        Task { @MainActor [weak self] in
+            let reply = await worker.value
+            self?.finishPreparation(reply, request: request, id: preparationID)
+        }
+    }
+
+    private func finishPreparation(_ reply: SpeechText.PreparedReply?, request: PreparationRequest, id: UUID) {
+        guard self.activePreparationID == id else { return }
+        self.activePreparationID = nil
+        self.activePreparation = nil
+        self.activeRequest = nil
+
+        if self.chat === request.chat, self.contextGeneration == request.contextGeneration,
+           self.chat?.contentRevision == request.revision, self.pendingPreparation == nil
+        {
+            self.preparedReply = reply
+            self.preparedRevision = request.revision
+        } else if self.pendingPreparation == nil, self.chat === request.chat,
+                  self.contextGeneration == request.contextGeneration
+        {
+            self.requestPreparation()
+        }
+        self.startPendingPreparation()
+    }
 }
 
 extension FocusedValues {
@@ -125,10 +263,21 @@ struct ReadAloudModifier: ViewModifier {
     let bottomInset: CGFloat
     let controller: ReadAloudController
     @Binding var pillInset: CGFloat
-    @State private var state = ReadAloudChatState()
+    @State private var state: ReadAloudChatState
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @AppStorage(ReadAloudSettings.autoReadKey) private var autoRead = false
+
+    init(chat: ChatStore, gateway: GatewayStore, bottomInset: CGFloat, controller: ReadAloudController,
+         pillInset: Binding<CGFloat>)
+    {
+        self.chat = chat
+        self.gateway = gateway
+        self.bottomInset = bottomInset
+        self.controller = controller
+        self._pillInset = pillInset
+        self._state = State(initialValue: ReadAloudChatState(controller: controller))
+    }
 
     func body(content: Content) -> some View {
         let pillInset = self.$pillInset
@@ -157,7 +306,12 @@ struct ReadAloudModifier: ViewModifier {
                 if self.state.isVisible { self.install() }
             }
             .onChange(of: self.autoRead) { self.install() }
-            .onDisappear { self.uninstall() }
+            .onChange(of: ObjectIdentifier(self.chat)) { self.install() }
+            .onChange(of: self.gateway.id) { self.install() }
+            .onDisappear {
+                self.uninstall()
+                self.state.unbind()
+            }
     }
 
     /// ⌥⌘L on iPad hardware keyboards (macOS has the Edit menu command); only the active pane answers.
@@ -185,8 +339,7 @@ struct ReadAloudModifier: ViewModifier {
     }
 
     private func install() {
-        self.state.chat = self.chat
-        self.state.gateway = self.gateway
+        self.state.bind(chat: self.chat, gateway: self.gateway)
         self.state.isVisible = self.scenePhase == .active
         guard self.autoRead else { return self.uninstall() }
         let state = self.state

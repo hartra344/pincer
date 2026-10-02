@@ -333,11 +333,31 @@ private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> G
 func runDemoVoice() async {
     guard let gateway = await voiceConnect(GatewayProfile.demo(), "demo") else { return }
     defer { gateway.stop() }
+    await readAloudCommandReadinessCheck(gateway)
     await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")
     await voiceFallbackChecks()
     await voiceFollowUpChecks(profile: GatewayProfile.demo(), label: "demo")
+}
+
+@MainActor
+private func readAloudCommandReadinessCheck(_ gateway: GatewayStore) async {
+    let chat = gateway.chat(for: "agent:main:main")
+    await chat.load()
+    let loaded = await waitFor("demo transcript for Read Aloud command", timeout: 8) { chat.hasLoaded || !chat.items.isEmpty }
+    check(loaded, "demo: the selected chat has transcript content for the latest-reply command")
+    guard loaded else { return }
+
+    let snapshot = chat.items
+    let reply = await Task.detached(priority: .utility) {
+        SpeechText.latestSpeakableReply(in: snapshot)
+    }.value
+    let source = reply.flatMap { value in
+        snapshot.first { ($0.transcriptId ?? $0.id) == value.messageId }
+    }
+    check(source?.role == .assistant && source?.isPending == false && source?.isError == false && reply?.text.isEmpty == false,
+          "demo: the prepared latest reply comes from a committed assistant message")
 }
 
 @MainActor
