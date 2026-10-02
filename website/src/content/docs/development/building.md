@@ -76,6 +76,18 @@ xcodebuild test -scheme PincerUITests-iOS \
 
 Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded.
 
+The iPad sidebar geometry probe hosts a 1,200-row transcript in `NavigationSplitView`, drives the public native `UISplitViewController` hide/show transition, and reports detail-width changes and row builds per display frame. It checks that the native column actually changes and that layouts stay bounded while the sidebar animates. This measures native geometry; it does not test the SwiftUI sidebar button binding. Run it on a regular-width iPad simulator (the default iPhone CI lane does not run this probe):
+
+```sh
+scripts/ios-test-scheme.sh
+xcodebuild test -scheme PincerUITests-iOS \
+  -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' \
+  -derivedDataPath .build/xcode-ipad \
+  -only-testing:PincerUITests/TranscriptSidebarSlideProbe
+```
+
+Use an available iPad simulator name from `xcrun simctl list devices available`.
+
 While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
 
 ## Self-checks
