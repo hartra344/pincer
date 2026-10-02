@@ -102,6 +102,7 @@ enum Suites {
             Section("MCP tool link resolution") { runMCPToolLinkChecks() },
             Section("Sidebar split action visibility") { runSidebarSplitActionChecks() },
             Section("Sidebar split pane marker") { runSidebarSplitPaneChecks() },
+            Section("Selected helper sidebar visibility") { runSidebarSelectedHelperChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },

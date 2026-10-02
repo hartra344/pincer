@@ -214,6 +214,29 @@ struct SidebarTests {
         }
     }
 
+    @Test func selectedHelperStaysListedWhileHiddenAutomationParentDoesNot() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        let parent = store.sessions[Self.automation]!
+        let helper = store.sessions[Self.automationHelper]!
+        #expect(parent.isAutomation && helper.isSubagent)
+        #expect(!store.showAutomations)
+        #expect(store.isHiddenInSidebar(parent) && !store.isHiddenInSidebar(helper))
+
+        store.selectedKey = Self.automationHelper
+        for (organization, keys) in self.keysByMode(store) {
+            #expect(keys.contains(Self.automationHelper), "selected helper is listed in \(organization)")
+            #expect(!keys.contains(Self.automation), "hidden parent stays omitted in \(organization)")
+        }
+
+        store.selectedKey = "agent:main:main"
+        #expect(store.isHiddenInSidebar(parent) && !store.isHiddenInSidebar(helper))
+        for (organization, keys) in self.keysByMode(store) {
+            #expect(!keys.contains(Self.automationHelper), "unselected helper stays hidden with its parent in \(organization)")
+            #expect(!keys.contains(Self.automation), "unselected parent remains hidden in \(organization)")
+        }
+    }
+
     @Test func searchFindsHiddenKinds() {
         defer { self.scratch.remove() }
         let store = self.store()
