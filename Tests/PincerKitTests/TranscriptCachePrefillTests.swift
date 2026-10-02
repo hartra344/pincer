@@ -30,22 +30,32 @@ struct TranscriptCachePrefillTests {
 
         await V8.save(V8.snapshot(original), gatewayID, key, temp.url)
         await TranscriptCache.flush(gatewayId: gatewayID, root: temp.url)
+        let seededManifest = try V8.manifest(manifest)
+        try #require(seededManifest["version"] as? Int == TranscriptCache.Snapshot.currentVersion,
+                     "the seed must be a readable current-format manifest")
         let index = MessageIndex.shared(gatewayId: gatewayID, root: temp.url)
-        #expect(!(try await index.search("question 0")).isEmpty)
+        let initialHits = try await index.search("question 0")
+        try #require(!initialHits.isEmpty, "the seed must have a usable search index")
 
         // Simulate a new process: retain the manifest and index on disk, but forget the writer's
         // in-memory fingerprints. Hold the next prime after it enters the writer so the current
         // detached restore can return and the following prefill save deterministically races it.
         await TranscriptCache.Writer.shared.forget(under: gatewayDirectory)
         await TranscriptCache.Writer.shared.delayPrimeForTesting(manifest, by: .seconds(2))
-        let primeStarted = await TranscriptCache.Writer.shared.watchNextPrimeStartForTesting(manifest)
-        let observedPrime = Task {
-            for await _ in primeStarted { break }
-        }
+        let previousPrimeStarts = await TranscriptCache.Writer.shared.primeStartCountForTesting(manifest)
 
         await chat.restoreFromCache()
-        await observedPrime.value
-        #expect(chat.items == original)
+        try #require(chat.cacheOutcome == .loaded, "the cached transcript must restore successfully before measuring the race")
+        try #require(chat.items == original, "the headless restore must contain the full retained transcript")
+        var primeStarted = false
+        for _ in 0..<100 {
+            if await TranscriptCache.Writer.shared.primeStartCountForTesting(manifest) > previousPrimeStarts {
+                primeStarted = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try #require(primeStarted, "the load must enqueue a writer prime")
 
         var tail = ChatItem(id: "prefill-tail", role: .assistant, blocks: [.text("prefill tail sentinel")])
         tail.transcriptId = tail.id
@@ -60,7 +70,7 @@ struct TranscriptCachePrefillTests {
         #expect(!(try await index.search("prefill tail sentinel")).isEmpty, "the new tail is searchable")
 
         await TranscriptCache.Writer.shared.delayPrimeForTesting(manifest, by: nil)
-        await TranscriptCache.removeAll(gatewayId: gatewayID, permanently: true, root: temp.url)
+        TranscriptCache.removeAll(gatewayId: gatewayID, permanently: true, root: temp.url)
         await TranscriptCache.flush(gatewayId: gatewayID, root: temp.url)
         await TranscriptCache.shutdown(root: temp.url)
     }
