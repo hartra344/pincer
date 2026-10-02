@@ -51,6 +51,12 @@ struct APIKeyVisibilityTests {
             .first { $0.identifier?.rawValue == "api-key-visibility" })
         #expect(button.isEnabled)
         #expect(Self.descendants(host).contains { $0 is NSSecureTextField })
+        let secure = try #require(Self.descendants(host).compactMap { $0 as? NSSecureTextField }.first)
+        try #require(window.makeFirstResponder(secure), "the fixture can focus the secure editor")
+        secure.selectText(nil)
+        let secureEditor = try #require(secure.currentEditor())
+        secureEditor.selectedRange = NSRange(location: 4, length: 3)
+        let revealLabel = button.accessibilityLabel()
         button.performClick(nil)
         let revealed = await eventually {
             Self.descendants(host).compactMap { $0 as? NSTextField }.contains {
@@ -59,11 +65,23 @@ struct APIKeyVisibilityTests {
         }
         #expect(revealed, "Show displays the actual key text in a plain editor")
         #expect(editor.text == "test_MiXeD+/=:@.")
+        let plain = try #require(Self.descendants(host).compactMap { $0 as? NSTextField }.first {
+            !($0 is NSSecureTextField) && !$0.isHidden && $0.isEditable && $0.stringValue == editor.text
+        })
+        #expect(plain.currentEditor()?.selectedRange == NSRange(location: 4, length: 3),
+                "Reveal preserves focus and the editor selection")
+        #expect(button.accessibilityLabel() != revealLabel)
         button.performClick(nil)
         let hidden = await eventually {
             Self.descendants(host).compactMap { $0 as? NSSecureTextField }.contains { !$0.isHidden && $0.stringValue == editor.text }
         }
         #expect(hidden)
+        #expect(secure.currentEditor()?.selectedRange == NSRange(location: 4, length: 3),
+                "Hide restores focus and selection to the secure editor")
+        #expect(button.accessibilityLabel() == revealLabel)
+        let action = try #require(secure.action)
+        #expect(secure.sendAction(action, to: secure.target))
+        #expect(editor.submissions == 1, "Return submission still reaches the original callback")
         editor.disabled = true
         #expect(await eventually { !button.isEnabled })
     }
@@ -100,13 +118,28 @@ struct APIKeyVisibilityTests {
             .first { $0.accessibilityIdentifier == "api-key-visibility" })
         let field = try #require(Self.descendants(host.view).compactMap { $0 as? UITextField }.first)
         #expect(field.isSecureTextEntry)
+        let start = try #require(field.position(from: field.beginningOfDocument, offset: 4))
+        let end = try #require(field.position(from: start, offset: 3))
+        field.selectedTextRange = field.textRange(from: start, to: end)
+        let label = button.accessibilityLabel
         #expect(Self.click(button) > 0)
         #expect(await eventually { !field.isSecureTextEntry })
         #expect(field.text == editor.text && editor.text == "test_MiXeD+/=:@.")
         #expect(field.textContentType == .oneTimeCode && field.passwordRules == nil)
         #expect(field.autocapitalizationType == .none && field.autocorrectionType == .no)
+        let revealedSelection = try #require(field.selectedTextRange)
+        #expect(field.offset(from: field.beginningOfDocument, to: revealedSelection.start) == 4
+                && field.offset(from: revealedSelection.start, to: revealedSelection.end) == 3)
+        #expect(button.accessibilityLabel != label)
         #expect(Self.click(button) > 0)
         #expect(await eventually { field.isSecureTextEntry })
+        let hiddenSelection = try #require(field.selectedTextRange)
+        #expect(field.offset(from: field.beginningOfDocument, to: hiddenSelection.start) == 4
+                && field.offset(from: hiddenSelection.start, to: hiddenSelection.end) == 3)
+        #expect(button.accessibilityLabel == label)
+        #expect(Self.descendants(host.view).compactMap { $0 as? UITextField }.first === field)
+        _ = field.delegate?.textFieldShouldReturn?(field)
+        #expect(editor.submissions == 1)
         editor.disabled = true
         #expect(await eventually { !field.isEnabled && !button.isEnabled })
     }
