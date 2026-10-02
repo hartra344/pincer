@@ -116,6 +116,11 @@ func runDemoChannels() async {
     check(telegramIssue?.offersReconnect == true && !health.activeIssues.contains { $0.channelAccount == whatsappKey },
           "demo Health raises Telegram (not the unconfigured WhatsApp) with Reconnect Account (\(health.activeIssues.map(\.id)))")
 
+    let skippedStart = await channels.start(whatsappKey)
+    check(!skippedStart && channels.notice?.severity == .error && !SettingsNoticePolicy.shouldAutoDismiss(.error),
+          "settings notices demo: logged-out channel errors wait for explicit dismissal")
+    channels.clearNotice()
+
     await channels.probe()
     check(!channels.isProbing && channels.account(discordKey)?.lastProbeAt != nil, "demo probe stamps lastProbeAt")
 
@@ -123,6 +128,8 @@ func runDemoChannels() async {
     if let key = telegramIssue?.channelAccount {
         let ok = await channels.reconnect(key)
         check(ok && channels.state(of: key) == .connected && channels.account(key)?.lastError == nil, "demo reconnect fixes Telegram")
+        check(channels.notice?.severity == .success && SettingsNoticePolicy.shouldAutoDismiss(.success),
+              "settings notices demo: successful reconnect remains eligible for timeout")
         let cleared = await waitFor("demo Telegram issue cleared") { !health.issues.contains { $0.channelAccount == key } }
         check(cleared, "demo Health issue gone after reconnect (\(health.issues.map(\.id)))")
     }
@@ -209,6 +216,8 @@ func runLiveChannels(profile: GatewayProfile, admin: GatewayStore) async {
     // WhatsApp: start is skipped until linked; QR login links it; log out unlinks it again.
     let skipped = await channels.start(whatsappKey)
     check(!skipped && channels.notice?.isError == true, "start on logged-out WhatsApp is skipped (\(channels.notice?.text ?? "-"))")
+    check(channels.notice?.severity == .error && !SettingsNoticePolicy.shouldAutoDismiss(.error),
+          "settings notices live: the logged-out channel error persists until dismissed")
     channels.startQRLogin(whatsappKey)
     let linked = await waitFor("mock WhatsApp linked", timeout: 30) { channels.state(of: whatsappKey) == .connected }
     check(linked, "mock QR login links WhatsApp (\(channels.qr.state(channel: "whatsapp", accountId: "default")))")

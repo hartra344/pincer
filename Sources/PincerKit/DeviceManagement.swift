@@ -315,6 +315,12 @@ public final class DeviceManagementModel {
     public struct Notice: Identifiable, Equatable, Sendable {
         public let id = UUID()
         public let text: String
+        public let severity: SettingsNoticeSeverity
+
+        public init(text: String, severity: SettingsNoticeSeverity = .info) {
+            self.text = text
+            self.severity = severity
+        }
     }
 
     public nonisolated static let listMethod = "device.pair.list"
@@ -680,7 +686,7 @@ public final class DeviceManagementModel {
         } catch {
             if Self.isUnknown(error, "unknown deviceid") {
                 self.dropDevice(device)
-                self.notice = Notice(text: Self.staleDeviceMessage)
+                self.notice = Notice(text: Self.staleDeviceMessage, severity: .warning)
                 await self.load()
                 return true
             }
@@ -762,7 +768,7 @@ public final class DeviceManagementModel {
             if Self.isUnknown(error, "unknown nodeid") {
                 self.nodes.removeAll { $0.nodeId == node.nodeId }
                 self.operations[key] = nil
-                self.notice = Notice(text: Self.staleNodeMessage)
+                self.notice = Notice(text: Self.staleNodeMessage, severity: .warning)
                 await self.loadNodes()
                 return true
             }
@@ -785,7 +791,7 @@ public final class DeviceManagementModel {
     private func requestFailed(_ request: PendingDeviceRequest, error: Error) async -> Bool {
         if Self.isUnknown(error, "unknown requestid") {
             self.dropRequest(request)
-            self.notice = Notice(text: Self.staleRequestMessage)
+            self.notice = Notice(text: Self.staleRequestMessage, severity: .warning)
             await self.load()
             return true
         }
@@ -796,7 +802,7 @@ public final class DeviceManagementModel {
         if GatewayError.isMissingScope(error) || Self.isDenied(error) {
             self.operations[key] = nil
             if !self.allowsWritesWithoutAdmin { self.manageDenied = true }
-            self.notice = Notice(text: Self.readOnlyMessage)
+            self.notice = Notice(text: Self.readOnlyMessage, severity: .warning)
             return false
         }
         self.operations[key] = .failed(Self.message(for: error))

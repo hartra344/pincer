@@ -202,6 +202,7 @@ struct PairingInboxModelTests {
         await model.approve(try #require(model.requests.first), makeCommandOwner: true)
         #expect(script.calls.last?.params["bootstrapCommandOwner"] == true)
         #expect(model.notice?.text == "Approved, but the sender couldn't be notified." && !model.canBootstrapCommandOwner)
+        #expect(model.notice?.severity == .warning, "a partial approval result remains visible for review")
     }
 
     @Test func expiredApproveShowsNoticeWithoutSending() async throws {
@@ -212,6 +213,7 @@ struct PairingInboxModelTests {
         let late = try #require(model.requests.first)
         #expect(await model.approve(late) == false)
         #expect(model.notice?.text == PairingInboxModel.expiredMessage)
+        #expect(model.notice?.severity == .warning)
         #expect(!script.methods.contains(PairingInboxModel.approveMethod) && model.operation(for: late) == .idle)
         #expect(await model.dismiss(late) && model.requests.isEmpty)
     }
@@ -228,6 +230,7 @@ struct PairingInboxModelTests {
         let gone = method == PairingInboxModel.approveMethod ? await model.approve(stale) : await model.dismiss(stale)
         #expect(gone && model.requests.map(\.requestId) == ["keep"])
         #expect(model.notice?.text == PairingInboxModel.staleMessage)
+        #expect(model.notice?.severity == .warning)
         #expect(script.methods == [PairingInboxModel.listMethod, method, PairingInboxModel.listMethod])
     }
 
@@ -239,6 +242,7 @@ struct PairingInboxModelTests {
         script.failure = .rpc(code: "INVALID_REQUEST", message: "channel account does not use DM pairing: telegram:home", details: nil)
         #expect(await model.dismiss(try #require(model.requests.first)) == false)
         #expect(model.notice?.text == "channel account does not use DM pairing: telegram:home")
+        #expect(model.notice?.severity == .warning)
         #expect(script.methods.last == PairingInboxModel.listMethod)
     }
 
@@ -251,6 +255,7 @@ struct PairingInboxModelTests {
         script.failure = .rpc(code: "UNAVAILABLE", message: "pairing store unavailable", details: nil)
         #expect(await model.approve(row) == false)
         #expect(model.requests.count == 1 && model.operation(for: row).error == "pairing store unavailable")
+        #expect(model.notice == nil, "generic action errors stay inline on their request row")
         script.failure = nil
         #expect(await model.approve(row) && model.requests.isEmpty)
     }

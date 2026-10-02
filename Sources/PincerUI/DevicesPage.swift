@@ -445,21 +445,23 @@ private struct DeviceNotice: View {
 
     var body: some View {
         if let notice = self.model.notice {
-            Text(notice.text)
-                .font(.callout)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.horizontal)
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .onTapGesture { withAnimation { self.model.clearNotice() } }
-                .task(id: notice.id) {
-                    AccessibilityNotification.Announcement(notice.text).post()
-                    try? await Task.sleep(for: .seconds(4))
-                    if self.model.notice?.id == notice.id { withAnimation { self.model.clearNotice() } }
-                }
+            SettingsNoticeBanner(id: notice.id, text: notice.text, severity: notice.severity,
+                                 announces: true, dismiss: {
+                guard self.model.notice?.id == notice.id else { return }
+                withAnimation { self.model.clearNotice() }
+            }) {
+                Text(notice.text).font(.callout).multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, Theme.Spacing.xxl)
+            .padding(.vertical, Theme.Spacing.lg)
+            .glassSurface(in: Capsule())
+            .padding(.horizontal)
+            .padding(.bottom, Theme.Spacing.section)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onTapGesture {
+                guard self.model.notice?.id == notice.id else { return }
+                withAnimation { self.model.clearNotice() }
+            }
         }
     }
 }
