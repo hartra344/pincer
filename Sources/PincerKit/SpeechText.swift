@@ -141,4 +141,12 @@ public enum SpeechText {
         let text = self.plain(fromMarkdown: item.plainText)
         return text.isEmpty ? nil : text
     }
+
+    /// Prepares one message for the renderer cache. Call this from its off-main worker so both
+    /// normalization and the retained-string cost measurement stay away from the interaction path.
+    public static func prepare(_ item: ChatItem) -> SpeechEligibilityCache.Prepared {
+        let text = self.speakableText(for: item)
+        return SpeechEligibilityCache.Prepared(isEligible: text != nil, speechText: text,
+                                               utf8ByteCount: text?.utf8.count ?? 0)
+    }
 }

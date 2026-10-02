@@ -35,6 +35,8 @@ Pincer reads the reply's text the way you'd say it, not the way it's typed:
 
 Replies that are only code or tool calls have nothing to read, so **Read Aloud** doesn't appear for them.
 
+Pincer checks reply text for readable content in the background, keeping transcript scrolling responsive. A newly loaded or edited reply can show **Listen** after that check finishes.
+
 ## Which voice is used
 
 Pincer decides for each reply:

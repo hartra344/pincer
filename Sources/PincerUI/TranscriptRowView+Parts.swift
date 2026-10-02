@@ -731,6 +731,7 @@ enum CompactFooterPacking {
 /// and its model.
 final class TranscriptFooterView: TranscriptBaseView {
     private var footer: TranscriptPart.Footer?
+    private var rowID: String?
     private let copyButton = TranscriptLabelButton()
     private let replyButton = TranscriptLabelButton()
     private let reactButton = TranscriptLabelButton()
@@ -902,8 +903,8 @@ final class TranscriptFooterView: TranscriptBaseView {
         }
         self.listenButton.isHidden = true
         self.listenButton.onTap = { [weak self] in
-            guard let self, let id = self.footer?.messageId else { return }
-            self.actions?.readAloud(id)
+            guard let self, let id = self.footer?.messageId, let rowID = self.rowID else { return }
+            self.actions?.readAloud(id, rowID: rowID)
         }
         self.reactButton.set(title: L("React"), symbol: "face.smiling")
         self.reactButton.accessibilityText = L("Add Reaction")
@@ -917,6 +918,7 @@ final class TranscriptFooterView: TranscriptBaseView {
         guard case let .footer(footer) = part else { return }
         let old = self.footer
         self.footer = footer
+        self.rowID = row.id
         self.actions = actions
         self.copyButton.isHidden = footer.copyText.isEmpty || (footer.compact && footer.actionFrames[.copy] == nil)
         self.replyButton.isHidden = footer.messageId == nil || (footer.compact && footer.actionFrames[.reply] == nil)
@@ -958,7 +960,8 @@ final class TranscriptFooterView: TranscriptBaseView {
     /// Read Aloud / Stop Reading Aloud for this message; re-runs when the controller's phase changes.
     private func updateListenButton() {
         guard let footer, !footer.compact || footer.actionFrames[.listen] != nil,
-              let id = footer.messageId, let actions, actions.canReadAloud(id) else {
+              let id = footer.messageId, let rowID = self.rowID, let actions,
+              actions.canReadAloud(id, rowID: rowID) else {
             if !self.listenButton.isHidden { self.listenButton.isHidden = true; self.relayoutFooter() }
             return
         }

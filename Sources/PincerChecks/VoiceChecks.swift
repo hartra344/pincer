@@ -341,6 +341,24 @@ func runDemoVoice() async {
           "demo transcript's assistant prose remains eligible for Read Aloud")
     check(demoPrompt.map { SpeechText.speakableText(for: $0) == nil } ?? false,
           "demo transcript's user messages are not eligible for Read Aloud")
+    if let demoReply {
+        var readiness = SpeechEligibilityCache()
+        let first = readiness.begin(messageID: demoReply.id)
+        let prepared = SpeechText.prepare(demoReply)
+        check(readiness.complete(first, with: prepared, sourceRevision: 1)
+              && readiness.value(messageID: demoReply.id)?.isEligible == true,
+              "demo assistant prose flows through the prepared eligibility cache")
+        var edited = demoReply
+        edited.blocks = [.text("```swift\nlet answer = 42\n```")]
+        readiness.invalidate(messageID: demoReply.id)
+        let revised = readiness.begin(messageID: demoReply.id)
+        let editedPrepared = SpeechText.prepare(edited)
+        check(readiness.complete(revised, with: editedPrepared, sourceRevision: 2)
+              && readiness.value(messageID: demoReply.id)?.isEligible == false,
+              "demo same-ID edits replace old Read Aloud eligibility")
+    } else {
+        check(false, "demo assistant fixture exists for prepared Read Aloud coverage")
+    }
     await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")
