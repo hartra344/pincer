@@ -159,6 +159,14 @@ enum TranscriptPart {
         let key: String
         let copyText: String
         let details: String
+        /// Compact rows reserve two action lines (plus the branch hit-target row when present)
+        /// before drawing metadata across the content width.
+        let compact: Bool
+        let branchRowHeight: CGFloat
+        let actionRowHeight: CGFloat
+        let controlHeight: CGFloat
+        let detailsFrame: CGRect
+        let detailLines: [String]
         /// The message Reply and React act on; nil hides them.
         var messageId: String?
         /// Shows the filled star (#384), which removes the bookmark when tapped.
@@ -1151,10 +1159,41 @@ extension TranscriptLayoutBuilder {
                             layout: TranscriptRowLayout, into stack: inout Stack)
     {
         let bookmarked = messageId.map { layout.decoration.bookmarks.contains($0) } ?? false
-        let details = [model, time?.messageDetailTimestamp].compactMap(\.self).joined(separator: " · ")
-        let height = max(TranscriptStyle.lineHeight(self.style.caption), 16)
-        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId, isBookmarked: bookmarked,
-                                branch: layout.decoration.branch)),
+        let timeDetail = time?.messageDetailTimestamp
+        let detailLines = [model, timeDetail].compactMap(\.self)
+        let details = detailLines.joined(separator: " · ")
+        let captionHeight = max(TranscriptStyle.lineHeight(self.style.caption), 16)
+        let compact = stack.width < 430
+        let branch = layout.decoration.branch
+        let branchRowHeight: CGFloat
+        let actionRowHeight: CGFloat
+        #if os(iOS)
+        branchRowHeight = branch == nil ? 0 : 44
+        actionRowHeight = 44
+        #else
+        branchRowHeight = branch == nil ? 0 : 28
+        // Bookmark's existing 8pt vertical hit outset adds 16pt to its 16pt caption-height frame.
+        actionRowHeight = max(captionHeight, 32)
+        #endif
+        let controlHeight: CGFloat
+        let detailsFrame: CGRect
+        let height: CGFloat
+        if compact {
+            // Reserve two stable action rows regardless of transient button state (Copy/Copied and
+            // Listen/Stop), and a separate branch-target row when this message has branch controls.
+            controlHeight = branchRowHeight + (branch == nil ? 0 : 4) + 2 * actionRowHeight
+            let detailsY = controlHeight + 4
+            detailsFrame = CGRect(x: 0, y: detailsY, width: stack.width, height: captionHeight * 2)
+            height = detailsFrame.maxY
+        } else {
+            controlHeight = 0
+            detailsFrame = .zero // The wide single-line frame follows the visible buttons in the view.
+            height = captionHeight
+        }
+        stack.add(.footer(.init(key: key, copyText: text, details: details, compact: compact,
+                                branchRowHeight: branchRowHeight, actionRowHeight: actionRowHeight,
+                                controlHeight: controlHeight, detailsFrame: detailsFrame, detailLines: detailLines,
+                                messageId: messageId, isBookmarked: bookmarked, branch: branch)),
                   height: height,
                   spacing: TranscriptMetrics.footerSpacing)
     }
