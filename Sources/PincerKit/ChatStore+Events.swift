@@ -354,6 +354,9 @@ extension ChatStore {
             self.items.append(item)
             self.trackLiveReply(item)
         }
+        // A committed user message is a persistence boundary: search must see it while its
+        // reply is still streaming. Later assistant output uses the bounded live-save window.
+        if item.role == .user { self.flushScheduledSave() }
         if let key = item.idempotencyKey {
             self.releaseCommittedOutboxImagePreviews([key])
         }
@@ -502,6 +505,7 @@ extension ChatStore {
         self.flushLive()
         guard self.live == nil || self.live?.runId == runId else { return }
         if self.finishedRunIds.contains(runId) { return }
+        self.flushScheduledSave()
         guard self.isSubscribed else {
             // A background chat: reload when it is opened instead of resubscribing.
             self.markStale()

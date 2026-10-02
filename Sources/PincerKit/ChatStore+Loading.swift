@@ -490,7 +490,7 @@ extension ChatStore {
     /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
     func reloadAfterHistoryChange(clearingCache clearCache: @MainActor () async -> Void = {}) async {
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cacheChecked = true
@@ -511,7 +511,7 @@ extension ChatStore {
 
     /// The session was deleted: nothing more is written to the transcript cache.
     func stopCaching() {
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cachingStopped = true
@@ -528,7 +528,7 @@ extension ChatStore {
     /// Writes what's loaded to the transcript cache now (after it was cleared).
     func saveToCache() async {
         guard self.hasLoaded, !self.isDehydrated, !self.cachingStopped else { return }
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         // The cache was cleared, so it no longer holds what was saved.
         self.savedState = nil
         await self.saveSnapshot()
@@ -538,11 +538,65 @@ extension ChatStore {
         guard self.hasLoaded, !self.isDehydrated, !self.cachingStopped, !self.cacheUnreadable,
               self.currentCacheState != self.savedState
         else { return }
+        let now = self.saveNow()
+        let runId = self.activeSaveRunId
+        let deadline: Date
+        if let runId {
+            // Keep the first deadline for this run: continuous deltas cannot postpone a save.
+            if let existing = self.saveDeadline,
+               self.saveDeadlineRunId == runId || self.saveDeadlineRunId == nil {
+                // A committed user message or an earlier idle save must stay searchable promptly.
+                deadline = min(existing, now.addingTimeInterval(5))
+            } else {
+                deadline = now.addingTimeInterval(5)
+            }
+        } else {
+            deadline = now.addingTimeInterval(1)
+        }
+        self.queueSave(until: deadline, forRunId: runId)
+    }
+
+    /// A completed run is a natural persistence boundary, so its latest transcript is saved now.
+    func flushScheduledSave() {
+        guard self.hasLoaded, !self.isDehydrated, !self.cachingStopped, !self.cacheUnreadable,
+              self.currentCacheState != self.savedState
+        else { return }
+        self.queueSave(until: self.saveNow(), forRunId: nil)
+    }
+
+    /// Invalidates both the queued task and its deadline so a canceled task cannot block later saves.
+    func cancelScheduledSave() {
+        self.saveScheduleGeneration &+= 1
         self.saveTask?.cancel()
+        self.saveTask = nil
+        self.saveDeadline = nil
+        self.saveDeadlineRunId = nil
+    }
+
+    private var activeSaveRunId: String? {
+        guard let runId = self.live?.runId, !self.finishedRunIds.contains(runId) else { return nil }
+        return runId
+    }
+
+    private func queueSave(until deadline: Date, forRunId runId: String?) {
+        self.cancelScheduledSave()
+        self.saveDeadline = deadline
+        self.saveDeadlineRunId = runId
+        let generation = self.saveScheduleGeneration
+        let wait = self.waitForSaveDeadline
         self.saveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, let self, !self.isDehydrated else { return }
+            do { try await wait(deadline) } catch { return }
+            guard !Task.isCancelled, let self, self.saveScheduleGeneration == generation,
+                  !self.isDehydrated, !self.cachingStopped
+            else { return }
+            self.saveDeadline = nil
+            self.saveDeadlineRunId = nil
             await self.saveSnapshot()
+            guard self.saveScheduleGeneration == generation else { return }
+            self.saveTask = nil
+            // If the disk write suspended while the transcript changed, make sure the newer
+            // revision still has a queued save even when the mutation did not schedule one.
+            self.scheduleSave()
         }
     }
 
@@ -573,7 +627,7 @@ extension ChatStore {
         var expectedRevision = self.contentRevision
         // A queued save must not land over the filler's write before this store reads it.
         let hadQueuedSave = self.saveTask != nil
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         var adoptionSaved = false
         func validCacheContext() -> Bool {
             !self.cachingStopped && !self.isDehydrated && self.gateway === gateway
@@ -636,7 +690,7 @@ extension ChatStore {
             self.forwardedSenderRefreshPending = false
             expectedRevision = self.contentRevision
         }
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         self.savedState = nil
         guard current() else { return }
         await self.saveSnapshot()
@@ -756,7 +810,7 @@ extension ChatStore {
     /// dropped stays on disk and pages back in through `loadOlder`.
     func trimToWindow(allowSelected: Bool = false, stillWanted: @MainActor () -> Bool = { true }) async {
         guard self.canTrim(allowSelected: allowSelected), self.committedCount > self.windowLimit else { return }
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         await self.saveSnapshot()
         // The save suspended: the chat may have been opened or become busy meanwhile.
         guard self.canTrim(allowSelected: allowSelected), self.savedState == self.currentCacheState, stillWanted()
@@ -767,7 +821,7 @@ extension ChatStore {
         self.hasPagedOlder = true
         self.olderOffset = nil
         self.items = self.items[cut...] + self.items[..<cut].filter(\.isPending)
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         self.savedState = self.currentCacheState
     }
 

@@ -263,6 +263,14 @@ public final class ChatStore: Identifiable {
     /// What restoring from the transcript cache found; nil until it's been tried.
     @ObservationIgnored var cacheOutcome: TranscriptCache.LoadOutcome?
     @ObservationIgnored var saveTask: Task<Void, Never>?
+    /// Injectable deadline source/waiter keeps transcript-save scheduling deterministic in tests.
+    @ObservationIgnored var saveNow: @MainActor () -> Date = { Date() }
+    @ObservationIgnored var waitForSaveDeadline: @MainActor (Date) async throws -> Void = { deadline in
+        try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
+    }
+    @ObservationIgnored var saveDeadline: Date?
+    @ObservationIgnored var saveDeadlineRunId: String?
+    @ObservationIgnored var saveScheduleGeneration = 0
     @ObservationIgnored var backfillTask: Task<Void, Never>?
     @ObservationIgnored var olderTask: Task<Bool, Never>?
     /// `chat.history` offset (counted back from the newest message) of the next older page.

@@ -25,12 +25,12 @@ extension ChatStore {
         guard !self.headless, self.isHydrated, !self.cachingStopped,
               TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot) != nil
         else { return }
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         // Writes nothing when the cache already holds what's loaded.
         await self.saveSnapshot()
         // The save suspended: the chat may have been opened or become busy meanwhile.
         guard self.isHydrated, let gateway, !gateway.isChatPinned(self.sessionKey) else { return }
-        self.saveTask?.cancel()
+        self.cancelScheduledSave()
         self.backfillTask?.cancel()
         self.backfillTask = nil
         self.olderTask?.cancel()

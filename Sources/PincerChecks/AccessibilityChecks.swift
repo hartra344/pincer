@@ -22,6 +22,15 @@ func runDemoAccessibilityPass() async {
         let label = AccessibilityText.newChatWith(agent: section.title)
         check(label == "New chat with \(section.title)", "a11y pass: + on \(section.title) is named (\(label))")
     }
+    gateway.organization = .group
+    let plainGroups = gateway.sections().filter { if case .group = $0.kind { true } else { false } }
+    check(plainGroups.contains { $0.title == "Home" } && plainGroups.contains { $0.title == "Personal" },
+          "a11y pass: demo supplies Home and Personal plain-group headers")
+    for section in plainGroups {
+        let label = AccessibilityText.newChatIn(group: section.title)
+        check(label == "New chat in \(section.title)", "a11y pass: plain-group + names \(section.title) (\(label))")
+    }
+    gateway.organization = .agent
     check(AccessibilityText.sectionState(isCollapsed: true) == "Collapsed"
           && AccessibilityText.sectionState(isCollapsed: false) == "Expanded", "a11y pass: section state values")
 
