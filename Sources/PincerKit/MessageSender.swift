@@ -93,7 +93,7 @@ public struct MessageSender: Hashable, Codable, Sendable {
     public func accessibilityAuthor(agents: [AgentSummary], receivingAgentId: String?) -> String {
         let name = self.displayName(agents: agents)
         if self.kind == .agent, let receivingAgentId,
-           self.agentId != receivingAgentId, self.agent(in: agents) != nil
+           let agentId = self.agentId, agentId != receivingAgentId
         {
             return AccessibilityText.join([name, L("forwarded", comment: "VoiceOver marker for a message sent from another known agent's chat")])
         }

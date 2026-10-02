@@ -18,7 +18,7 @@ struct ForwardedSenderAccessibilityTests {
 
         let namedUnknownAgent = MessageSender(kind: .agent, sessionKey: "agent:scout:main", agentId: "scout")
         #expect(namedUnknownAgent.accessibilityAuthor(agents: self.agents, receivingAgentId: "main")
-                == "Scout, from Scout’s chat")
+                == "Scout, forwarded")
     }
 
     @Test func helperAutomationAndUnknownSourcesKeepTheirContext() {
