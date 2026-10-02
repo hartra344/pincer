@@ -10,7 +10,7 @@ struct CompactFooterTests {
     @MainActor
     final class Actions: TranscriptRowActions {
         var readingAloud = false
-        var reactionsEnabled: Bool { true }
+        var reactionsEnabled = true
         var branchEntries: [TranscriptBranchEntry] { [] }
         var liveAvatar: TranscriptLiveAvatar? { nil }
 
@@ -66,7 +66,9 @@ struct CompactFooterTests {
         turn.textModelNames = ["claude-opus-4-8"]
         turn.textIds = ["compact-footer-message"]
         let row = TranscriptRow.entry(.assistant(turn))
-        let builder = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = true
+        let builder = TranscriptLayoutBuilder(context: context, settings: settings)
 
         func footer(_ width: CGFloat) throws -> (TranscriptRowLayout, TranscriptRowLayout.Placed, TranscriptFooterView) {
             let layout = builder.layout(row, width: width)
@@ -146,6 +148,85 @@ struct CompactFooterTests {
         compactView.configure(compactPart.part, row: compactLayout, actions: actions)
         compactView.layoutContent()
         #expect(compactView.detailsDrawFrame == compactDetailsFrame)
+    }
+
+    @Test func compactFooterUsesOnePackedRowBeforeTwoMetadataLines() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+
+        let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let key = "agent:footer:single-action-row"
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
+                                        previewImage: { _ in }, saveFile: { _, _ in })
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        var turn = AssistantTurn(id: "compact-footer-single-action-row", timestamp: stamp)
+        turn.text = ["A reply with model and time metadata."]
+        turn.textTimestamps = [stamp]
+        turn.textModelNames = ["claude-opus-4-8"]
+        turn.textIds = ["compact-footer-single-action-row-message"]
+
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = false
+        let layout = TranscriptLayoutBuilder(context: context, settings: settings)
+            .layout(.entry(.assistant(turn)), width: 420)
+        let placed = try #require(layout.parts.first { if case .footer = $0.part { true } else { false } })
+        let footer = footerPart(placed.part)
+        let view = TranscriptFooterView(frame: placed.frame)
+        var actions = Actions()
+        actions.reactionsEnabled = false
+        view.configure(placed.part, row: layout, actions: actions)
+        view.layoutContent()
+
+        let visibleButtons = view.subviews.compactMap { $0 as? TranscriptLabelButton }.filter { !$0.isHidden }
+        let actualActionRows = Set(visibleButtons.map { Int($0.frame.midY / footer.actionRowHeight) })
+        #expect(actualActionRows.count == 1, "the 420pt compact fixture keeps Copy, Reply and Listen on one row")
+        #expect(footer.controlHeight == footer.actionRowHeight,
+                "the row model reserves only the one action row the view uses")
+        #expect(footer.detailsFrame.minY == footer.controlHeight + 4,
+                "metadata starts immediately after that packed action row")
+        #expect(placed.frame.height == footer.controlHeight + 4 + footer.detailsFrame.height,
+                "the row's measured height matches its packed action and metadata geometry")
+    }
+
+    @Test func compactFooterReservesOnlyItsActualMetadataLines() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+
+        let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let key = "agent:footer:timestamp-only"
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
+                                        previewImage: { _ in }, saveFile: { _, _ in })
+        let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+        var turn = AssistantTurn(id: "compact-footer-timestamp-only", timestamp: stamp)
+        turn.text = ["A reply without recorded model metadata."]
+        turn.textTimestamps = [stamp]
+        turn.textIds = ["compact-footer-timestamp-only-message"]
+
+        var settings = TranscriptSettings.current(for: context)
+        settings.reactionsEnabled = false
+        let layout = TranscriptLayoutBuilder(context: context, settings: settings)
+            .layout(.entry(.assistant(turn)), width: 420)
+        let placed = try #require(layout.parts.first { if case .footer = $0.part { true } else { false } })
+        let footer = footerPart(placed.part)
+        let view = TranscriptFooterView(frame: placed.frame)
+        var actions = Actions()
+        actions.reactionsEnabled = false
+        view.configure(placed.part, row: layout, actions: actions)
+        view.layoutContent()
+
+        let captionHeight = max(TranscriptStyle.lineHeight(TranscriptStyle.shared.caption), 16)
+        #expect(footer.detailLines.count == 1)
+        #expect(Set(view.subviews.compactMap { $0 as? TranscriptLabelButton }.filter { !$0.isHidden }
+            .map { Int($0.frame.midY / footer.actionRowHeight) }).count == 1,
+                "the timestamp-only fixture also packs its visible actions into one row")
+        #expect(view.detailsDrawFrame.height == captionHeight,
+                "a timestamp-only footer draws one metadata line")
+        #expect(placed.frame.height == footer.controlHeight + 4 + captionHeight,
+                "the row height includes only its one metadata line")
     }
 
     @Test func compactBranchAndBookmarkKeepTheirOwnControlRow() throws {
@@ -234,5 +315,14 @@ extension TranscriptUIKitLayoutTests {
     @Test func compactFooterKeepsBranchAndBookmarkTargetsSeparate() throws {
         try CompactFooterTests().compactBranchAndBookmarkKeepTheirOwnControlRow()
     }
+
+    @Test func compactFooterReservesOnlyItsActualMetadataLines() throws {
+        try CompactFooterTests().compactFooterReservesOnlyItsActualMetadataLines()
+    }
+
+    @Test func messageFooterGapTracksPackedActionRows() throws {
+        try CompactFooterTests().compactFooterUsesOnePackedRowBeforeTwoMetadataLines()
+    }
 }
+
 #endif
