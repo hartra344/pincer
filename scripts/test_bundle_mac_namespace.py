@@ -98,6 +98,10 @@ else:
             self.assertEqual(long_info["CFBundleIdentifier"], f"chat.pincer.mac.dev-{'a' * 24}")
             self.assertEqual(long_info["PincerDevSuffix"], f".dev-{'a' * 24}")
 
+            leading_invalid_info = bundle("leading-invalid-build", "!" + "A" * 24)
+            self.assertEqual(leading_invalid_info["CFBundleIdentifier"], f"chat.pincer.mac.dev-{'a' * 23}")
+            self.assertEqual(leading_invalid_info["PincerDevSuffix"], f".dev-{'a' * 23}")
+
     @staticmethod
     def read_info(path: pathlib.Path) -> dict[str, object]:
         with path.open("rb") as plist_file:
