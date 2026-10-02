@@ -155,6 +155,8 @@ enum TranscriptPart {
 
     /// The line under a message: a Copy button and details such as when it was sent.
     struct Footer {
+        enum Action: Hashable { case bookmark, copy, reply, listen, react }
+
         /// Tells a recycled footer it now shows a different message, so "Copied" resets.
         let key: String
         let copyText: String
@@ -167,6 +169,9 @@ enum TranscriptPart {
         let controlHeight: CGFloat
         let detailsFrame: CGRect
         let detailLines: [String]
+        /// Compact action frames in footer coordinates. The view uses the same packed result that
+        /// sized this row, so controls and metadata cannot disagree about how many rows are needed.
+        let actionFrames: [Action: CGRect]
         /// The message Reply and React act on; nil hides them.
         var messageId: String?
         /// Shows the filled star (#384), which removes the bookmark when tapped.
@@ -1134,8 +1139,19 @@ extension TranscriptLayoutBuilder {
                                    into stack: inout Stack)
     {
         let time = turn.textTimestamps.indices.contains(index) ? turn.textTimestamps[index] : turn.timestamp
+        let messageId = Self.messageId(turn, index)
+        // This is a cheap packing candidate, not the final Read Aloud decision: the footer view
+        // still checks SpeechText once when configured. Avoid parsing the whole body a second time
+        // on the row-layout path merely to remove a possible empty slot from unusual markup.
+        let canListen: Bool
+        if let messageId, let item = self.context.chat?.message(withId: messageId) {
+            canListen = item.role == .assistant && !item.isPending && !item.isError && !turn.text[index].isEmpty
+        } else {
+            canListen = !turn.isStreaming && !turn.isError && messageId != nil && !turn.text[index].isEmpty
+        }
         self.footer(key: "\(turn.id):\(index)", copy: turn.text[index], time: time ?? turn.timestamp,
-                    model: self.model(of: turn, message: index), messageId: Self.messageId(turn, index), layout: layout,
+                    model: self.model(of: turn, message: index), messageId: messageId, canListen: canListen,
+                    layout: layout,
                     into: &stack)
     }
 
@@ -1160,13 +1176,15 @@ extension TranscriptLayoutBuilder {
     }
 
     fileprivate func footer(key: String, copy text: String, time: Date?, model: String?, messageId: String?,
+                            canListen: Bool = false,
                             layout: TranscriptRowLayout, into stack: inout Stack)
     {
         let bookmarked = messageId.map { layout.decoration.bookmarks.contains($0) } ?? false
         let timeDetail = time?.messageDetailTimestamp
         let detailLines = [model, timeDetail].compactMap(\.self)
         let details = detailLines.joined(separator: " · ")
-        let captionHeight = max(TranscriptStyle.lineHeight(self.style.caption), 16)
+        let lineHeight = TranscriptStyle.lineHeight(self.style.caption)
+        let captionHeight = max(lineHeight, 16)
         let compact = stack.width < 430
         let branch = layout.decoration.branch
         let branchRowHeight: CGFloat
@@ -1182,21 +1200,34 @@ extension TranscriptLayoutBuilder {
         let controlHeight: CGFloat
         let detailsFrame: CGRect
         let height: CGFloat
+        let actionFrames: [TranscriptPart.Footer.Action: CGRect]
+        let footerActionRowHeight: CGFloat
         if compact {
-            // Reserve two stable action rows regardless of transient button state (Copy/Copied and
-            // Listen/Stop), and a separate branch-target row when this message has branch controls.
-            controlHeight = branchRowHeight + (branch == nil ? 0 : 4) + 2 * actionRowHeight
-            let detailsY = controlHeight + 4
-            detailsFrame = CGRect(x: 0, y: detailsY, width: stack.width, height: captionHeight * 2)
+            var actions: [TranscriptPart.Footer.Action] = []
+            if bookmarked { actions.append(.bookmark) }
+            if !text.isEmpty { actions.append(.copy) }
+            if messageId != nil { actions.append(.reply) }
+            if canListen { actions.append(.listen) }
+            if messageId != nil, self.settings.reactionsEnabled { actions.append(.react) }
+            let packed = CompactFooterPacking.pack(width: stack.width, actions: actions, rowHeight: actionRowHeight)
+            actionFrames = packed.frames
+            footerActionRowHeight = packed.rowHeight
+            controlHeight = branchRowHeight + (branch == nil ? 0 : 4) + CGFloat(packed.rowCount) * footerActionRowHeight
+            let detailsY = controlHeight + (detailLines.isEmpty ? 0 : 4)
+            let detailsHeight = CGFloat(detailLines.count) * captionHeight
+            detailsFrame = CGRect(x: 0, y: detailsY, width: stack.width, height: detailsHeight)
             height = detailsFrame.maxY
         } else {
             controlHeight = 0
+            actionFrames = [:]
+            footerActionRowHeight = actionRowHeight
             detailsFrame = .zero // The wide single-line frame follows the visible buttons in the view.
             height = captionHeight
         }
         stack.add(.footer(.init(key: key, copyText: text, details: details, compact: compact,
-                                branchRowHeight: branchRowHeight, actionRowHeight: actionRowHeight,
+                                branchRowHeight: branchRowHeight, actionRowHeight: footerActionRowHeight,
                                 controlHeight: controlHeight, detailsFrame: detailsFrame, detailLines: detailLines,
+                                actionFrames: actionFrames,
                                 messageId: messageId, isBookmarked: bookmarked, branch: branch)),
                   height: height,
                   spacing: TranscriptMetrics.footerSpacing)

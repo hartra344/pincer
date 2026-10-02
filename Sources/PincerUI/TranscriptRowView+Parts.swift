@@ -648,13 +648,88 @@ final class TranscriptSendStatusView: TranscriptBaseView {
     #endif
 }
 
+/// Packs compact footer actions once in row layout and uses those exact frames to place the views.
+/// The one-entry cache is bounded and keyed by the localized labels and the active style generation.
+@MainActor
+enum CompactFooterPacking {
+    struct Result {
+        let frames: [TranscriptPart.Footer.Action: CGRect]
+        let rowCount: Int
+        let rowHeight: CGFloat
+    }
+
+    private struct Metric {
+        let width: CGFloat
+        let outset: CGFloat
+        let height: CGFloat
+    }
+
+    private struct Cache {
+        let key: String
+        let values: [TranscriptPart.Footer.Action: Metric]
+    }
+
+    private static var cache: Cache?
+
+    private static func metrics() -> [TranscriptPart.Footer.Action: Metric] {
+        let copy = L("Copy"), copied = L("Copied"), reply = L("Reply")
+        let listen = L("Listen"), stop = L("Stop"), react = L("React")
+        let labels = [copy, copied, reply, listen, stop, react]
+        let key = "\(TranscriptStyle.generation)|" + labels.joined(separator: "\u{0}")
+        if let cache, cache.key == key { return cache.values }
+
+        #if os(iOS)
+        let minimumTarget: CGFloat = 44
+        #else
+        let minimumTarget: CGFloat = 0
+        #endif
+        func metric(_ titles: [String], minimumWidth: CGFloat = 0, extraHitOutset: CGFloat = 0) -> Metric {
+            let sizes = titles.map(TranscriptLabelButton.size(title:))
+            let size = sizes.max { $0.width < $1.width } ?? .zero
+            let height = sizes.map(\.height).max() ?? 0
+            let width = max(minimumWidth, size.width)
+            let outset = max(extraHitOutset, max((minimumTarget - width) / 2, 0))
+            return Metric(width: width, outset: outset, height: height)
+        }
+        let values: [TranscriptPart.Footer.Action: Metric] = [
+            .bookmark: metric([""], extraHitOutset: minimumTarget == 0 ? 8 : 0),
+            .copy: metric([copy, copied], minimumWidth: 80),
+            .reply: metric([reply]),
+            .listen: metric([listen, stop], minimumWidth: 80),
+            .react: metric([react]),
+        ]
+        self.cache = Cache(key: key, values: values)
+        return values
+    }
+
+    static func pack(width: CGFloat, actions: [TranscriptPart.Footer.Action], rowHeight: CGFloat) -> Result {
+        let metrics = self.metrics()
+        let rowHeight = max(rowHeight, actions.compactMap { metrics[$0]?.height }.max() ?? 0)
+        var frames: [TranscriptPart.Footer.Action: CGRect] = [:]
+        var cursor: CGFloat = 0
+        var row = 0
+        for action in actions {
+            guard let metric = metrics[action] else { continue }
+            var x = cursor + metric.outset
+            if cursor > 0, x + metric.width + metric.outset > width {
+                row += 1
+                cursor = 0
+                x = metric.outset
+            }
+            frames[action] = CGRect(x: x, y: CGFloat(row) * rowHeight, width: metric.width, height: rowHeight)
+            cursor = x + metric.width + metric.outset + 10
+        }
+        return Result(frames: frames, rowCount: frames.isEmpty ? 0 : row + 1, rowHeight: rowHeight)
+    }
+
+    static func hitOutset(for action: TranscriptPart.Footer.Action) -> CGFloat {
+        self.metrics()[action]?.outset ?? 0
+    }
+}
+
 /// The line under a message: the branch switcher when its branches fork here, Copy, Reply and React, then details such as the time it was sent
 /// and its model.
 final class TranscriptFooterView: TranscriptBaseView {
-    /// Compact button slots are stable across the visible Copy/Copied and Listen/Stop states;
-    /// actual labels and accessibility text remain the localized button titles.
-    private static let compactCopySlotWidth: CGFloat = 80
-    private static let compactListenSlotWidth: CGFloat = 80
     private var footer: TranscriptPart.Footer?
     private let copyButton = TranscriptLabelButton()
     private let replyButton = TranscriptLabelButton()
@@ -843,10 +918,12 @@ final class TranscriptFooterView: TranscriptBaseView {
         let old = self.footer
         self.footer = footer
         self.actions = actions
-        self.copyButton.isHidden = footer.copyText.isEmpty
-        self.replyButton.isHidden = footer.messageId == nil
+        self.copyButton.isHidden = footer.copyText.isEmpty || (footer.compact && footer.actionFrames[.copy] == nil)
+        self.replyButton.isHidden = footer.messageId == nil || (footer.compact && footer.actionFrames[.reply] == nil)
         self.reactButton.isHidden = footer.messageId == nil || !actions.reactionsEnabled
+            || (footer.compact && footer.actionFrames[.react] == nil)
         self.bookmarkButton.isHidden = footer.messageId == nil || !footer.isBookmarked
+            || (footer.compact && footer.actionFrames[.bookmark] == nil)
         self.updateListenButton()
         if old?.branch != footer.branch {
             let branch = footer.branch
@@ -880,7 +957,8 @@ final class TranscriptFooterView: TranscriptBaseView {
 
     /// Read Aloud / Stop Reading Aloud for this message; re-runs when the controller's phase changes.
     private func updateListenButton() {
-        guard let id = footer?.messageId, let actions, actions.canReadAloud(id) else {
+        guard let footer, !footer.compact || footer.actionFrames[.listen] != nil,
+              let id = footer.messageId, let actions, actions.canReadAloud(id) else {
             if !self.listenButton.isHidden { self.listenButton.isHidden = true; self.relayoutFooter() }
             return
         }
@@ -979,41 +1057,16 @@ final class TranscriptFooterView: TranscriptBaseView {
             branchX = frame.maxX + (button === self.previousBranchButton || button === self.branchLabel ? 0 : 3)
         }
 
-        let rowHeight = footer.actionRowHeight
         let actionY = footer.branch == nil ? 0 : footer.branchRowHeight + 4
-        let actions = [self.bookmarkButton, self.copyButton, self.replyButton, self.listenButton, self.reactButton]
-            .filter { !$0.isHidden }
-        var x: CGFloat = 0
-        var row = 0
-        for button in actions {
-            let size = button.buttonSize
-            #if os(iOS)
-            let target: CGFloat = 44
-            button.hitOutset = CGSize(width: max((target - size.width) / 2, 0),
-                                      height: max((target - size.height) / 2, 0))
-            #else
-            button.hitOutset = button === self.bookmarkButton ? CGSize(width: 8, height: 8) : .zero
-            #endif
-            let reservedWidth: CGFloat
-            if button === self.copyButton {
-                reservedWidth = max(size.width, Self.compactCopySlotWidth)
-            } else if button === self.listenButton {
-                reservedWidth = max(size.width, Self.compactListenSlotWidth)
-            } else {
-                reservedWidth = size.width
-            }
-            let leftOutset = button.hitOutset.width
-            let rightOutset = button.hitOutset.width
-            var frameX = x + leftOutset
-            if x > 0, frameX + reservedWidth + rightOutset > self.bounds.width, row == 0 {
-                row = 1
-                x = 0
-                frameX = leftOutset
-            }
-            let y = actionY + CGFloat(row) * rowHeight + (rowHeight - size.height) / 2
-            let frame = CGRect(x: frameX, y: y, width: reservedWidth, height: size.height)
+        let buttons: [(TranscriptPart.Footer.Action, TranscriptLabelButton)] = [
+            (.bookmark, self.bookmarkButton), (.copy, self.copyButton), (.reply, self.replyButton),
+            (.listen, self.listenButton), (.react, self.reactButton),
+        ]
+        for (action, button) in buttons where !button.isHidden {
+            guard let planned = footer.actionFrames[action] else { continue }
+            button.hitOutset = CGSize(width: CompactFooterPacking.hitOutset(for: action), height: 0)
+            let frame = planned.offsetBy(dx: 0, dy: actionY)
             if button.frame != frame { button.frame = frame; moved = true }
-            x = frame.maxX + rightOutset + 10
         }
         if moved { self.redraw() }
     }
