@@ -3,36 +3,74 @@ import Synchronization
 
 /// Turns transcript markdown into text worth speaking.
 public enum SpeechText {
+    /// A reply normalized for the Read Aloud command. The full spoken text is retained so the
+    /// command can start immediately after readiness is published.
+    public struct PreparedReply: Sendable, Equatable {
+        public let messageId: String
+        public let text: String
+
+        public init(messageId: String, text: String) {
+            self.messageId = messageId
+            self.text = text
+        }
+    }
+
 #if DEBUG
     struct SpeakabilityDebugStats: Sendable, Equatable {
         var mainThreadNormalizations = 0
         var offMainNormalizations = 0
     }
 
-    private struct SpeakabilityDebugState: Sendable {
-        var trackedItemID: String?
+    private struct SpeakabilityDebugRecord: Sendable {
         var stats = SpeakabilityDebugStats()
+        var lastUse: UInt64
+    }
+
+    private struct SpeakabilityDebugState: Sendable {
+        static let capacity = 16
+        var records: [String: SpeakabilityDebugRecord] = [:]
+        var clock: UInt64 = 0
+
+        mutating func tick() -> UInt64 {
+            self.clock &+= 1
+            return self.clock
+        }
     }
 
     private static let speakabilityDebug = Mutex(SpeakabilityDebugState())
 
     /// Bounded, payload-free instrumentation for the actual Read Aloud eligibility path.
-    static var speakabilityDebugStats: SpeakabilityDebugStats {
-        self.speakabilityDebug.withLock { $0.stats }
+    static func speakabilityDebugStats(for itemID: String) -> SpeakabilityDebugStats {
+        self.speakabilityDebug.withLock { state in
+            guard var record = state.records[itemID] else { return SpeakabilityDebugStats() }
+            record.lastUse = state.tick()
+            state.records[itemID] = record
+            return record.stats
+        }
     }
 
     static func resetSpeakabilityDebugStats(tracking itemID: String) {
         self.speakabilityDebug.withLock { state in
-            state.trackedItemID = itemID
-            state.stats = SpeakabilityDebugStats()
+            if state.records[itemID] == nil, state.records.count >= SpeakabilityDebugState.capacity,
+               let oldest = state.records.min(by: { $0.value.lastUse < $1.value.lastUse })?.key
+            {
+                state.records[oldest] = nil
+            }
+            state.records[itemID] = SpeakabilityDebugRecord(stats: SpeakabilityDebugStats(), lastUse: state.tick())
         }
+    }
+
+    static func unregisterSpeakabilityDebugStats(tracking itemID: String) {
+        self.speakabilityDebug.withLock { $0.records[itemID] = nil }
     }
 
     private static func recordSpeakabilityNormalization(for item: ChatItem) {
         self.speakabilityDebug.withLock { state in
-            guard state.trackedItemID == item.id else { return }
-            if Thread.isMainThread { state.stats.mainThreadNormalizations += 1 }
-            else { state.stats.offMainNormalizations += 1 }
+            guard var record = state.records[item.id] else { return }
+            if Thread.isMainThread { record.stats.mainThreadNormalizations += 1 }
+            else { record.stats.offMainNormalizations += 1 }
+            record.lastUse = state.tick()
+            state.records[item.id] = record
         }
     }
 #endif
@@ -140,6 +178,17 @@ public enum SpeechText {
 #endif
         let text = self.plain(fromMarkdown: item.plainText)
         return text.isEmpty ? nil : text
+    }
+
+    /// Prepares only the newest reply the command can read. Call this from a worker; each candidate
+    /// is normalized once, and cancellation stops the backward scan between messages.
+    public static func latestSpeakableReply(in items: [ChatItem]) -> PreparedReply? {
+        for item in items.reversed() {
+            if Task.isCancelled { return nil }
+            guard let text = self.speakableText(for: item) else { continue }
+            return PreparedReply(messageId: item.transcriptId ?? item.id, text: text)
+        }
+        return nil
     }
 
     /// Prepares one message for the renderer cache. Call this from its off-main worker so both

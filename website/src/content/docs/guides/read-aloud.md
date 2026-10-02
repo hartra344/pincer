@@ -16,6 +16,8 @@ Other ways to start and stop:
 - **Command palette.** Press <kbd>⌘</kbd> <kbd>K</kbd> and run **Read Last Reply Aloud**. While something is speaking, it says **Stop Reading Aloud** instead. **Read Aloud Settings…** opens the settings, and **Gateway Voice Settings…** opens the gateway's voice page.
 - **Keyboard.** <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd> reads the latest reply in the chat you're looking at, on a Mac and on an iPad with a keyboard. Press it again to stop. You can change it in Settings → Keyboard Shortcuts (Shortcuts on a Mac). See [Change a shortcut](../../reference/keyboard-shortcuts/#change-a-shortcut).
 
+Pincer prepares the latest readable reply in the background, so the menu command and keyboard shortcut become available once that reply is ready. If a newer message has no readable text, the command uses the most recent reply that does.
+
 Only one reply speaks at a time. Starting another one stops the first.
 
 ### On iPhone and iPad

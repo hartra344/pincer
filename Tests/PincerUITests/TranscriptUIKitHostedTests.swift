@@ -169,6 +169,7 @@ struct TranscriptUIKitHostedTests {
         chat.items = [item]
 
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: messageID) }
         host.coordinator.update(rows: [Self.assistant(messageID, text: body, at: 1)], context: host.context, insets: (0, 0))
         await Self.idle(host, cap: 10)
         host.view.layoutIfNeeded()
@@ -189,9 +190,9 @@ struct TranscriptUIKitHostedTests {
             return host.view.visibleCells.contains(where: hasVisibleReadAloud)
         }
         #expect(firstReady && hasVisibleReadAloud(in: cell), "normal assistant prose keeps the actual Listen button after preparation")
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "visible-row and accessibility configuration should consume prepared eligibility rather than parse the body on main")
-        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 1,
                 "a visible cache miss is normalized once by the background worker")
         #expect(host.coordinator.renderer.layoutBuildCount == layoutBuildCountBeforeReadiness,
                 "readiness refresh advances the native apply token without rebuilding row geometry")
@@ -199,9 +200,9 @@ struct TranscriptUIKitHostedTests {
         host.view.reloadData()
         host.view.layoutIfNeeded()
         await Self.idle(host, cap: 10)
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "reconfiguring an unchanged visible item should reuse its eligibility")
-        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 1,
                 "reconfiguring an unchanged visible item should not repeat background normalization")
 
         // A different row advances the chat's coarse revision, but the unchanged assistant source
@@ -216,7 +217,7 @@ struct TranscriptUIKitHostedTests {
         host.view.layoutIfNeeded()
         #expect(host.view.visibleCells.contains(where: hasVisibleReadAloud),
                 "an unrelated row update keeps the existing assistant Listen action available")
-        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 1,
                 "an unrelated chat revision does not re-normalize the unchanged assistant body")
 
         // A changed item under the same transcript id must not leave stale eligibility behind.
@@ -228,11 +229,11 @@ struct TranscriptUIKitHostedTests {
         host.view.layoutIfNeeded()
         let codeReady = await eventually(timeout: .seconds(3)) {
             host.view.layoutIfNeeded()
-            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 2
+            return SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations >= 2
         }
         let codeCell = try #require(host.view.visibleCells.first)
         #expect(codeReady && !hasVisibleReadAloud(in: codeCell), "code-only assistant content is not speakable")
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "content changes should refresh eligibility off main")
 
         item.blocks = [.text(body + "\n\nA restored answer.")]
@@ -243,12 +244,12 @@ struct TranscriptUIKitHostedTests {
         host.view.layoutIfNeeded()
         let restoredReady = await eventually(timeout: .seconds(3)) {
             host.view.layoutIfNeeded()
-            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 3
+            return SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations >= 3
                 && host.view.visibleCells.contains(where: hasVisibleReadAloud)
         }
         let restoredCell = try #require(host.view.visibleCells.first)
         #expect(restoredReady && hasVisibleReadAloud(in: restoredCell), "restored prose is eligible again")
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "restoring content must also use the prepared off-main eligibility")
 
         // A style/context-wide reset drops both layout identity and readiness. If the store edits
@@ -287,6 +288,7 @@ struct TranscriptUIKitHostedTests {
         }
         defer { release.signal() }
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: messageID) }
         host.coordinator.update(rows: [Self.assistant(messageID, text: prose, at: 1)], context: host.context, insets: (0, 0))
         await Self.idle(host, cap: 10)
         let started = await eventually { entered.withLock { $0 } }
@@ -299,7 +301,7 @@ struct TranscriptUIKitHostedTests {
         release.signal()
         let refreshed = await eventually(timeout: .seconds(4)) {
             host.view.layoutIfNeeded()
-            return SpeechText.speakabilityDebugStats.offMainNormalizations >= 2
+            return SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations >= 2
                 && host.view.visibleCells.allSatisfy { cell in
                     var pending: [UIView] = [cell]
                     while let view = pending.popLast() {
@@ -311,7 +313,7 @@ struct TranscriptUIKitHostedTests {
                 }
         }
         #expect(refreshed, "a stale prose result is replaced by the current same-ID code-only result")
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "stale completion and its retry never normalize on main")
     }
 
@@ -394,6 +396,7 @@ struct TranscriptUIKitHostedTests {
         }
         defer { release.signal() }
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: messageID) }
         host.coordinator.update(rows: [row], context: host.context, insets: (0, 0))
 
         _ = renderer.layout(for: row, width: 280)
@@ -410,9 +413,9 @@ struct TranscriptUIKitHostedTests {
             renderer.canReadAloud(messageID, rowID: row.id)
         }
         #expect(ready, "the valid worker result survives a geometry-only layout rebuild")
-        #expect(SpeechText.speakabilityDebugStats.offMainNormalizations == 1,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 1,
                 "retargeting does not repeat normalization")
-        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+        #expect(SpeechText.speakabilityDebugStats(for: messageID).mainThreadNormalizations == 0,
                 "the layout serial retry stays off main")
     }
 
