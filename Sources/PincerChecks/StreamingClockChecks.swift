@@ -26,11 +26,12 @@ func runDemoStreamingClockChecks() async {
     #if DEBUG
     let (defaults, suite) = scratchDefaults()
     let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    gateway.cacheRoot = nil
     gateway.start()
-    defer { gateway.stop(); defaults.removePersistentDomain(forName: suite) }
+    defer { defaults.removePersistentDomain(forName: suite) }
     let ready = await waitFor("demo streaming clock") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(ready, "stream clock demo: connected")
-    guard ready else { return }
+    guard ready else { await gateway.stopAndFlushCache(); return }
     let chat = gateway.chat(for: "agent:main:main")
     await chat.load()
     func visibleBody() -> String? {
@@ -42,7 +43,7 @@ func runDemoStreamingClockChecks() async {
     await chat.send("long")
     let started = await waitFor("demo streaming clock first text") { visibleBody()?.isEmpty == false }
     check(started, "stream clock demo: actual reply begins publishing text")
-    guard started else { return }
+    guard started else { await gateway.stopAndFlushCache(); return }
     chat.flushLive()
     let before = visibleBody() ?? ""
     chat.lastPublishAt = Date().addingTimeInterval(3_600)
@@ -53,5 +54,6 @@ func runDemoStreamingClockChecks() async {
     check(grows, "stream clock demo: text keeps growing after a simulated clock rollback, before terminal flush")
     let finished = await waitFor("demo streaming clock terminal", timeout: 20) { !chat.isRunning }
     check(finished, "stream clock demo: the actual terminal event still completes the reply")
+    await gateway.stopAndFlushCache()
     #endif
 }
