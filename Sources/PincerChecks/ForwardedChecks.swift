@@ -47,6 +47,9 @@ func checkForwardedMessages() {
     check(rows.first?.sender?.canOpenSource == true, "Kiko's chat can be opened from the marker")
     check(rows.first?.sender?.marker(agents: agents, receivingAgentId: "lumi") == "from Kiko’s chat", "marker names the source chat")
 
+    check(rows.first?.sender?.accessibilityAuthor(agents: agents, receivingAgentId: "lumi") == "Kiko, forwarded",
+          "forwarded accessibility: names Kiko once with forwarded context")
+
     // Raw (older Gateways, or a live event before projection): user role with the model-facing prefix.
     let raw = items("""
     [
@@ -79,6 +82,9 @@ func checkForwardedMessages() {
     let sameAgent = MessageSender(kind: .agent, sessionKey: "agent:lumi:dashboard:ops")
     check(sameAgent.marker(agents: agents, receivingAgentId: "lumi") == "from another chat", "same agent's other chat reads “from another chat”")
 
+    check(sameAgent.accessibilityAuthor(agents: agents, receivingAgentId: "lumi") == "Lumi, from another chat",
+          "forwarded accessibility: retains same-agent other-chat context")
+
     // Automations (cron) and helpers (subagents).
     let other = items("""
     [
@@ -102,6 +108,11 @@ func checkForwardedMessages() {
     check(other[2].sender?.displayName(agents: agents) == "Helper", "helper reads “Helper”")
     check(other[4].sender == nil && other[4].role == .user, "cron input without job/run/source stays a user turn (upstream rule)")
     check(other[5].sender == nil && other[5].via == "Discord", "external_user keeps the channel label")
+
+    check(other[1].sender?.accessibilityAuthor(agents: agents, receivingAgentId: "lumi") == "Weekly review, from an automation",
+          "forwarded accessibility: retains named automation context")
+    check(other[2].sender?.accessibilityAuthor(agents: agents, receivingAgentId: "lumi") == "Helper, from a helper",
+          "forwarded accessibility: retains helper context")
 
     // Search and reply previews name the actual sender.
     let documents = MessageSearch.documents(sessionKey: "agent:lumi:main", items: projected)
