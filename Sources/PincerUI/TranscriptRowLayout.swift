@@ -103,7 +103,7 @@ enum TranscriptPart {
             enum Action {
                 case copy(String)
                 case toggle(key: String, to: Bool)
-                case openMCPServer(String)
+                case openMCPServer(String, toolName: String)
             }
 
             let id: String

@@ -19,10 +19,10 @@ struct GatewaySettingsOpener {
         self(gateway, at: .usage, routes: [.sessionUsage(key: key, agentId: agentId)])
     }
 
-    /// MCP Servers, on the server's page when `name` is a configured server, else on the list. When the
-    /// config hasn't loaded yet it's loaded first (up to a second) so the name can be resolved.
+    /// MCP Servers, on the server's page when this transcript tool id resolves to a configured server,
+    /// else on the list. When the config hasn't loaded yet it's loaded first (up to a second).
     @MainActor
-    func mcpServer(_ gateway: GatewayStore, name: String) {
+    func mcpServer(_ gateway: GatewayStore, name: String, sessionKey: String? = nil) {
         guard gateway.settings.hasLoaded else {
             Task { @MainActor in
                 var finished = false
@@ -34,21 +34,21 @@ struct GatewaySettingsOpener {
                     try? await Task.sleep(for: .milliseconds(50))
                 }
                 _ = load
-                self.openResolved(gateway, name: name)
+                self.openResolved(gateway, name: name, sessionKey: sessionKey)
             }
             return
         }
-        self.openResolved(gateway, name: name)
+        self.openResolved(gateway, name: name, sessionKey: sessionKey)
     }
 
     @MainActor
-    private func openResolved(_ gateway: GatewayStore, name: String) {
+    private func openResolved(_ gateway: GatewayStore, name: String, sessionKey: String?) {
         guard gateway.settings.hasLoaded else { return self(gateway, at: .mcpServers) }
         let servers = gateway.mcp.servers
-        // Transcript names carry a sanitised server name, so fall back to matching that.
-        let match = servers.first { $0.name == name }
-            ?? servers.first { MCPToolName.safeServerName($0.name) == name }
-        self(gateway, at: .mcpServers, routes: match.map { [.mcpServer($0.name)] } ?? [])
+        let match = MCPToolServerResolver.resolve(toolName: name, effectiveTools: nil,
+                                                  configuredServerNames: servers.map(\.name))
+        let configured = match.flatMap { serverName in servers.first { $0.name == serverName } }
+        self(gateway, at: .mcpServers, routes: configured.map { [.mcpServer($0.name)] } ?? [])
     }
 }
 

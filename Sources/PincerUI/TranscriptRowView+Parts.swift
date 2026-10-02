@@ -1476,8 +1476,8 @@ final class TranscriptToolView: TranscriptBaseView {
         case let .toggle(key, value):
             guard let rowId else { return }
             self.actions?.setExpanded(key, value, row: rowId)
-        case let .openMCPServer(name):
-            self.actions?.openMCPServer(name)
+        case let .openMCPServer(_, toolName: toolName):
+            self.actions?.openMCPServer(toolName)
         }
     }
 
