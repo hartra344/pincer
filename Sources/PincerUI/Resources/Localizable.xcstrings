@@ -9683,6 +9683,16 @@
         }
       }
     },
+    "Open %@ on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@ on %@"
+          }
+        }
+      }
+    },
     "Open %@’s Chat": {
       "localizations": {
         "en": {
