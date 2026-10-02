@@ -102,6 +102,14 @@ else:
             self.assertEqual(leading_invalid_info["CFBundleIdentifier"], f"chat.pincer.mac.dev-{'a' * 23}")
             self.assertEqual(leading_invalid_info["PincerDevSuffix"], f".dev-{'a' * 23}")
 
+            multiline_info = bundle("multiline-build", "Desk\nWork")
+            self.assertEqual(multiline_info["CFBundleIdentifier"], "chat.pincer.mac.dev-desk-work")
+            self.assertEqual(multiline_info["PincerDevSuffix"], ".dev-desk-work")
+
+            unicode_info = bundle("unicode-build", "K_İ")
+            self.assertEqual(unicode_info["CFBundleIdentifier"], "chat.pincer.mac.dev-k-i")
+            self.assertEqual(unicode_info["PincerDevSuffix"], ".dev-k-i")
+
     @staticmethod
     def read_info(path: pathlib.Path) -> dict[str, object]:
         with path.open("rb") as plist_file:
