@@ -47,9 +47,9 @@ struct WebSearchTruncationStatusTests {
 
         let selected = TranscriptHighlight(query: "TAILMARK",
                                            options: .init(includeTools: true),
-                                           current: .init(entryId: "turn-web-search-results-complete",
+                                           current: .init(entryId: "a-turn-web-search-results-complete",
                                                           section: .tool("web-call-results-complete"), occurrence: 0),
-                                           rows: ["turn-web-search-results-complete"])
+                                           rows: ["a-turn-web-search-results-complete"])
         let expanded = try Self.card(kind: "results", truncated: false, snippet: snippet, highlight: selected)
         let found = try #require(expanded.sections.first { $0.id?.hasSuffix(":web-0:snippet") == true })
         #expect(found.visibleLineLimit == nil && found.frame.height == found.contentHeight,

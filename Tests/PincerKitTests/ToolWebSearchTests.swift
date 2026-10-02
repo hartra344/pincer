@@ -133,7 +133,8 @@ struct ToolWebSearchTests {
             ])]),
         ])))
         let result = try #require(web.results.first)
-        #expect(result.snippet?.count == WebSearch.Limits.snippetShown)
+        #expect(result.snippet?.count == WebSearch.Limits.snippetShown + 1 && result.snippet?.hasSuffix("…") == true,
+                "the existing payload limit retains its appended clipping ellipsis")
         #expect(web.searchTexts == [result.text] && web.searchTexts[0].hasSuffix(result.snippet ?? ""),
                 "the complete capped result text remains available to Find when the view visually clamps it")
         #expect(web.copyText == "Guide\nhttps://docs.example/guide",
