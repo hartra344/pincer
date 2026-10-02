@@ -101,8 +101,11 @@ struct NarrowFileEditHeaderCountsTests {
         view.layoutIfNeeded()
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
+        // SwiftPM's hosted runner has no UIWindowScene. Invoke this configured native view's
+        // actual drawing path in a renderer context instead of relying on snapshotting a windowless
+        // hierarchy, which can return a blank image without indicating a layout failure.
         let image = try #require(UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in
-            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+            view.draw(view.bounds)
         }.cgImage)
         #endif
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
