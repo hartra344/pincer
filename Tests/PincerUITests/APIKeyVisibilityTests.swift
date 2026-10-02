@@ -146,6 +146,15 @@ struct APIKeyVisibilityTests {
         #expect(button.accessibilityLabel == label)
         #expect(Self.descendants(host.view).compactMap { $0 as? UITextField }.first === field)
         #expect(editor.submissions == 0, "Show/hide never submits the key")
+        try #require(field.becomeFirstResponder(), "the UIKit fixture can focus the input to expose its clear affordance")
+        host.view.layoutIfNeeded()
+        let clear = try #require(Self.descendants(field).compactMap { $0 as? UIButton }
+            .first { $0 !== button && !$0.isHidden }, "the eye control preserves a visible clear button while editing")
+        #expect(!field.convert(clear.bounds, from: clear).intersects(field.convert(button.bounds, from: button)),
+                "the clear and visibility targets do not overlap")
+        #expect(Self.click(clear) > 0)
+        #expect(await eventually { field.text?.isEmpty == true && editor.text.isEmpty },
+                "the native clear action clears the actual bound draft")
         _ = field.delegate?.textFieldShouldReturn?(field)
         #expect(editor.submissions == 1)
         editor.disabled = true
