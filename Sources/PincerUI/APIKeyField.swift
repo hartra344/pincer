@@ -176,12 +176,39 @@ private struct APIKeyMacField: NSViewRepresentable {
         func controlTextDidBeginEditing(_ notification: Notification) {
             guard let field = notification.object as? NSTextField,
                   let editor = field.currentEditor() as? NSTextView else { return }
-            editor.isAutomaticQuoteSubstitutionEnabled = false
-            editor.isAutomaticDashSubstitutionEnabled = false
-            editor.isAutomaticTextReplacementEnabled = false
-            editor.isAutomaticSpellingCorrectionEnabled = false
-            editor.isContinuousSpellCheckingEnabled = false
+            APIKeyMacTextInput.configure(editor)
         }
+    }
+}
+
+@MainActor
+private enum APIKeyMacTextInput {
+    static func configure(_ text: NSText) {
+        guard let editor = text as? NSTextView else { return }
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.isAutomaticTextCompletionEnabled = false
+        editor.isContinuousSpellCheckingEnabled = false
+    }
+}
+
+@MainActor
+private final class APIKeyPlainTextFieldCell: NSTextFieldCell {
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        let editor = super.setUpFieldEditorAttributes(textObj)
+        APIKeyMacTextInput.configure(editor)
+        return editor
+    }
+}
+
+@MainActor
+private final class APIKeySecureTextFieldCell: NSSecureTextFieldCell {
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        let editor = super.setUpFieldEditorAttributes(textObj)
+        APIKeyMacTextInput.configure(editor)
+        return editor
     }
 }
 
@@ -196,6 +223,8 @@ private final class APIKeyMacFieldView: NSStackView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        self.secureField.cell = APIKeySecureTextFieldCell(textCell: "")
+        self.plainField.cell = APIKeyPlainTextFieldCell(textCell: "")
         self.orientation = .horizontal
         self.alignment = .centerY
         self.distribution = .fill
