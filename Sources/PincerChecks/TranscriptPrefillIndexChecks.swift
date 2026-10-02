@@ -32,8 +32,9 @@ func runTranscriptPrefillIndexChecks() async {
         await TranscriptCache.save(updated, gatewayId: gatewayID, sessionKey: key, root: root)
         let index = MessageIndex.shared(gatewayId: gatewayID, root: root)
         let stats = index.lastIndexStats
-        check(stats.path == .tail && stats.documentsBuilt <= 2,
-              "prefill: one appended item builds at most two documents, not the whole transcript")
+        // A new user row reindexes the preceding user/assistant pair as well as the append.
+        check(stats.path == .tail && stats.documentsBuilt <= 3,
+              "prefill: user append uses the tail path and at most three boundary documents (path=\(stats.path), documents=\(stats.documentsBuilt))")
         let originalHits = await indexHits(gatewayID, "original message 0", root: root)
         let tailHits = await indexHits(gatewayID, "appended sentinel", root: root)
         check(!originalHits.isEmpty && !tailHits.isEmpty,
