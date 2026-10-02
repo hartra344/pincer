@@ -428,6 +428,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
     private let chip = UIButton(configuration: .plain())
     private let workingAvatar = SidebarWorkingAvatarView()
     private let unreadDot = UIImageView(image: UIImage(systemName: "circle.fill"))
+    private let splitPaneIndicator = UIImageView(image: UIImage(systemName: "rectangle.split.2x1"))
     private var onToggleThreads: (() -> Void)?
     var fill: UIColor? {
         didSet { if fill != oldValue { self.setNeedsUpdateConfiguration() } }
@@ -464,6 +465,11 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         self.unreadDot.frame = CGRect(x: 0, y: 0, width: 12, height: 12)
         self.unreadDot.tintColor = .tintColor
         self.unreadDot.accessibilityLabel = L("Unread")
+        self.splitPaneIndicator.frame = CGRect(x: 0, y: 0, width: 14, height: 14)
+        self.splitPaneIndicator.contentMode = .scaleAspectFit
+        self.splitPaneIndicator.tintColor = .tertiaryLabel
+        self.splitPaneIndicator.isAccessibilityElement = false
+        self.splitPaneIndicator.accessibilityElementsHidden = true
     }
 
     @available(*, unavailable)
@@ -544,17 +550,16 @@ private final class SidebarChatListCell: UICollectionViewListCell {
                                           options: .init(tintColor: .tertiaryLabel, font: .preferredFont(forTextStyle: .caption1))))
             }
         }
+        if entry.isShownInSplitPane {
+            accessories.append(.customView(configuration: .init(customView: self.splitPaneIndicator, placement: .trailing(),
+                                                                reservedLayoutWidth: .actual, maintainsFixedSize: true)))
+        }
         self.accessories = accessories
 
         self.accessibilityLabel = AccessibilityText.sessionRow(
             title: row.title, isUnread: unread, isPinned: row.isPinned, isRunning: entry.working != nil,
             workingLabel: entry.working?.label, preview: entry.preview)
-        let help = ChannelRowStyle.help(for: row)
-        if let group = entry.groupName {
-            self.accessibilityHint = [help, L("in \(group)")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
-        } else {
-            self.accessibilityHint = help
-        }
+        self.accessibilityHint = ChannelRowStyle.accessibilityHint(for: entry)
         self.accessibilityTraits.insert(.button)
     }
 }

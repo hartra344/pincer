@@ -99,6 +99,7 @@ enum Suites {
             Section("MCP editor validation") { runMCPEditorChecks() },
             Section("MCP tool link resolution") { runMCPToolLinkChecks() },
             Section("Sidebar split action visibility") { runSidebarSplitActionChecks() },
+            Section("Sidebar split pane marker") { runSidebarSplitPaneChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
@@ -183,6 +184,7 @@ enum Suites {
     static let demoExtras: [Section] = [
         Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
+        Section("Sidebar split pane marker (demo)") { await runDemoSidebarSplitPaneChecks() },
         Section("Shortcuts unread visibility (demo)") { await runDemoIntentVisibilityChecks() },
         Section("Device ID Settings cache (demo)") { runSettingsDeviceIdentityChecks() },
         Section("Settings content height (demo)") { checkSettingsContentHeight() },

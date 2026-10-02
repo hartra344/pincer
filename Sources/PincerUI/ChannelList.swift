@@ -13,6 +13,8 @@ struct ChannelList: View {
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     var windowIsCompactWidth = false
+    /// The main window's right-pane chat when that pane is actually visible.
+    var splitPaneKey: String? = nil
     @State private var search = ""
     @State private var newChat: NewChatRequest?
     @State private var renaming: SessionRow?
@@ -56,7 +58,7 @@ struct ChannelList: View {
             #endif
             self.searchMessagesRow
             ConnectionStatusRow()
-            ChannelListRows(search: self.search, expandedThreads: self.expandedThreads,
+            ChannelListRows(search: self.search, expandedThreads: self.expandedThreads, splitPaneKey: self.splitPaneKey,
                             actions: self.actions, theme: self.theme)
                 #if os(iOS)
                 // Scroll under the bottom search bar instead of stopping at its edge.
@@ -202,6 +204,7 @@ struct ChannelList: View {
 private struct ChannelListRows: View {
     let search: String
     let expandedThreads: Set<String>
+    let splitPaneKey: String?
     let actions: SidebarActions
     let theme: AppTheme
     @Environment(GatewayStore.self) private var gateway
@@ -212,7 +215,7 @@ private struct ChannelListRows: View {
         SidebarList(
             model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
                                       expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
-                                      showPreviews: self.showPreviews),
+                                      showPreviews: self.showPreviews, splitKey: self.splitPaneKey),
             selectedKey: self.gateway.selectedKey,
             gateway: self.gateway,
             actions: self.actions,
