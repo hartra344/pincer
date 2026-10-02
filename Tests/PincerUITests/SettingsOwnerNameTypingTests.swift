@@ -120,8 +120,9 @@ struct SettingsOwnerNameTypingProbe {
             host.view.layoutIfNeeded()
             return Self.fields(in: host.view).first?.text == text
         }, "reopening Settings reads the persisted display name from the same app model")
-        #expect(recorder.changedValues == ["Maya Chen 2"],
-                "typing remains local, then section departure persists one completed name")
+        // The serial writer can publish the value before its main-queue defaults notification runs.
+        #expect(await eventually { recorder.changedValues == ["Maya Chen 2"] },
+                "typing remains local, then section departure publishes one completed name")
         await wait.releaseAll()
     }
 
@@ -158,7 +159,9 @@ struct SettingsOwnerNameTypingProbe {
         await wait.releaseAll()
         #expect(await eventually { scratch.defaults.string(forKey: OwnerNameDraft.storageKey) == text },
                 "the actual field's idle autosave persists the final value")
-        #expect(recorder.changedValues == [text], "intermediate keystrokes produce no defaults notifications")
+        // Wait for notification delivery separately from persistence: the two queues are independent.
+        #expect(await eventually { recorder.changedValues == [text] },
+                "the idle save publishes only the final name, without intermediate keystroke notifications")
     }
 }
 
