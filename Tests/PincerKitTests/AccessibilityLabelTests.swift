@@ -67,6 +67,7 @@ struct AccessibilityLabelTests {
     @Test func speakerFallbacks() {
         #expect(AccessibilityText.speaker(role: .user) == "You")
         #expect(AccessibilityText.speaker(role: .user, author: "Travis") == "You", "the user's own rows are always You")
+        #expect(AccessibilityText.speaker(role: .user, userAuthor: "Maya") == "Maya")
         #expect(AccessibilityText.speaker(role: .assistant) == "Assistant")
         #expect(AccessibilityText.speaker(role: .assistant, author: nil) == "Assistant")
         #expect(AccessibilityText.speaker(role: .assistant, author: "  ") == "Assistant", "blank author falls back")
@@ -88,6 +89,10 @@ struct AccessibilityLabelTests {
     @Test func messageRowUserTurnViaChannel() {
         let label = AccessibilityText.messageRow(role: .user, author: "ignored", text: "check disk", via: "Discord")
         #expect(label == "You, via Discord, check disk")
+
+        let bridged = AccessibilityText.messageRow(
+            role: .user, userAuthor: "Maya", text: "check disk", via: "Telegram")
+        #expect(bridged == "Maya, via Telegram, check disk")
     }
 
     @Test func messageRowEmptyText() {

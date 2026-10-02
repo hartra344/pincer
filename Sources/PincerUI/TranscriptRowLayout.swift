@@ -537,7 +537,9 @@ struct TranscriptLayoutBuilder {
     // MARK: Rows
 
     private func user(_ item: ChatItem, into layout: inout TranscriptRowLayout) {
-        let header = TranscriptPart.Header(name: Owner.displayName, badge: item.via.map { L("via \($0)") },
+        let author = item.senderName(you: Owner.displayName, agent: self.context.agent.name,
+                                     agents: self.context.gateway.agents)
+        let header = TranscriptPart.Header(name: author, badge: item.via.map { L("via \($0)") },
                                            time: item.timestamp?.chatTimestamp, isPending: item.isAwaitingDelivery)
         let text = item.plainText
         let messageId = item.isReplyable ? item.transcriptId : nil
@@ -551,7 +553,7 @@ struct TranscriptLayoutBuilder {
         layout.copyItems = [.init(title: L("Copy Text"), text: text)]
         let attachments = item.blocks.filter { if case .image = $0 { true } else if case .file = $0 { true } else { false } }.count
         layout.accessibilityLabel = AccessibilityText.messageRow(
-            role: .user, text: text, timestamp: header.time, attachmentCount: attachments,
+            role: .user, userAuthor: item.channelSenderName, text: text, timestamp: header.time, attachmentCount: attachments,
             isPending: item.isPending && sendStatus == nil, isBookmarked: !layout.decoration.bookmarks.isEmpty,
             via: item.via, summaryLimit: 0)
         if let sendStatus { layout.accessibilityLabel += ". \(sendStatus.spoken)" }
