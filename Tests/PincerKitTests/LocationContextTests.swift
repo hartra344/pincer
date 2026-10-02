@@ -51,6 +51,18 @@ struct LocationContextTests {
                 "quantization uncertainty is added to the device's reported accuracy")
     }
 
+    @Test func preparedSnapshotRetainsAvailableCoordinatesAndReportedAccuracy() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let fix = LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
+                              timestamp: now)
+        let snapshot = try #require(LocationContextSnapshot.prepare(fix, now: now))
+
+        #expect(snapshot.context.contains("37.7749"))
+        #expect(snapshot.context.contains("-122.4194"))
+        #expect(snapshot.context.contains("±18m"), "accuracy reflects the location provider's reported radius")
+        #expect(!snapshot.context.contains("±2000m"), "the app does not impose a coarse floor")
+    }
+
     @Test func permissionAndLocationWorkWaitForForegroundOptIn() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -230,5 +242,43 @@ struct LocationContextTests {
                 "a queued send keeps the exact coarse context the user saw when sending")
         #expect(savedSecond.text.contains("51.50, -0.12") && !savedSecond.text.contains("37.78, -122.42"),
                 "a later location update applies only to later opted-in sends")
+    }
+
+    @Test func optedInLocationDoesNotRewriteAuthoredOrOptimisticMessageText() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = nil
+        let model = LocationContextModel(defaults: scratch.defaults)
+        let driver = LocationContextTestDriver(.authorized)
+        model.configure(driver: driver)
+        model.setActive(true)
+        model.setEnabled(true)
+        let generation = try #require(driver.requestedGenerations.last)
+        let now = Date()
+        await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
+                                           timestamp: now), generation: generation, now: now)
+        gateway.locationContext = model
+        let key = "agent:main:dashboard:location-display"
+        let chat = gateway.chat(for: key)
+        let authored = "Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"
+
+        #expect(await chat.sendMessage(authored, includeLocation: true) == .queued)
+        let entry = try #require(gateway.outbox.entries(for: key).last)
+        let optimistic = try #require(chat.items.last { $0.isPending })
+        #expect(entry.text == authored, "the queue retains only the user's authored message body")
+        #expect(optimistic.plainText == authored, "the optimistic bubble keeps authored location prose verbatim")
+    }
+
+    @Test func projectedHistoryPreservesAuthoredLocationLookalikes() throws {
+        let authored = "Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"
+        let fixture = Fixtures.json(#"{"role":"user","content":"Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z","__openclaw":{"id":"projected-location","workContext":{"snapshot":{"page":"Pincer location","detail":{"coordinates":"37.7749, -122.4194","accuracy":"±18m","observed":"2026-10-02T12:00:00Z"}},"text":"Location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z"}}}"#)
+        let projected = try #require(ChatItem(fixture, fallbackIndex: 0))
+
+        #expect(projected.plainText == authored,
+                "history display uses the Gateway's metadata-backed original-text projection, not footer matching")
+
+        let ordinary = try #require(ChatItem(Fixtures.json(#"{"role":"user","content":"I pasted this location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z","__openclaw":{"id":"authored-location-lookalike"}}"#), fallbackIndex: 1))
+        #expect(ordinary.plainText == "I pasted this location context (approximate, shared by Pincer): 📍 37.7749, -122.4194 ±18m; observed 2026-10-02T12:00:00Z")
     }
 }
