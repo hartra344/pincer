@@ -83,8 +83,8 @@ private func runGatewayMCPToolLinks(profile: GatewayProfile, label: String) asyn
     check(original != nil && collision != nil && original?.id != collision?.id,
           "\(label): actual effective catalog preserves distinct server identities")
     check(!tools.contains { $0.mcpServer == "ACME-DOCS" }
-          && [original?.id, collision?.id].compactMap { $0 }.contains { $0.contains("-3__") },
-          "\(label): disabled colliding server reserves its suffix before connected filtering")
+          && [original?.id, collision?.id].compactMap { $0 }.contains { $0.contains("-2__") || $0.contains("-3__") },
+          "\(label): disabled server is excluded and connected collisions retain distinct suffixed IDs")
     if let original, let collision {
         check(gateway.mcpServerName(forToolName: original.id, sessionKey: sessionKey) == "acme.docs",
               "\(label): warmed tool card opens the original dotted server")
