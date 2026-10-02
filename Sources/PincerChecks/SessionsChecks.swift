@@ -39,6 +39,12 @@ func checkSessionManager() async {
           "duration text")
     check(SessionManager.bulkSummary(verb: "Archived", SessionBulkOutcome(succeeded: ["a", "b"], failed: [.init(key: "c", message: "x")]))
           == "Archived 2 sessions; 1 failed", "bulk summary")
+    let titledFailure = SessionBulkOutcome.Failure(key: live.key, message: "refused")
+    let unknownFailure = SessionBulkOutcome.Failure(key: "agent:main:dashboard:removed", message: "gone")
+    check(SessionManager.bulkFailureSummary(titledFailure, sessionTitle: live.title) == "Alpha: refused"
+          && SessionManager.bulkFailureSummary(unknownFailure, sessionTitle: nil) == "\(unknownFailure.key): gone"
+          && SessionManager.bulkFailureSummary(unknownFailure, sessionTitle: " \n ") == "\(unknownFailure.key): gone",
+          "bulk failure summaries use known titles and retain key fallback for missing or empty titles")
     check(SessionBranch(["leafEntryId": "abcdef1234", "headline": "", "active": true])?.title == "Branch abcdef12", "untitled branch")
     check(SessionPreview(["key": "k", "status": "cold", "items": []])?.emptyReason == "The transcript isn't loaded on the Gateway yet",
           "cold preview reason")
@@ -199,8 +205,16 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     check(archive.succeeded == [ciFix] && manager.row(ciFix)?.isArchived == true, "demo archive (\(manager.actionError ?? ""))")
     let restore = await manager.setArchived([ciFix], archived: false)
     check(restore.succeeded == [ciFix] && manager.row(ciFix)?.isArchived == false, "demo unarchive")
-    let main = await manager.setArchived(["agent:main:main"], archived: true)
-    check(main.failed.first?.message == "Cannot archive an agent's main session.", "demo protects main sessions")
+    let mainKey = "agent:main:main"
+    let main = await manager.setArchived([mainKey], archived: true)
+    let mainFailure = main.failed.first { $0.key == mainKey }
+    let displayedMainFailure = mainFailure.map {
+        SessionManager.bulkFailureSummary($0, sessionTitle: manager.lastFailureTitles[$0.key])
+    }
+    check(mainFailure?.message == "Cannot archive an agent's main session.", "demo protects main sessions")
+    check(manager.row(mainKey)?.title == "Main"
+          && displayedMainFailure == "Main: Cannot archive an agent's main session.",
+          "demo bulk archive failures display the seeded main session title")
 
     let benchSeeded = await seedRemovalCache(gateway, bench, word: "benchprobexq")
     let deleted = await manager.delete([bench])

@@ -440,7 +440,7 @@ private struct SessionManagerMessages: View {
                 .foregroundStyle(.secondary)
         }
         ForEach(self.model.lastFailures, id: \.key) { failure in
-            Text("\(failure.key): \(failure.message)")
+            Text(SessionManager.bulkFailureSummary(failure, sessionTitle: self.model.lastFailureTitles[failure.key]))
                 .font(.caption)
                 .foregroundStyle(.red)
                 .textSelection(.enabled)

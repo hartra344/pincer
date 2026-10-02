@@ -269,6 +269,65 @@ struct SessionManagerTests {
         #expect(model.lastMessage == "Unarchived 2 sessions" && model.actionError == nil)
     }
 
+    @MainActor @Test func bulkFailurePresentationUsesKnownSessionTitle() async throws {
+        let recorder = Recorder()
+        recorder.handler = { method, _ in
+            switch method {
+            case "sessions.list": return ["sessions": [Self.alpha.raw]]
+            case "sessions.patchMany":
+                return ["outcomes": [["key": .string(Self.alpha.key), "ok": false,
+                                       "error": ["message": "Gateway refused the update."]]]]
+            default: return [:]
+            }
+        }
+        let model = SessionManagerModel(request: { try recorder.request($0, $1) })
+        await model.load(filter: .all)
+        let outcome = await model.setArchived([Self.alpha.key], archived: true)
+        let failure = try #require(model.lastFailures.first)
+        #expect(outcome.failed == [failure] && failure.key == Self.alpha.key)
+        #expect(model.lastFailureTitles[failure.key] == "Alpha")
+        #expect(SessionManager.bulkFailureSummary(failure, sessionTitle: model.lastFailureTitles[failure.key])
+                == "Alpha: Gateway refused the update.",
+                "the UI's O(1) bulk title snapshot supplies the listed session title")
+
+        let unknown = SessionBulkOutcome.Failure(key: "agent:main:dashboard:removed", message: "gone")
+        #expect(SessionManager.bulkFailureSummary(unknown, sessionTitle: nil) == "\(unknown.key): gone",
+                "unknown and deleted sessions fall back to the key")
+        #expect(SessionManager.bulkFailureSummary(unknown, sessionTitle: " \n ") == "\(unknown.key): gone",
+                "an empty title falls back to the key")
+    }
+
+    @MainActor @Test func failedDeleteTitleSurvivesRowRefreshAndClearMessages() async throws {
+        let recorder = Recorder()
+        var omitRowFromNextList = false
+        recorder.handler = { method, _ in
+            switch method {
+            case "sessions.list": return ["sessions": omitRowFromNextList ? [] : [Self.alpha.raw]]
+            case "sessions.delete": return ["deleted": false]
+            default: return [:]
+            }
+        }
+        let model = SessionManagerModel(request: { try recorder.request($0, $1) })
+        await model.load(filter: .all)
+        let outcome = await model.delete([Self.alpha.key])
+        let failure = try #require(model.lastFailures.first)
+        #expect(outcome.failed == [failure] && model.lastFailureTitles[failure.key] == "Alpha")
+        #expect(SessionManager.bulkFailureSummary(failure, sessionTitle: model.lastFailureTitles[failure.key])
+                == "Alpha: The Gateway didn't delete this session.")
+
+        omitRowFromNextList = true
+        await model.reload()
+        #expect(model.row(Self.alpha.key) == nil, "the next session-list snapshot removes the failed row")
+        #expect(model.lastFailureTitles[failure.key] == "Alpha"
+                && SessionManager.bulkFailureSummary(failure, sessionTitle: model.lastFailureTitles[failure.key])
+                    == "Alpha: The Gateway didn't delete this session.",
+                "the failure still has its captured title after its row disappears")
+
+        model.clearMessages()
+        #expect(model.lastFailures.isEmpty && model.lastFailureTitles.isEmpty,
+                "clearing the result removes both failures and captured titles")
+    }
+
     @MainActor @Test func deleteScopes() async {
         let recorder = Recorder()
         recorder.handler = { method, params in
