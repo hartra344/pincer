@@ -166,9 +166,21 @@ struct APIKeyVisibilityTests {
             .first { $0 !== button && !$0.isHidden }, "the eye control preserves a visible clear button while editing")
         #expect(!field.convert(clear.bounds, from: clear).intersects(field.convert(button.bounds, from: button)),
                 "the clear and visibility targets do not overlap")
-        #expect(Self.click(clear) > 0)
+        #expect(clear.isEnabled && field.clearButtonMode == .whileEditing)
+        // This package test runner has no UIApplicationMain. Verify native clear geometry above,
+        // then deliver the editingChanged state produced by clearing through the real target.
+        field.text = ""
+        var editingTargets = 0
+        for target in field.allTargets {
+            guard let object = target.base as? NSObject else { continue }
+            for action in field.actions(forTarget: object, forControlEvent: .editingChanged) ?? [] {
+                _ = object.perform(NSSelectorFromString(action), with: field)
+                editingTargets += 1
+            }
+        }
+        #expect(editingTargets > 0)
         #expect(await eventually { field.text?.isEmpty == true && editor.text.isEmpty },
-                "the native clear action clears the actual bound draft")
+                "the native editing target clears the actual bound draft")
         _ = field.delegate?.textFieldShouldReturn?(field)
         #expect(editor.submissions == 1)
         editor.disabled = true
