@@ -61,6 +61,19 @@ struct StreamingCoalescerTests {
         }
     }
 
+    @Test func defaultCadencePublishesTheNextDeltaWithinASixtyHzFrame() {
+        defer { self.scratch.remove() }
+        let chat = self.chat()
+        defer { chat.pendingFlush?.cancel() }
+        self.delta(chat, "A", full: "A")
+        // Simulate the next input after 20 ms without a wall-clock sleep. A 30 Hz policy
+        // leaves the displayed text behind; a 60 Hz policy can publish this leading edge.
+        chat.lastPublishAt = Date().addingTimeInterval(-0.020)
+        self.delta(chat, "B", full: "AB")
+        #expect(self.liveText(chat) == "AB", "a delta after one 60 Hz frame publishes immediately")
+        #expect(chat.pendingFlush == nil, "the ready leading edge needs no trailing timer")
+    }
+
     @Test func burstIsCoalescedThenTrailingFlushPublishes() async {
         defer { self.scratch.remove() }
         await self.withInterval(0.5) {
