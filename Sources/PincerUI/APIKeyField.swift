@@ -278,7 +278,7 @@ private final class APIKeyMacFieldView: NSStackView {
         self.alignment = .centerY
         self.distribution = .fill
         self.spacing = 6
-        self.detachesHiddenViews = false
+        self.detachesHiddenViews = true
 
         for field in [self.secureField, self.plainField] {
             field.isEditable = true
