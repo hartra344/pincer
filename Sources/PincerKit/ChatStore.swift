@@ -269,6 +269,8 @@ public final class ChatStore: Identifiable {
         try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
     }
     @ObservationIgnored var saveDeadline: Date?
+    @ObservationIgnored var saveDeadlineRunId: String?
+    @ObservationIgnored var saveScheduleGeneration = 0
     @ObservationIgnored var backfillTask: Task<Void, Never>?
     @ObservationIgnored var olderTask: Task<Bool, Never>?
     /// `chat.history` offset (counted back from the newest message) of the next older page.

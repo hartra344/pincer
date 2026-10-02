@@ -79,11 +79,22 @@ struct ChatStoreSaveTests {
         chat.items = V8.items(1)
         await scheduler.waitUntilScheduled()
 
-        #expect(chat.saveDeadline == scheduler.now.addingTimeInterval(5),
+        let firstDeadline = scheduler.now.addingTimeInterval(5)
+        #expect(chat.saveDeadline == firstDeadline,
                 "a live transcript should not hit the ordinary one-second save debounce")
-        #expect(scheduler.pendingDeadlines == [scheduler.now.addingTimeInterval(5)])
+        #expect(scheduler.pendingDeadlines == [firstDeadline])
+
+        // Later deltas keep the first deadline instead of extending the save window.
+        scheduler.now = scheduler.now.addingTimeInterval(4)
+        chat.items = V8.items(2)
+        #expect(chat.saveDeadline == firstDeadline)
+
+        // The run's terminal event flushes immediately, even though the scheduled waiter is pending.
+        chat.flushScheduledSave()
+        #expect(chat.saveDeadline == scheduler.now)
 
         chat.stopCaching()
+        #expect(chat.saveDeadline == nil)
         await scheduler.waitUntilIdle()
         TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url)
         self.temp.remove()

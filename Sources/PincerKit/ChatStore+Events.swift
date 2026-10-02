@@ -502,6 +502,7 @@ extension ChatStore {
         self.flushLive()
         guard self.live == nil || self.live?.runId == runId else { return }
         if self.finishedRunIds.contains(runId) { return }
+        self.flushScheduledSave()
         guard self.isSubscribed else {
             // A background chat: reload when it is opened instead of resubscribing.
             self.markStale()
