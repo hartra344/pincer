@@ -320,7 +320,7 @@ extension TranscriptCache.Writer {
             reusedAll = false
             let name = "\(UUID().uuidString.lowercased()).json"
             let data = try JSONEncoder().encode(Array(items[range]))
-            try data.write(to: directory.appending(path: name), options: [.atomic, .completeFileProtection])
+            try data.write(to: directory.appending(path: name), options: self.writeOptions)
             result.bytesWritten += data.count
             result.filesWritten += 1
             entries.append(Cache.SegmentEntry(
@@ -339,12 +339,12 @@ extension TranscriptCache.Writer {
         // never vouches for a transcript that isn't there.
         try? fileManager.removeItem(at: metaURL)
         let manifestData = try JSONEncoder().encode(manifest)
-        try manifestData.write(to: url, options: [.atomic, .completeFileProtection])
+        try manifestData.write(to: url, options: self.writeOptions)
         let meta = try JSONEncoder().encode(Cache.Meta(
             complete: manifest.complete, activityMs: manifest.activityMs, version: manifest.version,
             retained: manifest.retained,
             forwardedSenderRefreshPending: manifest.forwardedSenderRefreshPending))
-        try meta.write(to: metaURL, options: [.atomic, .completeFileProtection])
+        try meta.write(to: metaURL, options: self.writeOptions)
         result.bytesWritten += manifestData.count + meta.count
         result.filesWritten += 2
         let referenced = Set(manifest.segments.map(\.file))
