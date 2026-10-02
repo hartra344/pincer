@@ -145,11 +145,18 @@ public struct GatewayTargets: Sendable {
     public var agents: [AgentSummary]
     public var defaultAgentId: String
     public var sessions: [SessionRow]
+    /// The selected chat when these rows came from an in-app GatewayStore.
+    public var selectedSessionKey: String?
+    /// Distinguishes a live `nil` selection from targets fetched without the app's window state.
+    public var hasLiveSelectionContext: Bool
 
-    public init(agents: [AgentSummary], defaultAgentId: String, sessions: [SessionRow]) {
+    public init(agents: [AgentSummary], defaultAgentId: String, sessions: [SessionRow],
+                selectedSessionKey: String? = nil, hasLiveSelectionContext: Bool = false) {
         self.agents = agents
         self.defaultAgentId = defaultAgentId
         self.sessions = sessions
+        self.selectedSessionKey = selectedSessionKey
+        self.hasLiveSelectionContext = hasLiveSelectionContext
     }
 
     public func agentName(_ id: String) -> String {
@@ -222,7 +229,8 @@ public struct GatewayIntentConnector: IntentConnector {
     public func liveTargets(_ gatewayId: UUID) -> GatewayTargets? {
         guard let store = self.connectedStore(gatewayId), !store.sessions.isEmpty else { return nil }
         return GatewayTargets(agents: store.agents, defaultAgentId: store.defaultAgentId,
-                              sessions: store.sessions.values.filter { !$0.isArchived })
+                              sessions: store.sessions.values.filter { !$0.isArchived },
+                              selectedSessionKey: store.selectedKey, hasLiveSelectionContext: true)
     }
 
     public func liveApprovals(_ gatewayId: UUID) -> [ExecApproval]? {
@@ -838,9 +846,14 @@ public final class IntentService {
 
     // MARK: Unread / approvals
 
-    /// The same chats the app counts in its unread badge.
-    public static func unreadRows(_ rows: [SessionRow]) -> [SessionRow] {
-        rows.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent }
+    /// Unread chats the app counts in its badge, with each Gateway's sidebar visibility settings.
+    public static func unreadRows(
+        _ rows: [SessionRow], filter: BackgroundRefreshFilter = .init(), selectedSessionKey: String? = nil) -> [SessionRow]
+    {
+        rows.filter {
+            $0.isUnread && !$0.isArchived && !$0.isSubagent
+                && (filter.notifies($0) || $0.key == selectedSessionKey)
+        }
             .sorted { $0.activityMs != $1.activityMs ? $0.activityMs > $1.activityMs : $0.key < $1.key }
     }
 
@@ -869,7 +882,12 @@ public final class IntentService {
     public func unreadChats(gatewayId: UUID?, gatewayName: String? = nil) async throws -> [IntentChat] {
         try await self.eachGateway(gatewayId, name: gatewayName) { profile in
             let targets = try await self.targets(profile)
-            return Self.unreadRows(targets.sessions).map { self.chat($0, on: profile, targets: targets) }
+            let filter = BackgroundRefreshFilter.load(gatewayId: profile.id, defaults: self.labels)
+            let selectedSessionKey = targets.hasLiveSelectionContext
+                ? targets.selectedSessionKey
+                : self.labels.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+            return Self.unreadRows(targets.sessions, filter: filter, selectedSessionKey: selectedSessionKey)
+                .map { self.chat($0, on: profile, targets: targets) }
         }
     }
 
