@@ -25,9 +25,10 @@ struct ShowRunsMenuTests {
         @Bindable var presentation: ShowRunsMenuPresentation
         let gateway: GatewayStore
         let sessionKey: String
+        var explicitSessionKey: String? = nil
 
         var body: some View {
-            ShowRunsButton(isPresented: self.$presentation.isPresented)
+            ShowRunsButton(isPresented: self.$presentation.isPresented, sessionKey: self.explicitSessionKey)
                 .environment(self.gateway)
                 .environment(\.chatWindowKey, self.sessionKey)
                 .buttonStyle(.plain)
@@ -62,6 +63,31 @@ struct ShowRunsMenuTests {
         #expect(gateway.subagentTree(rootKey: Self.paneKey).count == 1)
         #expect(try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey) > 0,
                 "A completed helper is still useful history in the Runs panel")
+    }
+
+    @Test func explicitMenuSessionKeyTakesPrecedenceOverWindowAndGatewaySelection() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = self.gateway(scratch: scratch)
+        gateway.setSession(self.helper(key: "agent:main:subagent:selected-run", parent: Self.selectedKey),
+                           for: "agent:main:subagent:selected-run")
+        gateway.setSession(self.helper(key: "agent:main:subagent:window-run", parent: Self.paneKey),
+                           for: "agent:main:subagent:window-run")
+        gateway.selectedKey = Self.selectedKey
+
+        let explicitKey = "agent:main:dashboard:explicit"
+        #expect(gateway.hasRuns(sessionKey: Self.selectedKey))
+        #expect(gateway.hasRuns(sessionKey: Self.paneKey))
+        #expect(!gateway.hasRuns(sessionKey: explicitKey))
+        #expect(try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey,
+                                       explicitSessionKey: explicitKey) == 0,
+                "The menu's row key overrides both the chat-window key and main-window selection")
+
+        gateway.setSession(self.helper(key: "agent:main:subagent:explicit-run", parent: explicitKey),
+                           for: "agent:main:subagent:explicit-run")
+        #expect(try Self.visiblePixels(gateway: gateway, sessionKey: Self.paneKey,
+                                       explicitSessionKey: explicitKey) > 0,
+                "Runs belonging only to the explicit menu row keep its item available")
     }
 
     @Test func timelineOnlyRunKeepsShowRunsAvailable() throws {
@@ -114,10 +140,12 @@ struct ShowRunsMenuTests {
     }
 
     private static func visiblePixels(gateway: GatewayStore, sessionKey: String,
-                                      isPresented: Bool = false) throws -> Int
+                                      isPresented: Bool = false,
+                                      explicitSessionKey: String? = nil) throws -> Int
     {
         let presentation = ShowRunsMenuPresentation(isPresented: isPresented)
-        let renderer = ImageRenderer(content: Host(presentation: presentation, gateway: gateway, sessionKey: sessionKey))
+        let renderer = ImageRenderer(content: Host(presentation: presentation, gateway: gateway,
+                                                  sessionKey: sessionKey, explicitSessionKey: explicitSessionKey))
         renderer.scale = 1
         renderer.isOpaque = false
         let image = try #require(renderer.cgImage, "SwiftUI should render the actual ShowRunsButton layout")
@@ -147,6 +175,10 @@ struct ShowRunsMenuTests {
 extension TranscriptUIKitHostedTests {
     @Test func showRunsMenuUsesTheExplicitChatWindowContext() throws {
         try ShowRunsMenuTests().emptySplitPaneDoesNotBorrowRunsFromTheSelectedChat()
+    }
+
+    @Test func showRunsMenuHonorsItsExplicitPaneSessionKey() throws {
+        try ShowRunsMenuTests().explicitMenuSessionKeyTakesPrecedenceOverWindowAndGatewaySelection()
     }
 }
 #endif

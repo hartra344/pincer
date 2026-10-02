@@ -133,10 +133,16 @@ enum RunsToolbarVisibility {
 /// "Show Runs" for the chat's session menu.
 struct ShowRunsButton: View {
     @Binding var isPresented: Bool
+    var sessionKey: String? = nil
+    @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
-        Button(self.isPresented ? L("Hide Runs") : L("Show Runs"), systemImage: "point.3.connected.trianglepath.dotted") {
-            self.isPresented.toggle()
+        let key = self.sessionKey ?? self.windowKey ?? self.gateway.selectedKey
+        if self.isPresented || key.map({ self.gateway.hasRuns(sessionKey: $0) }) == true {
+            Button(self.isPresented ? L("Hide Runs") : L("Show Runs"), systemImage: "point.3.connected.trianglepath.dotted") {
+                self.isPresented.toggle()
+            }
         }
     }
 }

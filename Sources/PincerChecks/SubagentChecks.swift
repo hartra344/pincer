@@ -89,6 +89,8 @@ func runDemoSubagents(_ gateway: GatewayStore) async {
     check(tree.node(kids.running).flatMap { $0.duration(now: Date()) }.map { $0 > 60 } == true, "demo running helper has a duration")
     check(gateway.hasRuns(sessionKey: root) && gateway.parentSessionKey(of: kids.grandchild) == kids.done,
           "demo runs panel and parent breadcrumb")
+    check(!gateway.hasRuns(sessionKey: "agent:main:main"),
+          "demo omits Runs from a seeded chat without helpers or captured activity")
     check(gateway.runTitle(kids.running) == "Draft launch timeline", "demo helper title (\(gateway.runTitle(kids.running)))")
 
     let lanes = await waitFor("demo lanes") { gateway.runTimeline.latestLane(sessionKey: kids.running) != nil }
