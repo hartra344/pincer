@@ -171,6 +171,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
         Section("Shortcuts unread visibility (demo)") { await runDemoIntentVisibilityChecks() },
         Section("Device ID Settings cache (demo)") { runSettingsDeviceIdentityChecks() },
@@ -207,6 +208,7 @@ enum Suites {
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
+        Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
 
     /// Against a (mock) Gateway, first half.
@@ -228,6 +230,7 @@ enum Suites {
         LiveSection(nil) { url, token in await runLiveCacheRefill(url: url, token: token) },
         LiveSection("Setup wizard (live)") { url, token in await runLiveSetup(url: url, token: token) },
         LiveSection("Deep links (live)") { url, token in await runLiveDeepLinks(url: url, token: token) },
+        LiveSection("Cold-launch routes (live)") { url, token in await runLiveColdLaunchRouteChecks(url: url, token: token) },
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },

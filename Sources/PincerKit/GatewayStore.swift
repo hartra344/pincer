@@ -17,6 +17,14 @@ public final class GatewayStore: Identifiable {
     /// The host name this gateway last reported for itself (`GatewayHello.gatewayHost`), kept so
     /// links and Handoff from other devices find it before it has connected (#375).
     public private(set) var gatewayHost: String?
+    /// True after this connection has received at least one successful session-list snapshot.
+    /// A successfully empty list is ready too; emptiness alone cannot distinguish it from cold.
+    @ObservationIgnored private(set) var sessionListReady = false
+    /// Keeps the last complete snapshot usable during reconnect, without trusting partial events
+    /// received before the first successful list.
+    @ObservationIgnored private(set) var hasSessionListSnapshot = false
+    /// Lets the owning AppModel retry a pending external route without retaining either object.
+    @ObservationIgnored var routeCandidatesDidChange: (@MainActor () -> Void)?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
     /// Session rows by key. Writes that change nothing are dropped, so they don't invalidate every
@@ -48,6 +56,7 @@ public final class GatewayStore: Identifiable {
         self.subagentTrees = [:]
         self.settleRunTimeline()
         self.markVisibleChatsRead()
+        self.routeCandidatesDidChange?()
     }
     /// The chat each viewer (the main window, later chat windows) shows on screen right now, in an
     /// active, focused scene. See `setVisibleChat(_:viewer:)`.
@@ -487,7 +496,9 @@ public final class GatewayStore: Identifiable {
     }
 
     private func update(state: ConnectionState, hello: GatewayHello?) {
+        if state == .connected { self.setSessionListReady(false) }
         self.state = state
+        self.routeCandidatesDidChange?()
         if case let .failed(message) = state { self.lastError = message }
         if !state.isConnected {
             self.pairingInbox.reset()
@@ -507,6 +518,7 @@ public final class GatewayStore: Identifiable {
         if !self.profile.isDemo, let host = hello.gatewayHost, host != self.gatewayHost {
             self.gatewayHost = host
             self.defaults.set(host, forKey: Self.gatewayHostKey(self.id))
+            self.routeCandidatesDidChange?()
         }
         self.images.retryUnavailable()
         self.health.connectionChanged(state, hello: hello)
@@ -552,6 +564,7 @@ public final class GatewayStore: Identifiable {
 
     private func bootstrap(epoch: Int) async {
         self.bootstrapped = false
+        self.setSessionListReady(false)
         self.listReconcile = ListReconcile()
         async let agents = try? self.connection.request("agents.list", [:])
         async let subscribed = try? self.connection.request(
@@ -823,6 +836,12 @@ public final class GatewayStore: Identifiable {
         self.applySnapshot(list)
     }
 
+    private func setSessionListReady(_ ready: Bool) {
+        guard self.sessionListReady != ready else { return }
+        self.sessionListReady = ready
+        self.routeCandidatesDidChange?()
+    }
+
     func applySnapshot(_ list: JSONValue) {
         let previous = Set(self.sessions.values.filter { !$0.isPlaceholder }.map(\.key))
         var next: [String: SessionRow] = [:]
@@ -837,6 +856,8 @@ public final class GatewayStore: Identifiable {
         }
         self.addAgentHomes(to: &next)
         self.sessions = next
+        self.hasSessionListSnapshot = true
+        self.setSessionListReady(true)
         self.scheduleSpotlightReindex()
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
             self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
