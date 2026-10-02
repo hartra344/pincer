@@ -299,11 +299,11 @@ public struct MenuBarInbox: Equatable, Sendable {
         }
         func chatItem(_ chat: Chat, kind: Item.Kind) -> Item {
             let agent = chat.input.agent(chat.row.agentId)
-            Item(id: "\(kind):\(chat.input.id.uuidString):\(chat.row.key)", kind: kind,
-                 title: Self.chatLabel(row: chat.row, agent: agent) + suffix(chat.input),
-                 target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key),
-                 agentId: chat.row.agentId,
-                 petTitle: Self.chatLabel(row: chat.row, agent: agent, includeEmoji: false) + suffix(chat.input))
+            return Item(id: "\(kind):\(chat.input.id.uuidString):\(chat.row.key)", kind: kind,
+                        title: Self.chatLabel(row: chat.row, agent: agent) + suffix(chat.input),
+                        target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key),
+                        agentId: chat.row.agentId,
+                        petTitle: Self.chatLabel(row: chat.row, agent: agent, includeEmoji: false) + suffix(chat.input))
         }
         func key(_ chat: Chat) -> Key { Key(gatewayId: chat.input.id, sessionKey: chat.row.key) }
 
