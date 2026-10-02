@@ -25,6 +25,27 @@ extension ChatStore {
         return hasMore ? .more(nextOffset: nextOffset) : .complete(nextOffset: nextOffset)
     }
 
+    @inline(__always)
+    private func recordForwardedRefresh(_ phase: ForwardedSenderRefreshDiagnostics.Phase) {
+        ForwardedSenderRefreshDiagnostics.record(gatewayID: self.gatewayId, sessionKey: self.sessionKey, phase: phase)
+    }
+
+    @inline(__always)
+    private func recordForwardedRefreshAbort(_ reason: ForwardedSenderRefreshDiagnostics.AbortReason,
+                                              offset: Int?, scanned: Int) {
+        self.recordForwardedRefresh(.scanAborted(reason: reason, offset: offset, scanned: scanned))
+    }
+
+    private static func diagnosticDisposition(_ disposition: ForwardedRefreshPageDisposition)
+        -> ForwardedSenderRefreshDiagnostics.Disposition
+    {
+        switch disposition {
+        case .more: .more
+        case .complete: .complete
+        case .abort: .abort
+        }
+    }
+
     /// True when the message subscription was sent on the current connection.
     public var isSubscribed: Bool {
         guard let gateway else { return false }
@@ -151,10 +172,42 @@ extension ChatStore {
         let state = self.currentCacheState
         guard state != self.savedState else { return }
         let snapshot = self.snapshot()
+#if DEBUG
+        let refreshWrite = state.forwardedSenderRefreshPending || state.forwardedSenderRefreshCompleted
+            || !ForwardedSenderRefreshDiagnostics.events(gatewayID: self.gatewayId, sessionKey: self.sessionKey).isEmpty
+        if refreshWrite {
+            ForwardedSenderRefreshDiagnostics.record(
+                gatewayID: self.gatewayId, sessionKey: self.sessionKey,
+                phase: .snapshotWriteStarted(store: self.headless ? .headless : .open,
+                                             pending: state.forwardedSenderRefreshPending,
+                                             completed: state.forwardedSenderRefreshCompleted,
+                                             revision: state.revision))
+        }
+#endif
         let result = await TranscriptCache.saveReturningStats(
             snapshot, gatewayId: self.gatewayId, sessionKey: self.sessionKey,
             keepingOlder: self.olderInCache || self.hasMoreHistory, root: self.cacheRoot)
+#if DEBUG
+        if refreshWrite {
+            ForwardedSenderRefreshDiagnostics.record(
+                gatewayID: self.gatewayId, sessionKey: self.sessionKey,
+                phase: .snapshotWriteFinished(store: self.headless ? .headless : .open,
+                                              pending: state.forwardedSenderRefreshPending,
+                                              completed: state.forwardedSenderRefreshCompleted,
+                                              modifiedReported: result.modified != nil,
+                                              unchangedReported: result.unchanged))
+        }
+#endif
         self.recordSavedSnapshot(state, result: result)
+#if DEBUG
+        if refreshWrite {
+            let after = self.currentCacheState
+            self.recordForwardedRefresh(.snapshotStateAfterWrite(store: self.headless ? .headless : .open,
+                                                                 pending: after.forwardedSenderRefreshPending,
+                                                                 completed: after.forwardedSenderRefreshCompleted,
+                                                                 revision: after.revision))
+        }
+#endif
     }
 
     /// Records the state represented by a completed cache write, even if the store changed while
@@ -281,32 +334,93 @@ extension ChatStore {
     /// `generation` is the cache generation this fill started under; a rewind or delete since
     /// then makes it discard what it fetched instead of saving it.
     func fillCache(generation: Int? = nil, connectionEpoch expectedConnectionEpoch: Int? = nil) async {
-        guard let gateway else { return }
+        guard let gateway else {
+#if DEBUG
+            if self.forwardedSenderRefreshPending {
+                self.recordForwardedRefreshAbort(.gatewayChanged, offset: 0, scanned: 0)
+            }
+#endif
+            return
+        }
         let connectionEpoch = expectedConnectionEpoch ?? gateway.connectionEpoch
         await self.restoreFromCache()
+#if DEBUG
+        let expectedGeneration = generation ?? gateway.cacheGeneration(of: self.sessionKey)
+        let refreshForwardedSenders = self.forwardedSenderRefreshPending
+        if refreshForwardedSenders {
+            ForwardedSenderRefreshDiagnostics.record(
+                gatewayID: self.gatewayId, sessionKey: self.sessionKey,
+                phase: .fillStarted(epoch: connectionEpoch, generation: expectedGeneration, cachedRows: self.items.count))
+            if self.cacheUnreadable {
+                self.recordForwardedRefreshAbort(.cacheUnreadable, offset: 0, scanned: 0)
+                return
+            }
+            if !gateway.state.isConnected {
+                self.recordForwardedRefreshAbort(.disconnected, offset: 0, scanned: 0)
+                return
+            }
+            if gateway.connectionEpoch != connectionEpoch {
+                self.recordForwardedRefreshAbort(.connectionEpochChanged, offset: 0, scanned: 0)
+                return
+            }
+        } else {
+            guard !self.cacheUnreadable, gateway.state.isConnected,
+                  gateway.connectionEpoch == connectionEpoch
+            else { return }
+        }
+#else
         guard !self.cacheUnreadable, gateway.state.isConnected,
               gateway.connectionEpoch == connectionEpoch
         else { return }
         let expectedGeneration = generation ?? gateway.cacheGeneration(of: self.sessionKey)
         let refreshForwardedSenders = self.forwardedSenderRefreshPending
+#endif
         // `apply(history:)` can discard cached history when the newest page has no overlap. Keep
         // the complete restored snapshot for reconciliation until the authoritative scan finishes.
         let restoredCacheItems = refreshForwardedSenders ? self.items : []
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
-        guard let result = try? await gateway.connection.request("chat.history", .object(params), timeout: 30) else { return }
+        if refreshForwardedSenders { self.recordForwardedRefresh(.request(offset: 0, limit: self.historyLimit, scanned: 0)) }
+        let result: JSONValue
+        do {
+            result = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
+        } catch {
+            if refreshForwardedSenders { self.recordForwardedRefreshAbort(.requestFailed, offset: 0, scanned: 0) }
+            return
+        }
         let receivedFirstPage = result["messages"]?.array
         let firstPageDisposition = Self.forwardedRefreshPageDisposition(
             messageCount: receivedFirstPage?.count, reportedHasMore: result["hasMore"]?.bool,
             requestedOffset: 0, returnedOffset: result["nextOffset"]?.int,
             fallbackLimit: self.historyLimit)
-        if refreshForwardedSenders, firstPageDisposition == .abort { return }
+        if refreshForwardedSenders {
+            self.recordForwardedRefresh(.page(offset: 0, limit: self.historyLimit,
+                                              messageCount: receivedFirstPage?.count,
+                                              hasMore: result["hasMore"]?.bool,
+                                              nextOffset: result["nextOffset"]?.int,
+                                              disposition: Self.diagnosticDisposition(firstPageDisposition)))
+        }
+        if refreshForwardedSenders, firstPageDisposition == .abort {
+            self.recordForwardedRefreshAbort(receivedFirstPage == nil ? .missingMessages : .malformedPage,
+                                             offset: 0, scanned: 0)
+            return
+        }
         let firstPage = receivedFirstPage ?? []
         let parsed = await Self.parseDetached(firstPage, fallbackBase: 0)
-        guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
-              gateway.connectionEpoch == connectionEpoch,
-              gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration
-        else { return }
+        if refreshForwardedSenders {
+            if Task.isCancelled { self.recordForwardedRefreshAbort(.cancelled, offset: 0, scanned: firstPage.count); return }
+            if self.gateway !== gateway { self.recordForwardedRefreshAbort(.gatewayChanged, offset: 0, scanned: firstPage.count); return }
+            if !gateway.state.isConnected { self.recordForwardedRefreshAbort(.disconnected, offset: 0, scanned: firstPage.count); return }
+            if gateway.connectionEpoch != connectionEpoch { self.recordForwardedRefreshAbort(.connectionEpochChanged, offset: 0, scanned: firstPage.count); return }
+            if gateway.cacheGeneration(of: self.sessionKey) != expectedGeneration {
+                self.recordForwardedRefreshAbort(.cacheGenerationChanged, offset: 0, scanned: firstPage.count); return
+            }
+        } else {
+            guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
+                  gateway.connectionEpoch == connectionEpoch,
+                  gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration
+            else { return }
+        }
         self.apply(history: result, parsed: parsed)
         self.live = nil
         self.hasLoaded = true
@@ -318,61 +432,97 @@ extension ChatStore {
             switch firstPageDisposition {
             case let .more(nextOffset): offset = nextOffset; hasMore = true
             case let .complete(nextOffset): offset = nextOffset; hasMore = false
-            case .abort: return
+            case .abort:
+                self.recordForwardedRefreshAbort(.malformedPage, offset: 0, scanned: scanned)
+                return
             }
             while hasMore, scanned < TranscriptCache.maxItems {
-                guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
-                      gateway.connectionEpoch == connectionEpoch,
-                      gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
-                      gateway.appIsActive
-                else { return }
+                if Task.isCancelled { self.recordForwardedRefreshAbort(.cancelled, offset: offset, scanned: scanned); return }
+                if self.gateway !== gateway { self.recordForwardedRefreshAbort(.gatewayChanged, offset: offset, scanned: scanned); return }
+                if !gateway.state.isConnected { self.recordForwardedRefreshAbort(.disconnected, offset: offset, scanned: scanned); return }
+                if gateway.connectionEpoch != connectionEpoch { self.recordForwardedRefreshAbort(.connectionEpochChanged, offset: offset, scanned: scanned); return }
+                if gateway.cacheGeneration(of: self.sessionKey) != expectedGeneration {
+                    self.recordForwardedRefreshAbort(.cacheGenerationChanged, offset: offset, scanned: scanned); return
+                }
+                if !gateway.appIsActive { self.recordForwardedRefreshAbort(.applicationInactive, offset: offset, scanned: scanned); return }
                 params["limit"] = .number(Double(min(self.historyLimit, TranscriptCache.maxItems - scanned)))
                 params["offset"] = .number(Double(offset))
+                let requestedLimit = min(self.historyLimit, TranscriptCache.maxItems - scanned)
+                self.recordForwardedRefresh(.request(offset: offset, limit: requestedLimit, scanned: scanned))
                 let page: JSONValue
                 do {
                     page = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
                 } catch {
+                    self.recordForwardedRefreshAbort(.requestFailed, offset: offset, scanned: scanned)
                     return
                 }
                 let receivedPage = page["messages"]?.array
-                guard !Task.isCancelled else { return }
+                if Task.isCancelled { self.recordForwardedRefreshAbort(.cancelled, offset: offset, scanned: scanned); return }
                 let disposition = Self.forwardedRefreshPageDisposition(
                     messageCount: receivedPage?.count, reportedHasMore: page["hasMore"]?.bool,
                     requestedOffset: offset, returnedOffset: page["nextOffset"]?.int,
-                    fallbackLimit: min(self.historyLimit, TranscriptCache.maxItems - scanned))
-                if disposition == .abort { return }
-                guard let raw = receivedPage else { return }
+                    fallbackLimit: requestedLimit)
+                self.recordForwardedRefresh(.page(offset: offset, limit: requestedLimit,
+                                                  messageCount: receivedPage?.count,
+                                                  hasMore: page["hasMore"]?.bool,
+                                                  nextOffset: page["nextOffset"]?.int,
+                                                  disposition: Self.diagnosticDisposition(disposition)))
+                if disposition == .abort {
+                    self.recordForwardedRefreshAbort(receivedPage == nil ? .missingMessages : .malformedPage,
+                                                     offset: offset, scanned: scanned)
+                    return
+                }
+                guard let raw = receivedPage else {
+                    self.recordForwardedRefreshAbort(.missingMessages, offset: offset, scanned: scanned)
+                    return
+                }
                 let older = await Self.parseDetached(raw, fallbackBase: -(offset + raw.count))
                 pagesNewestFirst.append(older)
                 scanned += raw.count
                 switch disposition {
                 case let .more(nextOffset): offset = nextOffset; hasMore = true
                 case let .complete(nextOffset): offset = nextOffset; hasMore = false
-                case .abort: return
+                case .abort:
+                    self.recordForwardedRefreshAbort(.malformedPage, offset: offset, scanned: scanned)
+                    return
                 }
             }
-            guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
-                  gateway.connectionEpoch == connectionEpoch,
-                  gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
-                  gateway.appIsActive,
-                  !hasMore || scanned >= TranscriptCache.maxItems
-            else { return }
+            if Task.isCancelled { self.recordForwardedRefreshAbort(.cancelled, offset: offset, scanned: scanned); return }
+            if self.gateway !== gateway { self.recordForwardedRefreshAbort(.gatewayChanged, offset: offset, scanned: scanned); return }
+            if !gateway.state.isConnected { self.recordForwardedRefreshAbort(.disconnected, offset: offset, scanned: scanned); return }
+            if gateway.connectionEpoch != connectionEpoch { self.recordForwardedRefreshAbort(.connectionEpochChanged, offset: offset, scanned: scanned); return }
+            if gateway.cacheGeneration(of: self.sessionKey) != expectedGeneration {
+                self.recordForwardedRefreshAbort(.cacheGenerationChanged, offset: offset, scanned: scanned); return
+            }
+            if !gateway.appIsActive { self.recordForwardedRefreshAbort(.applicationInactive, offset: offset, scanned: scanned); return }
+            if hasMore, scanned < TranscriptCache.maxItems {
+                self.recordForwardedRefreshAbort(.malformedPage, offset: offset, scanned: scanned)
+                return
+            }
             var reconciled: [ChatItem]?
             for attempt in 0...1 {
                 let revision = self.contentRevision
                 let currentItems = self.items
+                self.recordForwardedRefresh(.reconcileStarted(scanned: scanned, revision: revision))
                 let result = await Self.reconcileForwardedRefresh(
                     restoredCache: restoredCacheItems, pagesNewestFirst: pagesNewestFirst, current: currentItems)
-                guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
-                      gateway.connectionEpoch == connectionEpoch,
-                      gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
-                      gateway.appIsActive
-                else { return }
+                if Task.isCancelled { self.recordForwardedRefreshAbort(.cancelled, offset: offset, scanned: scanned); return }
+                if self.gateway !== gateway { self.recordForwardedRefreshAbort(.gatewayChanged, offset: offset, scanned: scanned); return }
+                if !gateway.state.isConnected { self.recordForwardedRefreshAbort(.disconnected, offset: offset, scanned: scanned); return }
+                if gateway.connectionEpoch != connectionEpoch { self.recordForwardedRefreshAbort(.connectionEpochChanged, offset: offset, scanned: scanned); return }
+                if gateway.cacheGeneration(of: self.sessionKey) != expectedGeneration {
+                    self.recordForwardedRefreshAbort(.cacheGenerationChanged, offset: offset, scanned: scanned); return
+                }
+                if !gateway.appIsActive { self.recordForwardedRefreshAbort(.applicationInactive, offset: offset, scanned: scanned); return }
+                self.recordForwardedRefresh(.reconciled(scanned: scanned, rowCount: result.count, revision: revision))
                 if self.contentRevision == revision {
                     reconciled = result
                     break
                 }
-                if attempt == 1 { return }
+                if attempt == 1 {
+                    self.recordForwardedRefreshAbort(.changedTwiceDuringReconcile, offset: offset, scanned: scanned)
+                    return
+                }
             }
             guard let reconciled else { return }
             self.items = reconciled
@@ -590,6 +740,18 @@ extension ChatStore {
         self.cancelScheduledSave()
         self.saveDeadline = deadline
         self.saveDeadlineRunId = runId
+#if DEBUG
+        let state = self.currentCacheState
+        let hasRefreshTrace = !ForwardedSenderRefreshDiagnostics.events(
+            gatewayID: self.gatewayId, sessionKey: self.sessionKey).isEmpty
+        if state.forwardedSenderRefreshPending || state.forwardedSenderRefreshCompleted || hasRefreshTrace {
+            self.recordForwardedRefresh(.saveScheduled(store: self.headless ? .headless : .open,
+                                                       pending: state.forwardedSenderRefreshPending,
+                                                       completed: state.forwardedSenderRefreshCompleted,
+                                                       revision: state.revision,
+                                                       delayMilliseconds: max(0, Int(deadline.timeIntervalSinceNow * 1_000))))
+        }
+#endif
         let generation = self.saveScheduleGeneration
         let wait = self.waitForSaveDeadline
         self.saveTask = Task { [weak self] in
@@ -665,7 +827,15 @@ extension ChatStore {
             }
         }
         let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot)
-        guard current(), !self.cacheUnreadable else { return }
+        let contextValidAfterMeta = current()
+        if refreshWasPending {
+            self.recordForwardedRefresh(.adoptionRead(storePending: refreshWasPending,
+                                                     diskPending: meta?.forwardedSenderRefreshPending,
+                                                     diskComplete: meta?.complete,
+                                                     contextValid: contextValidAfterMeta,
+                                                     cacheReadable: !self.cacheUnreadable))
+        }
+        guard contextValidAfterMeta, !self.cacheUnreadable else { return }
         if let meta {
             self.hasMoreHistory = !meta.complete
             if meta.forwardedSenderRefreshPending == true {
