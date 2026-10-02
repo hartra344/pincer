@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Exercise bundle-mac.sh with isolated fake build tools and inspect its Info.plist."""
+
+from __future__ import annotations
+
+import os
+import pathlib
+import plistlib
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
+
+
+class BundleMacNamespaceTests(unittest.TestCase):
+    def test_namespace_is_applied_to_bundle_identity_and_info_plist(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pincer-bundle-namespace-") as temporary:
+            root = pathlib.Path(temporary)
+            repo = root / "repo"
+            tools = root / "fake-tools"
+            swift_bin = root / "swift-bin"
+            (repo / "scripts").mkdir(parents=True)
+            (repo / "Apps/Shared").mkdir(parents=True)
+            tools.mkdir()
+            swift_bin.mkdir()
+            shutil.copy2(REPO / "scripts/bundle-mac.sh", repo / "scripts/bundle-mac.sh")
+            (repo / "Apps/Shared/AppIcon.icon").write_text("fake icon\n", encoding="utf-8")
+            (swift_bin / "PincerMacDev").write_text("fake executable\n", encoding="utf-8")
+
+            self.write_tool(tools / "swift", """#!/bin/sh
+if [ "$1" = build ] && [ "$4" = --show-bin-path ]; then
+    printf '%s\\n' "$PINCER_TEST_SWIFT_BIN"
+fi
+""")
+            self.write_tool(tools / "xcrun", """#!/usr/bin/env python3
+import pathlib
+import sys
+
+args = sys.argv[1:]
+if args[:2] == ["--sdk", "macosx"]:
+    print("15.0")
+elif args[:1] == ["actool"]:
+    compile_path = pathlib.Path(args[args.index("--compile") + 1])
+    partial_path = pathlib.Path(args[args.index("--output-partial-info-plist") + 1])
+    compile_path.mkdir(parents=True, exist_ok=True)
+    (compile_path / "Assets.car").touch()
+    partial_path.parent.mkdir(parents=True, exist_ok=True)
+    partial_path.touch()
+else:
+    raise SystemExit(f"unexpected xcrun arguments: {args}")
+""")
+            for name in ("vtool", "codesign"):
+                self.write_tool(tools / name, "#!/bin/sh\nexit 0\n")
+
+            env = os.environ.copy()
+            env.pop("PINCER_DEV_NAMESPACE", None)
+            env.update({
+                "PATH": f"{tools}{os.pathsep}{env.get('PATH', '')}",
+                "PINCER_TEST_SWIFT_BIN": str(swift_bin),
+                "PINCER_BUNDLE_ROOT": str(root / "ordinary-build"),
+                "PINCER_SIGN_IDENTITY": "-",
+            })
+            subprocess.run(
+                [str(repo / "scripts/bundle-mac.sh"), "debug"],
+                cwd=repo,
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            production_info = self.read_info(root / "ordinary-build/Pincer.app/Contents/Info.plist")
+            self.assertEqual(production_info["CFBundleIdentifier"], "chat.pincer.mac")
+            self.assertNotIn("PincerDevSuffix", production_info)
+
+            env["PINCER_DEV_NAMESPACE"] = "Desk_Work!"
+            env["PINCER_BUNDLE_ROOT"] = str(root / "namespaced-build")
+            subprocess.run(
+                [str(repo / "scripts/bundle-mac.sh"), "debug"],
+                cwd=repo,
+                env=env,
+                check=True,
+                text=True,
+                capture_output=True,
+            )
+            namespaced_info = self.read_info(root / "namespaced-build/Pincer.app/Contents/Info.plist")
+            self.assertEqual(namespaced_info["CFBundleIdentifier"], "chat.pincer.mac.dev-desk-work")
+            self.assertEqual(namespaced_info["PincerDevSuffix"], ".dev-desk-work")
+
+    @staticmethod
+    def read_info(path: pathlib.Path) -> dict[str, object]:
+        with path.open("rb") as plist_file:
+            return plistlib.load(plist_file)
+
+    @staticmethod
+    def write_tool(path: pathlib.Path, contents: str) -> None:
+        path.write_text(contents, encoding="utf-8")
+        path.chmod(0o755)
+
+
+if __name__ == "__main__":
+    unittest.main()
