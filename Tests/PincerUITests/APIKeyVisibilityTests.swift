@@ -53,6 +53,9 @@ struct APIKeyVisibilityTests {
         #expect(Self.descendants(host).contains { $0 is NSSecureTextField })
         let secure = try #require(Self.descendants(host).compactMap { $0 as? NSSecureTextField }.first)
         #expect(!secure.isHidden)
+        let maskedFrame = secure.frame
+        #expect(abs(maskedFrame.maxX + 6 - button.frame.minX) < 1,
+                "The masked field uses the full input slot without a hidden-field gap")
         try #require(window.makeFirstResponder(secure), "the fixture can focus the secure editor")
         secure.selectText(nil)
         let secureEditor = try #require(secure.currentEditor())
@@ -69,6 +72,10 @@ struct APIKeyVisibilityTests {
         let plain = try #require(Self.descendants(host).compactMap { $0 as? NSTextField }.first {
             !($0 is NSSecureTextField) && !$0.isHidden && $0.isEditable && $0.stringValue == editor.text
         })
+        host.layoutSubtreeIfNeeded()
+        #expect(abs(plain.frame.width - maskedFrame.width) < 1
+                && abs(plain.frame.minX - maskedFrame.minX) < 1,
+                "Reveal keeps the same full-width input slot")
         #expect(!(plain.cell is NSSecureTextFieldCell), "Reveal uses a plain cell rather than suppressing secure-field bullets")
         let plainEditor = try #require(plain.currentEditor() as? NSTextView)
         #expect(!plainEditor.isAutomaticSpellingCorrectionEnabled && !plainEditor.isAutomaticTextReplacementEnabled,
