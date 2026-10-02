@@ -59,11 +59,17 @@ struct SidebarHomeGroupMenuTests {
     }
 
     #if os(iOS)
-    private static func submenuTitle(containing itemTitle: String, in menu: UIMenu) -> String? {
+    private static func submenuTitle(containing itemTitle: String, in menu: UIMenu,
+                                     titledAncestor: String? = nil) -> String? {
         for element in menu.children {
+            if let action = element as? UIAction, action.title == itemTitle { return titledAncestor }
             guard let submenu = element as? UIMenu else { continue }
-            if submenu.children.contains(where: { ($0 as? UIAction)?.title == itemTitle }) { return submenu.title }
-            if let nested = self.submenuTitle(containing: itemTitle, in: submenu) { return nested }
+            let owner = submenu.title.isEmpty || submenu.options.contains(.displayInline)
+                ? titledAncestor
+                : submenu.title
+            if let nested = self.submenuTitle(containing: itemTitle, in: submenu, titledAncestor: owner) {
+                return nested
+            }
         }
         return nil
     }
