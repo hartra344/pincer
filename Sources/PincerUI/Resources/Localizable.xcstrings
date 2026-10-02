@@ -14813,16 +14813,6 @@
         }
       }
     },
-    "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."
-          }
-        }
-      }
-    },
     "The Gateway config has model \"%@\", which is ignored. Choose a model here to replace it.": {
       "localizations": {
         "en": {
@@ -19060,6 +19050,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway rejected these synced settings. They remain pending on this device."
+          }
+        }
+      }
+    },
+    "The Gateway can't use %@ until you add a key again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway can't use %@ until you add a key again."
+          }
+        }
+      }
+    },
+    "Replies fall back to the next provider or this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replies fall back to the next provider or this device's voice."
           }
         }
       }
