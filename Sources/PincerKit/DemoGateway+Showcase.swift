@@ -31,6 +31,8 @@ extension DemoGateway {
             ?? "Use **Find in Chat** to search — try \"onsen\" in *Japan trip*."
         let paletteTip = paletteShortcut.map { "**\($0)** opens the command palette" }
             ?? "Open the command palette from the toolbar"
+        let captureTip = quickCaptureShortcut.map { "On a Mac, **\($0)** opens Quick Capture." }
+            ?? "On a Mac, open **Quick Capture** from the menu."
         return """
         ## Things to try
 
@@ -45,7 +47,7 @@ extension DemoGateway {
         - Send **/compact**, or use **Compact Now** in the context ring.
         - \(findTip)
         - \(paletteTip), and **⌘1–⌘3** jump to pinned chats.
-        - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - \(captureTip)
         - Settings → **Location** can attach approximate location to new messages. It starts off; \
         when enabled, this demo quotes the visible location context just like the rest of your message.
         - Switch models, or pin, rename and group chats in the sidebar.
