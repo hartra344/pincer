@@ -584,7 +584,8 @@ struct ToolFileEditTests {
         let detailsById = Dictionary(transcript.compactMap { row in
             row["toolCallId"]?.string.flatMap { id in row["details"].map { (id, $0) } }
         }, uniquingKeysWith: { first, _ in first })
-        #expect(calls.compactMap { $0["name"]?.string } == ["edit", "write", "apply_patch"])
+        try #require(calls.count == 4)
+        #expect(calls.compactMap { $0["name"]?.string } == ["edit", "write", "apply_patch", "apply_patch"])
         let edits = try calls.map { call in
             try #require(ToolFileEdit.parse(toolName: call["name"]?.string ?? "", arguments: ContentBlock.prettyJSON(call["arguments"] ?? .null),
                                             details: call["id"]?.string.flatMap { detailsById[$0] }))
@@ -592,6 +593,10 @@ struct ToolFileEditTests {
         #expect(edits[0].kind == .edit && edits[0].primaryPath == DemoGateway.fileEditsRetryPath && edits[0].additions == 2 && edits[0].deletions == 1)
         #expect(edits[1].files[0].operation == .add && edits[1].additions == 17 && edits[1].deletions == 0)
         #expect(edits[2].files.map(\.operation) == [.update, .move, .add, .delete] && edits[2].files[0].hunks.count == 3)
+        #expect(calls[3]["id"]?.string == DemoGateway.fileEditsDeleteCall)
+        #expect(edits[3].files.count == 1 && edits[3].files[0].operation == .delete
+                && edits[3].primaryPath == DemoGateway.fileEditsDeletePath)
+        #expect(edits[3].deletionsLabel == nil && edits[3].accessibilitySummary == "Deleted retry-legacy-adapter.ts")
     }
 }
 
