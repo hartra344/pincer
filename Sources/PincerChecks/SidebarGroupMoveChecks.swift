@@ -56,4 +56,21 @@ func runDemoSidebarGroupMoves() async {
     check(created, "group moves: empty group created")
     await gateway.moveChat(utilities, toGroup: "Unpacking", before: nil)
     await expectOnce(utilities, in: "agent:mochi/group:Unpacking", "into an empty group")
+
+    // Grouping a home chat changes its By group placement/order, but By agent intentionally keeps
+    // it in the agent's leading home slot, which is why its menu labels where groups appear.
+    let home = "agent:mochi:main"
+    let homeMoveReady = gateway.sessions[home] != nil && gateway.sessions[home]?.category == nil
+    check(homeMoveReady, "group moves: demo home chat starts ungrouped")
+    guard homeMoveReady else { return }
+    await gateway.moveChat(home, toGroup: "Day of move", before: nil)
+    let homeAssigned = await waitFor("home group assignment") {
+        gateway.sessions[home]?.category == "Day of move" && gateway.groupOrder("Day of move").last == home
+    }
+    check(homeAssigned, "group moves: home chat keeps its assigned category and group order")
+    check(mochiPlacements(gateway)[home] == [agent],
+          "group moves: By agent keeps the assigned home chat in its leading position")
+    gateway.organization = .group
+    let visibleInGroup = gateway.sections().first { $0.kind == .group("Day of move") }?.channels.contains { $0.row.key == home } == true
+    check(visibleInGroup, "group moves: assigned home chat is visible in its By group section")
 }

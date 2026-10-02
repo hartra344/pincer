@@ -311,7 +311,8 @@ struct SidebarList: UIViewRepresentable {
             guard indexPaths.count == 1, let id = self.dataSource?.itemIdentifier(for: indexPaths[0]) else { return nil }
             let items: [SidebarMenuItem]
             if let entry = self.entries[id] {
-                items = SidebarMenus.chat(entry.row, gateway: self.gateway, actions: self.actions)
+                items = SidebarMenus.chat(entry.row, gateway: self.gateway,
+                                          organization: self.gateway.organization, actions: self.actions)
             } else if let header = self.headers[id] {
                 items = SidebarMenus.header(header.section, gateway: self.gateway, actions: self.actions)
             } else {
