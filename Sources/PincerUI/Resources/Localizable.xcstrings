@@ -17723,6 +17723,17 @@
         }
       }
     },
+    "forwarded": {
+      "comment": "VoiceOver marker for a message sent from another known agent's chat",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "forwarded"
+          }
+        }
+      }
+    },
     "from %@’s chat": {
       "localizations": {
         "en": {
