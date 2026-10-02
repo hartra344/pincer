@@ -370,7 +370,7 @@ public final class ChatStore: Identifiable {
     }
 
     static func coalescedFlushDelay(interval: TimeInterval, elapsed: TimeInterval) -> TimeInterval {
-        interval - elapsed
+        max(0, interval - max(0, elapsed))
     }
 
     /// Publishes any coalesced live update now.

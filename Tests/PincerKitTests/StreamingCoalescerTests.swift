@@ -55,7 +55,10 @@ struct StreamingCoalescerTests {
         let interval = 1.0 / 60.0
         let backwardAdjustment = -3_600.0
         #expect(abs(ChatStore.coalescedFlushDelay(interval: interval, elapsed: backwardAdjustment) - interval) < 0.000_001)
+        #expect(abs(ChatStore.coalescedFlushDelay(interval: interval, elapsed: 0) - interval) < 0.000_001)
         #expect(abs(ChatStore.coalescedFlushDelay(interval: interval, elapsed: interval / 2) - interval / 2) < 0.000_001)
+        #expect(ChatStore.coalescedFlushDelay(interval: interval, elapsed: interval) == 0)
+        #expect(ChatStore.coalescedFlushDelay(interval: interval, elapsed: interval * 2) == 0)
     }
 
     @Test func runStartAndFirstDeltaPublishImmediately() async {

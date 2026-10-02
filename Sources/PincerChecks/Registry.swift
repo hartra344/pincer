@@ -64,6 +64,7 @@ enum Suites {
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
+            Section("Streaming clock adjustment") { runStreamingClockChecks() },
             Section("Streaming transcript saves") { runStreamingSaveChecks() },
             Section("Models") { runModelChecks() },
             Section("Exec approvals") { runExecApprovalChecks() },
