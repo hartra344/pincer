@@ -55,6 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
+            Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
