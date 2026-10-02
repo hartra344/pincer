@@ -118,5 +118,7 @@ struct SpeechTextTests {
         var failed = ChatItem(id: "e", role: .assistant, blocks: [.text("oops")])
         failed.isError = true
         #expect(SpeechText.speakableText(for: failed) == nil)
+        #expect(SpeechText.speakableText(for: ChatItem(id: "url", role: .assistant,
+                                                       blocks: [.text("https://example.test/a?token=hidden")])) == nil)
     }
 }

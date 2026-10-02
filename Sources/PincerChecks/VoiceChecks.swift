@@ -333,6 +333,14 @@ private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> G
 func runDemoVoice() async {
     guard let gateway = await voiceConnect(GatewayProfile.demo(), "demo") else { return }
     defer { gateway.stop() }
+    let mainChat = gateway.chat(for: "agent:main:main")
+    await mainChat.load()
+    let demoReply = mainChat.items.first { $0.role == .assistant && !$0.isPending && !$0.isError }
+    let demoPrompt = mainChat.items.first { $0.role == .user }
+    check(demoReply.map { SpeechText.speakableText(for: $0) != nil } ?? false,
+          "demo transcript's assistant prose remains eligible for Read Aloud")
+    check(demoPrompt.map { SpeechText.speakableText(for: $0) == nil } ?? false,
+          "demo transcript's user messages are not eligible for Read Aloud")
     await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")

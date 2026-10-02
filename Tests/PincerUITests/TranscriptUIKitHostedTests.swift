@@ -66,6 +66,62 @@ struct TranscriptUIKitHostedTests {
         try LoggedOutBadgeContrastTests.verifyContrast()
     }
 
+    @Test func visibleReadAloudEligibilityDoesNotNormalizeTheBodyOnMain() async throws {
+        let host = await Self.makeHost()
+        let messageID = "read-aloud-eligibility-\(UUID().uuidString)"
+        let body = String(repeating: "A **formatted reply** with `code` and a [source](https://example.test).\n\n", count: 80)
+        var item = ChatItem(id: messageID, role: .assistant, blocks: [.text(body)])
+        item.transcriptId = messageID
+        let chat = try #require(host.context.chat)
+        chat.items = [item]
+
+        SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        host.coordinator.update(rows: [Self.assistant(messageID, text: body, at: 1)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+
+        let cell = try #require(host.view.visibleCells.first)
+        func hasVisibleReadAloud(in root: UIView) -> Bool {
+            var pending = [root]
+            while let view = pending.popLast() {
+                if let button = view as? TranscriptLabelButton,
+                   button.accessibilityText == "Read Aloud", !button.isHidden { return true }
+                pending.append(contentsOf: view.subviews)
+            }
+            return false
+        }
+        #expect(hasVisibleReadAloud(in: cell), "normal assistant prose keeps the actual Listen button")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "visible-row and accessibility configuration should consume prepared eligibility rather than parse the body on main")
+
+        host.view.reloadData()
+        host.view.layoutIfNeeded()
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "reconfiguring an unchanged visible item should reuse its eligibility")
+
+        // A changed item under the same transcript id must not leave stale eligibility behind.
+        let codeOnly = "```swift\nlet answer = 42\n```"
+        item.blocks = [.text(codeOnly)]
+        chat.items = [item]
+        host.coordinator.update(rows: [Self.assistant(messageID, text: codeOnly, at: 2)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+        let codeCell = try #require(host.view.visibleCells.first)
+        #expect(!hasVisibleReadAloud(in: codeCell), "code-only assistant content is not speakable")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "content changes should refresh eligibility off main")
+
+        item.blocks = [.text(body + "\n\nA restored answer.")]
+        chat.items = [item]
+        host.coordinator.update(rows: [Self.assistant(messageID, text: item.plainText, at: 3)], context: host.context, insets: (0, 0))
+        await Self.idle(host, cap: 10)
+        host.view.layoutIfNeeded()
+        let restoredCell = try #require(host.view.visibleCells.first)
+        #expect(hasVisibleReadAloud(in: restoredCell), "restored prose is eligible again")
+        #expect(SpeechText.speakabilityDebugStats.mainThreadNormalizations == 0,
+                "restoring content must also use the prepared off-main eligibility")
+    }
+
     static func assistant(_ id: String, text: String, streaming: Bool = false, at n: Int) -> TranscriptRow {
         let stamp = Date(timeIntervalSince1970: 1_700_000_000 + Double(n))
         var turn = AssistantTurn(id: id, timestamp: stamp)
