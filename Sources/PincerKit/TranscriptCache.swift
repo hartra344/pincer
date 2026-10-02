@@ -830,16 +830,19 @@ public enum TranscriptCache {
         /// Tests: counts primes as they enter the writer, so a prefill save can be ordered against
         /// a suspended prime without an unbounded event wait.
         var primeStartsForTesting: [URL: Int] = [:]
+        var trackedPrimeURLsForTesting: Set<URL> = []
 
         func delayPrimeForTesting(_ url: URL, by delay: Duration?) {
             self.primeDelaysForTesting[url] = delay
         }
 
         func primeStartCountForTesting(_ url: URL) -> Int {
-            self.primeStartsForTesting[url, default: 0]
+            self.trackedPrimeURLsForTesting.insert(url)
+            return self.primeStartsForTesting[url, default: 0]
         }
 
         func resetPrimeStartCountForTesting(_ url: URL) {
+            self.trackedPrimeURLsForTesting.remove(url)
             self.primeStartsForTesting[url] = nil
         }
 
