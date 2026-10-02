@@ -111,6 +111,8 @@ Add `--skip-intent-checks` to the plain run to leave out the Shortcuts & Siri of
 
 Add `--skip-perf-budgets` to any mode to report the offline perf smoke timings (message index build, query and append) without enforcing their budgets. Only clearly broken timings, such as a selective query over 1 second, still fail. Use it when other work shares the CPU. `--perf-smoke` runs only the perf smoke, with its budgets enforced.
 
+Debug checks also enforce a deterministic sidebar work budget: a section build derives each eligible row's parent candidates at most once. This covers all organization modes and the built-in demo without relying on wall-clock timing or a persistent section cache.
+
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage. It also keeps every secret in memory, so it never touches or prompts for your real Keychain (no `PINCER_KEYCHAIN=memory` needed), and it fails if any real Keychain call happens.
 
 ## Launch CPU check
