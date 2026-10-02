@@ -6,7 +6,7 @@ import Foundation
 public enum VoiceKeyRemovalPolicy {
     /// Whether removing this provider's key changes the provider currently used for replies.
     public static func shouldExplainFallback(activeProvider: String?, removingProvider: String) -> Bool {
-        true
+        activeProvider != nil && activeProvider == removingProvider
     }
 }
 
