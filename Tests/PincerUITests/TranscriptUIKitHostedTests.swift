@@ -129,6 +129,8 @@ struct TranscriptUIKitHostedTests {
         _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.adopted > 0 }
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > offBefore, "open: the worker measured rows")
         #expect(host.coordinator.premeasureStats.adopted > 0)
+        let preparedVisibleDescription: String
+        #if DEBUG
         let initialVisible = try #require(host.coordinator.visibleRows)
         let rows = host.coordinator.controller.rows
         let driver = Self.driver(host.coordinator)
@@ -145,13 +147,21 @@ struct TranscriptUIKitHostedTests {
         let preparedTop = try #require(host.coordinator.rowTop(preparedIndex))
         let targetOffset = max(0, preparedTop - host.view.bounds.height / 3)
         let oldOffset = host.view.contentOffset.y
+        TranscriptText.resetMeasureStats()
         host.view.contentOffset.y = targetOffset
         host.coordinator.controller.readerScrolled(movingUp: targetOffset < oldOffset)
         host.view.layoutIfNeeded()
+        #expect(TranscriptText.measureStats.mainLayouts == 0,
+                "revealing this host's worker-prepared row must not run main-thread TextKit")
         let preparedVisible = host.coordinator.visibleRows?.contains(preparedIndex) == true
         #expect(preparedVisible, "the host's worker-prepared row entered the native visible range")
         #expect(host.coordinator.controller.heights[rows[preparedIndex].id]?.measured == true,
                 "the native list laid out the worker-prepared visible row")
+
+        preparedVisibleDescription = String(preparedVisible)
+        #else
+        preparedVisibleDescription = "not instrumented in release"
+        #endif
 
         // Every row is eligible text/markdown, so the budget for main-thread layouts is zero.
         let rowsBefore = host.coordinator.visibleRows
@@ -166,7 +176,7 @@ struct TranscriptUIKitHostedTests {
         await Self.idle(host)
         let jumped = host.coordinator.premeasureStats
         let far = Self.scrollSteps(host, 40)
-        print("\nTranscriptPremeasure UIKit scroll (3000 rows): worker-prepared visible row \(preparedVisible); "
+        print("\nTranscriptPremeasure UIKit scroll (3000 rows): worker-prepared visible row \(preparedVisibleDescription); "
             + "scroll near window: mainLayouts \(near.mainLayouts) memoHits \(near.memoHits); "
             + "after jump: offloaded \(offloadedBeforeJump) -> \(jumped.offloaded), scroll mainLayouts \(far.mainLayouts) memoHits \(far.memoHits); "
             + "premeasureStats \(host.coordinator.premeasureStats)")
