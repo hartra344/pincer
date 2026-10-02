@@ -19163,6 +19163,16 @@
           }
         }
       }
+    },
+    "Shown in right pane": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown in right pane"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
