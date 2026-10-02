@@ -10,9 +10,9 @@ enum MediaError: Error {
 @MainActor
 final class GatewayMediaClient {
     /// Hard cap on any single media download.
-    static let defaultMaxBytes = 25 * 1024 * 1024
+    nonisolated static let defaultMaxBytes = 25 * 1024 * 1024
     /// Cap when the user explicitly saves or shares a file.
-    static let explicitMaxBytes = 200 * 1024 * 1024
+    nonisolated static let explicitMaxBytes = 200 * 1024 * 1024
 
     private struct Identity: Equatable {
         let id: UUID

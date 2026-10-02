@@ -53,6 +53,7 @@ public final class ShareModel {
     /// Attachments sized for the connected Gateway, and files that won't be sent.
     public private(set) var attachments: [OutgoingAttachment] = []
     public private(set) var attachmentProblems: [String] = []
+    public private(set) var isPreparingAttachments = false
     public private(set) var sendError: String?
 
     public var profileId: UUID? {
@@ -68,7 +69,12 @@ public final class ShareModel {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var connection: GatewayConnection?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private var attachmentPreparationTask: Task<Void, Never>?
+    @ObservationIgnored private var attachmentPreparationGeneration = 0
+    @ObservationIgnored var attachmentPreparationProbe: (@Sendable () -> Void)?
     @ObservationIgnored private var hello: GatewayHello?
+    /// Latest live limits seen in this extension process, kept only for its configured profiles.
+    @ObservationIgnored private var lastKnownUploadPolicies: [UUID: UploadPolicy] = [:]
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var isInitialized = false
 
@@ -102,7 +108,8 @@ public final class ShareModel {
     public var messageText: String { self.content.message(note: self.note) }
 
     public var canSend: Bool {
-        self.phase == .ready && self.target != nil && (!self.messageText.isEmpty || !self.attachments.isEmpty)
+        self.phase == .ready && !self.isPreparingAttachments && self.target != nil
+            && (!self.messageText.isEmpty || !self.attachments.isEmpty)
     }
 
     public func setContent(_ content: SharedContent) {
@@ -139,6 +146,7 @@ public final class ShareModel {
         self.pumpTask?.cancel()
         self.pumpTask = nil
         self.hello = nil
+        self.prepareAttachments()
         if let connection = self.connection {
             Task { await connection.stop() }
         }
@@ -152,6 +160,7 @@ public final class ShareModel {
             if self.hello == nil { self.phase = .connecting(nil) }
         case let .reconnecting(_, _, reason):
             self.hello = nil
+            self.prepareAttachments()
             self.phase = .connecting(reason)
         case let .awaitingPairing(_, deviceId):
             self.phase = .awaitingPairing(deviceId: deviceId)
@@ -160,6 +169,11 @@ public final class ShareModel {
         case .connected:
             guard let hello else { return }
             self.hello = hello
+            if let profileId {
+                let policy = UploadPolicy(hello: hello)
+                self.lastKnownUploadPolicies[profileId] = policy
+                self.persistUploadPolicy(policy, profileId: profileId, generation: generation)
+            }
             self.prepareAttachments()
             await self.loadTargets()
             guard generation == self.generation else { return }
@@ -192,14 +206,61 @@ public final class ShareModel {
     }
 
     private func prepareAttachments() {
-        let prepared = self.content.attachments(limits: UploadLimits(hello: self.hello))
-        self.attachments = prepared.attachments
-        self.attachmentProblems = prepared.problems
+        self.attachmentPreparationGeneration += 1
+        let generation = self.attachmentPreparationGeneration
+        self.attachmentPreparationTask?.cancel()
+        self.isPreparingAttachments = true
+        self.attachments = []
+        self.attachmentProblems = []
+
+        let content = self.content
+        let liveHello = self.hello
+        let profileId = self.profileId
+        let livePolicy = liveHello.map(UploadPolicy.init(hello:))
+        let observedPolicy = profileId.flatMap { self.lastKnownUploadPolicies[$0] }
+        let savedPolicyData = livePolicy == nil && observedPolicy == nil
+            ? profileId.flatMap { self.defaults.data(forKey: GatewayStore.uploadPolicyKey($0)) }
+            : nil
+        let probe = self.attachmentPreparationProbe
+
+        // The serial preparer decodes the small saved policy and runs ImageCodec away from this
+        // actor. Results for content or a Gateway the user has since changed are discarded.
+        self.attachmentPreparationTask = Task { [weak self] in
+            let prepared = await SharedAttachmentPreparer.shared.prepare(
+                content, livePolicy: livePolicy, observedPolicy: observedPolicy,
+                savedPolicyData: savedPolicyData, probe: probe)
+            guard let self, !Task.isCancelled, self.attachmentPreparationGeneration == generation else { return }
+            self.attachments = prepared.attachments
+            self.attachmentProblems = prepared.problems
+            self.isPreparingAttachments = false
+            self.attachmentPreparationTask = nil
+        }
+    }
+
+    /// Lets callers that need a settled form (tests and the send action) wait for current local
+    /// preparation. It does not wait for the Gateway or block the share-sheet UI.
+    func waitForAttachmentPreparation() async {
+        while let task = self.attachmentPreparationTask {
+            await task.value
+        }
+    }
+
+    private func persistUploadPolicy(_ policy: UploadPolicy, profileId: UUID, generation: Int) {
+        let defaults = self.defaults
+        let key = GatewayStore.uploadPolicyKey(profileId)
+        Task { [weak self] in
+            let data = await Task.detached(priority: .utility) { try? JSONEncoder().encode(policy) }.value
+            guard let self, self.generation == generation, self.profileId == profileId,
+                  self.lastKnownUploadPolicies[profileId] == policy, let data
+            else { return }
+            defaults.set(data, forKey: key)
+        }
     }
 
     /// Sends the note and shared content. Returns whether the Gateway accepted it.
     @discardableResult
     public func send() async -> Bool {
+        await self.waitForAttachmentPreparation()
         guard self.canSend, let connection, let target else { return false }
         self.phase = .sending
         self.sendError = nil

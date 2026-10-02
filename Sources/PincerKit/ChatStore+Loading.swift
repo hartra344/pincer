@@ -515,6 +515,7 @@ extension ChatStore {
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cachingStopped = true
+        self.cancelOutboxImagePreviews()
     }
 
     /// The store is going away: writes what's loaded now, then nothing more is cached.
@@ -857,6 +858,7 @@ extension ChatStore {
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
+        self.releaseCommittedOutboxImagePreviews(committedKeys)
         self.pruneRecoveryState(keeping: parsed)
         self.recoverCappedMessages()
 

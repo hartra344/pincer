@@ -45,10 +45,23 @@ extension GatewayStore {
         guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly,
               self.state.isConnected, self.hello != nil
         else { return nil }
-        var scannedEntries = 0
-        let next = self.outbox.nextToSend(sessionKey: entry.sessionKey, scannedEntries: &scannedEntries)
-        self.outboxHeadScanVisits += scannedEntries
-        guard next?.id == entry.id else { return nil }
+        let heads: [String: String]
+        if let cached = self.outboxEligibleHeads {
+            heads = cached
+        } else {
+            var computed: [String: String] = [:]
+            var visitedSessions = Set<String>()
+            for candidate in self.outbox.entries {
+                self.outboxHeadScanVisits += 1
+                guard visitedSessions.insert(candidate.sessionKey).inserted else { continue }
+                if candidate.state == .queued, !candidate.isMemoryOnly {
+                    computed[candidate.sessionKey] = candidate.id
+                }
+            }
+            self.outboxEligibleHeads = computed
+            heads = computed
+        }
+        guard heads[entry.sessionKey] == entry.id else { return nil }
         guard self.uploadBytes(for: entry) >= OutboxEntry.largeUploadBytes else { return nil }
         if self.network.isConstrained { return .constrained }
         if self.network.isExpensive { return .expensive }

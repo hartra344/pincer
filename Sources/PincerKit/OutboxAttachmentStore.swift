@@ -69,6 +69,26 @@ public enum OutboxAttachmentStore {
         }.value
     }
 
+    /// Reads one image for an inline pending-row preview. The caller is the serialized preview
+    /// worker, so this never competes with another original image buffer. It drains queued writes
+    /// first, then maps only the selected image instead of loading every file in the outbox entry.
+    static func readImageAttachment(
+        entryId: String,
+        attachment: OutboxAttachmentRef,
+        gatewayId: UUID,
+        root: URL?) -> OutgoingAttachment?
+    {
+        guard attachment.mimeType.lowercased().hasPrefix("image/"),
+              attachment.byteCount > 0, attachment.byteCount <= GatewayMediaClient.explicitMaxBytes,
+              let url = self.fileURL(gatewayId: gatewayId, entryId: entryId, attachmentId: attachment.id, root: root)
+        else { return nil }
+        self.drain(gatewayId: gatewayId, root: root)
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+              !data.isEmpty, data.count <= GatewayMediaClient.explicitMaxBytes
+        else { return nil }
+        return OutgoingAttachment(id: attachment.id, fileName: attachment.fileName, mimeType: attachment.mimeType, data: data)
+    }
+
     // MARK: Queued file work
 
     /// Queues writing the files; false when the store is off or the entry id can't be a directory name.
