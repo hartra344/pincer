@@ -99,7 +99,8 @@ struct TranscriptUIKitHostedTests {
         func descendants(_ root: UIView) -> [UIView] {
             [root] + root.subviews.flatMap(descendants)
         }
-        let displayedSnippet = String(snippet.prefix(WebSearch.Limits.snippetShown))
+        let displayedSnippet = try #require(WebSearch.parse(tool.details)?.results.first?.snippet,
+                                            "the native view retains the complete parsed snippet, including its clipping ellipsis")
         let snippetSections = toolPart.sections.filter { $0.text.string.contains(displayedSnippet) }
         #expect(!snippetSections.isEmpty,
                 "the complete capped snippet remains in the rendered source used by Find")
