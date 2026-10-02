@@ -1490,13 +1490,12 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored internal(set) var healthDismissalPushes = 0
 
     /// Avatar characters by agent id, plus Pixel or Plush under `AvatarPreferences.renderStyleEntry`,
-    /// synced through `users.prefs` (`pincer.avatars`). Changes from the Gateway are written onto
-    /// this device's avatar settings, which the views read.
+    /// synced through `users.prefs` (`pincer.avatars`). Character mirrors stay scoped to this Gateway.
     public internal(set) var avatarChoices: [String: String] {
         didSet {
             guard self.avatarChoices != oldValue else { return }
             self.defaults.set(self.avatarChoices, forKey: "pincer.avatars.\(self.id.uuidString)")
-            AvatarPreferences.apply(self.avatarChoices, previous: oldValue, to: self.defaults)
+            AvatarPreferences.apply(self.avatarChoices, previous: oldValue, to: self.defaults, gatewayId: self.id)
         }
     }
 
