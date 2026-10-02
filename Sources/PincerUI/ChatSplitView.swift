@@ -4,10 +4,6 @@ import SwiftUI
 struct SidebarSplitPaneObservation: Equatable {
     let gatewayID: UUID
     let sessionKey: String?
-
-    static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.sessionKey == rhs.sessionKey
-    }
 }
 
 /// The main window's split view (#48): the selected chat on the left and a second chat on the right.
