@@ -10,9 +10,8 @@ BASE_BUNDLE_ID="chat.pincer.mac"
 BUNDLE_ID="$BASE_BUNDLE_ID"
 DEV_SUFFIX=""
 if [ -n "${PINCER_DEV_NAMESPACE:-}" ]; then
-  # Keep this in sync with DevNamespace.sanitize: ASCII lowercase, collapse invalid runs,
-  # cap at 24 characters, then trim dashes introduced at the boundaries.
-  DEV_NAMESPACE="$(printf '%s' "$PINCER_DEV_NAMESPACE" | LC_ALL=C tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | cut -c1-24 | sed -E 's/^-+//; s/-+$//')"
+  # Match DevNamespace.sanitize's Unicode lowercasing, scalar replacement, and cap order.
+  DEV_NAMESPACE="$(python3 -c 'import os, re; name = re.sub("[^a-z0-9]+", "-", os.environ["PINCER_DEV_NAMESPACE"].lower()); print(name[:24].strip("-"))')"
   if [ -n "$DEV_NAMESPACE" ]; then
     DEV_SUFFIX=".dev-$DEV_NAMESPACE"
     BUNDLE_ID="$BASE_BUNDLE_ID$DEV_SUFFIX"
