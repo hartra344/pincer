@@ -55,14 +55,10 @@ extension ChatStore {
         }
         let idempotencyKey = UUID().uuidString.lowercased()
         var blocks: [ContentBlock] = trimmed.isEmpty ? [] : [.text(trimmed)]
+        // Pending rows begin with lightweight file metadata. A bounded background preview worker
+        // replaces image files with small ImageRefs after it has read and downsampled the source.
         for attachment in attachments {
-            if attachment.isImage {
-                blocks.append(.image(ImageRef(
-                    artifactId: nil, base64: attachment.data.base64EncodedString(), url: nil,
-                    mimeType: attachment.mimeType, alt: attachment.fileName, width: nil, height: nil)))
-            } else {
-                blocks.append(.file(FileRef(name: attachment.fileName, mimeType: attachment.mimeType)))
-            }
+            blocks.append(.file(FileRef(name: attachment.fileName, mimeType: attachment.mimeType)))
         }
         let createdAt = Date()
         var pending = ChatItem(role: .user, blocks: blocks, timestamp: createdAt, idempotencyKey: idempotencyKey, isPending: true)
@@ -249,6 +245,7 @@ extension ChatStore {
     func syncOutbox(_ entries: [OutboxEntry]) {
         guard !self.headless else { return }
         let byId = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        self.pruneOutboxImagePreviews(entries)
         var items = self.items
         items.removeAll { item in
             guard item.outboxState != nil, let key = item.idempotencyKey else { return false }
@@ -264,14 +261,15 @@ extension ChatStore {
                 continue
             }
             if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
+            let blocks = self.outboxPreviewBlocks(for: entry)
+            if items[index].blocks != blocks { items[index].blocks = blocks }
             let hold = self.gateway?.hold(for: entry)
             if items[index].outboxHold != hold { items[index].outboxHold = hold }
             let bytes = hold == nil ? nil : self.gateway?.uploadBytes(for: entry)
             if items[index].outboxUploadBytes != bytes { items[index].outboxUploadBytes = bytes }
         }
         for entry in entries where !seen.contains(entry.id) {
-            var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: (entry.text.isEmpty ? [] : [.text(entry.text)])
-                                + entry.attachments.map { .file(FileRef(name: $0.fileName, mimeType: $0.mimeType)) },
+            var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: self.outboxPreviewBlocks(for: entry),
                                 timestamp: entry.createdAt, idempotencyKey: entry.id, isPending: true)
             item.outboxState = entry.state
             item.outboxHold = self.gateway?.hold(for: entry)
@@ -285,6 +283,7 @@ extension ChatStore {
             // After this outbox change has settled; the transcript already has these.
             Task { [weak gateway] in gateway?.reconcileOutbox(committedKeys: committed) }
         }
+        self.scheduleOutboxImagePreviews(entries)
     }
 
     /// Compacts the session's context now, reporting token counts before and after in `compaction`.

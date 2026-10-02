@@ -145,6 +145,12 @@ public final class ChatStore: Identifiable {
     nonisolated(unsafe) static var liveFlushInterval: TimeInterval = 1.0 / 30
     @ObservationIgnored var lastPublishAt = Date.distantPast
     @ObservationIgnored var pendingFlush: Task<Void, Never>?
+    @ObservationIgnored var outboxImagePreviews = OutboxImagePreviewCache()
+    @ObservationIgnored var outboxPreviewAttempts: Set<OutboxImagePreviewKey> = []
+    @ObservationIgnored var outboxPreviewActiveKeys: Set<OutboxImagePreviewKey> = []
+    @ObservationIgnored var outboxPreviewTask: Task<Void, Never>?
+    @ObservationIgnored var outboxPreviewGeneration = 0
+    @ObservationIgnored var outboxImagePreviewProbe: (@Sendable () -> Void)?
     @ObservationIgnored var hasPendingLive = false
     /// How many leading `entries` come from committed items; the rest is the live tail. `nil` until
     /// `entries` has been rebuilt from `items`, so the next rebuild rebuilds the committed part too.

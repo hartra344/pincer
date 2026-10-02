@@ -46,6 +46,8 @@ Creates a new chat with an **Agent**, sends an optional first **Message** withou
 
 Returns the chats counted in Pincer's unread badge, most recent first. Helper runs and archived chats aren't included. Leave **Gateway** empty to check every gateway.
 
+The list respects each Gateway's **Show Automations** and **Show Slash Commands** choices in the sidebar's **Organize** menu. Hidden chats stay out of the unread list; the currently selected chat remains included, just as it does in the app's badge. Changing either choice applies to the next unread lookup, including from Shortcuts while Pincer is running.
+
 Siri says how many there are and names up to five, for example "3 unread chats: Research, Forge, Inbox." An agent's main chat is named after the agent, here Forge, unless you renamed it.
 
 ### Get Pending Approvals
