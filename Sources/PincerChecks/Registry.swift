@@ -215,6 +215,7 @@ enum Suites {
         Section("Demo agent and model settings") { await runDemoAgentModelsPageChecks() },
         Section("Transcript headless fill (demo, #299)") { await runDemoTranscriptHeadlessFillChecks() },
         Section("Resize streaming inputs (demo, #353)") { await runDemoResizeStreamingInputs() },
+        Section("Streaming clock rollback (demo, #649)") { await runDemoStreamingClockChecks() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
