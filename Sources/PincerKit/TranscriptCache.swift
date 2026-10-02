@@ -797,9 +797,18 @@ public enum TranscriptCache {
 
         /// Tests: `prime` for this URL first suspends this long, standing in for a writer busy with saves.
         var primeDelaysForTesting: [URL: Duration] = [:]
+        /// Tests: signals when the next prime reaches the writer, so a prefill save can be ordered
+        /// deterministically against a suspended prime.
+        var primeStartContinuationsForTesting: [URL: AsyncStream<Void>.Continuation] = [:]
 
         func delayPrimeForTesting(_ url: URL, by delay: Duration?) {
             self.primeDelaysForTesting[url] = delay
+        }
+
+        func watchNextPrimeStartForTesting(_ url: URL) -> AsyncStream<Void> {
+            let (stream, continuation) = AsyncStream<Void>.makeStream()
+            self.primeStartContinuationsForTesting[url] = continuation
+            return stream
         }
 
         func remove(_ url: URL) {
