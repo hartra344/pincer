@@ -43,4 +43,4 @@ The left chat keeps the window's title and toolbar. The right chat has a small h
 
 Both chats have their own composer, and the right chat stays loaded and live and isn't notified, just like a chat in its own window. Selecting the right-hand chat in the sidebar moves it to the left, and the chat it replaces moves to the right. Menu commands and links inside either chat act on the left chat. The split also hides on a Mac when the window is too narrow for two chats.
 
-On iPad, **Open in Split View** is in a chat's context menu in the sidebar. The split shows while the window is wide enough for two chats, and hides when it's too narrow (for example in Slide Over), then comes back.
+On iPad, **Open in Split View** is in a chat's context menu in the sidebar while the window is wide enough for two chats. The action and an existing split hide when the window is too narrow (for example in Slide Over), then come back when you widen it.

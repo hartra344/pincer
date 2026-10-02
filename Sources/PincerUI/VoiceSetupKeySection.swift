@@ -64,7 +64,13 @@ struct VoiceSetupKeySection: View {
                 Button(L("Remove Key"), role: .destructive, action: self.remove)
                 Button(L("Cancel"), role: .cancel) {}
             } message: {
-                Text(String(format: L("The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."), self.name))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(format: L("The Gateway can't use %@ until you add a key again."), self.name))
+                    if VoiceKeyRemovalPolicy.shouldExplainFallback(activeProvider: self.model.status?.provider,
+                                                                    removingProvider: self.provider) {
+                        Text(L("Replies fall back to the next provider or this device's voice."))
+                    }
+                }
             }
     }
 

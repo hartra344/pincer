@@ -146,6 +146,14 @@ struct RootView: View {
         return nil
     }
 
+    private var windowIsCompactWidth: Bool {
+        #if os(iOS)
+        self.sizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         Group {
             if self.showsFirstRun {
@@ -154,7 +162,8 @@ struct RootView: View {
                     .onAppear { self.compactColumn = .sidebar }
             } else if let gateway = self.app.selectedGateway {
                 NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
-                    ChannelList(openChat: { self.compactColumn = .detail })
+                    ChannelList(openChat: { self.compactColumn = .detail },
+                                windowIsCompactWidth: self.windowIsCompactWidth)
                         .environment(gateway)
                         .background { self.sidebarBackground?.ignoresSafeArea() }
                         .id(gateway.id)
