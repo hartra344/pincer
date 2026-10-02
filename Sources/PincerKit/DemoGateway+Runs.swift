@@ -139,8 +139,13 @@ extension DemoGateway {
         }
 
         let wantsLong = lowered.range(of: #"\blong\b"#, options: .regularExpression) != nil
+        let shortcuts = await MainActor.run {
+            (ShortcutStore.shared.combo(for: .commandPalette)?.displayString,
+             ShortcutStore.shared.combo(for: .findInChat)?.displayString)
+        }
         let reply = wantsLong ? Self.longReply
-            : answered ?? Self.reply(to: text, usedTool: wantsTool, note: approvesLater ? Self.laterApprovalNote : nil)
+            : answered ?? Self.reply(to: text, usedTool: wantsTool, note: approvesLater ? Self.laterApprovalNote : nil,
+                                     paletteShortcut: shortcuts.0, findShortcut: shortcuts.1)
         var out = ""
         // The long reply streams a few words per step so it doesn't take a minute.
         let words = Self.words(reply)

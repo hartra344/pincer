@@ -7,13 +7,13 @@ import UniformTypeIdentifiers
 extension DemoGateway {
     // MARK: Content
 
-    static func reply(to text: String, usedTool: Bool, note: String? = nil) -> String {
+    static func reply(to text: String, usedTool: Bool, note: String? = nil, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F") -> String {
         let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
         return """
         \(quoted.isEmpty ? "" : quoted + "\n\n")\(note.map { $0 + "\n\n" } ?? "")This is **Pincer's demo mode**, \
         so this reply is canned. Connect your own OpenClaw Gateway to chat with real agents.
 
-        \(Self.thingsToTry(usedTool: usedTool))
+        \(Self.thingsToTry(usedTool: usedTool, paletteShortcut: paletteShortcut, findShortcut: findShortcut))
 
         ```text
         streaming: ok · markdown: ok · tools: \(usedTool ? "ran" : "on request")
@@ -24,7 +24,7 @@ extension DemoGateway {
     // MARK: Demo showcase: tips
 
     /// Trigger words match anywhere in a message, so each tip names only its own.
-    static func thingsToTry(usedTool: Bool) -> String {
+    static func thingsToTry(usedTool: Bool, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F") -> String {
         """
         ## Things to try
 
