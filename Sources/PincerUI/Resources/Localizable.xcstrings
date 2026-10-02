@@ -19064,6 +19064,86 @@
         }
       }
     },
+    "%@ (iPad keyboard).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (iPad keyboard)."
+          }
+        }
+      }
+    },
+    "Open the command palette to jump to any chat, agent, model, or setting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the command palette to jump to any chat, agent, model, or setting."
+          }
+        }
+      }
+    },
+    "Press %@ to find in the current chat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press %@ to find in the current chat."
+          }
+        }
+      }
+    },
+    "Press %@ to jump to any chat, agent, model, or setting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press %@ to jump to any chat, agent, model, or setting."
+          }
+        }
+      }
+    },
+    "Search all messages from %@ or the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from %@ or the sidebar search field."
+          }
+        }
+      }
+    },
+    "Search all messages from the command palette or the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from the command palette or the sidebar search field."
+          }
+        }
+      }
+    },
+    "Search all messages from the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from the sidebar search field."
+          }
+        }
+      }
+    },
+    "Use Find in Chat to search the current chat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Find in Chat to search the current chat."
+          }
+        }
+      }
+    },
     "The Gateway can't use %@ until you add a key again.": {
       "localizations": {
         "en": {

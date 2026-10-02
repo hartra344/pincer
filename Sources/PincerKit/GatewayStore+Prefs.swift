@@ -631,9 +631,64 @@ extension GatewayStore {
                                    methods: { [weak self] in self?.hello?.methods }, request: self.toolsRequest)
     }
 
-    private var toolsRequest: ToolsInspectorModel.Request {
+    var toolsRequest: ToolsInspectorModel.Request {
         let connection = self.connection
-        return { method, params in try await connection.request(method, params, timeout: 30) }
+        return { [weak self] method, params in
+            let sessionKey = method == ToolsPolicy.effectiveMethod ? params["sessionKey"]?.text : nil
+            let version = sessionKey.flatMap { self?.beginEffectiveMCPToolRead(sessionKey: $0) }
+            do {
+                let result = try await connection.request(method, params, timeout: 30)
+                if let self, let sessionKey, let version {
+                    await self.finishEffectiveMCPToolRead(result, sessionKey: sessionKey, version: version)
+                }
+                return result
+            } catch {
+                if let self, let sessionKey, let version {
+                    self.cancelEffectiveMCPToolRead(sessionKey: sessionKey, version: version)
+                }
+                throw error
+            }
+        }
+    }
+
+    /// Resolves a transcript tool using this Gateway's latest bounded snapshot for that session.
+    /// A genuinely uncached ID keeps the legacy safe-prefix fallback; a cached stale server does not.
+    public func mcpServerName(forToolName toolName: String, sessionKey: String) -> String? {
+        let index = self.mcpToolServerIndexes.value(for: sessionKey)
+        let configured = self.settings.config["mcp"]?["servers"]?.object ?? [:]
+        if let index {
+            for exactID in MCPToolServerResolver.exactIDs(for: toolName) {
+                if let entry = index.serversByToolID[exactID] {
+                    guard case let .server(name) = entry, configured[name] != nil else { return nil }
+                    return name
+                }
+            }
+            if !index.isComplete { return nil }
+        }
+        let names = self.mcp.servers.map(\.name)
+        return MCPToolServerResolver.resolve(toolName: toolName, effectiveIndex: nil,
+                                             configuredServerNames: names)
+    }
+
+    func beginEffectiveMCPToolRead(sessionKey: String) -> UInt64? {
+        guard self.mcpToolServerReadVersions[sessionKey] != nil || self.mcpToolServerReadVersions.count < 32 else { return nil }
+        self.mcpToolServerReadSequence &+= 1
+        self.mcpToolServerReadVersions[sessionKey] = self.mcpToolServerReadSequence
+        return self.mcpToolServerReadSequence
+    }
+
+    func cancelEffectiveMCPToolRead(sessionKey: String, version: UInt64) {
+        guard self.mcpToolServerReadVersions[sessionKey] == version else { return }
+        self.mcpToolServerReadVersions.removeValue(forKey: sessionKey)
+    }
+
+    func finishEffectiveMCPToolRead(_ result: JSONValue, sessionKey: String, version: UInt64) async {
+        let index = await Task.detached(priority: .utility) {
+            MCPToolServerResolver.serverIndex(from: result)
+        }.value
+        guard self.mcpToolServerReadVersions[sessionKey] == version else { return }
+        self.mcpToolServerReadVersions.removeValue(forKey: sessionKey)
+        _ = self.mcpToolServerIndexes.insert(index, for: sessionKey, cost: index.cost)
     }
 
     /// `message.action` calls the built-in demo received, oldest first (for checks; empty for real Gateways).

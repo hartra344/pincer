@@ -120,7 +120,7 @@ struct TranscriptUIKitHostedTests {
         return TranscriptText.measureStats
     }
 
-    @Test func scrollingWithinThePrefetchedWindowDoesNoMainTextKit() async {
+    @Test func scrollingWithinThePrefetchedWindowDoesNoMainTextKit() async throws {
         let host = await Self.makeHost()
         let offBefore = TranscriptPremeasurer.offMainLayouts.withLock { $0 }
         TranscriptText.resetMeasureStats()
@@ -129,18 +129,39 @@ struct TranscriptUIKitHostedTests {
         _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.adopted > 0 }
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > offBefore, "open: the worker measured rows")
         #expect(host.coordinator.premeasureStats.adopted > 0)
-        let rowWidth = max(0, host.view.bounds.width - host.view.safeAreaInsets.left - host.view.safeAreaInsets.right)
-        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: rowWidth)
-        let hasWarmVisibleRow = host.coordinator.visibleRows.map { visible in
-            visible.contains { index in
-                guard index < host.coordinator.controller.rows.count,
-                      let keys = host.coordinator.renderer.premeasureBodies(for: host.coordinator.controller.rows[index]),
-                      !keys.isEmpty
-                else { return false }
-                return keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }
-            }
-        } ?? false
-        #expect(hasWarmVisibleRow, "open: a native visible row reuses its worker-premeasured sizes")
+        let preparedVisibleDescription: String
+        #if DEBUG
+        let initialVisible = try #require(host.coordinator.visibleRows)
+        let rows = host.coordinator.controller.rows
+        let driver = Self.driver(host.coordinator)
+        // On-screen rows are deliberately measured synchronously. Bring the nearest worker-submitted
+        // neighbor into view so the check proves this host prepared a row before it became visible,
+        // without inspecting TranscriptText's process-wide LRUs after other suites can evict entries.
+        let preparedIndex = try #require(rows.indices
+            .filter { driver.adoptedIds.contains(rows[$0].id) && !initialVisible.contains($0) }
+            .min { lhs, rhs in
+                let distance: (Int) -> Int = { $0 < initialVisible.lowerBound
+                    ? initialVisible.lowerBound - $0 : $0 - initialVisible.upperBound }
+                return distance(lhs) < distance(rhs)
+            })
+        let preparedTop = try #require(host.coordinator.rowTop(preparedIndex))
+        let targetOffset = max(0, preparedTop - host.view.bounds.height / 3)
+        let oldOffset = host.view.contentOffset.y
+        TranscriptText.resetMeasureStats()
+        host.view.contentOffset.y = targetOffset
+        host.coordinator.controller.readerScrolled(movingUp: targetOffset < oldOffset)
+        host.view.layoutIfNeeded()
+        #expect(TranscriptText.measureStats.mainLayouts == 0,
+                "revealing this host's worker-prepared row must not run main-thread TextKit")
+        let preparedVisible = host.coordinator.visibleRows?.contains(preparedIndex) == true
+        #expect(preparedVisible, "the host's worker-prepared row entered the native visible range")
+        #expect(host.coordinator.controller.heights[rows[preparedIndex].id]?.measured == true,
+                "the native list laid out the worker-prepared visible row")
+
+        preparedVisibleDescription = String(preparedVisible)
+        #else
+        preparedVisibleDescription = "not instrumented in release"
+        #endif
 
         // Every row is eligible text/markdown, so the budget for main-thread layouts is zero.
         let rowsBefore = host.coordinator.visibleRows
@@ -155,7 +176,7 @@ struct TranscriptUIKitHostedTests {
         await Self.idle(host)
         let jumped = host.coordinator.premeasureStats
         let far = Self.scrollSteps(host, 40)
-        print("\nTranscriptPremeasure UIKit scroll (3000 rows): a visible row was worker-warmed \(hasWarmVisibleRow); "
+        print("\nTranscriptPremeasure UIKit scroll (3000 rows): worker-prepared visible row \(preparedVisibleDescription); "
             + "scroll near window: mainLayouts \(near.mainLayouts) memoHits \(near.memoHits); "
             + "after jump: offloaded \(offloadedBeforeJump) -> \(jumped.offloaded), scroll mainLayouts \(far.mainLayouts) memoHits \(far.memoHits); "
             + "premeasureStats \(host.coordinator.premeasureStats)")

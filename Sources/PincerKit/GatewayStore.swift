@@ -75,6 +75,11 @@ public final class GatewayStore: Identifiable {
     /// Per chat, how many finished replies have been decided (marked or not); tests wait on it.
     @ObservationIgnored var replyUnreadDecisions: [String: Int] = [:]
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
+    /// Compact exact tool-id to original server-name snapshots, scoped to this Gateway.
+    @ObservationIgnored var mcpToolServerIndexes = BoundedLRUCache<String, MCPToolServerIndex>(countLimit: 16, costLimit: 64 * 1024)
+    /// Latest in-flight effective snapshot per session; distinct entries are capped at 32.
+    @ObservationIgnored var mcpToolServerReadVersions: [String: UInt64] = [:]
+    @ObservationIgnored var mcpToolServerReadSequence: UInt64 = 0
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
 #if DEBUG
     /// Counts actual parent-candidate derivations performed while building sidebar sections.
@@ -261,7 +266,7 @@ public final class GatewayStore: Identifiable {
     /// MCP Servers: the server list (through the shared settings draft), live state and OAuth
     /// sign-in. The demo may write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var mcp = MCPServersModel(
-        settings: self.settings, connection: self.connection, hello: { [weak self] in self?.hello },
+        settings: self.settings, request: self.toolsRequest, hello: { [weak self] in self?.hello },
         sessionKey: { [weak self] in self?.defaultSessionKey }, allowsWritesWithoutAdmin: self.profile.isDemo)
     /// Gateway Settings → Sessions: every session with previews, details, bulk archive/delete and
     /// branch tools. The demo may write without `operator.admin`.

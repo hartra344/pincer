@@ -30,7 +30,7 @@ struct TranscriptToolContextMenu: Equatable {
         var openServerName: String?
         var openServerTitle: String?
         for control in controls {
-            guard case let .openMCPServer(name) = control.action else { continue }
+            guard case let .openMCPServer(name, _) = control.action else { continue }
             openServerName = name
             openServerTitle = control.title
             break

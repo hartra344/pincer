@@ -15,7 +15,7 @@ On a Mac, open **Pincer → Settings → Shortcuts**. On iPad with a hardware ke
 - **Reset one:** click the reset button next to a changed shortcut, or right-click it and choose **Reset to Default**.
 - **Reset all:** click **Restore Defaults** at the bottom of the list.
 
-Changes apply straight away to the menus, buttons and command palette, in every window.
+Changes apply straight away to the menus, buttons, command palette and tips, in every window. New demo replies also show your current Command Palette and Find in Chat shortcuts. Clearing either shortcut leaves action guidance without advertising the old keys.
 
 If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> and <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats), can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>\</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
 
@@ -23,7 +23,7 @@ If another Pincer command already uses the keys, Pincer asks before moving the s
 
 **Show/Hide Sidebar** (<kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd>) is in the **View** menu. On iPad it's listed as **Toggle Sidebar** and can be changed. On a Mac it's the system's own menu item, so it isn't listed and its keys can't go to another command. It's also in the [command palette](../../guides/command-palette-and-navigation/). On iPad, when the sidebar is hidden, the **Show Sidebar** button at the top left of the chat brings it back.
 
-Quick Capture's shortcut works from any app, so it's set separately in **Settings → General → Quick Capture**.
+Quick Capture's shortcut works from any app, so it's set separately in **Settings → General → Quick Capture**. New demo replies show that shortcut while it is enabled, or point to the menu while it is off. The picker's <kbd>⌘</kbd> <kbd>J</kbd> and <kbd>Tab</kbd> keys are fixed.
 
 ## App
 

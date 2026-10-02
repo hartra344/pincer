@@ -101,6 +101,7 @@ public struct MenuBarInbox: Equatable, Sendable {
         public let id: String
         public let kind: Kind
         public let title: String
+        private let petTitle: String?
         public let target: Notifier.Target
         /// The agent behind the row, for its pet; nil when the Gateway didn't say.
         public let agentId: String?
@@ -108,14 +109,20 @@ public struct MenuBarInbox: Equatable, Sendable {
         public let pose: AvatarState
 
         public init(id: String, kind: Kind, title: String, target: Notifier.Target,
-                    agentId: String? = nil, pose: AvatarState? = nil)
+                    agentId: String? = nil, pose: AvatarState? = nil, petTitle: String? = nil)
         {
             self.id = id
             self.kind = kind
             self.title = title
+            self.petTitle = petTitle
             self.target = target
             self.agentId = agentId
             self.pose = pose ?? kind.pose
+        }
+
+        /// Pet rows avoid repeating the agent emoji; text-only rows keep their original title.
+        public func displayTitle(showingPet: Bool) -> String {
+            showingPet ? self.petTitle ?? self.title : self.title
         }
     }
 
@@ -246,10 +253,12 @@ public struct MenuBarInbox: Equatable, Sendable {
         {
             let row = lookup(input, sessionKey)
             let chat = row.map { " — \(Self.chatLabel(row: $0, agent: input.agent($0.agentId)))" } ?? ""
+            let petChat = row.map { " — \(Self.chatLabel(row: $0, agent: input.agent($0.agentId), includeEmoji: false))" } ?? ""
             let key = row?.key ?? sessionKey ?? ""
             let target = Notifier.Target(gatewayId: input.id, sessionKey: key)
             return (Item(id: "\(kind):\(input.id.uuidString):\(id)", kind: kind, title: text + chat + suffix(input), target: target,
-                         agentId: row?.agentId ?? agentId ?? sessionKey.flatMap(SessionKey.agentId(from:))),
+                         agentId: row?.agentId ?? agentId ?? sessionKey.flatMap(SessionKey.agentId(from:)),
+                         petTitle: row.map { _ in text + petChat + suffix(input) }),
                     Key(gatewayId: input.id, sessionKey: key))
         }
 
@@ -289,10 +298,12 @@ public struct MenuBarInbox: Equatable, Sendable {
             }
         }
         func chatItem(_ chat: Chat, kind: Item.Kind) -> Item {
-            Item(id: "\(kind):\(chat.input.id.uuidString):\(chat.row.key)", kind: kind,
-                 title: Self.chatLabel(row: chat.row, agent: chat.input.agent(chat.row.agentId)) + suffix(chat.input),
-                 target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key),
-                 agentId: chat.row.agentId)
+            let agent = chat.input.agent(chat.row.agentId)
+            return Item(id: "\(kind):\(chat.input.id.uuidString):\(chat.row.key)", kind: kind,
+                        title: Self.chatLabel(row: chat.row, agent: agent) + suffix(chat.input),
+                        target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key),
+                        agentId: chat.row.agentId,
+                        petTitle: Self.chatLabel(row: chat.row, agent: agent, includeEmoji: false) + suffix(chat.input))
         }
         func key(_ chat: Chat) -> Key { Key(gatewayId: chat.input.id, sessionKey: chat.row.key) }
 
@@ -327,7 +338,11 @@ public struct MenuBarInbox: Equatable, Sendable {
 
     /// `🦞 home-lab · Claw`, like a notification's title.
     public static func chatLabel(row: SessionRow, agent: AgentSummary) -> String {
-        let prefix = agent.emoji.map { "\($0) " } ?? ""
+        Self.chatLabel(row: row, agent: agent, includeEmoji: true)
+    }
+
+    private static func chatLabel(row: SessionRow, agent: AgentSummary, includeEmoji: Bool) -> String {
+        let prefix = includeEmoji ? agent.emoji.map { "\($0) " } ?? "" : ""
         return "\(prefix)\(Self.truncated(row.title)) · \(agent.name)"
     }
 

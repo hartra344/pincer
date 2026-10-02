@@ -504,8 +504,9 @@ private struct TranscriptPane: View {
                     },
                     previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) },
                     quickLook: { [$quickLookURL] in $quickLookURL.wrappedValue = $0 },
-                    openMCPServer: { [opener = self.openGatewaySettings, gateway = self.gateway] in
-                        opener.mcpServer(gateway, name: $0)
+                    openMCPServer: { [opener = self.openGatewaySettings, gateway = self.gateway,
+                                      sessionKey = self.chat.sessionKey] in
+                        opener.mcpServer(gateway, name: $0, sessionKey: sessionKey)
                     }),
                 isConnected: self.gateway.state.isConnected,
                 bottomInset: self.bottomInset,

@@ -289,6 +289,7 @@ final class SetupFakeGateway {
 
     // MARK: Tips
 
+    @MainActor
     @Test func tipsCopyAndPlatform() {
         #expect(SetupTips.all.map(\.text) == [
             "Type / in the composer for slash commands.",
@@ -308,6 +309,25 @@ final class SetupFakeGateway {
         #expect(!iPhone.contains { $0.contains("⌘") })
         #expect(iPhone == [SetupTips.all[0].text, SetupTips.all[1].text, SetupTips.all[2].text,
                            "Search all messages from the sidebar search field."])
+    }
+
+    @MainActor
+    @Test func tipsReflectCustomizedAndClearedShortcuts() throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let shortcuts = ShortcutStore(defaults: scratch.defaults)
+        shortcuts.set(KeyCombo("p", [.control, .option]), for: .commandPalette)
+
+        let customized = SetupTips.tips(iOS: false, shortcuts: shortcuts)
+        let palette = try #require(customized.first { $0.tip.id == "palette" })
+        #expect(palette.text == "Press ⌃⌥P to jump to any chat, agent, model, or setting.")
+
+        shortcuts.set(nil, for: .findInChat)
+        let cleared = SetupTips.tips(iOS: false, shortcuts: shortcuts)
+        let find = try #require(cleared.first { $0.tip.id == "find" })
+        #expect(!find.text.contains("⌘F"), "a tip must not advertise a shortcut after it is cleared")
+        let search = try #require(cleared.first { $0.tip.id == "search" })
+        #expect(!search.text.contains("⌘K"), "search instructions must follow a customized palette shortcut")
     }
 
     @Test func tipsShowOnceNeverOverSetup() {

@@ -59,9 +59,10 @@ private struct TipsCard: View {
 
     private var tips: [(tip: SetupTips.Tip, text: String)] {
         #if os(iOS)
-        SetupTips.tips(iOS: true, iPhone: UIDevice.current.userInterfaceIdiom == .phone)
+        SetupTips.tips(iOS: true, iPhone: UIDevice.current.userInterfaceIdiom == .phone,
+                       shortcuts: .shared)
         #else
-        SetupTips.tips(iOS: false)
+        SetupTips.tips(iOS: false, shortcuts: .shared)
         #endif
     }
 
@@ -123,7 +124,9 @@ private struct CompactTipsCard: View {
     let dismiss: () -> Void
     @State private var index = 0
 
-    private let tips = SetupTips.tips(iOS: true, iPhone: true)
+    private var tips: [(tip: SetupTips.Tip, text: String)] {
+        SetupTips.tips(iOS: true, iPhone: true, shortcuts: .shared)
+    }
 
     var body: some View {
         let entry = self.tips[min(self.index, self.tips.count - 1)]

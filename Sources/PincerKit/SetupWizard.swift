@@ -265,13 +265,61 @@ public enum SetupTips {
     ]
 
     /// The tips as shown on this platform. iPad marks keyboard tips "(iPad keyboard)"; iPhone leaves them out.
-    public static func tips(iOS: Bool, iPhone: Bool = false) -> [(tip: Tip, text: String)] {
-        if iOS, iPhone {
-            return self.all.filter { !$0.usesKeyboard }.map {
-                ($0, $0.id == "search" ? "Search all messages from the sidebar search field." : $0.text)
+    @MainActor
+    public static func tips(iOS: Bool, iPhone: Bool = false,
+                            shortcuts: ShortcutStore? = nil) -> [(tip: Tip, text: String)] {
+        let paletteShortcut = shortcuts == nil
+            ? ShortcutCommand.commandPalette.defaultCombo?.displayString
+            : shortcuts?.combo(for: .commandPalette)?.displayString
+        let findShortcut = shortcuts == nil
+            ? ShortcutCommand.findInChat.defaultCombo?.displayString
+            : shortcuts?.combo(for: .findInChat)?.displayString
+        func currentText(for tip: Tip) -> String {
+            guard shortcuts != nil else {
+                return iPhone && tip.id == "search"
+                    ? L("Search all messages from the sidebar search field.") : tip.text
+            }
+            return switch tip.id {
+            case "palette":
+                if let paletteShortcut {
+                    L("Press \(paletteShortcut) to jump to any chat, agent, model, or setting.")
+                } else {
+                    L("Open the command palette to jump to any chat, agent, model, or setting.")
+                }
+            case "find":
+                if let findShortcut {
+                    L("Press \(findShortcut) to find in the current chat.")
+                } else {
+                    L("Use Find in Chat to search the current chat.")
+                }
+            case "search":
+                if iPhone {
+                    L("Search all messages from the sidebar search field.")
+                } else if let paletteShortcut {
+                    L("Search all messages from \(paletteShortcut) or the sidebar search field.")
+                } else {
+                    L("Search all messages from the command palette or the sidebar search field.")
+                }
+            default:
+                tip.text
             }
         }
-        return self.all.map { ($0, iOS && $0.usesKeyboard ? "\($0.text.dropLast()) (iPad keyboard)." : $0.text) }
+        if iOS, iPhone {
+            return self.all.filter { !$0.usesKeyboard }.map {
+                ($0, currentText(for: $0))
+            }
+        }
+        return self.all.map { tip in
+            let text = currentText(for: tip)
+            let shortcutIsBound = switch tip.id {
+            case "palette": paletteShortcut != nil
+            case "find": findShortcut != nil
+            default: false
+            }
+            let displayed = iOS && tip.usesKeyboard && shortcutIsBound
+                ? L("\(String(text.dropLast())) (iPad keyboard).") : text
+            return (tip, displayed)
+        }
     }
 
     /// Show once the gateway connected and setup isn't showing or about to be offered; the demo

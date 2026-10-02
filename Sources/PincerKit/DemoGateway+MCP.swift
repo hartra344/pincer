@@ -505,6 +505,22 @@ extension DemoGateway {
     func mcpEffective(_ effective: JSONValue) -> JSONValue {
         self.mcp.seedIfNeeded()
         guard var result = effective.object else { return effective }
+        // JSONValue objects do not preserve declaration order. Keep the demo deterministic by
+        // assigning collision suffixes from its sorted configured names, including servers that
+        // are currently disabled or not connected.
+        var usedServerNames = Set<String>()
+        let safeServerNames = Dictionary(uniqueKeysWithValues: self.mcp.serverNames.map { name in
+            let base = MCPToolName.safeServerName(name)
+            var candidate = base
+            var suffix = 2
+            while usedServerNames.contains(candidate.lowercased()) {
+                let ending = "-\(suffix)"
+                candidate = "\(base.prefix(max(1, 30 - ending.count)))\(ending)"
+                suffix += 1
+            }
+            usedServerNames.insert(candidate.lowercased())
+            return (name, candidate)
+        })
         let connected = self.mcp.serverNames.flatMap { name in
             (self.mcp.runtime[name]?.state == "connected" ? self.mcp.runtime[name]?.tools ?? [] : []).map { (name, $0) }
         }
@@ -516,7 +532,7 @@ extension DemoGateway {
             let tools: [JSONValue] = connected.map { server, tool in
                 let description = DemoMCPState.toolDescriptions[tool] ?? "\(tool) (\(server))"
                 var entry: [String: JSONValue] = [
-                    "id": .string("\(MCPToolName.safeServerName(server))__\(tool)"), "label": .string(tool), "description": .string(description),
+                    "id": .string("\(safeServerNames[server] ?? MCPToolName.safeServerName(server))__\(tool)"), "label": .string(tool), "description": .string(description),
                     "rawDescription": .string(description), "source": "mcp", "mcpServer": .string(server), "mcpToolName": .string(tool),
                 ]
                 if tool == "call_service" { entry["risk"] = "medium" }
