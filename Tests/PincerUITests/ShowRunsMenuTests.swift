@@ -5,6 +5,14 @@ import Testing
 @testable import PincerKit
 @testable import PincerUI
 
+@MainActor
+@Observable
+private final class ShowRunsMenuPresentation {
+    var isPresented: Bool
+
+    init(isPresented: Bool = false) { self.isPresented = isPresented }
+}
+
 /// #424: the chat menu should offer Runs only when its own chat has run activity, while an
 /// already-open Runs panel must keep its close action available after that activity ends.
 @MainActor
@@ -13,15 +21,8 @@ struct ShowRunsMenuTests {
     private static let selectedKey = "agent:main:main"
     private static let paneKey = "agent:main:dashboard:notes"
 
-    @Observable
-    private final class Presentation {
-        var isPresented: Bool
-
-        init(isPresented: Bool = false) { self.isPresented = isPresented }
-    }
-
     private struct Host: View {
-        @Bindable var presentation: Presentation
+        @Bindable var presentation: ShowRunsMenuPresentation
         let gateway: GatewayStore
         let sessionKey: String
 
@@ -115,7 +116,7 @@ struct ShowRunsMenuTests {
     private static func visiblePixels(gateway: GatewayStore, sessionKey: String,
                                       isPresented: Bool = false) throws -> Int
     {
-        let presentation = Presentation(isPresented: isPresented)
+        let presentation = ShowRunsMenuPresentation(isPresented: isPresented)
         let renderer = ImageRenderer(content: Host(presentation: presentation, gateway: gateway, sessionKey: sessionKey))
         renderer.scale = 1
         renderer.isOpaque = false
@@ -131,7 +132,8 @@ struct ShowRunsMenuTests {
               let context = CGContext(data: nil, width: width, height: height,
                                       bitsPerComponent: 8, bytesPerRow: width * 4,
                                       space: colorSpace,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                                          | CGBitmapInfo.byteOrder32Big.rawValue),
               let data = context.data else { return 0 }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
