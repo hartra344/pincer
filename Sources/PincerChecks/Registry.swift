@@ -110,6 +110,7 @@ enum Suites {
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
+            Section("SVG render lifetime") { runSVGRenderLifetimeChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },
             Section("Composer drafts") { await checkDrafts() },
