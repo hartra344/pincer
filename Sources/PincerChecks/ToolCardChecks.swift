@@ -164,6 +164,15 @@ private func checkWebSearchCard(_ call: ToolActivity, label: String) {
         } else {
             check(false, "demo: the long first web-search result keeps its capped snippet")
         }
+        let linkActions = AccessibilityText.linkActionsWithWebHosts(web.results.map {
+            .init(text: $0.title, url: $0.url, webHost: $0.url.host(percentEncoded: false))
+        })
+        check(linkActions.count == web.results.count
+              && linkActions.first?.title == web.results[0].title
+              && linkActions.first?.webHost == web.results[0].url.host(percentEncoded: false),
+              "demo: parsed web-search link actions preserve the result title and owning host")
+        check(linkActions.allSatisfy { $0.webHost != nil && !($0.title ?? "").contains("https://") },
+              "demo: web-search link actions expose host context without using the full URL as a title")
     }
     check(Array(p.searchTexts.suffix(web.results.count)) == web.results.map(\.text) && !p.searchTexts.contains { $0.contains("\"kind\"") },
           "\(label): web_search Find strings are the drawn rows")

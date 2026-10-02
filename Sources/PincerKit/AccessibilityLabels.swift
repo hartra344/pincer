@@ -270,6 +270,51 @@ public enum AccessibilityText {
     /// Most "Open …" link actions offered on one transcript row.
     public static let maxLinkActions = 10
 
+    /// A link in rendered transcript text, with optional site context for a web-search result.
+    /// `webHost` is supplied by the producer only for web-search result and citation links; ordinary
+    /// Markdown links leave it nil and keep their existing VoiceOver wording.
+    public struct LinkActionRun: Sendable {
+        public let text: String
+        public let url: URL
+        public let webHost: String?
+
+        public init(text: String, url: URL, webHost: String? = nil) {
+            self.text = text
+            self.url = url
+            self.webHost = webHost
+        }
+    }
+
+    /// A deduplicated link action, preserving its originating host when it is a web result.
+    public struct LinkAction: Sendable {
+        /// Nil when a web result has no useful title or its visible link text is the full URL;
+        /// callers can then speak the safe host alone rather than exposing URL details.
+        public let title: String?
+        public let webHost: String?
+        public let url: URL
+    }
+
+    /// The links a transcript row offers as actions while retaining web-result host context.
+    /// The first run for each URL wins, in reading order, with the same cap as `linkActions`.
+    public static func linkActionsWithWebHosts(_ runs: [LinkActionRun],
+                                               limit: Int = maxLinkActions) -> [LinkAction] {
+        var seen: Set<URL> = []
+        var result: [LinkAction] = []
+        for run in runs where result.count < limit && seen.insert(run.url).inserted {
+            let text = run.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let host = run.webHost?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let webHost = host?.isEmpty == false ? host : nil
+            let title: String?
+            if webHost != nil, text.isEmpty || text == run.url.absoluteString {
+                title = nil
+            } else {
+                title = text.isEmpty ? run.url.absoluteString : text
+            }
+            result.append(LinkAction(title: title, webHost: webHost, url: run.url))
+        }
+        return result
+    }
+
     /// The links a transcript row offers as "Open …" actions, from its text's link runs in reading
     /// order: one per URL (first run wins), trimmed text or else the URL as the title, capped at `limit`.
     public static func linkActions(_ runs: [(text: String, url: URL)],

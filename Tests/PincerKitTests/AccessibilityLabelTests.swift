@@ -302,6 +302,54 @@ struct AccessibilityLabelTests {
         #expect(AccessibilityText.linkActions(dupes).map(\.title) == (1...10).map { "Link \($0)" })
     }
 
+    @Test func webSearchLinkActionsIncludeHostAndKeepSafeTitles() throws {
+        let docsURL = try #require(URL(string: "https://alice:secret@docs.example/guide?token=private#fragment"))
+        let otherURL = try #require(URL(string: "https://other.example/guide?session=secret"))
+        let safeURL = try #require(URL(string: "https://bob:credential@safe.example/private/path?key=hidden#section"))
+        let emptyTitleURL = try #require(URL(string: "https://empty.example/untitled?token=private"))
+        let actions = AccessibilityText.linkActionsWithWebHosts([
+            .init(text: "Guide", url: docsURL, webHost: "docs.example"),
+            .init(text: "Guide", url: otherURL, webHost: "other.example"),
+            .init(text: "Duplicate title", url: docsURL, webHost: "docs.example"),
+            .init(text: safeURL.absoluteString, url: safeURL, webHost: "safe.example"),
+            .init(text: " \n ", url: emptyTitleURL, webHost: "empty.example"),
+        ])
+
+        #expect(actions.map(\.title) == ["Guide", "Guide", nil, nil], "distinct hosts remain distinguishable; first URL run wins")
+        #expect(actions.map(\.webHost) == ["docs.example", "other.example", "safe.example", "empty.example"])
+        #expect(actions.map(\.url) == [docsURL, otherURL, safeURL, emptyTitleURL])
+        #expect(!actions.compactMap(\.title).joined(separator: " ").contains("secret"), "credentials and query values are never titles")
+        #expect(!actions.compactMap(\.title).joined(separator: " ").contains("private/path"), "URL paths are never titles")
+
+        let ordinaryURL = try #require(URL(string: "https://markdown.example/article?token=private"))
+        let ordinary = AccessibilityText.linkActionsWithWebHosts([
+            .init(text: "", url: ordinaryURL),
+        ])
+        #expect(ordinary.map(\.title) == [ordinaryURL.absoluteString], "ordinary Markdown keeps its existing URL fallback")
+        #expect(ordinary.first?.webHost == nil, "ordinary Markdown has no web-search host context")
+    }
+
+    @Test func webSearchLinkActionsKeepTheExistingCapInReadingOrder() throws {
+        let runs = try (0..<12).map { index in
+            AccessibilityText.LinkActionRun(
+                text: "Result \(index)",
+                url: try #require(URL(string: "https://result\(index).example/page")),
+                webHost: "result\(index).example")
+        }
+        let actions = AccessibilityText.linkActionsWithWebHosts(runs)
+        #expect(actions.count == AccessibilityText.maxLinkActions)
+        #expect(actions.map(\.title) == (0..<AccessibilityText.maxLinkActions).map { "Result \($0)" })
+        #expect(actions.last?.webHost == "result9.example")
+    }
+
+    @Test func webSearchLinkActionCatalogKeyCarriesTitleAndHost() throws {
+        let catalogURL = Self.repo.appending(path: "Sources/PincerUI/Resources/Localizable.xcstrings")
+        let catalog = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL)) as? [String: Any])
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        #expect(strings["Open %@ on %@"] != nil, "catalog key for the titled web-search link action")
+        #expect(String(format: "Open %@ on %@", "Guide", "docs.example") == "Open Guide on docs.example")
+    }
+
     /// The row's custom actions are named `L("Open \(title)")` in PincerUI, so the helper returns bare
     /// titles (no "Open Open …") and the catalog must carry the `Open %@` key.
     @Test func linkActionTitlesArePrefixedOpenByTheCatalogKey() throws {
