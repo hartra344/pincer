@@ -40,9 +40,12 @@ struct DemoAgentsSettingsVisibilityTests {
 
         // Exercise the same local selection and rendered-style path as the Pet picker without
         // leaving an asynchronous Gateway prefs write behind in this fixture.
+        // Stop the actor directly so it emits `.idle` through the still-live store event pump.
+        // `GatewayStore.stop()` cancels that pump first, leaving its published state connected.
+        await gateway.connection.stop()
+        let stopped = await eventually(timeout: .seconds(10)) { gateway.state == .idle }
+        try #require(stopped, "demo Gateway store did not observe the connection stopping")
         gateway.stop()
-        let stopped = await eventually(timeout: .seconds(10)) { !gateway.state.isConnected }
-        try #require(stopped, "demo Gateway did not stop before the local Pet selection")
         defer { gateway.queuedAvatarChoices = [:] }
 
         gateway.setAvatarCreature(.cat, for: agent.id)
