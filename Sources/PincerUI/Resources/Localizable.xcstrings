@@ -19193,6 +19193,16 @@
           }
         }
       }
+    },
+    "Move to Group (shown in By Group)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Group (shown in By Group)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
