@@ -287,6 +287,25 @@ struct TranscriptUIKitHostedTests {
         await resize(to: initialWidth)
     }
 
+    @Test func scrollToTopDelegateSettlesMeasuredRowsAtTheTop() async {
+        let host = await Self.makeHost()
+        host.coordinator.update(rows: Self.rows(count: 240, salt: "scroll-to-top"),
+                                context: host.context, insets: (0, 0))
+        await Self.idle(host)
+        #expect((host.coordinator.visibleRows?.lowerBound ?? 0) > 0)
+        #expect(host.coordinator.scrollViewShouldScrollToTop(host.view))
+        #expect(host.coordinator.isScrolling, "the native delegate marks the scroll-to-top transition active")
+        // Model UIKit's completed offset, then invoke its public delegate callback. This is not
+        // an automated OS status-bar gesture.
+        host.view.contentOffset.y = -host.view.adjustedContentInset.top
+        host.coordinator.scrollViewDidScrollToTop(host.view)
+        await Self.idle(host)
+        #expect(!host.coordinator.isScrolling)
+        #expect(host.coordinator.controller.anchor == .top)
+        #expect(host.coordinator.visibleRows?.lowerBound == 0)
+        Self.expectConsistentGeometry(host, width: host.view.bounds.width)
+    }
+
     static func expectConsistentGeometry(_ host: Host, width: CGFloat) {
         let coordinator = host.coordinator
         let effectiveWidth = coordinator.controller.host?.layoutWidth ?? 0
