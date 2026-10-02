@@ -427,10 +427,6 @@ struct SettingsHeightCap: ViewModifier {
         CGFloat(SettingsContentHeight.limit(visibleScreenHeight: visibleScreenHeight.map(Double.init)))
     }
 
-    @MainActor static func screenLimit() -> CGFloat {
-        self.limit(visibleScreenHeight: (NSApp?.keyWindow?.screen ?? NSScreen.main)?.visibleFrame.height)
-    }
-
     func body(content: Content) -> some View {
         CappedHeightLayout(maxHeight: self.maxHeight) { content }
     }
