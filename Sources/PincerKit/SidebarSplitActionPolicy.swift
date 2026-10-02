@@ -4,3 +4,10 @@ public enum SidebarSplitActionPolicy {
         supportsSplitView && !isCompactWidth
     }
 }
+
+/// Whether a chat should carry the sidebar marker for the split pane.
+public enum SidebarSplitPaneMarker {
+    public static func isVisible(sessionKey: String, splitKey: String?) -> Bool {
+        splitKey == sessionKey
+    }
+}

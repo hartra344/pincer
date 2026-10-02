@@ -114,6 +114,11 @@ extension AppModel {
     }
 }
 
+private struct VisibleSidebarSplitPane: Equatable {
+    let gatewayID: UUID
+    let sessionKey: String
+}
+
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
@@ -131,6 +136,8 @@ struct RootView: View {
     @Environment(\.openWindow) private var openWindow
     #endif
     @State private var columns: NavigationSplitViewVisibility = .all
+    /// The right-pane chat currently on screen, scoped to this window.
+    @State private var visibleSidebarSplitPane: VisibleSidebarSplitPane?
     /// On iPhone the split view is a stack; picking a chat pushes it.
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
     #if os(iOS)
@@ -154,6 +161,23 @@ struct RootView: View {
         #endif
     }
 
+    private func visibleSplitKey(for gateway: GatewayStore) -> String? {
+        guard self.visibleSidebarSplitPane?.gatewayID == gateway.id else { return nil }
+        return self.visibleSidebarSplitPane?.sessionKey
+    }
+
+    private func sidebarSplitKeyBinding(for gateway: GatewayStore) -> Binding<String?> {
+        Binding(
+            get: { self.visibleSplitKey(for: gateway) },
+            set: { key in
+                if let key {
+                    self.visibleSidebarSplitPane = VisibleSidebarSplitPane(gatewayID: gateway.id, sessionKey: key)
+                } else if self.visibleSidebarSplitPane?.gatewayID == gateway.id {
+                    self.visibleSidebarSplitPane = nil
+                }
+            })
+    }
+
     var body: some View {
         Group {
             if self.showsFirstRun {
@@ -163,7 +187,8 @@ struct RootView: View {
             } else if let gateway = self.app.selectedGateway {
                 NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
                     ChannelList(openChat: { self.compactColumn = .detail },
-                                windowIsCompactWidth: self.windowIsCompactWidth)
+                                windowIsCompactWidth: self.windowIsCompactWidth,
+                                splitPaneKey: self.visibleSplitKey(for: gateway))
                         .environment(gateway)
                         .background { self.sidebarBackground?.ignoresSafeArea() }
                         .id(gateway.id)
@@ -171,7 +196,7 @@ struct RootView: View {
                         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
                         #endif
                 } detail: {
-                    GatewayDetail(gateway: gateway)
+                    GatewayDetail(gateway: gateway, sidebarSplitKey: self.sidebarSplitKeyBinding(for: gateway))
                         .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
                 }
             }
@@ -337,6 +362,7 @@ private struct UnreadBadgeSync: View {
 /// builds, re-renders when the selected chat changes.
 private struct GatewayDetail: View {
     let gateway: GatewayStore
+    let sidebarSplitKey: Binding<String?>
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
 
@@ -360,7 +386,7 @@ private struct GatewayDetail: View {
                             .id("\(gateway.id)|\(key)")
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .modifier(ChatSplitHost(gateway: gateway))
+                    .modifier(ChatSplitHost(gateway: gateway, sidebarSplitKey: self.sidebarSplitKey))
                     .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
                     ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",

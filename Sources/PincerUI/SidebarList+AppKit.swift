@@ -589,7 +589,7 @@ private extension Array {
 
 // MARK: Cells
 
-private final class SidebarChatCell: NSTableCellView {
+final class SidebarChatCell: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("SidebarChatCell")
 
     private let threadArrow = NSImageView()
@@ -600,6 +600,7 @@ private final class SidebarChatCell: NSTableCellView {
     private let chip = NSButton()
     private let workingAvatar = SidebarWorkingAvatarView()
     private let unreadDot = NSImageView()
+    private let splitPaneIndicator = NSImageView()
     private let date = NSTextField(labelWithString: "")
     private var onToggleThreads: (() -> Void)?
     private var leading: NSLayoutConstraint?
@@ -645,9 +646,14 @@ private final class SidebarChatCell: NSTableCellView {
         self.unreadDot.symbolConfiguration = .init(pointSize: 7, weight: .regular)
         self.unreadDot.contentTintColor = .labelColor
         self.unreadDot.setAccessibilityElement(false)
+        self.splitPaneIndicator.image = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: nil)
+        self.splitPaneIndicator.identifier = NSUserInterfaceItemIdentifier("sidebar-split-pane-indicator")
+        self.splitPaneIndicator.symbolConfiguration = .init(pointSize: 10, weight: .regular)
+        self.splitPaneIndicator.contentTintColor = .tertiaryLabelColor
+        self.splitPaneIndicator.setAccessibilityElement(false)
         self.date.font = .systemFont(ofSize: NSFont.systemFontSize(for: .mini))
         self.date.textColor = .tertiaryLabelColor
-        for view in [self.chip, self.workingAvatar, self.unreadDot, self.date] as [NSView] {
+        for view in [self.chip, self.workingAvatar, self.unreadDot, self.splitPaneIndicator, self.date] as [NSView] {
             view.setContentHuggingPriority(.required, for: .horizontal)
             view.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -663,7 +669,8 @@ private final class SidebarChatCell: NSTableCellView {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-        let row = NSStackView(views: [self.threadArrow, self.icon, text, spacer, self.chip, self.workingAvatar, self.unreadDot, self.date])
+        let row = NSStackView(views: [self.threadArrow, self.icon, text, spacer, self.chip, self.workingAvatar,
+                                      self.unreadDot, self.splitPaneIndicator, self.date])
         row.spacing = 7
         row.alignment = .centerY
         row.distribution = .fill
@@ -720,6 +727,7 @@ private final class SidebarChatCell: NSTableCellView {
             self.workingAvatar.stop()
         }
         self.unreadDot.isHidden = entry.avatar != nil || !(row.isUnread && !row.isSubagent)
+        self.splitPaneIndicator.isHidden = !entry.isShownInSplitPane
         let activity = entry.avatar != nil || !self.unreadDot.isHidden ? nil : row.activityDate
         self.date.isHidden = activity == nil
         self.date.stringValue = activity.map(ChannelRowStyle.relativeDate) ?? ""
@@ -727,6 +735,7 @@ private final class SidebarChatCell: NSTableCellView {
         self.setAccessibilityLabel(AccessibilityText.sessionRow(
             title: row.title, isUnread: row.isUnread && !row.isSubagent, isPinned: !self.pin.isHidden,
             isRunning: working, workingLabel: entry.working?.label, preview: entry.preview))
+        self.setAccessibilityHelp(ChannelRowStyle.accessibilityHint(for: entry))
     }
 
     override var backgroundStyle: NSView.BackgroundStyle {

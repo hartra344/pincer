@@ -119,6 +119,8 @@ struct SidebarModel: Equatable {
         var depth = 0
         /// Name of the nested group the chat sits in, if any.
         var groupName: String?
+        /// True when this chat is the one shown in the split view's right pane.
+        var isShownInSplitPane = false
     }
 
     struct Group: Equatable {
@@ -181,7 +183,7 @@ struct SidebarModel: Equatable {
     @MainActor
     static func build(gateway: GatewayStore, search: String, collapsed: Set<String>,
                       expandedThreads: Set<String>, showSubagentRuns: Bool,
-                      showPreviews: Bool) -> SidebarModel
+                      showPreviews: Bool, splitKey: String? = nil) -> SidebarModel
     {
         let selected = gateway.selectedKey
         let avatarsOn = AvatarSettings.isEnabled
@@ -217,7 +219,8 @@ struct SidebarModel: Equatable {
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
                     preview: showPreviews ? channel.row.preview : nil,
-                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth, groupName: groupName))
+                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth, groupName: groupName,
+                    isShownInSplitPane: SidebarSplitPaneMarker.isVisible(sessionKey: channel.row.key, splitKey: splitKey)))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -236,7 +239,8 @@ struct SidebarModel: Equatable {
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
                                          preview: showPreviews ? thread.preview : nil,
-                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth, groupName: groupName))
+                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth, groupName: groupName,
+                                         isShownInSplitPane: SidebarSplitPaneMarker.isVisible(sessionKey: thread.key, splitKey: splitKey)))
                 }
             }
             return entries
@@ -348,6 +352,15 @@ enum ChannelRowStyle {
         return nil
     }
 
+    static func accessibilityHint(for entry: SidebarModel.Entry) -> String? {
+        let group = entry.groupName.map { L("in \($0)") }
+        let split = entry.isShownInSplitPane ? L("Shown in right pane") : nil
+        let parts = [self.help(for: entry.row), group, split]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
     private static func origin(of row: SessionRow) -> String? {
         guard let origin = row.channel?.lowercased(),
               ["discord", "slack", "telegram", "imessage", "whatsapp"].contains(origin) else { return nil }
@@ -385,6 +398,7 @@ enum ChannelRowStyle {
     }
     #endif
 }
+
 
 // MARK: Menus
 
