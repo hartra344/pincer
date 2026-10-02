@@ -361,12 +361,16 @@ public final class ChatStore: Identifiable {
         }
         self.hasPendingLive = true
         guard self.pendingFlush == nil else { return }
-        let remaining = interval - elapsed
+        let remaining = Self.coalescedFlushDelay(interval: interval, elapsed: elapsed)
         self.pendingFlush = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(remaining))
             guard !Task.isCancelled else { return }
             self?.flushLive()
         }
+    }
+
+    static func coalescedFlushDelay(interval: TimeInterval, elapsed: TimeInterval) -> TimeInterval {
+        max(0, interval - max(0, elapsed))
     }
 
     /// Publishes any coalesced live update now.
