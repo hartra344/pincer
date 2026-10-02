@@ -30,7 +30,7 @@ When a session is deleted, rewound, switched to another branch or recovered (fro
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. Nothing is written, and message search is off too (except in the demo, which keeps its index in memory). To use another folder, set it to a path. See [Security & privacy](../../reference/security/#local-cache).
 
-While a response streams, Pincer batches changes to the committed transcript into bounded five-second save windows, then queues a save as soon as the run ends. Changes outside a running response keep the usual one-second debounce. Saving happens in the background and does not delay messages appearing.
+While a response streams, Pincer batches changes to the committed transcript into bounded five-second save windows, then queues a save as soon as the run ends. Changes outside a running response keep the usual one-second debounce. Committed user messages queue a save immediately so they remain searchable while their reply streams; an earlier queued save is never postponed by the start of a response. Saving happens in the background and does not delay messages appearing.
 
 ## Long chats
 

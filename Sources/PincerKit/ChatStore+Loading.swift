@@ -543,8 +543,10 @@ extension ChatStore {
         let deadline: Date
         if let runId {
             // Keep the first deadline for this run: continuous deltas cannot postpone a save.
-            if self.saveDeadlineRunId == runId, let existing = self.saveDeadline {
-                deadline = existing
+            if let existing = self.saveDeadline,
+               self.saveDeadlineRunId == runId || self.saveDeadlineRunId == nil {
+                // A committed user message or an earlier idle save must stay searchable promptly.
+                deadline = min(existing, now.addingTimeInterval(5))
             } else {
                 deadline = now.addingTimeInterval(5)
             }

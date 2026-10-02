@@ -38,6 +38,14 @@ func runStreamingSaveChecks() {
     idle.hasLoaded = true
     idle.items = [ChatItem(id: "idle", role: .user, blocks: [.text("Ordinary transcript change")])]
     check(idle.saveDeadline == now.addingTimeInterval(1), "stream saves: idle changes keep the ordinary one-second debounce")
+    let earlier = idle.saveDeadline
+    idle.live = LiveRun(runId: "search-check")
+    idle.items.append(ChatItem(id: "reply", role: .assistant, blocks: [.text("Reply step")]))
+    check(idle.saveDeadline == earlier, "stream saves: starting a run preserves an earlier pending save")
+    idle.handleSessionMessage(["message": ["role": "user", "content": "Searchable user message", "__openclaw": ["id": "search-check-user"]]])
+    check(idle.saveDeadline == now, "stream saves: a committed user message flushes promptly for search")
+    idle.items.append(ChatItem(id: "reply-next", role: .assistant, blocks: [.text("Next reply step")]))
+    check(idle.saveDeadline == now, "stream saves: reply output cannot postpone the user-message flush")
     #endif
 }
 
