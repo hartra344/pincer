@@ -104,7 +104,7 @@ On an iPhone 18 Pro / iOS 27 simulator in a Debug build, the baseline was:
 
 These are simulated event/render costs, not physical-device timings or a measured network cadence. Run the `StreamingRenderingTests` command above to collect the table on another simulator.
 
-While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
+While a reply streams, text-growth updates are coalesced to the configured frame interval. If the wall clock moves backward, negative elapsed time is treated as zero so a coalesced update waits no longer than one frame; normal bursts and already-due updates keep their existing timing. Status and terminal updates remain immediate. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
 
 ## Self-checks
 
