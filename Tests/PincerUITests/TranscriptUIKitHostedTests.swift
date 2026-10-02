@@ -176,7 +176,7 @@ struct TranscriptUIKitHostedTests {
         let chat = try #require(host.context.chat)
         chat.items = [item]
 
-        let entered = DispatchSemaphore(value: 0)
+        let entered = Mutex(false)
         let release = DispatchSemaphore(value: 0)
         let firstPreparation = Mutex(true)
         host.coordinator.renderer.speechPreparationProbe = { _ in
@@ -186,7 +186,7 @@ struct TranscriptUIKitHostedTests {
                 return true
             }
             if shouldHold {
-                entered.signal()
+                entered.withLock { $0 = true }
                 _ = release.wait(timeout: .now() + 4)
             }
         }
@@ -194,7 +194,8 @@ struct TranscriptUIKitHostedTests {
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
         host.coordinator.update(rows: [Self.assistant(messageID, text: prose, at: 1)], context: host.context, insets: (0, 0))
         await Self.idle(host, cap: 10)
-        #expect(entered.wait(timeout: .now() + 3) == .success, "the real renderer starts background preparation")
+        let started = await eventually { entered.withLock { $0 } }
+        #expect(started, "the real renderer starts background preparation")
 
         // The store now owns different content under the same transcript ID, while the native row
         // still holds its old projection. This is the interval in which stale work must be rejected.
@@ -205,7 +206,7 @@ struct TranscriptUIKitHostedTests {
             host.view.layoutIfNeeded()
             return SpeechText.speakabilityDebugStats.offMainNormalizations >= 2
                 && host.view.visibleCells.allSatisfy { cell in
-                    var pending = [cell]
+                    var pending: [UIView] = [cell]
                     while let view = pending.popLast() {
                         if let button = view as? TranscriptLabelButton,
                            button.accessibilityText == "Read Aloud", !button.isHidden { return false }
@@ -234,13 +235,13 @@ struct TranscriptUIKitHostedTests {
             rows.append(Self.assistant(id, text: text, at: index))
         }
         chat.items = items
-        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
         let renderer = host.coordinator.renderer
         let width = max(1, host.view.bounds.width)
         let preparedIDs = Mutex(Set<String>())
         renderer.speechPreparationProbe = { id in
             preparedIDs.withLock { $0.insert(id) }
         }
+        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
 
         for (item, row) in zip(items, rows) {
             _ = renderer.layout(for: row, width: width)
@@ -289,20 +290,21 @@ struct TranscriptUIKitHostedTests {
         let chat = try #require(host.context.chat)
         chat.items = [item]
         let row = Self.assistant(messageID, text: text, at: 1)
-        host.coordinator.update(rows: [row], context: host.context, insets: (0, 0))
         let renderer = host.coordinator.renderer
-        let entered = DispatchSemaphore(value: 0)
+        let entered = Mutex(false)
         let release = DispatchSemaphore(value: 0)
         renderer.speechPreparationProbe = { _ in
-            entered.signal()
+            entered.withLock { $0 = true }
             _ = release.wait(timeout: .now() + 4)
         }
         defer { release.signal() }
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
+        host.coordinator.update(rows: [row], context: host.context, insets: (0, 0))
 
         _ = renderer.layout(for: row, width: 280)
         #expect(!renderer.canReadAloud(messageID, rowID: row.id), "the row queues an initial preparation")
-        #expect(entered.wait(timeout: .now() + 3) == .success, "the worker is held before normalization")
+        let started = await eventually { entered.withLock { $0 } }
+        #expect(started, "the worker is held before normalization")
 
         _ = renderer.layout(for: row, width: 320)
         #expect(!renderer.canReadAloud(messageID, rowID: row.id),
