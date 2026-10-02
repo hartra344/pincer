@@ -251,6 +251,9 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var spawnRows: Set<String> = []
     private var observers: [NSObjectProtocol] = []
     #if os(macOS)
+    private var accessibilityObservation: NSObjectProtocol?
+    #endif
+    #if os(macOS)
     /// Dark Mode flips re-lay out rows, so rendered diagrams and math pick up the matching palette.
     private var appearanceObservation: NSKeyValueObservation?
     #endif
@@ -293,6 +296,10 @@ final class TranscriptRenderer: TranscriptRowActions {
             MainActor.assumeIsolated { _ = self?.settingsChanged() }
         })
         #if os(macOS)
+        self.accessibilityObservation = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { _ = self?.settingsChanged() }
+        }
         self.appearanceObservation = NSApp?.observe(\.effectiveAppearance) { [weak self] _, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { _ = self?.settingsChanged() } }
         }
@@ -315,6 +322,9 @@ final class TranscriptRenderer: TranscriptRowActions {
         for job in self.speechJobs.values { job.task?.cancel() }
         self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
         for observer in self.observers { NotificationCenter.default.removeObserver(observer) }
+        #if os(macOS)
+        if let accessibilityObservation { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObservation) }
+        #endif
     }
 
     /// Tells the image cache which images the rows on screen show, so it keeps them.

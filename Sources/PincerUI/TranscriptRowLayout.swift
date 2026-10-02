@@ -401,6 +401,8 @@ struct TranscriptSettings: Equatable {
     var theme = AppTheme()
     /// Dark Mode, for the palette baked into rendered diagrams and math.
     var dark = false
+    /// Explicit accessibility snapshot: AppKit can canonicalize dynamic color appearances to Aqua.
+    var increasedContrast = false
     /// The agent's companion, when animated avatars are on.
     var avatarStyle: AvatarStyle?
     /// Every agent's companion by id, for messages other agents sent here.
@@ -412,12 +414,18 @@ struct TranscriptSettings: Equatable {
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         let animated = AvatarSettings.isEnabled
+        #if os(macOS)
+        let increasedContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        #else
+        let increasedContrast = false // UIKit dynamic colors resolve their accessibilityContrast trait.
+        #endif
         return TranscriptSettings(
             thinking: ThinkingDisplay.current,
             reactionsEnabled: ReactionFeature.isEnabled,
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
             theme: AppTheme.current,
             dark: RichBlock.isDark,
+            increasedContrast: increasedContrast,
             avatarStyle: animated ? AvatarSettings.style(for: context.agent, in: context.gateway) : nil,
             agentStyles: animated
                 ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0, in: context.gateway)) }) { first, _ in first }

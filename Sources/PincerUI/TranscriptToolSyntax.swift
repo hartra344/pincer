@@ -68,11 +68,11 @@ enum TranscriptSyntaxColors {
     /// `text` with syntax tokens colored against their actual card or terminal surface.
     /// Color resolution is dynamic, but policy work is shared once per token kind for this string.
     static func apply(_ tokens: [ToolSyntax.Token], to text: NSAttributedString,
-                      surface: Surface = .card, theme: AppTheme = .current) -> NSAttributedString
+                      surface: Surface = .card, theme: AppTheme = .current, increasedContrast: Bool = false) -> NSAttributedString
     {
         guard !tokens.isEmpty else { return text }
         let colors = Dictionary(uniqueKeysWithValues: Set(tokens.map(\.kind)).map { kind in
-            (kind, self.color(kind, surface: surface, theme: theme))
+            (kind, self.color(kind, surface: surface, theme: theme, increasedContrast: increasedContrast))
         })
         let colored = NSMutableAttributedString(attributedString: text)
         let length = colored.length
@@ -85,13 +85,13 @@ enum TranscriptSyntaxColors {
         return colored
     }
 
-    private static func color(_ kind: ToolSyntax.TokenKind, surface: Surface, theme: AppTheme) -> PColor {
+    private static func color(_ kind: ToolSyntax.TokenKind, surface: Surface, theme: AppTheme, increasedContrast: Bool) -> PColor {
         let shades = self.hex(kind)
         #if os(macOS)
         let resolved = ResolutionCache()
         return NSColor(name: nil) { appearance in
             let dark = Self.isDark(appearance)
-            let highContrast = Self.isHighContrast(appearance)
+            let highContrast = increasedContrast || Self.isHighContrast(appearance)
             let background = Self.background(surface, theme: theme, appearance: appearance)
             if let cached = resolved.value(background: background, dark: dark, increasedContrast: highContrast) {
                 return Self.nativeColor(cached)
@@ -105,7 +105,7 @@ enum TranscriptSyntaxColors {
         let resolved = ResolutionCache()
         return UIColor { traits in
             let dark = traits.userInterfaceStyle == .dark
-            let highContrast = traits.accessibilityContrast == .high
+            let highContrast = increasedContrast || traits.accessibilityContrast == .high
             let background = Self.background(surface, theme: theme, traits: traits)
             if let cached = resolved.value(background: background, dark: dark, increasedContrast: highContrast) {
                 return Self.nativeColor(cached)
@@ -132,13 +132,13 @@ enum TranscriptSyntaxColors {
     }
 
     private static func background(_ surface: Surface, theme: AppTheme, appearance: NSAppearance) -> UInt32 {
-        let chatColor = theme.value(.chatBackground).map { Self.packed(Self.themeRGB($0, appearance: appearance)) }
+        let chatColor = theme.value(.chatBackground).map { Self.packed(Self.resolve($0.platformColor, appearance: appearance)) }
             ?? Self.packed(Self.resolve(AppTheme.systemPlatformDefault(.chatBackground), appearance: appearance))
         let cardColor = Self.composite(Self.resolve(Self.cardFill, appearance: appearance), over: chatColor)
         guard surface == .terminal else { return cardColor }
         let terminal: RGBA
         if let configured = theme.value(.codeBackground) {
-            let rgb = Self.themeRGB(configured, appearance: appearance)
+            let rgb = Self.resolve(configured.platformColor, appearance: appearance)
             terminal = RGBA(red: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
         } else {
             terminal = Self.resolve(NSColor.textBackgroundColor.withAlphaComponent(0.6), appearance: appearance)
@@ -152,13 +152,6 @@ enum TranscriptSyntaxColors {
         #else
         .quinaryLabel
         #endif
-    }
-
-    private static func themeRGB(_ color: ThemeColor, appearance: NSAppearance) -> RGBA {
-        let dark = Self.isDark(appearance)
-        let rgb = dark ? color.dark : color.light
-        return RGBA(red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255,
-                    blue: Double(rgb & 0xFF) / 255, alpha: 1)
     }
 
     private static func resolve(_ color: NSColor, appearance: NSAppearance) -> RGBA {

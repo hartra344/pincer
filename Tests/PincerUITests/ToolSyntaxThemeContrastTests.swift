@@ -80,12 +80,27 @@ struct ToolSyntaxThemeContrastTests {
         #expect(contrast >= 4.5,
                 "the rendered syntax token should retain normal-text contrast on the active code background; got \(contrast)")
 
-        let highContrastColors = try Self.resolvedRGBA(foreground: foreground, background: background, increased: true)
+        // AppKit canonicalizes a manually requested high-contrast appearance to Aqua on this host.
+        // The renderer therefore snapshots the actual accessibility setting into its layout inputs.
+        var highSettings = settings
+        highSettings.increasedContrast = true
+        #expect(highSettings != settings, "accessibility changes invalidate cached layouts")
+        var highBuilder = TranscriptLayoutBuilder(context: context, settings: highSettings)
+        let highRow = highBuilder.layout(.entry(.assistant(turn)), width: 500)
+        let highCard = try #require(highRow.parts.compactMap { placed -> TranscriptPart.Tool? in
+            if case let .tool(part) = placed.part { return part }
+            return nil
+        }.first)
+        let highOutput = try #require(highCard.sections.first { $0.id == "\(toolId):output" })
+        #expect(highOutput.text.string == output.text.string)
+        let highForeground = try #require(highOutput.text.attribute(.foregroundColor, at: keyToken.range.location,
+                                                                     effectiveRange: nil) as? PColor)
+        let highContrastColors = try Self.resolvedRGBA(foreground: highForeground, background: background, increased: true)
         let highContrast = Self.contrast(highContrastColors.0, highContrastColors.1)
         let achievable = max(Self.contrast(Self.RGB(red: 0, green: 0, blue: 0), colors.1),
                              Self.contrast(Self.RGB(red: 1, green: 1, blue: 1), colors.1))
         #expect(highContrast >= 7 && highContrast <= achievable,
-                "increased contrast reaches 7:1 where this custom blue allows it")
+                "increased contrast reaches 7:1 where this custom blue allows it; got \(highContrast)")
 
         let darkColors = try Self.resolvedRGBA(foreground: foreground, background: background, dark: true)
         #expect(Self.contrast(darkColors.0, darkColors.1) >= 4.5,
