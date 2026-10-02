@@ -485,7 +485,7 @@ enum SidebarMenus {
     }
 
     static func groupMenuTitle(for row: SessionRow, organization: SidebarOrganization) -> String {
-        L("Move to Group")
+        row.isMain && organization == .agent ? L("Move to Group (shown in By Group)") : L("Move to Group")
     }
 
     private static func colorName(_ color: String) -> String {

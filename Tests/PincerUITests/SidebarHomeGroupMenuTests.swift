@@ -14,6 +14,10 @@ import UIKit
 @Suite("Sidebar home chat group menu")
 struct SidebarHomeGroupMenuTests {
     @Test func menuCaptionNamesWhereHomeChatGroupsAppear() throws {
+        try Self.verifyMenuCaptions()
+    }
+
+    static func verifyMenuCaptions() throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gateway = GatewayStore(
@@ -26,11 +30,15 @@ struct SidebarHomeGroupMenuTests {
 
         let byAgent = self.groupMenuTitle(row: row, gateway: gateway, organization: .agent)
         let byGroup = self.groupMenuTitle(row: row, gateway: gateway, organization: .group)
+        let ordinaryJSON: JSONValue = ["key": "agent:mochi:dashboard:inbox", "category": "Work"]
+        let ordinary = try #require(SessionRow(ordinaryJSON))
+        let ordinaryByAgent = self.groupMenuTitle(row: ordinary, gateway: gateway, organization: .agent)
         #expect(byAgent == L("Move to Group (shown in By Group)"))
         #expect(byGroup == L("Move to Group"), "the normal group view keeps the existing caption")
+        #expect(ordinaryByAgent == L("Move to Group"), "non-home chats keep the existing caption")
     }
 
-    private func groupMenuTitle(row: SessionRow, gateway: GatewayStore, organization: SidebarOrganization) -> String? {
+    private static func groupMenuTitle(row: SessionRow, gateway: GatewayStore, organization: SidebarOrganization) -> String? {
         let actions = SidebarActions(
             select: { _ in }, newChat: { _ in }, newChatInGroup: { _, _ in },
             rename: { _ in }, changeIcon: { _ in }, changeGroupIcon: { _ in }, pickColor: { _ in },
@@ -51,7 +59,7 @@ struct SidebarHomeGroupMenuTests {
     }
 
     #if os(iOS)
-    private func submenuTitle(containing itemTitle: String, in menu: UIMenu) -> String? {
+    private static func submenuTitle(containing itemTitle: String, in menu: UIMenu) -> String? {
         for element in menu.children {
             guard let submenu = element as? UIMenu else { continue }
             if submenu.children.contains(where: { ($0 as? UIAction)?.title == itemTitle }) { return submenu.title }
