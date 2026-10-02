@@ -117,6 +117,11 @@ public struct MenuBarInbox: Equatable, Sendable {
             self.agentId = agentId
             self.pose = pose ?? kind.pose
         }
+
+        /// Pet rows avoid repeating the agent emoji; text-only rows keep their original title.
+        public func displayTitle(showingPet: Bool) -> String {
+            self.title
+        }
     }
 
     public struct GatewayStatus: Identifiable, Hashable, Sendable {

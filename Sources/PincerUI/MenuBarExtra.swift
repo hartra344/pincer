@@ -114,12 +114,9 @@ struct MenuBarContent: View {
     private static let petSide: CGFloat = 16
 
     /// Text-only unless pets are on and the row's agent is known; a still pose, never animated.
-    @ViewBuilder private func rowLabel(_ item: MenuBarInbox.Item) -> some View {
-        if let image = self.petImage(for: item) {
-            Label { Text(item.title) } icon: { Image(nsImage: image) }
-        } else {
-            Text(item.title)
-        }
+    private func rowLabel(_ item: MenuBarInbox.Item) -> some View {
+        let image = self.petImage(for: item)
+        return MenuBarRowLabel(title: item.displayTitle(showingPet: image != nil), petImage: image)
     }
 
     private func petImage(for item: MenuBarInbox.Item) -> NSImage? {
@@ -158,6 +155,20 @@ struct MenuBarContent: View {
         let controller = QuickCaptureController.shared
         if controller.openWindow == nil { controller.openWindow = self.openWindow }
         controller.showMainWindow()
+    }
+}
+
+/// One menu row's icon and text. Kept separate so its real rendered column can be checked.
+struct MenuBarRowLabel: View {
+    let title: String
+    let petImage: NSImage?
+
+    @ViewBuilder var body: some View {
+        if let image = self.petImage {
+            Label { Text(self.title) } icon: { Image(nsImage: image) }
+        } else {
+            Text(self.title)
+        }
     }
 }
 #endif
