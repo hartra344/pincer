@@ -704,7 +704,7 @@ export function toolsEffectivePayload(agentId, sessionKey, state) {
       label: 'MCP tools',
       source: 'mcp',
       tools: mcpEffectiveTools(state).map((tool) => ({
-        id: `${tool.server}__${tool.tool}`,
+        id: `${tool.safeServer}__${tool.tool}`,
         label: tool.tool,
         description: tool.description,
         rawDescription: tool.description,

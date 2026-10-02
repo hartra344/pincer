@@ -159,6 +159,32 @@ export async function run() {
     assert.equal((await patch({ empty: { enabled: true } })).ok, true);
     assert.equal((await reader.send('mcp.status', { serverNames: ['empty'] })).servers[0].state, 'invalid');
     await patch({ empty: null });
+
+    // tools.effective uses collision-free model IDs from the full declared config, even when an
+    // earlier declaration is disabled. Existing declaration order keeps acme.docs unsuffixed.
+    const longA = 'LongNamespaceCollisionServerNameAlpha';
+    const longB = 'LongNamespaceCollisionServerNameBeta';
+    assert.equal((await patch({
+      'ACME-DOCS': { command: 'node', enabled: false },
+      'acme-docs': { command: 'node' },
+      [longA]: { command: 'node' },
+      [longB]: { command: 'node' },
+    })).ok, true);
+    await waitFor(async () => {
+      const rows = (await reader.send('mcp.status', { serverNames: ['ACME-DOCS', 'acme-docs', longA, longB] })).servers;
+      return rows.map((row) => row.state).join() === 'disabled,connected,connected,connected';
+    });
+    const collisionEffective = await reader.send('tools.effective', { sessionKey: 'agent:main:main' });
+    const collisionTools = collisionEffective.groups.find((group) => group.source === 'mcp').tools;
+    const byServerTool = (server, tool) => collisionTools.find((entry) => entry.mcpServer === server && entry.mcpToolName === tool);
+    assert.equal(byServerTool('acme.docs', 'search')?.id, 'acme-docs__search');
+    assert.equal(byServerTool('acme-docs', 'echo')?.id, 'acme-docs-3__echo');
+    assert.equal(byServerTool(longA, 'echo')?.id, 'LongNamespaceCollisionServerNa__echo');
+    assert.equal(byServerTool(longB, 'echo')?.id, 'LongNamespaceCollisionServer-2__echo');
+    assert.equal(collisionTools.some((entry) => entry.mcpServer === 'ACME-DOCS'), false);
+    const collisionIds = collisionTools.map((entry) => entry.id);
+    assert.equal(new Set(collisionIds).size, collisionIds.length);
+
     admin.ws.close();
     reader.ws.close();
   } finally {
