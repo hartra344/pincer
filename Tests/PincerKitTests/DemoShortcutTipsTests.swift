@@ -15,4 +15,13 @@ struct DemoShortcutTipsTests {
         #expect(cleared.contains("command palette"))
         #expect(cleared.contains("Japan trip"))
     }
+    @Test func demoQuickCaptureTipReflectsGlobalHotkeyAndDisabledState() {
+        let custom = DemoGateway.thingsToTry(usedTool: false, quickCaptureShortcut: "⌃⌥Q")
+        #expect(custom.contains("⌃⌥Q"))
+        #expect(!custom.contains("⌃⇧Space"))
+        let disabled = DemoGateway.thingsToTry(usedTool: false, quickCaptureShortcut: nil)
+        #expect(!disabled.contains("⌃⇧Space"))
+        #expect(disabled.contains("Quick Capture"))
+    }
+
 }
