@@ -56,6 +56,26 @@ final class ReadAloudChatState {
 
     var isEnabled: Bool { self.controller.isActive || self.lastReply != nil }
 
+    /// Installs the same accepted-reply callback used by the SwiftUI modifier. Kept on the state
+    /// so the production callback can be exercised without relying on a hosting view's lifecycle.
+    func installAutoReadCallback() {
+        guard let chat = self.chat else { return }
+        chat.onFinalAssistantReplyOwner = self
+        chat.onFinalAssistantReply = { [weak self] item in
+            guard let self, self.isVisible, !ReadAloudSupport.isVoiceOverRunning, !self.controller.isDictating,
+                  let text = SpeechText.speakableText(for: item) else { return }
+            self.controller.start(messageId: item.transcriptId ?? item.id, text: text, gateway: self.gateway?.voice)
+        }
+    }
+
+    /// Clears this state's callback, or an unowned callback, just as the modifier's old cleanup did.
+    func uninstallAutoReadCallback(from chat: ChatStore? = nil) {
+        guard let chat = chat ?? self.chat,
+              chat.onFinalAssistantReplyOwner === self || chat.onFinalAssistantReplyOwner == nil else { return }
+        chat.onFinalAssistantReply = nil
+        chat.onFinalAssistantReplyOwner = nil
+    }
+
     func bind(chat: ChatStore, gateway: GatewayStore) {
         let changed = self.chat !== chat || self.gateway !== gateway
         if changed, let oldChat = self.chat { self.clearAutoReadCallback(from: oldChat) }
@@ -88,8 +108,7 @@ final class ReadAloudChatState {
 
     private func clearAutoReadCallback(from chat: ChatStore) {
         guard chat.onFinalAssistantReplyOwner === self else { return }
-        chat.onFinalAssistantReply = nil
-        chat.onFinalAssistantReplyOwner = nil
+        self.uninstallAutoReadCallback(from: chat)
     }
 
     private func observeItems(in chat: ChatStore, generation: Int) {
@@ -342,20 +361,11 @@ struct ReadAloudModifier: ViewModifier {
         self.state.bind(chat: self.chat, gateway: self.gateway)
         self.state.isVisible = self.scenePhase == .active
         guard self.autoRead else { return self.uninstall() }
-        let state = self.state
-        let controller = self.controller
-        self.chat.onFinalAssistantReplyOwner = state
-        self.chat.onFinalAssistantReply = { [weak state, weak controller] item in
-            guard let state, let controller, state.isVisible, !ReadAloudSupport.isVoiceOverRunning, !controller.isDictating,
-                  let text = SpeechText.speakableText(for: item) else { return }
-            controller.start(messageId: item.transcriptId ?? item.id, text: text, gateway: state.gateway?.voice)
-        }
+        self.state.installAutoReadCallback()
     }
 
     private func uninstall() {
-        guard self.chat.onFinalAssistantReplyOwner === self.state || self.chat.onFinalAssistantReplyOwner == nil else { return }
-        self.chat.onFinalAssistantReply = nil
-        self.chat.onFinalAssistantReplyOwner = nil
+        self.state.uninstallAutoReadCallback(from: self.chat)
     }
 }
 
