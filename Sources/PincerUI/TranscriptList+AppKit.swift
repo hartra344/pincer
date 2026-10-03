@@ -45,6 +45,11 @@ struct TranscriptList: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, TranscriptListHost {
         /// Rows, heights, the anchor and measuring, shared with the UIKit list.
         let controller: TranscriptListController
+#if DEBUG
+        /// Observes the actual keyboard menu after native event/target resolution. Returning
+        /// true suppresses only its blocking presentation in an opted-in hosted test.
+        var keyboardMenuProbe: (@MainActor (String?, NSMenu) -> Bool)?
+#endif
         var renderer: TranscriptRenderer { self.controller.renderer }
         private var rows: [TranscriptRow] { self.controller.rows }
         private var anchor: TranscriptAnchor {
@@ -512,6 +517,9 @@ struct TranscriptList: NSViewRepresentable {
         private func openActions() {
             guard let table, let id = self.controller.navigationRowId, let row = self.rows.firstIndex(where: { $0.id == id }),
                   let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell else { return }
+#if DEBUG
+            cell.keyboardMenuProbe = self.keyboardMenuProbe
+#endif
             cell.popUpActions()
         }
 
@@ -740,6 +748,9 @@ private final class TranscriptCell: NSView {
     override func isAccessibilityFocused() -> Bool { self.showsFocusRing }
 
     var spokenLabel: String? { self.content.layout?.accessibilityLabel }
+#if DEBUG
+    var keyboardMenuProbe: (@MainActor (String?, NSMenu) -> Bool)?
+#endif
 
     /// The row's actions menu at its first message, as a right-click there would open it.
     func popUpActions() {
@@ -750,6 +761,9 @@ private final class TranscriptCell: NSView {
                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                                              context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
               let menu = self.content.menu(for: event) else { NSSound.beep(); return }
+#if DEBUG
+        if self.keyboardMenuProbe?(layout.message(at: point.y), menu) == true { return }
+#endif
         menu.popUp(positioning: nil, at: point, in: self.content)
     }
 
