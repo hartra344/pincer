@@ -173,14 +173,56 @@ public struct SetupSkill: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A prepared presentation snapshot for the optional Skills setup step.
+/// The source values stay on `SetupSkill` for existing consumers; the wizard renders this small projection.
+public struct SetupSkillsPresentation: Hashable, Sendable {
+    public struct Row: Hashable, Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let emoji: String?
+        public let requirementSummary: String?
+        public let installerLabel: String?
+
+        fileprivate init(skill: SetupSkill) {
+            self.id = skill.id
+            self.name = skill.name
+            self.emoji = skill.emoji
+            self.requirementSummary = skill.missing.isEmpty ? nil : skill.missing.joined(separator: ", ")
+            if skill.installOptions.isEmpty {
+                self.installerLabel = nil
+            } else {
+                let options = skill.installOptions.joined(separator: " · ")
+                self.installerLabel = L("Install: \(options)")
+            }
+        }
+    }
+
+    public let readyCount: Int
+    public let notSetUpCount: Int
+    public let rows: [Row]
+
+    fileprivate init(skills: [SetupSkill]) {
+        self.readyCount = skills.filter { $0.eligible && !$0.disabled }.count
+        self.rows = skills.filter(\.isMissingRequirements).map { Row(skill: $0) }
+        self.notSetUpCount = self.rows.count
+    }
+
+    /// Baseline presentation keeps the current all-visible list; the Skills polish changes this policy.
+    public func visibleNotSetUpRows(expanded: Bool) -> [Row] { self.rows }
+}
+
 public struct SetupSkillsReport: Hashable, Sendable {
     public let skills: [SetupSkill]
+    public let presentation: SetupSkillsPresentation
 
-    public init(skills: [SetupSkill]) { self.skills = skills }
+    public init(skills: [SetupSkill]) {
+        self.skills = skills
+        self.presentation = SetupSkillsPresentation(skills: skills)
+    }
 
     public init?(_ json: JSONValue) {
         guard let skills = json["skills"]?.array else { return nil }
-        self.skills = skills.compactMap(SetupSkill.init)
+        self.init(skills: skills.compactMap(SetupSkill.init))
     }
 
     public var missing: [SetupSkill] { self.skills.filter(\.isMissingRequirements) }
@@ -204,9 +246,9 @@ public enum SetupRules {
     /// Missing requirements never need attention.
     public static func skills(_ report: SetupSkillsReport?, failure: String? = nil) -> SetupStepStatus {
         guard let report else { return .notChecked(failure) }
-        let ready = report.ready.count
+        let ready = report.presentation.readyCount
         let readyText = ready == 1 ? "1 skill is ready." : "\(ready) skills are ready."
-        let notSetUp = report.missing.count
+        let notSetUp = report.presentation.notSetUpCount
         guard notSetUp > 0 else { return .done(readyText) }
         return .done("\(readyText) \(notSetUp) \(notSetUp == 1 ? "isn't" : "aren't") set up.")
     }
@@ -751,7 +793,7 @@ public final class SetupWizardModel {
         }
         do {
             let result = try await self.environment.request("skills.status", [:])
-            self.skills = SetupSkillsReport(result)
+            self.skills = await Task.detached(priority: .userInitiated) { SetupSkillsReport(result) }.value
             self.skillsFailure = self.skills == nil ? "The Gateway sent an unexpected skill status." : nil
         } catch {
             self.skills = nil

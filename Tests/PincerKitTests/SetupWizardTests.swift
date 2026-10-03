@@ -23,6 +23,23 @@ enum SetupFixtures {
         Fixtures.json(#"{"workspaceDir":"/w","managedSkillsDir":"/m","agentId":"main","skills":["# + entries.joined(separator: ",") + "]}")
     }
 
+    static func skillWithMissing(_ name: String, emoji: String, bins: [String] = [], anyBins: [String] = [],
+                                 env: [String] = [], config: [String] = [], install: [String] = []) -> String
+    {
+        func values(_ items: [String]) -> String { items.map { "\"\($0)\"" }.joined(separator: ",") }
+        let installs = install.map { "{\"id\":\"test\",\"kind\":\"brew\",\"label\":\"\($0)\",\"bins\":[]}" }
+            .joined(separator: ",")
+        let configChecks = config.map { "{\"path\":\"\($0)\",\"satisfied\":false}" }.joined(separator: ",")
+        return """
+        {"name":"\(name)","description":"d","emoji":"\(emoji)","source":"openclaw-bundled","bundled":true,"filePath":"f","baseDir":"b",
+         "skillKey":"\(name)","always":false,"disabled":false,"blockedByAllowlist":false,"blockedByAgentFilter":false,
+         "eligible":false,"platformIncompatible":false,"modelVisible":false,"userInvocable":true,"commandVisible":false,
+         "requirements":{"bins":[\(values(bins))],"anyBins":[\(values(anyBins))],"env":[\(values(env))],"config":[\(values(config))],"os":[]},
+         "missing":{"bins":[\(values(bins))],"anyBins":[\(values(anyBins))],"env":[\(values(env))],"config":[\(values(config))],"os":[]},
+         "configChecks":[\(configChecks)],"install":[\(installs)]}
+        """
+    }
+
     static let skillsOneMissing = skills([
         skill("github"), skill("weather"), skill("summarize", eligible: false, missingBins: ["summarize"]),
         skill("apple-notes", eligible: false, missingBins: ["memo"], os: ["darwin"]),
@@ -70,6 +87,38 @@ final class SetupFakeGateway {
         #expect(!SetupRules.skills(two).needsAttention)
         #expect(SetupRules.skills(nil, failure: "x") == .notChecked("x"))
         #expect(SetupSkillsReport(Fixtures.json("{}")) == nil)
+    }
+
+    @Test func skillsPresentationSeparatesCollapsedRowsAndExplainsRequirements() throws {
+        let report = try #require(SetupSkillsReport(SetupFixtures.skills([
+            SetupFixtures.skill("ready"),
+            SetupFixtures.skillWithMissing("summarize", emoji: "🧾", bins: ["summarize"], install: ["Install summarize (brew)"]),
+            SetupFixtures.skillWithMissing("one-of-tools", emoji: "🧰", anyBins: ["tool-a", "tool-b"]),
+            SetupFixtures.skillWithMissing("notion", emoji: "📝", env: ["NOTION_API_KEY"]),
+            SetupFixtures.skillWithMissing("voice-call", emoji: "📞", config: ["plugins.entries.voice-call.enabled"]),
+        ])))
+        let presentation = report.presentation
+
+        #expect(presentation.readyCount == 1)
+        #expect(presentation.notSetUpCount == 4)
+        #expect(presentation.rows.map(\.id) == ["summarize", "one-of-tools", "notion", "voice-call"])
+        #expect(presentation.rows.compactMap(\.emoji) == ["🧾", "🧰", "📝", "📞"])
+        #expect(presentation.visibleNotSetUpRows(expanded: false).isEmpty,
+                "collapsed setup shows its count without rendering every missing-skill row")
+        #expect(presentation.visibleNotSetUpRows(expanded: true) == presentation.rows)
+
+        let rows = Dictionary(uniqueKeysWithValues: presentation.rows.map { ($0.id, $0) })
+        let bins = try #require(rows["summarize"])
+        let anyBins = try #require(rows["one-of-tools"])
+        let env = try #require(rows["notion"])
+        let config = try #require(rows["voice-call"])
+        #expect(bins.requirementSummary?.localizedCaseInsensitiveContains("command-line") == true)
+        #expect(anyBins.requirementSummary?.localizedCaseInsensitiveContains("supported") == true)
+        #expect(env.requirementSummary?.localizedCaseInsensitiveContains("environment") == true)
+        #expect(config.requirementSummary?.localizedCaseInsensitiveContains("configuration") == true)
+        #expect(env.requirementSummary?.contains("NOTION_API_KEY") == false)
+        #expect(config.requirementSummary?.contains("plugins.entries") == false)
+        #expect(bins.installerLabel == "Install summarize (brew)")
     }
 
     @Test func agentAndTestMessageRules() {

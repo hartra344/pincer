@@ -58,6 +58,28 @@ func runDemoSetup() async {
           && agentPresentation.tone == .neutral,
           "demo Agent & Model shows a neutral Current default status without Full Management")
     let skills = setup.status(of: .skills)
+    if let report = setup.skills {
+        let presentation = report.presentation
+        let rowsByID = Dictionary(uniqueKeysWithValues: presentation.rows.map { ($0.id, $0) })
+        check(presentation.readyCount == report.ready.count && presentation.notSetUpCount == report.missing.count,
+              "demo Skills presentation retains the report's ready and not-set-up counts")
+        check(presentation.visibleNotSetUpRows(expanded: false).isEmpty
+              && presentation.visibleNotSetUpRows(expanded: true).map(\.id) == presentation.rows.map(\.id),
+              "demo Skills collapsed presentation hides rows while expanded presentation preserves their stable order")
+        let summarizeRow = rowsByID["summarize"]
+        let notionRow = rowsByID["notion"]
+        let voiceCallRow = rowsByID["voice-call"]
+        check(summarizeRow?.emoji == "🧾" && summarizeRow?.requirementSummary?.localizedCaseInsensitiveContains("command-line") == true
+              && summarizeRow?.installerLabel == "Install summarize (brew)",
+              "demo summarize row names its CLI requirement and keeps the upstream installer label")
+        check(notionRow?.emoji == "📝" && notionRow?.requirementSummary?.localizedCaseInsensitiveContains("environment") == true
+              && notionRow?.requirementSummary?.contains("NOTION_API_KEY") == false,
+              "demo Notion row describes an environment setting without exposing its raw key")
+        check(voiceCallRow?.emoji == "📞"
+              && voiceCallRow?.requirementSummary?.localizedCaseInsensitiveContains("configuration") == true
+              && voiceCallRow?.requirementSummary?.contains("plugins.entries") == false,
+              "demo voice-call row describes a Gateway configuration requirement without its raw path")
+    }
     // The wizard reads the Skills page's seed: every Needs Setup skill there (not disabled, blocked or other-OS) is missing.
     await gateway.skills.load(agentId: nil)
     let seedMissing = gateway.skills.skills.filter { $0.state == .needsSetup && !$0.platformIncompatible }.map(\.name)
