@@ -691,6 +691,16 @@
         }
       }
     },
+    "%lld command suggestions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld command suggestions"
+          }
+        }
+      }
+    },
     "%lld command-line tools": {
       "localizations": {
         "en": {
@@ -1043,6 +1053,16 @@
         }
       }
     },
+    "1 command suggestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 command suggestion"
+          }
+        }
+      }
+    },
     "1 dismissed issue": {
       "localizations": {
         "en": {
@@ -1179,6 +1199,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "A channel is waiting for a Gateway restart."
+          }
+        }
+      }
+    },
+    "Argument suggestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Argument suggestion"
+          }
+        }
+      }
+    },
+    "Command suggestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command suggestion"
           }
         }
       }

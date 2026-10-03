@@ -17,14 +17,14 @@ private struct SlashMenuAnnouncementFixture {
         let controller: UIHostingController<AnyView>
         let window: UIWindow
 
-        init() {
+        init(text: String = "/") {
             self.app = AppModel(defaults: self.scratch.defaults)
             self.gateway = GatewayStore(
                 profile: GatewayProfile(id: UUID(), name: "Slash keyboard fixture", url: "ws://127.0.0.1:1", authMode: .none),
                 defaults: self.scratch.defaults, identity: UIFixtures.identity())
             self.gateway.cacheRoot = nil
             self.chat = ChatStore(sessionKey: "agent:main:slash-announcement", agentId: "main", gateway: self.gateway, headless: true)
-            self.chat.draft.text = "/"
+            self.chat.draft.text = text
             let app = self.app
             let gateway = self.gateway
             let chat = self.chat
@@ -79,8 +79,12 @@ private struct SlashMenuAnnouncementFixture {
             }
         }
 
+        func command(_ input: String, in field: ComposerUITextView) throws -> UIKeyCommand {
+            try #require(field.keyCommands?.first { $0.input == input && $0.modifierFlags.isEmpty })
+        }
+
         func key(_ input: String, in field: ComposerUITextView) throws {
-            let command = try #require(field.keyCommands?.first { $0.input == input && $0.modifierFlags.isEmpty })
+            let command = try self.command(input, in: field)
             let action = try #require(command.action)
             try #require(field.canPerformAction(action, withSender: command))
             try #require(field.responds(to: action))
@@ -129,7 +133,7 @@ private struct SlashMenuAnnouncementFixture {
         let query = "/help"
         let suggestions = SlashCompletion.suggestions(for: query, commands: host.gateway.slashCommands(for: host.chat.sessionKey))
         try #require(!suggestions.isEmpty)
-        let spoken = "\(suggestions.count) command suggestions"
+        let spoken = suggestions.count == 1 ? "1 command suggestion" : "\(suggestions.count) command suggestions"
         let control = "Slash query posting control"
         let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: [control, spoken])
         let previous = AccessibilityAnnouncer.debugPostingProbe
@@ -144,6 +148,157 @@ private struct SlashMenuAnnouncementFixture {
         #expect(host.chat.draft.text == suggestions[0].replacement, "Actual Tab accepts the new query's first result")
         #expect(field.isFirstResponder)
         #expect(probe.posts == [control, spoken], "The actual query change must announce its result count")
+    }
+
+    func changedQueriesWithEqualCountsAndZeroResultsAreAnnounced() async throws {
+        let host = Host()
+        defer { host.stop() }
+        let field = try await host.field()
+        let commands = host.gateway.slashCommands(for: host.chat.sessionKey)
+        let queries = ["/help", "/status", "/zzzz_no_matching_command"]
+        let counts = queries.map { SlashCompletion.suggestions(for: $0, commands: commands).count }
+        try #require(counts == [1, 1, 0], "Use real catalog queries with equal counts and an empty result")
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: ["1 command suggestion", "0 command suggestions"])
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        var expected: [String] = []
+        for (index, query) in queries.enumerated() {
+            host.chat.draft.text = query
+            expected.append(counts[index] == 1 ? "1 command suggestion" : "0 command suggestions")
+            try await host.wait { field.text == query && field.menuActive == (counts[index] > 0) && probe.posts == expected }
+            #expect(probe.posts == expected, "A changed query announces its actual count even when the count stayed equal")
+            #expect(field.isFirstResponder)
+        }
+        host.chat.draft.text = queries[2]
+        host.controller.view.setNeedsLayout()
+        host.controller.view.layoutIfNeeded()
+        #expect(probe.posts == expected, "Unchanged query/layout cannot repeat the count announcement")
+    }
+
+    func nativeArrowsWrapAndSpeakExactlyEachChangedCommand() async throws {
+        let host = Host()
+        defer { host.stop() }
+        let field = try await host.field()
+        let suggestions = SlashCompletion.suggestions(for: "/", commands: host.gateway.slashCommands(for: host.chat.sessionKey))
+        try #require(suggestions.count > 2)
+        func label(_ suggestion: SlashSuggestion) throws -> String {
+            guard case let .command(command) = suggestion.kind else { throw CocoaError(.coderReadCorrupt) }
+            return "/\(command.name)"
+        }
+        let first = try label(suggestions[0])
+        let second = try label(suggestions[1])
+        let last = try label(try #require(suggestions.last))
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: [first, second, last])
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        try host.key(UIKeyCommand.inputUpArrow, in: field)
+        try host.key(UIKeyCommand.inputDownArrow, in: field)
+        try host.key(UIKeyCommand.inputDownArrow, in: field)
+        try host.key(UIKeyCommand.inputUpArrow, in: field)
+        try host.key("\t", in: field)
+        try await host.wait { host.chat.draft.text == suggestions[0].replacement && field.text == suggestions[0].replacement }
+        #expect(probe.posts == [last, first, second, first])
+        #expect(field.isFirstResponder)
+    }
+
+    func singleResultDoesNotSpeakUnchangedSelections() async throws {
+        let host = Host(text: "/help")
+        defer { host.stop() }
+        let field = try await host.field()
+        let suggestions = SlashCompletion.suggestions(for: "/help", commands: host.gateway.slashCommands(for: host.chat.sessionKey))
+        try #require(suggestions.count == 1)
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: ["/help"])
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        try host.key(UIKeyCommand.inputDownArrow, in: field)
+        try host.key(UIKeyCommand.inputUpArrow, in: field)
+        try host.key("\t", in: field)
+        #expect(host.chat.draft.text == suggestions[0].replacement)
+        #expect(probe.posts.isEmpty)
+        #expect(field.isFirstResponder)
+    }
+
+    func nativeArrowStillSelectsWhileVoiceOverIsOff() async throws {
+        let host = Host()
+        defer { host.stop() }
+        let field = try await host.field()
+        let suggestions = SlashCompletion.suggestions(for: "/", commands: host.gateway.slashCommands(for: host.chat.sessionKey))
+        try #require(suggestions.count >= 2)
+        guard case let .command(second) = suggestions[1].kind else { throw CocoaError(.coderReadCorrupt) }
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: ["/\(second.name)"], voiceOverEnabled: false)
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        try host.key(UIKeyCommand.inputDownArrow, in: field)
+        try host.key("\t", in: field)
+        try await host.wait { host.chat.draft.text == suggestions[1].replacement && field.text == suggestions[1].replacement }
+        #expect(probe.posts.isEmpty)
+        #expect(field.isFirstResponder)
+    }
+
+    func argumentArrowAnnouncesTheActualChoiceAndTabKeepsItsReplacement() async throws {
+        let host = Host(text: "/think ")
+        defer { host.stop() }
+        let field = try await host.field()
+        let levels = [SlashCommandChoice(value: "default")] + SlashCommand.fallbackThinkingLevels.map { SlashCommandChoice(value: $0) }.filter { $0.value != "default" }
+        let suggestions = SlashCompletion.suggestions(for: "/think ", commands: host.gateway.slashCommands(for: host.chat.sessionKey), choices: { _, _, _ in levels })
+        try #require(suggestions.count >= 2)
+        guard case let .argument(choice, _, _) = suggestions[1].kind else { throw CocoaError(.coderReadCorrupt) }
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: [choice.label])
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        try host.key(UIKeyCommand.inputDownArrow, in: field)
+        try host.key("\t", in: field)
+        try await host.wait { host.chat.draft.text == suggestions[1].replacement && field.text == suggestions[1].replacement }
+        #expect(probe.posts == [choice.label])
+        #expect(field.isFirstResponder)
+    }
+
+    func returnAndEscapeKeepExistingAcceptanceAndDismissalBehavior() async throws {
+        let host = Host(text: "/hel")
+        defer { host.stop() }
+        let field = try await host.field()
+        let suggestions = SlashCompletion.suggestions(for: "/hel", commands: host.gateway.slashCommands(for: host.chat.sessionKey))
+        let first = try #require(suggestions.first)
+        try host.key("\r", in: field)
+        try await host.wait { host.chat.draft.text == first.replacement && field.text == first.replacement }
+        #expect(host.chat.unsentEntries.isEmpty, "Return accepts the incomplete command instead of sending it")
+        try host.key(UIKeyCommand.inputEscape, in: field)
+        try await host.wait { !field.menuActive }
+        #expect(host.chat.draft.text == first.replacement)
+        #expect(field.isFirstResponder)
+        host.chat.draft.text = "/hel"
+        try await host.wait { field.menuActive && field.text == "/hel" }
+        #expect(field.isFirstResponder)
+    }
+
+    func markedTextAndCaretAwayFromEndKeepArrowCommandsSuppressed() async throws {
+        let host = Host(text: "/help")
+        defer { host.stop() }
+        let field = try await host.field()
+        let probe = AccessibilityAnnouncer.DebugPostingProbe(matching: ["/help"])
+        let previous = AccessibilityAnnouncer.debugPostingProbe
+        AccessibilityAnnouncer.debugPostingProbe = probe
+        defer { AccessibilityAnnouncer.debugPostingProbe = previous }
+        let command = try host.command(UIKeyCommand.inputDownArrow, in: field)
+        let action = try #require(command.action)
+        field.setMarkedText("help", selectedRange: NSRange(location: 4, length: 0))
+        try #require(field.markedTextRange != nil, "Use actual UIKit marked-text state, not a fake guard")
+        #expect(!field.canPerformAction(action, withSender: command))
+        #expect(probe.posts.isEmpty)
+        field.unmarkText()
+        host.chat.draft.text = "/help"
+        try await host.wait { field.text == "/help" }
+        field.selectedRange = NSRange(location: 0, length: 0)
+        field.delegate?.textViewDidChangeSelection?(field)
+        try await host.wait { !field.menuActive }
+        #expect(!field.canPerformAction(action, withSender: command))
+        #expect(probe.posts.isEmpty)
+        #expect(field.isFirstResponder)
     }
 
     func postingProbeIsExactBoundedAndRespectsDisabledVoiceOver() {
@@ -175,5 +330,28 @@ extension TranscriptUIKitHostedTests {
     @Test(.timeLimit(.minutes(2))) func slashMenuPostingProbeControls() {
         SlashMenuAnnouncementFixture().postingProbeIsExactBoundedAndRespectsDisabledVoiceOver()
     }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitArrowWrapping() async throws {
+        try await SlashMenuAnnouncementFixture().nativeArrowsWrapAndSpeakExactlyEachChangedCommand()
+    }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitSingleResult() async throws {
+        try await SlashMenuAnnouncementFixture().singleResultDoesNotSpeakUnchangedSelections()
+    }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitVoiceOverOff() async throws {
+        try await SlashMenuAnnouncementFixture().nativeArrowStillSelectsWhileVoiceOverIsOff()
+    }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitArgumentChoice() async throws {
+        try await SlashMenuAnnouncementFixture().argumentArrowAnnouncesTheActualChoiceAndTabKeepsItsReplacement()
+    }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitReturnAndEscape() async throws {
+        try await SlashMenuAnnouncementFixture().returnAndEscapeKeepExistingAcceptanceAndDismissalBehavior()
+    }
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitMarkedTextAndCaret() async throws {
+        try await SlashMenuAnnouncementFixture().markedTextAndCaretAwayFromEndKeepArrowCommandsSuppressed()
+    }
+
+    @Test(.timeLimit(.minutes(2))) func slashMenuUIKitEqualCountAndZeroQueries() async throws {
+        try await SlashMenuAnnouncementFixture().changedQueriesWithEqualCountsAndZeroResultsAreAnnounced()
+    }
+
 }
 #endif
