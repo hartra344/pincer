@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import pathlib
 import plistlib
+import re
 import shutil
 import subprocess
 import tempfile
@@ -27,6 +28,7 @@ class BundleMacNamespaceTests(unittest.TestCase):
             tools.mkdir()
             swift_bin.mkdir()
             shutil.copy2(REPO / "scripts/bundle-mac.sh", repo / "scripts/bundle-mac.sh")
+            shutil.copy2(REPO / "project.yml", repo / "project.yml")
             (repo / "Apps/Shared/AppIcon.icon").write_text("fake icon\n", encoding="utf-8")
             (swift_bin / "PincerMacDev").write_text("fake executable\n", encoding="utf-8")
 
@@ -83,6 +85,14 @@ else:
             production_info = bundle("ordinary-build", None)
             self.assertEqual(production_info["CFBundleIdentifier"], "chat.pincer.mac")
             self.assertNotIn("PincerDevSuffix", production_info)
+            project = (repo / "project.yml").read_text(encoding="utf-8")
+            purpose_values = re.findall(
+                r'^\s*INFOPLIST_KEY_NSLocationUsageDescription:\s*"([^"]*)"\s*$',
+                project,
+                re.MULTILINE,
+            )
+            self.assertEqual(len(purpose_values), 1, "project.yml should define one macOS location purpose")
+            self.assertEqual(production_info["NSLocationUsageDescription"], purpose_values[0])
 
             namespaced_info = bundle("namespaced-build", "Desk_Work!")
             self.assertEqual(namespaced_info["CFBundleIdentifier"], "chat.pincer.mac.dev-desk-work")
