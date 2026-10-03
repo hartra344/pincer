@@ -391,6 +391,62 @@ final class MemoryPressureMonitor: @unchecked Sendable {
 }
 
 public enum ImageCodec {
+#if DEBUG
+    /// Narrow executor probe for the composer attachment-preparation regression. A single
+    /// registered filename keeps parallel image tests from contaminating its measurement.
+    enum PreparationProbe {
+        struct Counts: Sendable, Equatable {
+            let mainThread: Int
+            let background: Int
+        }
+
+        private final class Storage: @unchecked Sendable {
+            let lock = NSLock()
+            var trackedFileName: String?
+            var counts = Counts(mainThread: 0, background: 0)
+        }
+
+        private static let storage = Storage()
+
+        static func track(fileName: String) {
+            let storage = self.storage
+            storage.lock.lock()
+            storage.trackedFileName = fileName
+            storage.counts = Counts(mainThread: 0, background: 0)
+            storage.lock.unlock()
+        }
+
+        static func stopTracking(fileName: String) {
+            let storage = self.storage
+            storage.lock.lock()
+            if storage.trackedFileName == fileName {
+                storage.trackedFileName = nil
+                storage.counts = Counts(mainThread: 0, background: 0)
+            }
+            storage.lock.unlock()
+        }
+
+        static func counts() -> Counts {
+            let storage = self.storage
+            storage.lock.lock()
+            defer { storage.lock.unlock() }
+            return storage.counts
+        }
+
+        fileprivate static func record(fileName: String) {
+            let storage = self.storage
+            storage.lock.lock()
+            defer { storage.lock.unlock() }
+            guard storage.trackedFileName == fileName else { return }
+            if Thread.isMainThread {
+                storage.counts = Counts(mainThread: storage.counts.mainThread + 1, background: storage.counts.background)
+            } else {
+                storage.counts = Counts(mainThread: storage.counts.mainThread, background: storage.counts.background + 1)
+            }
+        }
+    }
+#endif
+
     public static func decode(_ data: Data) -> CGImage? {
         self.decode(data, maxPixel: 2400)
     }
@@ -409,6 +465,9 @@ public enum ImageCodec {
     /// Re-encodes an image so it fits under `maxBytes`, shrinking progressively. Strips
     /// metadata (GPS etc.) as a side effect, which is what we want before upload.
     public static func prepareForUpload(_ data: Data, fileName: String, maxBytes: Int) -> OutgoingAttachment? {
+#if DEBUG
+        PreparationProbe.record(fileName: fileName)
+#endif
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let baseName = (fileName as NSString).deletingPathExtension
         let originalType = CGImageSourceGetType(source) as String?
