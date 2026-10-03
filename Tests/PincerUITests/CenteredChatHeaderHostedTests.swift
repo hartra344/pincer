@@ -112,7 +112,7 @@ enum CenteredChatHeaderNativeFixtures {
             renderedHierarchy = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
             if !renderedHierarchy { window.layer.render(in: context.cgContext) }
         }
-        print("Centered header package capture drawHierarchy=\(renderedHierarchy); layer fallback is diagnostic only, real app screenshot supplies appearance proof")
+        print("Centered header package capture drawHierarchy=\(renderedHierarchy) reduceTransparency=\(UIAccessibility.isReduceTransparencyEnabled); layer fallback is diagnostic only, real app screenshot supplies appearance proof")
         if renderedHierarchy, let avatar {
             let cgImage = try #require(image.cgImage)
             let scale = image.scale
@@ -177,11 +177,11 @@ private struct CenteredChatHeaderHostedTests {
                 let avatar = try #require(host.geometry.frames[.avatar])
                 let title = try #require(host.geometry.frames[.title])
                 let reservation = try #require(host.geometry.frames[.reservation])
-                #expect(reservation.height == 60 && title.maxY <= reservation.maxY + 1,
+                #expect(reservation.height == 44 && title.maxY <= reservation.maxY + 1,
                         "Actual title must fit the reserved region rather than overlap transcript content")
                 print("Centered header actual geometry width=\(width) key=\(key) avatar=\(avatar) title=\(title) reservation=\(reservation); title content is verified separately by real chatTitle unit and full-app screenshot")
                 #expect(abs(host.window.bounds.width - width) < 1)
-                #expect(abs(avatar.width - 64) < 1 && abs(avatar.height - 64) < 1)
+                #expect(abs(avatar.width - 48) < 1 && abs(avatar.height - 48) < 1)
                 #expect(abs(avatar.midX - host.window.bounds.midX) <= 1 && abs(title.midX - host.window.bounds.midX) <= 1,
                         "Actual identity stays centered regardless of branch/action availability and side widths")
                 #expect(title.minY >= avatar.maxY && title.maxY < 180)
@@ -189,7 +189,7 @@ private struct CenteredChatHeaderHostedTests {
                 let bar = try #require(bars.first)
                 let barFrame = bar.convert(bar.bounds, to: host.window)
                 #expect(avatar.minY < barFrame.maxY && avatar.maxY > barFrame.maxY,
-                        "The actual large avatar spans the native bar and reserved content region")
+                        "The actual compact avatar spans the native bar and reserved content region")
                 #expect(bar.topItem?.title?.isEmpty != false, "The capsule is the current visible title")
                 try CenteredChatHeaderNativeFixtures.snapshot(host.window, width: width, suffix: key.contains("garden") ? "garden" : "trip", avatar: avatar)
             }
@@ -262,11 +262,11 @@ private struct CenteredChatHeaderHostedTests {
             let title = try #require(host.geometry.frames[.title])
             let reservation = try #require(host.geometry.frames[.reservation])
             print("Centered header measured typography type=\(type) host=\(width)x\(height) avatar=\(avatar) title=\(title) reservation=\(reservation)")
-            #expect(abs(avatar.width - 64) < 1 && abs(avatar.height - 64) < 1)
+            #expect(abs(avatar.width - 48) < 1 && abs(avatar.height - 48) < 1)
             #expect(abs(avatar.midX - width / 2) <= 1 && abs(title.midX - width / 2) <= 1)
             #expect(title.minY >= avatar.maxY && title.maxY <= reservation.maxY + 1,
                     "Actual largest accessibility or landscape title must fit its measured reservation")
-            if type == .accessibility5 { #expect(reservation.height > 60, "Actual accessibility typography needs more space than the default reservation") }
+            if type == .accessibility5 { #expect(reservation.height > 44, "Actual accessibility typography needs more space than the default reservation") }
             let composer = try #require(CenteredChatHeaderNativeFixtures.views(host.window).compactMap { $0 as? ComposerUITextView }.first { $0.bounds.height > 0 })
             let composerFrame = composer.convert(composer.bounds, to: host.window)
             #expect(composerFrame.minY >= title.maxY && composerFrame.maxY <= host.window.bounds.maxY + 1,
@@ -314,11 +314,11 @@ private struct CenteredChatHeaderHostedTests {
             defer { host.close() }
             let shouldAnimate = !UIAccessibility.isReduceMotionEnabled && phase == .active
             try #require(await eventually(timeout: .seconds(15)) {
-                recorder.last == shouldAnimate && host.geometry.frames[.avatar]?.width == 64
+                recorder.last == shouldAnimate && host.geometry.frames[.avatar]?.width == 48
             }, "Actual avatar render branch must report environment-controlled animation admission")
             if !shouldAnimate { #expect(!recorder.sawActive) }
             let avatar = try #require(host.geometry.frames[.avatar])
-            #expect(abs(avatar.width - 64) < 1 && abs(avatar.height - 64) < 1)
+            #expect(abs(avatar.width - 48) < 1 && abs(avatar.height - 48) < 1)
             try CenteredChatHeaderNativeFixtures.snapshot(host.window, width: 390,
                 suffix: phase == .inactive ? "inactive" : "system-motion", avatar: avatar)
         }
