@@ -53,6 +53,11 @@ enum DemoUsage {
                 models: [(sonnet, 1)], dailyTokens: 80_000, activeDays: 1..<3, log: kikoLog),
         Session(key: "agent:mochi:main", agentId: "mochi", label: nil, channel: "webchat",
                 models: [(sonnet, 1)], dailyTokens: 40_000, activeDays: 1..<7, log: mochiLog),
+        // Keep this after the existing entries so their deterministic model/usage waves retain
+        // the same indices. The log is projected from the actual long-chat transcript.
+        Session(key: DemoGateway.longChatKey, agentId: "main", label: "Home-lab migration", channel: "webchat",
+                models: [(sonnet, 1)], dailyTokens: 420_000, activeDays: 0..<18,
+                log: DemoGateway.longChatUsageLog),
     ]
 
     /// The model a demo chat mainly runs on, so its row and replies match its usage.

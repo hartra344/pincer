@@ -278,13 +278,19 @@ func checkDemoSeededSearchTerms(_ gateway: GatewayStore, trip: ChatStore) async 
     let tripKey = "agent:main:dashboard:trip", mainKey = "agent:main:main", homeLab = "agent:main:discord:channel:123"
     let forge = "agent:coder:main", scout = "agent:research:main"
     // Every chat is prefetched in the background; wait until the last of them is searchable.
-    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 4 }
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 5 }
     let newestHits = backup?.chats.map { $0.messages.compactMap(\.hit.timestamp).max() ?? .distantPast } ?? []
-    check(backup.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, homeLab, forge, tripKey]
+    let longChat = "agent:main:dashboard:lab-migration"
+    check(backup.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, homeLab, forge, tripKey, longChat]
           && newestHits == newestHits.sorted(by: >),
-          "“backup” is found in four chats, newest first (\(backup?.chats.map(\.title) ?? []))")
+          "“backup” is found in five chats, newest first (\(backup?.chats.map(\.title) ?? []))")
     check(backup?.chats.first { $0.sessionKey == homeLab }?.messages.contains { $0.sender == "via Discord" } == true,
           "a bridged message names its channel as the sender")
+    let productSearch = await waitForSearch(gateway, "proxmox backup server", timeout: 20) {
+        $0.chats.contains { $0.sessionKey == longChat }
+    }
+    check(productSearch?.chats.map(\.sessionKey) == [longChat],
+          "the full Proxmox Backup Server product name is searchable in Home-lab migration")
 
     let ghibli = await waitForSearch(gateway, "ghibli") { !$0.isEmpty }
     let ghibliIds = ghibli?.chats.first?.messages.map(\.hit.entryId) ?? []
@@ -343,8 +349,8 @@ func checkDemoSearchWithoutCache() async {
     let connected = await waitFor("demo connection (cache off)") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "cache off: demo connected")
     guard connected else { return }
-    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 4 }
-    check(backup?.chats.count == 4, "cache off: prefetched chats are searchable (\(backup?.chats.map(\.title) ?? []))")
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 5 }
+    check(backup?.chats.count == 5, "cache off: prefetched chats are searchable (\(backup?.chats.map(\.title) ?? []))")
     let ghibli = await waitForSearch(gateway, "ghibli") { !$0.isEmpty }
     check(ghibli?.chats.first?.messages.count == 3, "cache off: older history is searchable")
     let chat = gateway.chat(for: "agent:research:main")

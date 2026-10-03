@@ -109,7 +109,7 @@ extension DemoGateway {
          - **Clock drift:** a restored VM can wake up with a stale clock and confuse time-based automations. Sync it before starting Home Assistant.
          """),
         ("Good list. I'll pass the stick by ID.", "That's the right call."),
-        ("How should I protect the new cluster's VMs?", "Use Proxmox's PBS on the NAS, with nightly incremental snapshots and weekly verification. Deduplication keeps the repository small."),
+        ("How should I protect the new cluster's VMs?", "Use Proxmox Backup Server (PBS) on the NAS, with nightly incremental snapshots and weekly verification. Deduplication keeps the repository small."),
         ("How much space will that need?", "With 120 GB of VM disks and a 30-day retention, expect roughly 200 to 300 GB thanks to dedup."),
         ("Can I keep offsite copies too?", "Yes. PBS can sync a namespace to a remote repository. A cheap storage box works well, and everything is encrypted client-side."),
         ("OK, add that to the list for later.", "Noted as a follow-up, after the cutover."),
@@ -187,5 +187,24 @@ extension DemoGateway {
             pair(turn, code: turn.user.hasSuffix("Write me the replication script.") ? Self.longChatScript : nil)
         }
         return messages
+    }
+
+    /// Usage logs are derived from the same transcript shown in the chat, so search and drill-down
+    /// text cannot drift into a second copy of the conversation.
+    static var longChatUsageLog: [(role: String, content: String)] {
+        self.seedLongChatTranscript().flatMap { message -> [(role: String, content: String)] in
+            let role = message["role"]?.string
+            let blocks = message["content"]?.array ?? []
+            let text = blocks.compactMap { $0["text"]?.string }.joined(separator: "\n")
+            var lines: [(role: String, content: String)] = []
+
+            if let role, !text.isEmpty { lines.append((role, text)) }
+            for block in blocks where block["type"]?.string == "toolCall" {
+                let name = block["name"]?.string ?? "tool"
+                let command = block["arguments"]?["command"]?.string
+                lines.append(("tool", command.map { "\(name): \($0)" } ?? name))
+            }
+            return lines
+        }
     }
 }

@@ -291,6 +291,11 @@ func checkUsageDemo(_ gateway: GatewayStore) async {
     check((usage.totals?.totalTokens ?? 0) > 0 && (usage.totals?.totalCost ?? 0) > 0 && (aggregates?.sessionCount ?? 0) >= 5
           && Set(aggregates?.byProvider.compactMap(\.provider) ?? []).count >= 2 && (aggregates?.byModel.count ?? 0) >= 3
           && Set(aggregates?.byAgent.map(\.key) ?? []) == Set(gateway.agents.map(\.id)), "demo aggregates across providers, models and agents")
+    let labMigrationKey = "agent:main:dashboard:lab-migration"
+    let labMigrationRow = usage.sessions.value?.sessions.first { $0.key == labMigrationKey }
+    check(labMigrationRow?.provider == "anthropic" && labMigrationRow?.model == "claude-sonnet-5"
+          && (labMigrationRow?.usage?.totals.totalTokens ?? 0) > 0,
+          "demo Home-lab migration has explicit Sonnet usage instead of the default model")
     check(usage.daily?.count == 7 && usage.daily?.contains { $0.hasCategories } == true, "demo daily covers the week")
     check(aggregates?.byModel.contains { $0.totals.missingCostEntries > 0 && $0.totals.totalCost > 0 } == true
           && usage.sessions.value?.sessions.contains { $0.usage.map { $0.totals.costStatus == .unknown(missing: $0.totals.missingCostEntries) } == true } == true,
@@ -324,6 +329,15 @@ func checkUsageDemo(_ gateway: GatewayStore) async {
     check((detail?.row?.usage?.totals.totalTokens ?? 0) > 0 && detail?.totals.loadState == .idle, "demo drill-down totals")
     check((detail?.timeseries.value?.points.count ?? 0) >= 40, "demo drill-down timeseries (\(detail?.timeseries.value?.points.count ?? 0))")
     check(detail?.logs.value?.count == 20 && Set(detail?.logs.value?.map(\.role) ?? []) == [.user, .assistant, .tool, .toolResult], "demo drill-down logs")
+
+    usage.prepareSession(labMigrationKey, agentId: "main")
+    await usage.loadSession(labMigrationKey)
+    let labMigration = usage.detail(labMigrationKey)
+    check(labMigration?.row?.provider == "anthropic" && labMigration?.row?.model == "claude-sonnet-5"
+          && (labMigration?.row?.usage?.totals.totalTokens ?? 0) > 0
+          && labMigration?.timeseries.value?.points.isEmpty == false
+          && labMigration?.logs.value?.contains { $0.content.contains("Proxmox Backup Server") } == true,
+          "demo Home-lab migration drill-down has model usage and transcript-matched logs")
     // Deterministic (#243): the first chat, by key, that the 30-day dashboard lists no usage for.
     await usage.setPreset(.month)
     let used = Set(usage.sessions.value?.sessions.filter { !($0.usage?.totals.isEmpty ?? true) }.map(\.key) ?? [])
