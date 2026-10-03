@@ -74,6 +74,8 @@ public final class AppModel {
     public private(set) var history = ChatHistory<Notifier.Target>()
     /// Open chat windows per chat (#48), see `ChatWindowRef.swift`.
     @ObservationIgnored var windowRefCounts: [ChatWindowRef: Int] = [:]
+    @ObservationIgnored var legacyWindowRefCounts: [ChatWindowRef: Int] = [:]
+    @ObservationIgnored var ownedChatWindows: [UUID: OwnedChatWindow] = [:]
     /// False until a scene reports `.active`, so a background launch doesn't prefetch.
     public var appIsActive = false {
         didSet {
@@ -371,6 +373,7 @@ public final class AppModel {
 
     public func remove(_ id: UUID) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
+        self.removeChatWindows(gatewayID: id)
         let store = self.gateways.remove(at: index)
         store.routeCandidatesDidChange = nil
         self.retryPendingExternalRouteIfNeeded()

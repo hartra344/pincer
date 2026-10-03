@@ -26,6 +26,10 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     public var visible: Target?
     /// Chats shown in their own windows (#48); like `visible`, never notified while the app is active.
     public var windowVisible: Set<Target> = []
+    #if DEBUG
+    /// Observes the actual target-clear path without requiring notification permissions.
+    package var clearTargetProbe: (@MainActor (Target) -> Void)?
+    #endif
     public var appIsActive = true
     public var enabled: Bool {
         get { UserDefaults.standard.object(forKey: "pincer.notifications") as? Bool ?? true }
@@ -252,6 +256,9 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     public func clear(target: Target) {
+        #if DEBUG
+        self.clearTargetProbe?(target)
+        #endif
         guard let center else { return }
         let thread = "\(target.gatewayId.uuidString)|\(target.sessionKey)"
         Task {

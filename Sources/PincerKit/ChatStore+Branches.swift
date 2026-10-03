@@ -39,7 +39,10 @@ extension ChatStore {
         return users.last?.transcriptId
     }
 
-    /// The header chip's content, or nil while the chat has a single branch.
+    /// Constant-cost admission for the header's branch toolbar item.
+    public var hasBranchHeaderChip: Bool { BranchHeaderChip.shows(branchCount: self.branches.count) }
+
+    /// The header chip's content, or nil while the chat has at most one branch.
     public var branchHeaderChip: BranchHeaderChip? {
         BranchHeaderChip(branches: self.branches, hasAccess: self.gateway?.sessionManager.canSwitchBranch == true,
                          isRunning: self.isRunning || self.isBusyForHistoryChange)
@@ -111,6 +114,8 @@ public struct BranchMenuEntry: Equatable, Sendable {
 
 /// The "Branch 2 of 3" header control: always present when the chat has more than one branch.
 public struct BranchHeaderChip: Equatable, Sendable {
+    /// Constant-cost toolbar admission, shared with the chip's construction policy.
+    public static func shows(branchCount: Int) -> Bool { branchCount > 1 }
     public let label: String
     public let entries: [BranchMenuEntry]
     /// Why switching is off, or nil when it's allowed.
@@ -118,7 +123,7 @@ public struct BranchHeaderChip: Equatable, Sendable {
     public var canSwitch: Bool { self.disabledReason == nil }
 
     public init?(branches: [SessionBranch], hasAccess: Bool, isRunning: Bool) {
-        guard branches.count > 1 else { return nil }
+        guard Self.shows(branchCount: branches.count) else { return nil }
         let active = branches.firstIndex(where: \.active) ?? 0
         self.label = L("Branch \(active + 1) of \(branches.count)")
         self.entries = branches.map {

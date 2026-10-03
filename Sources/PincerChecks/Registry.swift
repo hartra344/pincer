@@ -198,6 +198,7 @@ enum Suites {
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
         Section("Slash suggestion announcements (demo)") { await runDemoSlashSuggestionAnnouncementChecks() },
+        Section("Compact chat toolbar branches (demo)") { await runDemoCompactBranchToolbarChecks() },
         Section("Explicit transcript history navigation (demo)") { await runDemoTranscriptManualNavigationChecks() },
         Section("Image attachment preparation (demo)") { await runDemoAttachmentPreparationChecks() },
         Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
@@ -246,6 +247,7 @@ enum Suites {
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
+        Section("Chat window notification visibility (demo)") { await runDemoChatWindowNotificationVisibility() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
