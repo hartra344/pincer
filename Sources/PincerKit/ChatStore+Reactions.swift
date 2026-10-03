@@ -4,6 +4,22 @@ import Observation
 extension ChatStore {
     // MARK: Replies
 
+#if DEBUG
+    /// Drains actual admitted work; fixtures may warm a bounded set of loaded targets first.
+    package func waitForReplyPreviewPreparation() async {
+        for item in self.items.suffix(ReplyPreviewPreparationService.pendingLimit + 1) {
+            guard item.isReplyable, let id = item.transcriptId,
+                  let source = ReplyPreviewSource(blocks: item.blocks) else { continue }
+            _ = self.replyPreviewPreparation.request(source, messageID: id)
+        }
+        await self.replyPreviewPreparation.drain()
+        guard !Task.isCancelled else { return }
+        if let publication = self.replyPreviewPublication {
+            await withTaskCancellationHandler { await publication.value } onCancel: { publication.cancel() }
+        }
+    }
+#endif
+
     /// A loaded, committed message by transcript id.
     public func message(withId id: String) -> ChatItem? {
         self.itemsByTranscriptId[id]
@@ -12,10 +28,56 @@ extension ChatStore {
     /// What a Reply on `messageId` would target. `you` and `agent` name the senders.
     public func replyTarget(for messageId: String, you: String, agent: String) -> ReplyTarget? {
         guard let item = self.message(withId: messageId) else { return nil }
-        let text = MediaDirectives.extract(from: item.plainText).text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let preview = text.isEmpty ? (item.blocks.contains { if case .image = $0 { true } else { false } } ? "Image" : "Attachment") : text
-        return ReplyTarget(messageId: messageId, senderLabel: item.senderName(you: you, agent: agent, agents: self.gateway?.agents ?? []),
-                           preview: preview, isAssistant: item.role == .assistant)
+        let source = ReplyPreviewSource(blocks: item.blocks)
+        let preview = source.flatMap { self.replyPreviewPreparation.cachedLine(for: $0) } ?? ""
+        if let source { _ = self.replyPreviewPreparation.request(source, messageID: messageId) }
+        var target = ReplyTarget(messageId: messageId,
+                                 senderLabel: item.senderName(you: you, agent: agent, agents: self.gateway?.agents ?? []),
+                                 preview: preview, isAssistant: item.role == .assistant)
+        target.previewSource = source
+        target.previewUnavailable = source == nil
+        return target
+    }
+
+    public func selectReply(to messageId: String, you: String, agent: String) {
+        guard let target = self.replyTarget(for: messageId, you: you, agent: agent) else { return }
+        self.replyTarget = target
+    }
+
+    func refreshSelectedReplyPreview() {
+        self.replyPreviewPublication?.cancel()
+        guard let selected = self.replyTarget else { return }
+        guard let item = self.message(withId: selected.messageId) else {
+            self.replyTarget = nil
+            return
+        }
+        let source = ReplyPreviewSource(blocks: item.blocks)
+        var updated = selected
+        updated.previewSource = source
+        updated.previewUnavailable = source == nil
+        updated.preview = source.flatMap { self.replyPreviewPreparation.cachedLine(for: $0) } ?? ""
+        self.replyTarget = updated
+        guard let source else { return }
+        let lifecycle = self.replyPreviewLifecycle
+        let selectionID = selected.selectionID
+        guard let handle = self.replyPreviewPreparation.request(source, messageID: selected.messageId) else { return }
+        self.replyPreviewPublication = Task { @MainActor [weak self] in
+            let line = await handle.value()
+            guard !Task.isCancelled, let self,
+                  self.replyPreviewLifecycle == lifecycle,
+                  var current = self.replyTarget, current.selectionID == selectionID,
+                  current.previewSource == source, !current.previewUnavailable else { return }
+            current.preview = line ?? ""
+            current.previewUnavailable = line == nil
+            self.replyTarget = current
+        }
+    }
+
+    func stopReplyPreviewPublication() {
+        self.replyPreviewLifecycle &+= 1
+        self.replyPreviewPublication?.cancel()
+        self.replyPreviewPublication = nil
+        self.replyTarget = nil
     }
 
     /// The newest committed message a reply can target (for ⇧⌘R).

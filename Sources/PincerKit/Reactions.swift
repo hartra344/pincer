@@ -6,16 +6,25 @@ import Foundation
 /// The message the composer is replying to. `senderLabel` and `preview` are what the chip and the
 /// optimistic quote show until the Gateway's own `replyToPreview` arrives.
 public struct ReplyTarget: Hashable, Sendable {
+    /// Stable through preview publication; selecting even the same message again gets a new ID.
+    public let selectionID: UUID
     public var messageId: String
     public var senderLabel: String
     public var preview: String
     public var isAssistant: Bool
+    package var previewSource: ReplyPreviewSource?
+    /// A loaded target whose current source cannot be captured must never use an older preview
+    /// or the compatibility path for callers supplying a nonempty external preview.
+    package var previewUnavailable = false
+
 
     public init(messageId: String, senderLabel: String, preview: String, isAssistant: Bool) {
+        self.selectionID = UUID()
         self.messageId = messageId
         self.senderLabel = senderLabel
         self.preview = preview
         self.isAssistant = isAssistant
+        self.previewSource = nil
     }
 }
 

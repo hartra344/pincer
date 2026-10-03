@@ -239,7 +239,17 @@ public final class ChatStore: Identifiable {
         }
     }
     /// The message the composer is replying to. Per chat, in memory only.
-    public var replyTarget: ReplyTarget?
+    public var replyTarget: ReplyTarget? {
+        didSet {
+            if oldValue?.selectionID != self.replyTarget?.selectionID { self.refreshSelectedReplyPreview() }
+        }
+    }
+    @ObservationIgnored package var replyPreviewPreparation = ReplyPreviewPreparationService.shared
+    @ObservationIgnored var replyPreviewPublication: Task<Void, Never>?
+    @ObservationIgnored var replyPreviewLifecycle = 0
+#if DEBUG
+    @ObservationIgnored package var replyPreparationDidReserve: (@MainActor (String) -> Void)?
+#endif
     /// The user message being edited (Edit & Resend). Per chat, in memory only.
     public var editTarget: MessageEditTarget?
     /// The chat's transcript tips (`sessions.branches.list`), oldest first; see `refreshBranches()`.
@@ -459,6 +469,7 @@ public final class ChatStore: Identifiable {
                 if let id = item.transcriptId { byId[id] = item }
             }
             self.itemsByTranscriptId = byId
+            self.refreshSelectedReplyPreview()
             let reactions = Reactions.agentReactions(in: self.items)
             if reactions != self.agentReactions { self.agentReactions = reactions }
             if !self.sawThinking {

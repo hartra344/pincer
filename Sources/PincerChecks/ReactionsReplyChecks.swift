@@ -1,6 +1,94 @@
 import Foundation
 @testable import PincerKit
 
+#if DEBUG
+private actor ReplyDemoPreparationGate {
+    private var open = false
+    private var held: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        guard !self.open else { return }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if self.open || Task.isCancelled { continuation.resume() }
+                else { self.held.append(continuation) }
+            }
+        } onCancel: { Task { await self.release() } }
+    }
+    func release() {
+        self.open = true
+        let held = self.held
+        self.held = []
+        for waiter in held { waiter.resume() }
+    }
+}
+@MainActor
+private func checkConnectedColdReplyPreparation(_ chat: ChatStore, gateway: GatewayStore, agentName: String) async {
+    let messageID = "demo-main-status"
+    await chat.load(force: true)
+    guard chat.message(withId: messageID) != nil else {
+        check(false, "connected reply preparation: seeded source is present")
+        return
+    }
+    let nonce = UUID().uuidString.lowercased()
+    let text = "connected preparation \(nonce)"
+    let originalService = chat.replyPreviewPreparation
+    let service = ReplyPreviewPreparationService()
+    let gate = ReplyDemoPreparationGate()
+    service.normalizationGate = { _ in await gate.wait() }
+    chat.replyPreviewPreparation = service
+    defer {
+        chat.replyPreparationDidReserve = nil
+        chat.replyPreviewPreparation = originalService
+        Task { await gate.release(); await gateway.connection.demoUntrackSendRequests(matchingText: text) }
+    }
+    await gateway.connection.demoTrackSendRequests(matchingText: text)
+    let (reservations, reserved) = AsyncStream.makeStream(of: String.self)
+    let reservationFence = Task {
+        try? await Task.sleep(for: .seconds(120))
+        if !Task.isCancelled { reserved.finish() }
+    }
+    defer { reservationFence.cancel(); reserved.finish() }
+    chat.replyPreparationDidReserve = { reserved.yield($0) }
+    guard let target = chat.replyTarget(for: messageID, you: "You", agent: agentName) else {
+        check(false, "connected reply preparation: actual cold target is available")
+        return
+    }
+    let send = Task { await chat.sendMessage(text, replyTo: target) }
+    let sendFence = Task {
+        try? await Task.sleep(for: .seconds(120))
+        if !Task.isCancelled { send.cancel(); await gate.release() }
+    }
+    defer { sendFence.cancel(); send.cancel() }
+    var reservationKey: String?
+    for await key in reservations { reservationKey = key; break }
+    guard let reservationKey else {
+        check(false, "connected reply preparation: send reserved an optimistic row")
+        return
+    }
+    check(chat.items.contains { $0.isPending && $0.idempotencyKey == reservationKey },
+          "connected reply preparation: optimistic row appears while its quote is held")
+    check(!gateway.outbox.persistable.entries.contains { $0.id == reservationKey },
+          "connected reply preparation: held quote is excluded from persisted outbox")
+    await gateway.flushOutbox()
+    let before = await gateway.connection.demoSendRequests(matchingText: text)
+    check(before.isEmpty, "connected reply preparation: a flush while preparation is held emits zero chat.send RPCs")
+    await gate.release()
+    async let competingFlush: Void = gateway.flushOutbox()
+    let outcome = await send.value
+    await competingFlush
+    let sent = await gateway.connection.demoSendRequests(matchingText: text)
+    if case .sent = outcome {} else { check(false, "connected reply preparation: prepared direct send is accepted") }
+    check(sent.count == 1 && sent.first?.idempotencyKey == reservationKey && sent.first?.hasReplyToID == true,
+          "connected reply preparation: direct delivery racing a flush emits exactly one RPC with the reserved key")
+    _ = await waitFor("connected prepared reply completed", timeout: 20) { !chat.isRunning }
+    await chat.load(force: true)
+    let committed = userItem(chat, containing: text).filter { !$0.isPending }
+    check(committed.count == 1 && committed.first?.replyToId == messageID
+          && committed.first?.replyToPreview?.text.contains("Disk status") == true,
+          "connected reply preparation: one committed message retains the Gateway’s meaningful quote for the same source ID")
+}
+#endif
+
 // Replies (#45) and reactions (#74): parsing, derivation, codecs and the send fallback offline,
 // then against the built-in demo and the mock Gateway.
 
@@ -345,13 +433,49 @@ func runDemoReactionsReply() async {
     let located = await chat.locate("demo-main-status")
     check(located && chat.items.count == before && chat.locatingReplyId == nil, "locating a loaded message doesn't page")
 
+    // Exercise the actual reply action against a large version of the loaded seeded
+    // status message, retaining its transcript locator and sender metadata.
+    #if DEBUG
+    let trackedReplyID = "demo-main-status"
+    chat.replyPreviewPreparation = ReplyPreviewPreparationService()
+    ReplyPreviewDebugProbe.reset(tracking: trackedReplyID)
+    defer { ReplyPreviewDebugProbe.unregister(tracking: trackedReplyID) }
+    if let index = chat.items.firstIndex(where: { $0.transcriptId == trackedReplyID }) {
+        chat.items[index].blocks = [.text("Disk status " + String(repeating: "a", count: 200_000))]
+        chat.rebuild(itemsChanged: true)
+    } else {
+        check(false, "reply preparation demo: seeded status item is loaded")
+        return
+    }
+    #endif
+
     // Replying persists replyToId and a preview (AC-40).
+    guard let immediateReply = chat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
+        check(false, "cold reply target for the disk status")
+        return
+    }
+    check(immediateReply.messageId == "demo-main-status" && immediateReply.isAssistant && immediateReply.senderLabel == agentName,
+          "reply preparation demo: cold Reply preserves identity and sender immediately")
+    #if DEBUG
+    await chat.waitForReplyPreviewPreparation()
+    #endif
     guard let target = chat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
         check(false, "reply target for the disk status")
         return
     }
     check(target.isAssistant && target.senderLabel == agentName && !target.preview.isEmpty, "reply target names the agent")
+    #if DEBUG
+    check(target.messageId == trackedReplyID && ReplyPreviewDebugProbe.stats(for: trackedReplyID).mainThreadNormalizations == 0,
+          "reply preparation demo: actual seeded Reply target preserves identity without normalizing full text on Main")
+    check(ReplyPreviewDebugProbe.stats(for: trackedReplyID).offMainNormalizations > 0 && target.preview.hasPrefix("Disk status"),
+          "reply preparation demo: actual cold request runs an instrumented worker and returns meaningful text")
+    check(target.preview.count <= 280 && target.preview.utf8.count <= 2_048,
+          "reply preparation demo: large single-line text produces a bounded prepared target")
+    #endif
     check(chat.replyTarget(for: "nope", you: "You", agent: agentName) == nil, "no reply target for an unknown id")
+    #if DEBUG
+    await checkConnectedColdReplyPreparation(chat, gateway: gateway, agentName: agentName)
+    #endif
     chat.replyTarget = target
     let nonce = UUID().uuidString.prefix(6)
     var sawAck = false
@@ -434,6 +558,10 @@ func runDemoReactionsReply() async {
     let oldChat = old.chat(for: main)
     await oldChat.load()
     _ = await waitFor("older demo history") { oldChat.message(withId: "demo-main-status") != nil }
+    #if DEBUG
+    oldChat.replyPreviewPreparation = ReplyPreviewPreparationService()
+    ReplyPreviewDebugProbe.reset(tracking: "demo-main-status")
+    #endif
     guard let oldTarget = oldChat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
         check(false, "reply target on the older demo")
         return
@@ -441,7 +569,24 @@ func runDemoReactionsReply() async {
     check(!old.replyToUnsupported, "replyToId assumed until rejected")
     oldChat.replyTarget = oldTarget
     let oldNonce = UUID().uuidString.prefix(6)
+    #if DEBUG
+    let oldAuthoredText = "quoted \(oldNonce)"
+    await old.connection.demoTrackSendRequests(matchingText: oldAuthoredText)
+    defer { Task { await old.connection.demoUntrackSendRequests(matchingText: oldAuthoredText) } }
+    #endif
+    // Send the cold target directly: its optimistic reservation must capture the quote
+    // independently of subsequent UI preview publication and the legacy rekey/retry.
     let runId = await oldChat.send("quoted \(oldNonce)", replyTo: oldTarget)
+    #if DEBUG
+    let legacyAttempts = await old.connection.demoSendRequests(matchingText: oldAuthoredText)
+    check(legacyAttempts.count == 2 && legacyAttempts[0].hasReplyToID && !legacyAttempts[0].isQuotedFallback
+          && !legacyAttempts[1].hasReplyToID && legacyAttempts[1].isQuotedFallback
+          && legacyAttempts[0].idempotencyKey != legacyAttempts[1].idempotencyKey,
+          "reply preparation demo: legacy schema rejection causes exactly two actual RPCs, rekeying only the quoted fallback")
+    check(ReplyPreviewDebugProbe.stats(for: "demo-main-status").mainThreadNormalizations == 0
+          && ReplyPreviewDebugProbe.stats(for: "demo-main-status").offMainNormalizations > 0,
+          "reply preparation demo: sending a cold captured target prepares its quote off-main before delivery")
+    #endif
     check(runId != nil && oldChat.errorMessage == nil && old.replyToUnsupported && oldChat.replyTarget == nil,
           "rejected replyToId → resent once without it, no error (\(oldChat.errorMessage ?? "ok"))")
     _ = await waitFor("older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "quoted \(oldNonce)").first?.isPending == false }
@@ -449,6 +594,8 @@ func runDemoReactionsReply() async {
     let quotedSent = userItem(oldChat, containing: "quoted \(oldNonce)")
     check(quotedSent.count == 1 && quotedSent[0].plainText.hasPrefix("> **\(agentName):** ") && quotedSent[0].replyToId == nil
           && quotedSent[0].plainText.hasSuffix("\n\nquoted \(oldNonce)"), "one message, text starts with the blockquote (\(quotedSent.first?.plainText.prefix(40) ?? "none"))")
+    check(quotedSent.first?.plainText.contains("Disk status") == true,
+          "reply preparation demo: send-before-ready preserves meaningful captured quote text through legacy fallback")
     let secondNonce = UUID().uuidString.prefix(6)
     await oldChat.send("again \(secondNonce)", replyTo: oldTarget)
     _ = await waitFor("second older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "again \(secondNonce)").first?.isPending == false }

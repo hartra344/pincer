@@ -834,8 +834,7 @@ struct ExportedFile: FileDocument {
 extension ChatStore {
     /// Starts replying to a message: the composer shows the "Replying to" chip and takes focus.
     func beginReply(to messageId: String, agentName: String) {
-        guard let target = self.replyTarget(for: messageId, you: Owner.displayName, agent: agentName) else { return }
-        self.replyTarget = target
+        self.selectReply(to: messageId, you: Owner.displayName, agent: agentName)
     }
 }
 
