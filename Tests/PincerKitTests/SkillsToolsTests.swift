@@ -565,6 +565,13 @@ struct SkillsToolsTests {
         await #expect(throws: GatewayError.self) { try await model.detail(external.installRef) }
     }
 
+    @MainActor @Test func demoBuiltInInstallUsesGatewaySuccessMessage() async throws {
+        let demo = DemoGateway()
+        let response = try await demo.handle("skills.install", ["name": "github", "installId": "brew"])
+        #expect(response["ok"]?.bool == true)
+        #expect(response["message"]?.text == "Installed")
+    }
+
     @MainActor @Test func demoToolsInspector() async throws {
         let demo = DemoGateway()
         let request: ToolsInspectorModel.Request = { method, params in try await demo.handle(method, params) }

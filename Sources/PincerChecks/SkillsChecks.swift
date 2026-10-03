@@ -129,8 +129,9 @@ func runDemoSkills(_ gateway: GatewayStore) async {
         check(false, "demo nas-report has an update")
     }
     if let video = skills.skill(key: "video-frames"), let option = video.install.first {
-        _ = await skills.runInstaller(skill: video, option: option)
-        check(skills.skill(key: "video-frames")?.state == .ready, "demo installer fixes the missing binary")
+        let installed = await skills.runInstaller(skill: video, option: option)
+        check(installed == .done("Installed") && skills.skill(key: "video-frames")?.state == .ready,
+              "demo installer matches the Gateway success message and fixes the missing binary")
     }
 
     let inspector = gateway.toolsInspector(sessionKey: "agent:main:main")
