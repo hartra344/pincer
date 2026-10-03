@@ -423,7 +423,11 @@ extension ChatStore {
     /// Remembers live assistant text so the run's last reply can be handed to auto-read when the run succeeds.
     private func trackLiveReply(_ item: ChatItem) {
         if item.role == .user { self.dropPendingReply(); return }
-        guard item.role == .assistant, !item.isPending, SpeechText.speakableText(for: item) != nil else { return }
+        guard item.role == .assistant, !item.isPending else { return }
+        // Read Aloud is off unless a window installs its callback. Do not normalize every
+        // accepted reply in the default disabled state, and discard any stale candidate.
+        guard self.onFinalAssistantReply != nil else { self.dropPendingReply(); return }
+        guard SpeechText.speakableText(for: item) != nil else { return }
         if self.awaitingFinalReply {
             self.awaitingFinalReply = false
             self.onFinalAssistantReply?(item)
@@ -441,6 +445,7 @@ extension ChatStore {
     func noteRunSucceeded(_ runId: String) {
         guard self.autoReadRunId != runId else { return }
         self.autoReadRunId = runId
+        guard self.onFinalAssistantReply != nil else { self.dropPendingReply(); return }
         if let item = self.liveReplyCandidate {
             self.liveReplyCandidate = nil
             self.onFinalAssistantReply?(item)

@@ -360,11 +360,46 @@ func runDemoVoice() async {
         check(false, "demo assistant fixture exists for prepared Read Aloud coverage")
     }
     await readAloudCommandReadinessCheck(gateway)
+    await readAloudCallbackOptInCheck(mainChat)
     await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")
     await voiceFallbackChecks()
     await voiceFollowUpChecks(profile: GatewayProfile.demo(), label: "demo")
+}
+
+@MainActor
+private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
+    check(chat.onFinalAssistantReply == nil, "demo: the opt-in boundary starts without a Read Aloud callback")
+    let priorIDs = Set(chat.items.map(\.id))
+    let firstOutcome = await chat.sendMessage("A demo reply received while Read Aloud is disabled.", requiresConnection: true)
+    guard case .sent = firstOutcome else {
+        check(false, "demo: a reply can be committed while Read Aloud has no callback")
+        return
+    }
+    let disabledReplyArrived = await waitFor("demo reply with Read Aloud disabled", timeout: 10) {
+        chat.items.contains { $0.role == .assistant && !$0.isPending && !$0.isError && !priorIDs.contains($0.id) }
+    }
+    check(disabledReplyArrived, "demo: the accepted reply remains in the transcript while Read Aloud is disabled")
+    guard disabledReplyArrived else { return }
+
+    var callbacks: [String] = []
+    chat.onFinalAssistantReply = { callbacks.append($0.id) }
+    defer { chat.onFinalAssistantReply = nil }
+    check(callbacks.isEmpty, "demo: installing Read Aloud does not replay a disabled-period reply")
+
+    let beforeNext = Set(chat.items.map(\.id))
+    let nextOutcome = await chat.sendMessage("A fresh demo reply after enabling Read Aloud.", requiresConnection: true)
+    guard case .sent = nextOutcome else {
+        check(false, "demo: the enabled Read Aloud callback can send a fresh reply")
+        return
+    }
+    let delivered = await waitFor("demo reply through the enabled Read Aloud callback", timeout: 10) {
+        callbacks.count == 1 && chat.items.contains { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
+    }
+    let newestReply = chat.items.last { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
+    check(delivered && callbacks == newestReply.map { [$0.id] },
+          "demo: a fresh enabled run delivers its committed reply once")
 }
 
 @MainActor
