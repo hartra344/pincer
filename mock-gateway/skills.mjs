@@ -472,8 +472,14 @@ function patchSkillEntry(skills, params) {
 function parseSkillRef(raw) {
   const value = String(raw).trim();
   if (value.startsWith('skills-sh:')) return { slug: value.split('/').pop(), requestedReference: value };
-  const scoped = /^@([^/\s]+)\/([^/\s]+)$/.exec(value);
-  if (scoped) return { ownerHandle: scoped[1], slug: scoped[2] };
+  if (value.startsWith('@')) {
+    const slash = value.indexOf('/', 1);
+    if (slash >= 0 && value.indexOf('/', slash + 1) < 0) {
+      const ownerHandle = value.slice(1, slash).trim().toLowerCase();
+      const slug = value.slice(slash + 1).trim();
+      if (ownerHandle && slug) return { ownerHandle, slug };
+    }
+  }
   return { slug: value };
 }
 

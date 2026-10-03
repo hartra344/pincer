@@ -223,9 +223,19 @@ extension DemoGateway {
 
     /// A catalog entry by install ref (`@owner/slug`) or bare slug.
     private func catalogEntry(_ ref: String) -> JSONValue? {
+        if let exact = self.clawHubCatalog.first(where: { $0["installRef"]?.text == ref }) { return exact }
+        if ref.hasPrefix("@") {
+            let components = ref.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+            guard components.count == 2 else { return nil }
+            let owner = components[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let slug = components[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !owner.isEmpty, !slug.isEmpty else { return nil }
+            return self.clawHubCatalog.first {
+                $0["ownerHandle"]?.text?.lowercased() == owner && $0["slug"]?.text == slug
+            }
+        }
         let bare = ref.split(separator: "/").last.map(String.init) ?? ref
-        return self.clawHubCatalog.first { $0["installRef"]?.text == ref }
-            ?? self.clawHubCatalog.first { $0["slug"]?.text == ref || $0["slug"]?.text == bare }
+        return self.clawHubCatalog.first { $0["slug"]?.text == ref || $0["slug"]?.text == bare }
     }
 
     private func searchClawHub(_ query: String?, limit: Int) -> [JSONValue] {
