@@ -97,6 +97,7 @@ enum Suites {
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
+            Section("Quoted row preview preparation") { await runQuotePreviewChecks() },
             Section("Agent avatar signals") { runAvatarSignalChecks() },
             Section("Avatar choices per Gateway") { runGatewayAvatarChoiceChecks() },
             Section("Agent reply targets") { checkReplyTargets() },

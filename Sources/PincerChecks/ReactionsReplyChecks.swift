@@ -423,6 +423,7 @@ func runDemoReactionsReply() async {
     let ask = chat.message(withId: "demo-main-gauge-ask")
     check(ask?.replyToId == "demo-main-status" && ask?.replyToPreview?.senderLabel == "Claw"
           && ask?.replyToPreview?.text.hasPrefix("Disk status") == true, "gauge question replies to the disk status")
+    if let ask { _ = chat.quote(for: ask); await chat.quotePreviewPreparation.drain() }
     if let ask, let quote = chat.quote(for: ask) {
         check(quote.targetId == "demo-main-status" && quote.sender == .agent && quote.text?.isEmpty == false,
               "quote resolves the loaded original (\(quote.text ?? "nil"))")
@@ -891,6 +892,7 @@ private func checkTelegramReplyShapes(_ chat: ChatStore, idPrefix: String, label
     let dentist = chat.items.first { $0.role == .assistant && $0.plainText.hasPrefix("Your dentist appointment") }
     let pickup = chat.items.first { $0.role == .assistant && $0.plainText.contains("Friday pickup") }
     check(clinic?.replyToId == "\(idPrefix)-clinic" && clinic?.replyToCurrent == false, "\(label): delivery replyToId parsed (\(clinic?.replyToId ?? "nil"))")
+    if let clinic { _ = chat.quote(for: clinic); await chat.quotePreviewPreparation.drain() }
     if let clinic, let quote = chat.quote(for: clinic) {
         check(quote.targetId == "\(idPrefix)-clinic" && quote.sender == .label("Maya") && quote.text?.hasPrefix("Can you find") == true,
               "\(label): the answer to the earlier message shows a quote card naming Maya (\(quote.sender), \(quote.text ?? "nil"))")

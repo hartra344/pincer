@@ -5,8 +5,8 @@ extension ChatStore {
     // MARK: Replies
 
 #if DEBUG
-    /// Neutral until quote work is asynchronous; tests drain only work the real quote path admitted.
-    package func waitForQuotePreviewPreparation() async {}
+    /// Drains only work admitted by actual quote requests; never prewarms unrelated messages.
+    package func waitForQuotePreviewPreparation() async { await self.quotePreviewPreparation.drain() }
 
     /// Drains actual admitted work; fixtures may warm a bounded set of loaded targets first.
     package func waitForReplyPreviewPreparation() async {
@@ -77,6 +77,7 @@ extension ChatStore {
     }
 
     func stopReplyPreviewPublication() {
+        self.stopQuotePreviewPublication()
         self.replyPreviewLifecycle &+= 1
         self.replyPreviewPublication?.cancel()
         self.replyPreviewPublication = nil
@@ -99,10 +100,10 @@ extension ChatStore {
             targetId = resolved
         }
         if let target = self.message(withId: targetId) {
-            #if DEBUG
-            self.quotePreviewNormalizationProbe?.record(messageID: targetId)
-            #endif
-            let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
+            let input = QuotePreviewInput(isLoaded: true, primary: ReplyPreviewSource(blocks: target.blocks),
+                                          fallback: item.replyToPreview.flatMap { ReplyPreviewSource(text: $0.text) })
+            let prepared = self.quotePreviewPreparation.cachedText(for: input)
+            if prepared == nil { self.quotePreviewPreparation.request(input, targetID: targetId, chat: self) }
             let sender: ReplyQuote.Sender = if let from = target.sender {
                 .label(from.displayName(agents: self.gateway?.agents ?? []))
             } else if let name = target.channelSenderName {
@@ -111,14 +112,14 @@ extension ChatStore {
                 target.role == .user ? .you : .agent
             }
             return ReplyQuote(targetId: targetId, sender: sender,
-                              text: line.isEmpty ? item.replyToPreview?.text : line)
+                              text: prepared?.text)
         }
         if let preview = item.replyToPreview {
-            #if DEBUG
-            self.quotePreviewNormalizationProbe?.record(messageID: targetId)
-            #endif
+            let input = QuotePreviewInput(isLoaded: false, primary: nil, fallback: ReplyPreviewSource(text: preview.text))
+            let prepared = self.quotePreviewPreparation.cachedText(for: input)
+            if prepared == nil { self.quotePreviewPreparation.request(input, targetID: targetId, chat: self) }
             return ReplyQuote(targetId: targetId, sender: preview.senderLabel.map { .label($0) },
-                              text: Replies.previewLine(preview.text))
+                              text: prepared?.text)
         }
         return ReplyQuote(targetId: targetId, sender: nil, text: nil)
     }
