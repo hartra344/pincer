@@ -2283,6 +2283,16 @@
         }
       }
     },
+    "Ask for deeper reasoning with /think. Expand a thinking section to read it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask for deeper reasoning with /think. Expand a thinking section to read it."
+          }
+        }
+      }
+    },
     "Asks to run commands for agents (node role).": {
       "localizations": {
         "en": {

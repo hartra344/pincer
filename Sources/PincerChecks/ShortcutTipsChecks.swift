@@ -20,6 +20,9 @@ func runShortcutTipsChecks() {
     let phone = SetupTips.tips(iOS: true, iPhone: true, shortcuts: shortcuts)
     check(phone.allSatisfy { !$0.tip.usesKeyboard && !$0.text.contains("⌘") },
           "iPhone retains touch-only tips")
+    check(phone.first { $0.tip.id == "thinking" }?.text
+          == "Ask for deeper reasoning with /think. Expand a thinking section to read it.",
+          "the compact thinking tip separates deeper reasoning from reading a thinking section")
 }
 
 @MainActor
@@ -44,6 +47,10 @@ func runDemoShortcutTips() async {
     guard ready else { return }
     let chat = gateway.chat(for: "agent:main:main")
     await chat.load()
+    let tips = SetupTips.tips(iOS: true, iPhone: true, shortcuts: shortcuts)
+    check(tips.first { $0.tip.id == "thinking" }?.text
+          == "Ask for deeper reasoning with /think. Expand a thinking section to read it.",
+          "the connected demo's compact tips retain the two-sentence thinking guidance")
     shortcuts.set(KeyCombo("p", [.control, .option]), for: .commandPalette)
     shortcuts.set(KeyCombo("f", [.control, .option]), for: .findInChat)
     capture.isEnabled = true

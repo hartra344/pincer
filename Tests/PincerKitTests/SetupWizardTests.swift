@@ -411,7 +411,7 @@ final class SetupFakeGateway {
     @Test func tipsCopyAndPlatform() {
         #expect(SetupTips.all.map(\.text) == [
             "Type / in the composer for slash commands.",
-            "Ask for deeper reasoning with /think; expand a thinking section to read it.",
+            "Ask for deeper reasoning with /think. Expand a thinking section to read it.",
             "Approvals for commands and tools appear in the chat and as notifications. Allow once or always.",
             "Press ⌘K to jump to any chat, agent, model, or setting.",
             "Press ⌘F to find in the current chat.",
