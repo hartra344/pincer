@@ -1,4 +1,5 @@
 import PincerKit
+import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -85,6 +86,7 @@ struct CaretRequest: Equatable {
 struct ComposerTextView: View {
     let placeholder: String
     @Binding var text: String
+    @State private var measuredHeightRevision = 0
     var maxLines = 12
     /// Off while a send is in flight, so the text can't change under it.
     var isEditable = true
@@ -116,7 +118,9 @@ struct ComposerTextView: View {
 
     var body: some View {
         PlatformComposerTextView(
-            text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
+            text: self.$text, measuredHeightRevision: self.measuredHeightRevision,
+            onHeightMeasurementChange: { self.measuredHeightRevision &+= 1 },
+            maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
             escapeActive: self.escapeActive, canSubmit: self.canSubmit, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onCommandSubmit: self.onCommandSubmit,
             onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
@@ -145,13 +149,14 @@ private func composerHeight(for text: String, font: PlatformFont, lineHeight: CG
     var height = lineHeight
     if !text.isEmpty, width > 0 {
 #if DEBUG
-        let probeStart = ComposerSizingProbe.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        let probeEnabled = ComposerSizingProbe.isEnabled
+        let probeStart = probeEnabled ? ProcessInfo.processInfo.systemUptime : nil
         let attributed = NSAttributedString(string: text, attributes: [.font: font])
         let bounds = attributed.boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             context: nil)
-        let attributedLength = attributed.length
+        let attributedLength = probeEnabled ? attributed.length : 0
 #else
         let bounds = NSAttributedString(string: text, attributes: [.font: font]).boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
@@ -187,7 +192,7 @@ struct ComposerSizingSample: Sendable, Equatable {
     let returnedHeight: Double
 }
 
-enum ComposerSizingProbe {
+public enum ComposerSizingProbe {
     private static let storage = ComposerSizingProbeStorage()
 
     static var isEnabled: Bool { self.storage.isEnabled }
@@ -235,8 +240,140 @@ private final class ComposerSizingProbeStorage: @unchecked Sendable {
 }
 #endif
 
+private struct ComposerSizingFont: @unchecked Sendable {
+    // NSFont and UIFont are immutable after construction; the worker only reads this snapshot.
+    let font: PlatformFont
+    let lineHeight: Double
+    let identity: ObjectIdentifier
+    let name: String
+    let pointSize: Double
+
+    init(font: PlatformFont, lineHeight: CGFloat) {
+        self.font = font
+        self.lineHeight = Double(lineHeight)
+        self.identity = ObjectIdentifier(font)
+        self.name = font.fontName
+        self.pointSize = Double(font.pointSize)
+    }
+}
+
+private struct ComposerSizingRequest: Sendable {
+    let text: String
+    let font: ComposerSizingFont
+    let width: Double
+    let maxLines: Int
+}
+
+private struct ComposerSizingStyleKey: Hashable, Sendable {
+    let width: Double
+    let fontIdentity: ObjectIdentifier
+    let fontName: String
+    let pointSize: Double
+    let lineHeight: Double
+    let maxLines: Int
+
+    init(font: ComposerSizingFont, width: CGFloat, maxLines: Int) {
+        self.width = Double(width)
+        self.fontIdentity = font.identity
+        self.fontName = font.name
+        self.pointSize = font.pointSize
+        self.lineHeight = font.lineHeight
+        self.maxLines = maxLines
+    }
+}
+
+private struct ComposerSizingKey: Hashable, Sendable {
+    let textRevision: UInt64
+    let style: ComposerSizingStyleKey
+
+    init(textRevision: UInt64, font: ComposerSizingFont, width: CGFloat, maxLines: Int) {
+        self.textRevision = textRevision
+        self.style = ComposerSizingStyleKey(font: font, width: width, maxLines: maxLines)
+    }
+}
+
+@MainActor
+final class ComposerHeightMeasurement {
+    private let worker = LatestMeasurementWorker<ComposerSizingRequest, Double> { request in
+        autoreleasepool {
+            Double(composerHeight(
+                for: request.text,
+                font: request.font.font,
+                lineHeight: CGFloat(request.font.lineHeight),
+                width: CGFloat(request.width),
+                maxLines: request.maxLines))
+        }
+    }
+    private var textRevision: UInt64 = 0
+    private var currentKey: ComposerSizingKey?
+    private var completedKey: ComposerSizingKey?
+    private var completedHeight: CGFloat?
+    private var heightDidChange: (@MainActor () -> Void)?
+    private var isDetached = false
+
+    func textDidChange() {
+        self.textRevision &+= 1
+        self.currentKey = nil
+        self.worker.invalidate()
+    }
+
+    func height(
+        for text: String,
+        font: PlatformFont,
+        lineHeight: CGFloat,
+        width: CGFloat,
+        maxLines: Int,
+        onHeightChange: @escaping @MainActor () -> Void
+    ) -> CGFloat {
+        let oneLineFallback = ceil(min(lineHeight, lineHeight * CGFloat(maxLines)))
+        // SwiftUI may probe zero or unbounded widths while negotiating layout. Those
+        // probes must not replace the pending measurement for the actual finite width.
+        guard width.isFinite, width > 0 else { return oneLineFallback }
+        self.heightDidChange = onHeightChange
+        let fontSnapshot = ComposerSizingFont(font: font, lineHeight: lineHeight)
+        let style = ComposerSizingStyleKey(font: fontSnapshot, width: width, maxLines: maxLines)
+        let key = ComposerSizingKey(textRevision: self.textRevision, font: fontSnapshot, width: width, maxLines: maxLines)
+        let canReuseCompletedHeight = !text.isEmpty && width > 0 && self.completedKey?.style == style
+        let fallback = canReuseCompletedHeight ? (self.completedHeight ?? oneLineFallback) : oneLineFallback
+
+        if self.currentKey == key {
+            return self.completedKey == key ? (self.completedHeight ?? fallback) : fallback
+        }
+
+        self.currentKey = key
+        guard !self.isDetached else { return fallback }
+        guard !text.isEmpty, width > 0 else {
+            self.worker.invalidate()
+            self.completedKey = key
+            self.completedHeight = fallback
+            return fallback
+        }
+
+        let request = ComposerSizingRequest(text: text, font: fontSnapshot, width: Double(width), maxLines: maxLines)
+        self.worker.submit(request) { [weak self] measuredHeight in
+            guard let self, !self.isDetached, self.currentKey == key else { return }
+            let height = CGFloat(measuredHeight)
+            let changed = abs(fallback - height) > 0.5
+            self.completedKey = key
+            self.completedHeight = height
+            if changed { self.heightDidChange?() }
+        }
+        return fallback
+    }
+
+    func detach() {
+        guard !self.isDetached else { return }
+        self.isDetached = true
+        self.currentKey = nil
+        self.completedKey = nil
+        self.completedHeight = nil
+        self.heightDidChange = nil
+        self.worker.invalidate()
+    }
+}
+
 #if os(macOS)
-private typealias PlatformFont = NSFont
+typealias PlatformFont = NSFont
 
 final class ComposerNSTextView: NSTextView {
     var onMedia: (([PastedMedia]) -> Void)?
@@ -277,6 +414,8 @@ final class ComposerNSTextView: NSTextView {
 
 private struct PlatformComposerTextView: NSViewRepresentable {
     @Binding var text: String
+    let measuredHeightRevision: Int
+    let onHeightMeasurementChange: () -> Void
     let maxLines: Int
     let isEditable: Bool
     let menuActive: Bool
@@ -341,6 +480,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         }
         let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
         if textView.string != self.text {
+            context.coordinator.heightMeasurement.textDidChange()
             textView.string = self.text
             textView.setSelectedRange(NSRange(location: caret ?? (self.text as NSString).length, length: 0))
         } else if let caret {
@@ -348,12 +488,28 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         }
     }
 
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.heightMeasurement.detach()
+    }
+
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         let width = proposal.width ?? nsView.frame.width
         let text = (nsView.documentView as? NSTextView)?.string ?? self.text
+        let coordinator = context.coordinator
+        let height = context.coordinator.heightMeasurement.height(
+            for: text,
+            font: Self.font,
+            lineHeight: Self.lineHeight,
+            width: width,
+            maxLines: self.maxLines,
+            onHeightChange: { [weak coordinator, weak nsView] in
+                guard let coordinator else { return }
+                coordinator.parent.onHeightMeasurementChange()
+                nsView?.invalidateIntrinsicContentSize()
+            })
         return CGSize(
             width: width,
-            height: composerHeight(for: text, font: Self.font, lineHeight: Self.lineHeight, width: width, maxLines: self.maxLines))
+            height: height)
     }
 
     @MainActor
@@ -361,6 +517,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         var parent: PlatformComposerTextView
         var focusRequest: Int
         var caretSerial: Int?
+        let heightMeasurement = ComposerHeightMeasurement()
 
         init(_ parent: PlatformComposerTextView) {
             self.parent = parent
@@ -377,6 +534,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            self.heightMeasurement.textDidChange()
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
@@ -451,7 +609,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
 }
 
 #else
-private typealias PlatformFont = UIFont
+typealias PlatformFont = UIFont
 
 final class ComposerUITextView: UITextView {
     var onMedia: (([PastedMedia]) -> Void)?
@@ -549,6 +707,8 @@ final class ComposerUITextView: UITextView {
 
 private struct PlatformComposerTextView: UIViewRepresentable {
     @Binding var text: String
+    let measuredHeightRevision: Int
+    let onHeightMeasurementChange: () -> Void
     let maxLines: Int
     let isEditable: Bool
     let menuActive: Bool
@@ -604,6 +764,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         }
         let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
         if textView.text != self.text {
+            context.coordinator.heightMeasurement.textDidChange()
             textView.text = self.text
             textView.selectedRange = NSRange(location: caret ?? (self.text as NSString).length, length: 0)
         } else if let caret {
@@ -611,12 +772,28 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         }
     }
 
+    static func dismantleUIView(_ textView: ComposerUITextView, coordinator: Coordinator) {
+        coordinator.heightMeasurement.detach()
+    }
+
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerUITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? uiView.frame.width
         let font = uiView.font ?? .preferredFont(forTextStyle: .body)
+        let coordinator = context.coordinator
+        let height = context.coordinator.heightMeasurement.height(
+            for: uiView.text ?? "",
+            font: font,
+            lineHeight: font.lineHeight,
+            width: width,
+            maxLines: self.maxLines,
+            onHeightChange: { [weak coordinator, weak uiView] in
+                guard let coordinator else { return }
+                coordinator.parent.onHeightMeasurementChange()
+                uiView?.invalidateIntrinsicContentSize()
+            })
         return CGSize(
             width: width,
-            height: composerHeight(for: uiView.text ?? "", font: font, lineHeight: font.lineHeight, width: width, maxLines: self.maxLines))
+            height: height)
     }
 
     @MainActor
@@ -624,6 +801,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         var parent: PlatformComposerTextView
         var focusRequest: Int
         var caretSerial: Int?
+        let heightMeasurement = ComposerHeightMeasurement()
 
         init(_ parent: PlatformComposerTextView) {
             self.parent = parent
@@ -639,6 +817,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            self.heightMeasurement.textDidChange()
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }

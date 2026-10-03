@@ -64,6 +64,7 @@ enum Suites {
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
+            Section("Latest measurement worker") { await runLatestMeasurementChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
