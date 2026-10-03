@@ -97,7 +97,7 @@ xcodebuild test -scheme PincerUITests-iOS \
   -only-testing:PincerUITests/SVGRasterizerTests
 ```
 
-Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded.
+Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded. The SVG tests check rendered pixels as well as bitmap dimensions, plus cancellation before rendering starts. iOS WebKit rendering has a 30-second deadline spanning navigation and snapshot; a debug timeout identifies which phase was still waiting. Deterministic `SVGRasterizationLifetimeTests` and the offline SVG lifetime checks cover timeout, cancellation, late callbacks and deadline cleanup without sleeping.
 
 The iPad sidebar geometry probe hosts a 1,200-row transcript in `NavigationSplitView`, drives the public native `UISplitViewController` hide/show transition, and reports detail-width changes and row builds per display frame. It checks that the native column actually changes and that layouts stay bounded while the sidebar animates. This measures native geometry; it does not test the SwiftUI sidebar button binding. Run it on a regular-width iPad simulator (the default iPhone CI lane does not run this probe):
 

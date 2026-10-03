@@ -13,6 +13,8 @@ import WebKit
 /// the SVG as an `<img>` in a script-less web view (main-actor only, and it must be in a window),
 /// where SVG can't run scripts or load external resources.
 public struct SVGRasterizer: SVGRasterizing {
+    fileprivate static let svgRenderDeadline: Duration = .seconds(30)
+
     public init() {}
 
     /// Registers this as the app's SVG rasterizer; call once at launch.
@@ -37,7 +39,10 @@ public struct SVGRasterizer: SVGRasterizing {
             return Self.redraw(cgImage, size: pixels)
         }.value
         #else
-        return await WebSnapshotter.snapshot(svg: data, size: intrinsic, pixels: pixels)
+        guard let image = await WebSnapshotter.snapshot(svg: data, size: intrinsic, pixels: pixels) else { return nil }
+        return await Task.detached(priority: .userInitiated) {
+            Self.redraw(image, size: pixels)
+        }.value
         #endif
     }
 
@@ -61,9 +66,36 @@ public struct SVGRasterizer: SVGRasterizing {
 #if os(iOS)
 @MainActor
 private final class WebSnapshotter: NSObject, WKNavigationDelegate {
-    private var continuation: CheckedContinuation<Bool, Never>?
+    private enum Phase: String {
+        case navigation
+        case snapshot
+    }
+
+    private let view: WKWebView
+    private let snapshotConfiguration: WKSnapshotConfiguration
+    private var continuation: CheckedContinuation<CGImage?, Never>?
+    private var lifetime: SVGRasterizationLifetime?
+    private var renderedImage: CGImage?
+    private var phase = Phase.navigation
+
+    private init(view: WKWebView, snapshotConfiguration: WKSnapshotConfiguration) {
+        self.view = view
+        self.snapshotConfiguration = snapshotConfiguration
+    }
 
     static func snapshot(svg: Data, size: CGSize, pixels: CGSize) async -> CGImage? {
+        guard !Task.isCancelled else { return nil }
+        let html = await Task.detached(priority: .userInitiated) {
+            """
+            <!doctype html><html><head><meta name="viewport" content="width=\(Int(size.width)), initial-scale=1">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+            <style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}
+            img{display:block;width:\(size.width)px;height:\(size.height)px}</style></head>
+            <body><img src="data:image/svg+xml;base64,\(svg.base64EncodedString())"></body></html>
+            """
+        }.value
+        guard !Task.isCancelled else { return nil }
+
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -78,39 +110,94 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
             .compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
         view.frame.origin = CGPoint(x: -size.width - 10_000, y: 0)
         window?.addSubview(view)
-        defer { view.removeFromSuperview() }
-
-        let delegate = WebSnapshotter()
-        view.navigationDelegate = delegate
-        let html = """
-        <!doctype html><html><head><meta name="viewport" content="width=\(Int(size.width)), initial-scale=1">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
-        <style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}
-        img{display:block;width:\(size.width)px;height:\(size.height)px}</style></head>
-        <body><img src="data:image/svg+xml;base64,\(svg.base64EncodedString())"></body></html>
-        """
-        let loaded = await withCheckedContinuation { continuation in
-            delegate.continuation = continuation
-            view.loadHTMLString(html, baseURL: nil)
-        }
-        guard loaded else { return nil }
         let snapshotConfiguration = WKSnapshotConfiguration()
         snapshotConfiguration.rect = CGRect(origin: .zero, size: size)
         snapshotConfiguration.snapshotWidth = NSNumber(value: Double(pixels.width / view.traitCollection.displayScale))
         snapshotConfiguration.afterScreenUpdates = true
-        guard let image = try? await view.takeSnapshot(configuration: snapshotConfiguration).cgImage else { return nil }
-        return SVGRasterizer.redraw(image, size: pixels)
+
+        let operation = WebSnapshotter(view: view, snapshotConfiguration: snapshotConfiguration)
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                operation.start(html: html, continuation: continuation, alreadyCancelled: Task.isCancelled)
+            }
+        } onCancel: {
+            Task { @MainActor in operation.finish(.cancelled) }
+        }
     }
 
-    private func finish(_ loaded: Bool) {
-        self.continuation?.resume(returning: loaded)
+    private func start(
+        html: String,
+        continuation: CheckedContinuation<CGImage?, Never>,
+        alreadyCancelled: Bool
+    ) {
+        self.continuation = continuation
+        self.lifetime = SVGRasterizationLifetime(
+            scheduleDeadline: Self.scheduleDeadline,
+            onTermination: { [weak self] outcome in self?.terminate(outcome) }
+        )
+        guard !alreadyCancelled else {
+            self.finish(.cancelled)
+            return
+        }
+        self.view.navigationDelegate = self
+        self.view.loadHTMLString(html, baseURL: nil)
+    }
+
+    private static func scheduleDeadline(
+        _ fire: @escaping @MainActor () -> Void
+    ) -> @MainActor () -> Void {
+        let task = Task { @MainActor in
+            do {
+                try await Task.sleep(for: SVGRasterizer.svgRenderDeadline)
+            } catch {
+                return
+            }
+            fire()
+        }
+        return { task.cancel() }
+    }
+
+    private func finish(_ outcome: SVGRasterizationLifetime.Outcome) {
+        _ = self.lifetime?.finish(outcome)
+    }
+
+    private func terminate(_ outcome: SVGRasterizationLifetime.Outcome) {
+#if DEBUG
+        if outcome == .timedOut {
+            print("[SVGRasterizer] render deadline expired during \(self.phase.rawValue)")
+        }
+#endif
+        self.view.stopLoading()
+        self.view.navigationDelegate = nil
+        self.view.removeFromSuperview()
+        let continuation = self.continuation
         self.continuation = nil
+        self.lifetime = nil
+        let image = outcome == .completed ? self.renderedImage : nil
+        self.renderedImage = nil
+        continuation?.resume(returning: image)
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { self.finish(true) }
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { self.finish(false) }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard let lifetime = self.lifetime, lifetime.outcome == nil else { return }
+        self.phase = .snapshot
+        webView.takeSnapshot(with: self.snapshotConfiguration) { [weak self] image, error in
+            Task { @MainActor in
+                guard let self, let lifetime = self.lifetime, lifetime.outcome == nil else { return }
+                guard error == nil, let image = image?.cgImage else {
+                    self.finish(.failed)
+                    return
+                }
+                self.renderedImage = image
+                self.finish(.completed)
+            }
+        }
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        self.finish(.failed)
+    }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        self.finish(false)
+        self.finish(.failed)
     }
 
     func webView(
