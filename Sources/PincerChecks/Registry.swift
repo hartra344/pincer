@@ -214,6 +214,7 @@ enum Suites {
         Section("Channel status staleness (demo)") { await runDemoChannelPollingChecks() },
         Section("Tool diffs (demo)") { await runDemoToolDiffs() },
         Section("Tool cards (demo)") { await runDemoToolCards() },
+        Section("Quoted row preview preparation (demo)") { await runDemoQuotePreviewChecks() },
         Section("Grouped message keyboard selection (demo)") { await runDemoGroupedMessageKeyboardChecks() },
         Section("Rich rendering (demo)") { await runDemoRichRendering() },
         Section("Agent avatars (demo)") { await runDemoAvatars() },

@@ -5,6 +5,9 @@ extension ChatStore {
     // MARK: Replies
 
 #if DEBUG
+    /// Neutral until quote work is asynchronous; tests drain only work the real quote path admitted.
+    package func waitForQuotePreviewPreparation() async {}
+
     /// Drains actual admitted work; fixtures may warm a bounded set of loaded targets first.
     package func waitForReplyPreviewPreparation() async {
         for item in self.items.suffix(ReplyPreviewPreparationService.pendingLimit + 1) {
@@ -96,6 +99,9 @@ extension ChatStore {
             targetId = resolved
         }
         if let target = self.message(withId: targetId) {
+            #if DEBUG
+            self.quotePreviewNormalizationProbe?.record(messageID: targetId)
+            #endif
             let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
             let sender: ReplyQuote.Sender = if let from = target.sender {
                 .label(from.displayName(agents: self.gateway?.agents ?? []))
@@ -108,6 +114,9 @@ extension ChatStore {
                               text: line.isEmpty ? item.replyToPreview?.text : line)
         }
         if let preview = item.replyToPreview {
+            #if DEBUG
+            self.quotePreviewNormalizationProbe?.record(messageID: targetId)
+            #endif
             return ReplyQuote(targetId: targetId, sender: preview.senderLabel.map { .label($0) },
                               text: Replies.previewLine(preview.text))
         }

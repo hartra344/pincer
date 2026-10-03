@@ -249,6 +249,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var replyPreviewLifecycle = 0
 #if DEBUG
     @ObservationIgnored package var replyPreparationDidReserve: (@MainActor (String) -> Void)?
+    @ObservationIgnored package var quotePreviewNormalizationProbe: QuotePreviewNormalizationProbe?
 #endif
     /// The user message being edited (Edit & Resend). Per chat, in memory only.
     public var editTarget: MessageEditTarget?
