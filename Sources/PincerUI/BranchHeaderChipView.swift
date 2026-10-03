@@ -5,6 +5,7 @@ import SwiftUI
 /// Reads only `branches`, `isRunning` and the switch permission, so it never touches the transcript.
 struct BranchHeaderChipView: View {
     let chat: ChatStore?
+    var showsTitle = false
 
     var body: some View {
         if let chat, let chip = chat.branchHeaderChip {
@@ -27,7 +28,9 @@ struct BranchHeaderChipView: View {
                     }
                 }
             } label: {
-                Image(systemName: "arrow.triangle.branch")
+                if self.showsTitle {
+                    Label(chip.label, systemImage: "arrow.triangle.branch")
+                } else { Image(systemName: "arrow.triangle.branch") }
             }
             .menuIndicator(.hidden)
             .help(chip.label)

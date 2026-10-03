@@ -5,6 +5,7 @@ import SwiftUI
 /// keep the model the Gateway recorded for them.
 struct ModelPicker: View {
     let row: SessionRow
+    var showsActionTitle = false
     @Environment(GatewayStore.self) private var gateway
 
     private var catalog: [ModelChoice]? { self.gateway.modelCatalogs[self.row.agentId] }
@@ -20,7 +21,7 @@ struct ModelPicker: View {
         Menu {
             self.content
         } label: {
-            Label(self.currentRef.map(ModelRef.shortName) ?? "Model", systemImage: "cpu")
+            Label(self.showsActionTitle ? L("Model") : (self.currentRef.map(ModelRef.shortName) ?? "Model"), systemImage: "cpu")
                 .labelStyle(.titleAndIcon)
         }
         .menuIndicator(.visible)

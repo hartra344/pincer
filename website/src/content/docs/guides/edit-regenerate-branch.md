@@ -30,9 +30,9 @@ When a chat has more than one path, an inline **‹ 2 / 3 ›** switcher sits in
 
 ## The header branch menu
 
-Whenever a chat has more than one branch, a branch icon appears in the chat header: in the toolbar on iPhone, iPad and Mac, and in each pane header in split view. Hover it for a tooltip such as "Branch 2 of 3" (VoiceOver reads the same). Click it to list every branch with its message count and a checkmark on the current one, then pick one to switch, without scrolling back to the fork point. Switching needs Full Management access and isn't possible while a reply streams; the menu then shows why.
+Whenever a chat has more than one branch, a branch icon appears in the chat header: in chat options on compact iPhone layouts, in the toolbar on regular-width iPad and Mac, and in each pane header in split view. Hover it for a tooltip such as "Branch 2 of 3" (VoiceOver reads the same). Click it to list every branch with its message count and a checkmark on the current one, then pick one to switch, without scrolling back to the fork point. Switching needs Full Management access and isn't possible while a reply streams; the menu then shows why.
 
-On iPhone and iPad, chats without multiple branches leave no empty space for this icon, keeping the model and chat-options controls compact.
+On compact iPhone layouts, the branch menu appears in chat options only when the chat has multiple branches. On regular-width iPad, chats without multiple branches leave no empty space for the toolbar icon.
 
 :::note
 The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent (remembered until the app quits), otherwise on the last message you sent on the current branch. After relaunching, or on another device, it may sit lower than the real fork point.
