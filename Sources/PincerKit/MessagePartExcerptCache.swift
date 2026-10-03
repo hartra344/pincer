@@ -22,22 +22,21 @@ package struct MessagePartExcerptSource: Hashable, Sendable {
 /// the serial worker; decoded text and Markdown cleanup never run on the main thread.
 @MainActor
 package final class MessagePartExcerptCache {
-    package static let entryLimit = 512
-    package static let byteLimit = 128 * 1024
+    nonisolated package static let entryLimit = 512
+    nonisolated package static let byteLimit = 128 * 1024
 
     package typealias Normalizer = @Sendable (MessagePartExcerptSource) -> String
 
     package static let shared = MessagePartExcerptCache()
 
-    private var values = BoundedLRUCache<MessagePartExcerptSource, String>(countLimit: Self.entryLimit,
-                                                                           costLimit: Self.byteLimit)
+    private var values: BoundedLRUCache<MessagePartExcerptSource, String>
     private var inFlight: Set<MessagePartExcerptSource> = []
     private let queue = BoundedPreparationQueue<String>()
     private let normalize: Normalizer
 
     package init(
-        entryLimit: Int = Self.entryLimit,
-        byteLimit: Int = Self.byteLimit,
+        entryLimit: Int = MessagePartExcerptCache.entryLimit,
+        byteLimit: Int = MessagePartExcerptCache.byteLimit,
         normalize: @escaping Normalizer = { $0.normalizedExcerpt() }
     ) {
         self.values = BoundedLRUCache(countLimit: entryLimit, costLimit: byteLimit)

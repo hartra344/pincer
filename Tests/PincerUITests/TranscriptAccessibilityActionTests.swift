@@ -49,7 +49,7 @@ struct TranscriptAccessibilityActionTests {
         #expect(layout.messages.map(\.id) == ["m1", "m2", "m3"])
     }
 
-    @Test func renderedPartActionsIdentifyTheirMessageWithoutChangingTargets() {
+    @Test func renderedPartActionsIdentifyTheirMessageWithoutChangingTargets() async {
         var replyTargets: [String] = []
         let (renderer, scratch) = self.renderer { replyTargets.append($0) }
         defer { scratch.remove() }

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import PincerKit
 
@@ -86,8 +87,12 @@ struct MessagePartExcerptCacheTests {
         let started = Mutex(false)
         let release = DispatchSemaphore(value: 0)
         let cache = MessagePartExcerptCache(entryLimit: 2, byteLimit: 512) { source in
-            started.withLock { $0 = true }
-            release.wait()
+            let first = started.withLock { value in
+                let first = !value
+                value = true
+                return first
+            }
+            if first { release.wait() }
             return source.normalizedExcerpt()
         }
         defer { release.signal() }
