@@ -9,12 +9,14 @@ extension ChatStore {
         let state = payload["state"]?.string ?? ""
         switch state {
         case "status":
+            self.beginReadAloudLifecycleIfNeeded(runId)
             self.awaitingFinalReply = false
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             run.phase = payload["phase"]?.string
             if run.phase == "thinking" { run.isTextStreaming = false }
             self.live = run
         case "delta":
+            self.beginReadAloudLifecycleIfNeeded(runId)
             self.awaitingFinalReply = false
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             run.phase = nil
@@ -338,22 +340,27 @@ extension ChatStore {
             self.scheduleReload()
             return
         }
+        let acceptedIndex: Int
         if let transcriptId = item.transcriptId,
            let index = self.items.firstIndex(where: { $0.transcriptId == transcriptId })
         {
             self.items[index] = item
+            acceptedIndex = index
         } else if let key = item.idempotencyKey,
                   let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key })
         {
             self.items[index] = item
+            acceptedIndex = index
         } else if item.role == .user,
                   let index = self.items.firstIndex(where: { $0.isAwaitingDelivery && $0.plainText == item.plainText })
         {
             self.items[index] = item
+            acceptedIndex = index
         } else {
             self.items.append(item)
-            self.trackLiveReply(item)
+            acceptedIndex = self.items.count - 1
         }
+        self.trackLiveReply(item, at: acceptedIndex)
         self.scheduleLegacyLocationProjection(item)
         // A committed user message is a persistence boundary: search must see it while its
         // reply is still streaming. Later assistant output uses the bounded live-save window.
@@ -422,25 +429,276 @@ extension ChatStore {
         }
     }
 
-    /// Remembers live assistant text so the run's last reply can be handed to auto-read when the run succeeds.
-    private func trackLiveReply(_ item: ChatItem) {
+    /// Starts a new suppressed generation only at the next observed run lifecycle, rather than
+    /// silently retrying overflowed work within the run that exceeded its budget.
+    private func beginReadAloudLifecycleIfNeeded(_ runId: String) {
+        guard self.liveReplyLifecycleRunId != runId else { return }
+        self.liveReplyLifecycleRunId = runId
+        guard self.liveReplyGenerationSuppressed else { return }
+        self.invalidateLiveReplyGeneration(suppressed: false)
+    }
+
+    /// Remembers live assistant text so the run's last speakable message can be handed to auto-read.
+    private func trackLiveReply(_ item: ChatItem, at index: Int) {
         if item.role == .user { self.dropPendingReply(); return }
-        guard item.role == .assistant, !item.isPending else { return }
+        guard item.role == .assistant else { return }
+        guard !item.isPending, !item.isError else {
+            self.invalidateLiveReplyPreparation(forItemID: item.id)
+            return
+        }
         // Read Aloud is off unless a window installs its callback. Do not normalize every
         // accepted reply in the default disabled state, and discard any stale candidate.
         guard self.onFinalAssistantReply != nil else { self.dropPendingReply(); return }
-        guard SpeechText.speakableText(for: item) != nil else { return }
-        if self.awaitingFinalReply {
-            self.awaitingFinalReply = false
-            self.onFinalAssistantReply?(item)
-        } else {
-            self.liveReplyCandidate = item
+        guard !self.liveReplyGenerationSuppressed else { return }
+        guard let textBlocks = Self.liveReplyTextSnapshot(for: item) else {
+            self.invalidateLiveReplyGeneration(suppressed: true)
+            return
+        }
+        self.liveReplyPreparationSequence &+= 1
+        let eventSequence = self.liveReplyPreparationSequence
+        guard textBlocks.textByteCount > 0 else {
+            guard self.liveReplyItemTokens[item.id] != nil || self.liveReplyCandidate?.id == item.id else { return }
+            // A later nonempty update to this same row remains eligible, so replace the bounded
+            // snapshot instead of letting an older active normalization publish stale text.
+            self.refreshLiveReplyPreparation(item, at: index, sequence: eventSequence, textBlocks: textBlocks)
+            return
+        }
+        self.refreshLiveReplyPreparation(item, at: index, sequence: eventSequence, textBlocks: textBlocks)
+    }
+
+    private func refreshLiveReplyPreparation(
+        _ item: ChatItem,
+        at index: Int,
+        sequence: UInt64,
+        textBlocks: (blocks: [String], textByteCount: Int, retainedBytes: Int)
+    ) {
+        self.liveReplyPreparationRevision &+= 1
+        let revision = self.liveReplyPreparationRevision
+        let isQueued = self.liveReplyItemTokens[item.id] != nil
+        let isCandidate = self.liveReplyCandidate?.id == item.id
+        let input = LiveReplyPreparationInput(
+            ownerID: self.liveReplyPreparationOwnerID,
+            generation: self.liveReplyPreparationGeneration,
+            sequence: sequence,
+            revision: revision,
+            itemID: item.id,
+            transcriptID: item.transcriptId,
+            fallbackIndex: index,
+            textBlocks: textBlocks.blocks,
+            textByteCount: textBlocks.textByteCount,
+            retainedBytes: textBlocks.retainedBytes)
+
+        if isQueued {
+            guard self.liveReplyPreparationQueue.replace(input) else {
+                self.invalidateLiveReplyGeneration(suppressed: true)
+                return
+            }
+            self.liveReplyItemTokens[item.id] = revision
+            self.liveReplyWorkSequences[item.id] = sequence
+            return
+        }
+
+        if isCandidate {
+            let order = self.liveReplyCandidateQueueOrder
+            self.liveReplyCandidate = nil
+            guard let order else {
+                self.invalidateLiveReplyGeneration(suppressed: true)
+                return
+            }
+            self.liveReplyItemTokens[item.id] = revision
+            self.liveReplyWorkSequences[item.id] = sequence
+            self.liveReplyPreparationOutstanding += 1
+            if var barrierOrders = self.liveReplyFinalBarrierOrders,
+               barrierOrders.insert(order).inserted
+            {
+                self.liveReplyFinalBarrierOrders = barrierOrders
+                self.liveReplyFinalBarrierRemaining += 1
+            }
+            let admission = self.liveReplyPreparationQueue.submitRevalidation(input, queueOrder: order) { [weak self] token, isSpeakable in
+                self?.finishLiveReplyPreparation(token, isSpeakable: isSpeakable)
+            }
+            if case .rejectedPendingCount = admission { self.invalidateLiveReplyGeneration(suppressed: true) }
+            else if case .rejectedPendingBytes = admission { self.invalidateLiveReplyGeneration(suppressed: true) }
+            return
+        }
+
+        self.liveReplyPreparationSequence = max(self.liveReplyPreparationSequence, sequence)
+        self.liveReplyWorkSequences[item.id] = sequence
+        self.liveReplyItemTokens[item.id] = revision
+        self.liveReplyPreparationOutstanding += 1
+        let admission = self.liveReplyPreparationQueue.submit(input) { [weak self] token, isSpeakable in
+            self?.finishLiveReplyPreparation(token, isSpeakable: isSpeakable)
+        }
+        switch admission {
+        case .started, .queued:
+            break
+        case .rejectedPendingCount, .rejectedPendingBytes:
+            self.liveReplyPreparationOutstanding -= 1
+            self.liveReplyItemTokens.removeValue(forKey: item.id)
+            self.liveReplyWorkSequences.removeValue(forKey: item.id)
+            self.invalidateLiveReplyGeneration(suppressed: true)
         }
     }
 
     func dropPendingReply() {
+        self.invalidateLiveReplyGeneration(suppressed: false)
+    }
+
+    private func invalidateLiveReplyGeneration(suppressed: Bool) {
+        let oldGeneration = self.liveReplyPreparationGeneration
+        self.liveReplyPreparationGeneration &+= 1
+        self.liveReplyPreparationQueue.cancelPending(ownerID: self.liveReplyPreparationOwnerID,
+                                                     generation: oldGeneration)
+        self.liveReplyPreparationSequence = 0
+        self.liveReplyPreparationRevision = 0
+        self.liveReplyPreparationOutstanding = 0
+        self.liveReplyFinalBarrierOrders = nil
+        self.liveReplyFinalBarrierSequence = nil
+        self.liveReplyFinalBarrierRemaining = 0
+        self.liveReplyItemTokens.removeAll(keepingCapacity: true)
+        self.liveReplyWorkSequences.removeAll(keepingCapacity: true)
         self.liveReplyCandidate = nil
+        self.liveReplyCandidateSequence = nil
+        self.liveReplyCandidateQueueOrder = nil
         self.awaitingFinalReply = false
+        self.liveReplyGenerationSuppressed = suppressed
+    }
+
+    /// Refreshes matching accepted work after authoritative history without changing its FIFO
+    /// position. A completed candidate is temporarily cleared and revalidated at its saved order.
+    func refreshLiveReplyPreparations(matching rows: [(item: ChatItem, fallbackIndex: Int)]) {
+        for row in rows {
+            let item = row.item
+            let isCandidate = self.liveReplyCandidate?.id == item.id
+            guard self.liveReplyItemTokens[item.id] != nil || isCandidate else { continue }
+            guard item.role == .assistant, !item.isPending, !item.isError else {
+                self.invalidateLiveReplyPreparation(forItemID: item.id)
+                continue
+            }
+            guard let textBlocks = Self.liveReplyTextSnapshot(for: item) else {
+                self.invalidateLiveReplyGeneration(suppressed: true)
+                return
+            }
+            let sequence = self.liveReplyWorkSequences[item.id]
+                ?? (isCandidate ? self.liveReplyCandidateSequence : nil)
+                ?? 0
+            guard sequence > 0 else { continue }
+            self.refreshLiveReplyPreparation(item, at: row.fallbackIndex, sequence: sequence, textBlocks: textBlocks)
+        }
+    }
+
+    func invalidateLiveReplyPreparation(forItemID itemID: String) {
+        self.liveReplyItemTokens.removeValue(forKey: itemID)
+        self.liveReplyWorkSequences.removeValue(forKey: itemID)
+        if self.liveReplyCandidate?.id == itemID {
+            self.liveReplyCandidate = nil
+            self.liveReplyCandidateSequence = nil
+            self.liveReplyCandidateQueueOrder = nil
+        }
+    }
+
+    private func finishLiveReplyPreparation(_ token: LiveReplyPreparationToken, isSpeakable: Bool) {
+        guard token.ownerID == self.liveReplyPreparationOwnerID,
+              token.generation == self.liveReplyPreparationGeneration else { return }
+        self.liveReplyPreparationOutstanding = max(0, self.liveReplyPreparationOutstanding - 1)
+        let tokenIsCurrent = self.liveReplyItemTokens[token.itemID] == token.revision
+            && self.liveReplyWorkSequences[token.itemID] == token.sequence
+        if tokenIsCurrent {
+            self.liveReplyItemTokens.removeValue(forKey: token.itemID)
+            self.liveReplyWorkSequences.removeValue(forKey: token.itemID)
+        }
+        if tokenIsCurrent, isSpeakable, let item = self.currentLiveReplyItem(for: token) {
+            if token.sequence >= (self.liveReplyCandidateSequence ?? 0) {
+                if let barrierOrders = self.liveReplyFinalBarrierOrders {
+                    // Only jobs present at successful completion participate in that barrier.
+                    // Later arrivals cannot replace its candidate or prolong the completed run.
+                    guard barrierOrders.contains(token.queueOrder) else {
+                        self.finishFinalReplyBarrierMemberIfNeeded(token.queueOrder)
+                        return
+                    }
+                    self.liveReplyCandidateSequence = token.sequence
+                    self.liveReplyCandidateQueueOrder = token.queueOrder
+                    self.liveReplyCandidate = item
+                } else if self.awaitingFinalReply {
+                    self.awaitingFinalReply = false
+                    self.liveReplyCandidateSequence = nil
+                    self.liveReplyCandidateQueueOrder = nil
+                    self.onFinalAssistantReply?(item)
+                } else {
+                    self.liveReplyCandidateSequence = token.sequence
+                    self.liveReplyCandidateQueueOrder = token.queueOrder
+                    self.liveReplyCandidate = item
+                }
+            }
+        }
+        self.finishFinalReplyBarrierMemberIfNeeded(token.queueOrder)
+    }
+
+    private func finishFinalReplyBarrierMemberIfNeeded(_ queueOrder: UInt64) {
+        guard var barrierOrders = self.liveReplyFinalBarrierOrders,
+              barrierOrders.remove(queueOrder) != nil else { return }
+        self.liveReplyFinalBarrierOrders = barrierOrders
+        self.liveReplyFinalBarrierRemaining = max(0, self.liveReplyFinalBarrierRemaining - 1)
+        if self.liveReplyFinalBarrierRemaining == 0 { self.completeFinalReplyBarrier() }
+    }
+
+    private func currentLiveReplyItem(for token: LiveReplyPreparationToken) -> ChatItem? {
+        if let transcriptID = token.transcriptID,
+           let item = self.message(withId: transcriptID), item.id == token.itemID,
+           item.role == .assistant, !item.isPending, !item.isError
+        {
+            return item
+        }
+        guard token.transcriptID == nil, self.items.indices.contains(token.fallbackIndex) else { return nil }
+        let item = self.items[token.fallbackIndex]
+        guard item.id == token.itemID, item.transcriptId == nil,
+              item.role == .assistant, !item.isPending, !item.isError else { return nil }
+        return item
+    }
+
+    private func completeFinalReplyBarrier() {
+        self.liveReplyFinalBarrierOrders = nil
+        self.liveReplyFinalBarrierSequence = nil
+        if let item = self.liveReplyCandidate {
+            self.liveReplyCandidate = nil
+            self.liveReplyCandidateSequence = nil
+            self.liveReplyCandidateQueueOrder = nil
+            self.awaitingFinalReply = false
+            self.onFinalAssistantReply?(item)
+        } else {
+            self.awaitingFinalReply = true
+        }
+    }
+
+    private static func liveReplyTextSnapshot(for item: ChatItem) -> (blocks: [String], textByteCount: Int, retainedBytes: Int)? {
+        let maxBlocks = 64
+        let maxTextBytes = LiveReplyPreparationQueue.messageTextByteLimit
+        guard item.blocks.count <= maxBlocks,
+              let itemIDBytes = self.contiguousByteCount(item.id), itemIDBytes <= 256 else { return nil }
+        let transcriptIDBytes: Int
+        if let transcriptID = item.transcriptId {
+            guard let count = self.contiguousByteCount(transcriptID), count <= 256 else { return nil }
+            transcriptIDBytes = count
+        } else {
+            transcriptIDBytes = 0
+        }
+        var blocks: [String] = []
+        blocks.reserveCapacity(item.blocks.count)
+        var textBytes = 0
+        for block in item.blocks {
+            guard case let .text(text) = block else { continue }
+            guard let count = self.contiguousByteCount(text) else { return nil }
+            let separatorBytes = blocks.isEmpty ? 0 : 2
+            guard count <= maxTextBytes - textBytes - separatorBytes else { return nil }
+            textBytes += separatorBytes + count
+            blocks.append(text)
+        }
+        return (blocks, textBytes, textBytes + itemIDBytes + transcriptIDBytes)
+    }
+
+    private static func contiguousByteCount(_ text: String) -> Int? {
+        guard text.isContiguousUTF8 else { return nil }
+        return text.utf8.withContiguousStorageIfAvailable { $0.count }
     }
 
     /// A run ended successfully: auto-read speaks its last reply, now or when it arrives.
@@ -448,8 +706,19 @@ extension ChatStore {
         guard self.autoReadRunId != runId else { return }
         self.autoReadRunId = runId
         guard self.onFinalAssistantReply != nil else { self.dropPendingReply(); return }
-        if let item = self.liveReplyCandidate {
+        guard !self.liveReplyGenerationSuppressed else { return }
+        let outstandingOrders = self.liveReplyPreparationQueue.outstandingQueueOrders(
+            ownerID: self.liveReplyPreparationOwnerID,
+            generation: self.liveReplyPreparationGeneration)
+        if !outstandingOrders.isEmpty {
+            self.liveReplyFinalBarrierOrders = outstandingOrders
+            self.liveReplyFinalBarrierSequence = self.liveReplyPreparationSequence
+            self.liveReplyFinalBarrierRemaining = outstandingOrders.count
+        } else if let item = self.liveReplyCandidate {
             self.liveReplyCandidate = nil
+            self.liveReplyCandidateSequence = nil
+            self.liveReplyCandidateQueueOrder = nil
+            self.awaitingFinalReply = false
             self.onFinalAssistantReply?(item)
         } else {
             self.awaitingFinalReply = true

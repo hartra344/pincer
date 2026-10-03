@@ -1,5 +1,6 @@
 import Foundation
 import PincerKit
+import Synchronization
 
 @MainActor
 private final class HeldReadAloudSpeaker: ReadAloudLocalSpeaking {
@@ -375,6 +376,16 @@ func runDemoVoice() async {
 @MainActor
 private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
     check(chat.onFinalAssistantReply == nil, "demo: the opt-in boundary starts without a Read Aloud callback")
+    let normalized = Mutex<[(String, Bool)]>([])
+    let previousQueue = chat.liveReplyPreparationQueue
+    chat.liveReplyPreparationQueue = LiveReplyPreparationQueue(normalizer: { input in
+        normalized.withLock { $0.append((input.itemID, Thread.isMainThread)) }
+        return SpeechText.isSpeakable(textBlocks: input.textBlocks, itemID: input.itemID)
+    })
+    defer {
+        chat.onFinalAssistantReply = nil
+        chat.liveReplyPreparationQueue = previousQueue
+    }
     let priorIDs = Set(chat.items.map(\.id))
     let firstOutcome = await chat.sendMessage("A demo reply received while Read Aloud is disabled.", requiresConnection: true)
     guard case .sent = firstOutcome else {
@@ -385,11 +396,11 @@ private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
         chat.items.contains { $0.role == .assistant && !$0.isPending && !$0.isError && !priorIDs.contains($0.id) }
     }
     check(disabledReplyArrived, "demo: the accepted reply remains in the transcript while Read Aloud is disabled")
+    check(normalized.withLock { $0.isEmpty }, "demo: disabled Read Aloud does not prepare accepted replies")
     guard disabledReplyArrived else { return }
 
     var callbacks: [ChatItem] = []
     chat.onFinalAssistantReply = { callbacks.append($0) }
-    defer { chat.onFinalAssistantReply = nil }
     check(callbacks.isEmpty, "demo: installing Read Aloud does not replay a disabled-period reply")
 
     let beforeNext = Set(chat.items.map(\.id))
@@ -401,23 +412,16 @@ private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
     let delivered = await waitFor("demo reply through the enabled Read Aloud callback", timeout: 10) {
         callbacks.count == 1 && chat.items.contains { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
     }
+    let settled = await waitFor("demo Read Aloud preparation queue", timeout: 5) { chat.liveReplyPreparationQueue.isIdle }
     let newestReply = chat.items.last { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
-    check(delivered && callbacks.map(\.id) == newestReply.map { [$0.id] },
+    check(delivered && settled && callbacks.map(\.id) == newestReply.map { [$0.id] },
           "demo: a fresh enabled run delivers its committed reply once")
     guard let selected = callbacks.first, delivered else { return }
-    let (prepared, ranOffMain) = await Task.detached(priority: .utility) {
-        prepareSelectedAutoReadReply(selected)
-    }.value
-    check(ranOffMain && prepared?.messageId == (selected.transcriptId ?? selected.id)
-          && prepared?.text.isEmpty == false,
-          "demo: the selected callback payload prepares its spoken text off-main without changing the reply target")
+    let preparations = normalized.withLock { $0.filter { $0.0 == selected.id } }
+    check(!preparations.isEmpty && preparations.allSatisfy { !$0.1 },
+          "demo: the actual accepted-reply path normalizes the selected item off-main")
     check(chat.items.first { $0.id == selected.id } == selected,
           "demo: preparing the selected callback leaves its committed transcript item unchanged")
-}
-
-/// Synchronous worker-only probe: Foundation permits thread inspection outside an async body.
-private func prepareSelectedAutoReadReply(_ item: ChatItem) -> (SpeechText.PreparedReply?, Bool) {
-    (SpeechText.latestSpeakableReply(in: [item]), !Thread.isMainThread)
 }
 
 @MainActor

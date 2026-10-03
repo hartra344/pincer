@@ -196,7 +196,8 @@ public final class ChatStore: Identifiable {
     /// history loads, aborted or failed runs). Read Aloud's auto-read uses it.
     @ObservationIgnored public var onFinalAssistantReply: (@MainActor (ChatItem) -> Void)? {
         didSet {
-            if self.onFinalAssistantReply == nil { self.dropPendingReply() }
+            // Work accepted by one window must not cross to a replacement handler.
+            self.dropPendingReply()
         }
     }
     /// Who installed `onFinalAssistantReply`, so a closing window only removes its own handler.
@@ -206,6 +207,25 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var liveReplyCandidate: ChatItem?
     @ObservationIgnored var awaitingFinalReply = false
     @ObservationIgnored var autoReadRunId: String?
+    @ObservationIgnored package var liveReplyPreparationQueue = LiveReplyPreparationQueue.shared
+    @ObservationIgnored var liveReplyPreparationOwnerID = UUID()
+    @ObservationIgnored var liveReplyPreparationGeneration: UInt64 = 0
+    @ObservationIgnored var liveReplyPreparationSequence: UInt64 = 0
+    @ObservationIgnored var liveReplyPreparationRevision: UInt64 = 0
+    @ObservationIgnored var liveReplyPreparationOutstanding = 0
+    /// Queue-order membership is fixed when successful completion arrives. Later events may
+    /// refresh a member without moving it, while new work cannot extend this completed-run barrier.
+    @ObservationIgnored var liveReplyFinalBarrierOrders: Set<UInt64>?
+    /// Retained as a diagnostic sequence snapshot; membership decisions use queue orders above.
+    @ObservationIgnored var liveReplyFinalBarrierSequence: UInt64?
+    @ObservationIgnored var liveReplyFinalBarrierRemaining = 0
+    @ObservationIgnored var liveReplyGenerationSuppressed = false
+    @ObservationIgnored var liveReplyLifecycleRunId: String?
+    /// Contains only IDs with queued work; queue admission bounds this map to at most 33 rows.
+    @ObservationIgnored var liveReplyItemTokens: [String: UInt64] = [:] // per-item revision
+    @ObservationIgnored var liveReplyWorkSequences: [String: UInt64] = [:] // stable per-item FIFO position
+    @ObservationIgnored var liveReplyCandidateSequence: UInt64?
+    @ObservationIgnored var liveReplyCandidateQueueOrder: UInt64?
     /// Whether the transcript contains any reasoning; used to hint at `/reasoning on`.
     public internal(set) var sawThinking = false
     /// The agent's task checklist for this session, shown above the composer.
