@@ -304,7 +304,7 @@ extension DemoGateway {
                     Self.thinking("I should look at disk usage and summarize the main volumes."),
                     Self.toolCall(ackCall, "message", ["action": "react", "emoji": "✅"]),
                     Self.toolCall(dfCall, "exec", ["command": "df -h"]),
-                ], ago: 20 * minute - 5),
+                ], id: "demo-main-thinking", ago: 20 * minute - 5),
                 Self.message("toolResult", [Self.text(#"{"ok":true,"added":"✅"}"#)], ago: 20 * minute - 7,
                              extra: ["toolCallId": .string(ackCall), "toolName": "message", "isError": false]),
                 Self.message("toolResult", [Self.text("""

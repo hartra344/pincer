@@ -93,6 +93,30 @@ struct ChatStoreAutoReadTests {
                 "disabled Read Aloud must not parse the accepted reply on main")
     }
 
+    @Test func acceptedThinkingMessagePresenceDoesNotJoinLongTextOnMain() {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        let id = "accepted-thinking-presence-\(UUID().uuidString)"
+        ChatItem.resetThinkingTextJoinProbe(tracking: id)
+        defer { ChatItem.unregisterThinkingTextJoinProbe(tracking: id) }
+
+        let longThinking = String(repeating: "thinking-token ", count: 8_000)
+        chat.handleSessionMessage(["message": [
+            "role": "assistant",
+            "content": .array([
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "text", "text": .string("Committed reply")],
+            ]),
+            "__openclaw": ["id": .string(id)],
+        ]])
+
+        #expect(chat.sawThinking)
+        #expect(chat.items.contains { $0.id == id })
+        #expect(ChatItem.thinkingTextJoinProbeStats(for: id).mainThreadJoins == 0,
+                "presence-only accepted-message and rebuild checks must not join the thinking payload")
+    }
+
     @Test func uninstallingReadAloudDropsPreviouslyEligibleReply() {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "prepared-before-uninstall", text: "This arrived with auto-read enabled.")
