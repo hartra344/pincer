@@ -2,16 +2,48 @@ import PincerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum AttachmentIngestResult: Sendable {
+    case attachment(OutgoingAttachment)
+    case failure(String)
+}
+
+/// NSItemProvider is retained only in the main-actor FIFO and touched from its main-actor operation.
+private final class ProviderReference: @unchecked Sendable {
+    let provider: NSItemProvider
+
+    init(_ provider: NSItemProvider) { self.provider = provider }
+}
+
 /// Turns pasted, dropped and picked media into attachments sized for the Gateway's limits, for
 /// the chat composer and Quick Capture. `add` receives each attachment; `report` gets a problem
 /// to show, or nil once something was attached.
 @MainActor
 struct AttachmentIngest: Sendable {
+    private static let sharedImageQueue = BoundedPreparationQueue<AttachmentIngestResult>()
+
     let limits: UploadLimits
+    let imageQueue: BoundedPreparationQueue<AttachmentIngestResult>
+    let providerTimeoutNanoseconds: UInt64
     /// The limits come from a saved policy while offline, so a size problem says so.
     var limitsAreLastKnown = false
     let add: @MainActor @Sendable (OutgoingAttachment) -> Void
     let report: @MainActor @Sendable (String?) -> Void
+
+    init(
+        limits: UploadLimits,
+        limitsAreLastKnown: Bool = false,
+        imageQueue: BoundedPreparationQueue<AttachmentIngestResult>? = nil,
+        providerTimeoutNanoseconds: UInt64 = 30_000_000_000,
+        add: @escaping @MainActor @Sendable (OutgoingAttachment) -> Void,
+        report: @escaping @MainActor @Sendable (String?) -> Void)
+    {
+        self.limits = limits
+        self.limitsAreLastKnown = limitsAreLastKnown
+        self.imageQueue = imageQueue ?? Self.sharedImageQueue
+        self.providerTimeoutNanoseconds = providerTimeoutNanoseconds
+        self.add = add
+        self.report = report
+    }
 
     func ingest(_ items: [PastedMedia]) {
         for item in items {
@@ -27,75 +59,87 @@ struct AttachmentIngest: Sendable {
     }
 
     func addImage(_ data: Data, name: String) {
-        if let attachment = ImageCodec.prepareForUpload(data, fileName: name, maxBytes: self.limits.imageBytes) {
-            self.add(attachment)
-            self.report(nil)
-        } else {
-            self.report("Couldn’t prepare \(name) for upload.")
+        guard data.count <= Self.maxRawImageBytes else {
+            self.report(Self.rawImageTooLarge(name))
+            return
         }
+        self.enqueue(data, type: .image, name: name)
+    }
+
+    private func addFile(_ url: URL) {
+        let limits = self.limits
+        let lastKnown = self.limitsAreLastKnown
+        self.submit(retainedBytes: 0, name: url.lastPathComponent, operation: {
+            await Task.detached(priority: .userInitiated) {
+                switch Self.readFile(url, maxFileBytes: limits.fileBytes, lastKnown: lastKnown) {
+                case let .success(file): Self.prepare(file.data, type: file.type, name: file.name, limits: limits, lastKnown: lastKnown)
+                case let .failure(error): .failure(error.message)
+                }
+            }.value
+        })
     }
 
     private func load(_ provider: NSItemProvider) {
         let mediaType = MediaPasteboard.mediaType(in: provider.registeredTypeIdentifiers)
-        guard mediaType == nil, provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
-            self.loadData(provider, type: mediaType)
-            return
-        }
-        let maxFileBytes = self.limits.fileBytes
+        let providerReference = ProviderReference(provider)
+        let limits = self.limits
         let lastKnown = self.limitsAreLastKnown
-        _ = provider.loadObject(ofClass: URL.self) { url, _ in
-            // Files handed over by a provider may only be readable inside this callback.
-            let result = url.map { Self.readFile($0, maxFileBytes: maxFileBytes, lastKnown: lastKnown) }
-            Task { @MainActor in
-                switch result {
-                case let .success(file)?:
-                    self.addData(file.data, type: file.type, name: file.name)
-                case let .failure(error)?:
-                    self.report(error.message)
-                case nil:
-                    self.report("That item can’t be attached.")
-                }
-            }
-        }
-    }
-
-    private func loadData(_ provider: NSItemProvider, type: UTType?) {
-        guard let type else {
-            self.report("That item can’t be attached.")
-            return
-        }
-        let name = Self.fileName(provider.suggestedName, type: type)
-        _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
-            Task { @MainActor in
-                guard let data else {
-                    self.report("Couldn’t read \(name).")
-                    return
-                }
-                self.addData(data, type: type, name: name)
-            }
-        }
-    }
-
-    private func addFile(_ url: URL) {
-        switch Self.readFile(url, maxFileBytes: self.limits.fileBytes, lastKnown: self.limitsAreLastKnown) {
-        case let .success(file):
-            self.addData(file.data, type: file.type, name: file.name)
-        case let .failure(error):
-            self.report(error.message)
-        }
+        let timeout = self.providerTimeoutNanoseconds
+        let name = Self.fileName(provider.suggestedName, type: mediaType ?? .data)
+        self.submit(retainedBytes: 0, name: name, operation: {
+            await Self.prepareProvider(
+                providerReference,
+                type: mediaType,
+                name: name,
+                limits: limits,
+                lastKnown: lastKnown,
+                timeoutNanoseconds: timeout)
+        })
     }
 
     private func addData(_ data: Data, type: UTType?, name: String) {
-        if type?.conforms(to: .image) == true {
-            self.addImage(data, name: name)
-        } else if data.count > self.limits.fileBytes {
-            self.report(Self.tooLarge(name, limit: self.limits.fileBytes, lastKnown: self.limitsAreLastKnown))
-        } else {
-            self.add(OutgoingAttachment(
-                fileName: name,
-                mimeType: type?.preferredMIMEType ?? "application/octet-stream",
-                data: data))
-            self.report(nil)
+        let isImage = type?.conforms(to: .image) == true
+        let limit = isImage ? Self.maxRawImageBytes : self.limits.fileBytes
+        guard data.count <= limit else {
+            self.report(isImage
+                ? Self.rawImageTooLarge(name)
+                : Self.tooLarge(name, limit: self.limits.fileBytes, lastKnown: self.limitsAreLastKnown))
+            return
+        }
+        self.enqueue(data, type: type, name: name)
+    }
+
+    private func enqueue(_ data: Data, type: UTType?, name: String) {
+        let limits = self.limits
+        let lastKnown = self.limitsAreLastKnown
+        self.submit(retainedBytes: data.count, name: name, operation: {
+            await Task.detached(priority: .userInitiated) {
+                Self.prepare(data, type: type, name: name, limits: limits, lastKnown: lastKnown)
+            }.value
+        })
+    }
+
+    private func submit(
+        retainedBytes: Int,
+        name: String,
+        operation: @escaping @MainActor @Sendable () async -> AttachmentIngestResult)
+    {
+        let add = self.add
+        let report = self.report
+        let admission = self.imageQueue.submit(retainedBytes: retainedBytes, operation: operation) { result in
+            switch result {
+            case let .attachment(attachment):
+                add(attachment)
+                report(nil)
+            case let .failure(message):
+                report(message)
+            }
+        }
+        switch admission {
+        case .started, .queued:
+            break
+        case .rejectedPendingCount, .rejectedPendingBytes:
+            self.report(Self.queueFull(name))
         }
     }
 
@@ -112,8 +156,207 @@ struct AttachmentIngest: Sendable {
         let name: String
     }
 
-    private struct ReadError: Error {
+    private struct ReadError: Error, Sendable {
         let message: String
+    }
+
+    private enum ProviderReadResult: Sendable {
+        case file(ReadFile)
+        case failure(String)
+    }
+
+    /// A provider that never invokes its callback must not pin the shared preparation FIFO.
+    /// Once a callback claims the gate, however, its security-scoped URL read retains the active
+    /// slot until it finishes. A late callback after timeout returns before touching its URL.
+    private final class ProviderLoadGate: @unchecked Sendable {
+        private enum State: Equatable { case waiting, callback, finished }
+
+        private let lock = NSLock()
+        private var state: State = .waiting
+        private var continuation: CheckedContinuation<ProviderReadResult, Never>?
+        private var timeoutTask: Task<Void, Never>?
+        private var providerProgress: Progress?
+
+        init(_ continuation: CheckedContinuation<ProviderReadResult, Never>) {
+            self.continuation = continuation
+        }
+
+        func setTimeoutTask(_ task: Task<Void, Never>) {
+            self.lock.lock()
+            let shouldCancel = self.state != .waiting
+            if !shouldCancel { self.timeoutTask = task }
+            self.lock.unlock()
+            if shouldCancel { task.cancel() }
+        }
+
+        func setProviderProgress(_ progress: Progress) {
+            self.lock.lock()
+            let shouldCancel = self.state == .finished
+            if !shouldCancel { self.providerProgress = progress }
+            self.lock.unlock()
+            if shouldCancel { progress.cancel() }
+        }
+
+        func beginCallback() -> Bool {
+            self.lock.lock()
+            guard self.state == .waiting else {
+                self.lock.unlock()
+                return false
+            }
+            self.state = .callback
+            let timeoutTask = self.timeoutTask
+            self.timeoutTask = nil
+            self.providerProgress = nil
+            self.lock.unlock()
+            timeoutTask?.cancel()
+            return true
+        }
+
+        func finish(_ result: ProviderReadResult) {
+            self.lock.lock()
+            guard self.state == .callback else {
+                self.lock.unlock()
+                return
+            }
+            self.state = .finished
+            let continuation = self.continuation
+            self.continuation = nil
+            self.providerProgress = nil
+            self.lock.unlock()
+            continuation?.resume(returning: result)
+        }
+
+        func timeout(_ failure: String) {
+            self.lock.lock()
+            guard self.state == .waiting else {
+                self.lock.unlock()
+                return
+            }
+            self.state = .finished
+            let continuation = self.continuation
+            self.continuation = nil
+            self.timeoutTask = nil
+            let progress = self.providerProgress
+            self.providerProgress = nil
+            self.lock.unlock()
+            progress?.cancel()
+            continuation?.resume(returning: .failure(failure))
+        }
+    }
+
+    private static func prepareProvider(
+        _ reference: ProviderReference,
+        type: UTType?,
+        name: String,
+        limits: UploadLimits,
+        lastKnown: Bool,
+        timeoutNanoseconds: UInt64) async -> AttachmentIngestResult
+    {
+        let provider = reference.provider
+        if type == nil, provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            let loaded = await withCheckedContinuation { (continuation: CheckedContinuation<ProviderReadResult, Never>) in
+                let gate = ProviderLoadGate(continuation)
+                let timeoutTask = Task { @MainActor in
+                    do { try await Task.sleep(nanoseconds: timeoutNanoseconds) } catch { return }
+                    gate.timeout("That item can’t be attached.")
+                }
+                gate.setTimeoutTask(timeoutTask)
+                let progress = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard gate.beginCallback() else { return }
+                    // Provider file URLs are valid only inside this callback; read and close the
+                    // security scope before returning, then let the serialized codec job proceed.
+                    guard !Thread.isMainThread else {
+                        gate.finish(.failure("That item can’t be attached."))
+                        return
+                    }
+                    guard let url else {
+                        gate.finish(.failure("That item can’t be attached."))
+                        return
+                    }
+                    switch Self.readFile(url, maxFileBytes: limits.fileBytes, lastKnown: lastKnown) {
+                    case let .success(file):
+                        gate.finish(.file(file))
+                    case let .failure(error):
+                        gate.finish(.failure(error.message))
+                    }
+                }
+                gate.setProviderProgress(progress)
+            }
+            switch loaded {
+            case let .file(file):
+                return await Task.detached(priority: .userInitiated) {
+                    Self.prepare(file.data, type: file.type, name: file.name, limits: limits, lastKnown: lastKnown)
+                }.value
+            case let .failure(message):
+                return .failure(message)
+            }
+        }
+        guard let type else { return .failure("That item can’t be attached.") }
+        let loaded = await withCheckedContinuation { (continuation: CheckedContinuation<ProviderReadResult, Never>) in
+            let gate = ProviderLoadGate(continuation)
+            let timeoutTask = Task { @MainActor in
+                do { try await Task.sleep(nanoseconds: timeoutNanoseconds) } catch { return }
+                gate.timeout("Couldn’t read \(name).")
+            }
+            gate.setTimeoutTask(timeoutTask)
+            let progress = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+                guard gate.beginCallback() else { return }
+                guard let data else {
+                    gate.finish(.failure("Couldn’t read \(name)."))
+                    return
+                }
+                let byteLimit = type.conforms(to: .image) ? Self.maxRawImageBytes : limits.fileBytes
+                guard data.count <= byteLimit else {
+                    let message = type.conforms(to: .image)
+                        ? Self.rawImageTooLarge(name)
+                        : Self.tooLarge(name, limit: limits.fileBytes, lastKnown: lastKnown)
+                    gate.finish(.failure(message))
+                    return
+                }
+                gate.finish(.file(ReadFile(data: data, type: type, name: name)))
+            }
+            gate.setProviderProgress(progress)
+        }
+        switch loaded {
+        case let .file(file):
+            return await Task.detached(priority: .userInitiated) {
+                Self.prepare(file.data, type: file.type, name: file.name, limits: limits, lastKnown: lastKnown)
+            }.value
+        case let .failure(message):
+            return .failure(message)
+        }
+    }
+
+    private nonisolated static func prepare(
+        _ data: Data,
+        type: UTType?,
+        name: String,
+        limits: UploadLimits,
+        lastKnown: Bool) -> AttachmentIngestResult
+    {
+        if type?.conforms(to: .image) == true {
+            guard data.count <= Self.maxRawImageBytes else { return .failure(Self.rawImageTooLarge(name)) }
+            guard let attachment = ImageCodec.prepareForUpload(data, fileName: name, maxBytes: limits.imageBytes) else {
+                return .failure("Couldn’t prepare \(name) for upload.")
+            }
+            return .attachment(attachment)
+        }
+        guard data.count <= limits.fileBytes else {
+            return .failure(Self.tooLarge(name, limit: limits.fileBytes, lastKnown: lastKnown))
+        }
+        return .attachment(OutgoingAttachment(
+            fileName: name,
+            mimeType: type?.preferredMIMEType ?? "application/octet-stream",
+            data: data))
+    }
+
+    private nonisolated static func queueFull(_ name: String) -> String {
+        L("Couldn’t queue \(name); attachment preparation is full. Try again after current items finish.")
+    }
+
+    private nonisolated static func rawImageTooLarge(_ name: String) -> String {
+        let limit = Self.byteString(Self.maxRawImageBytes)
+        return L("\(name) exceeds the maximum image source size (\(limit)).")
     }
 
     /// Images may exceed the Gateway limit because they're downscaled before upload.
@@ -130,7 +373,10 @@ struct AttachmentIngest: Sendable {
         let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
         let limit = type?.conforms(to: .image) == true ? self.maxRawImageBytes : maxFileBytes
         if let size = values?.fileSize, size > limit {
-            return .failure(ReadError(message: self.tooLarge(name, limit: maxFileBytes, lastKnown: lastKnown)))
+            let message = type?.conforms(to: .image) == true
+                ? self.rawImageTooLarge(name)
+                : self.tooLarge(name, limit: maxFileBytes, lastKnown: lastKnown)
+            return .failure(ReadError(message: message))
         }
         guard let data = try? Data(contentsOf: url) else {
             return .failure(ReadError(message: "Couldn’t read \(name)."))
