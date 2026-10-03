@@ -113,6 +113,14 @@ export async function run() {
     });
     assert.equal(emptyOwnerInstall.error.code, 'UNAVAILABLE');
     assert.equal(byName(await reader.send('skills.status', {}))['nas-report'].clawhub.installedVersion, '1.2.0');
+    for (const slug of ['garbage/nas-report', 'wrong/path/nas-report', 'nas-report/']) {
+      assert.equal((await reader.call('skills.detail', { slug })).error.code, 'UNAVAILABLE');
+    }
+    const invalidPathInstall = await admin.call('skills.install', {
+      source: 'clawhub', slug: 'wrong/path/nas-report', force: true,
+    });
+    assert.equal(invalidPathInstall.error.code, 'UNAVAILABLE');
+    assert.equal(byName(await reader.send('skills.status', {}))['nas-report'].clawhub.installedVersion, '1.2.0');
     for (const params of [
       { slug: '@clawdia/nas-report', version: '' },
       { slug: '@clawdia/nas-report', version: 1 },

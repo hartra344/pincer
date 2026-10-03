@@ -626,11 +626,44 @@ struct SkillsToolsTests {
         let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
             $0["name"]?.text == "nas-report"
         }
+        #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
         do {
             _ = try await demo.handle("skills.install", [
                 "source": .string("clawhub"), "slug": .string("@ /nas-report"), "force": .bool(true),
             ])
             Issue.record("force install with an empty qualified owner must not replace nas-report")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "UNAVAILABLE")
+        }
+        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        #expect(after == before)
+    }
+
+    @MainActor @Test func demoClawHubRejectsPathLikeBareReferencesWithoutMutation() async throws {
+        let demo = DemoGateway()
+        let bare = try await demo.handle("skills.detail", ["slug": .string("nas-report")])
+        #expect(bare["skill"]?["slug"]?.text == "nas-report")
+
+        for reference in ["garbage/nas-report", "wrong/path/nas-report", "nas-report/"] {
+            do {
+                _ = try await demo.handle("skills.detail", ["slug": .string(reference)])
+                Issue.record("path-like bare ClawHub reference must not resolve: \(reference)")
+            } catch let GatewayError.rpc(code, _, _) {
+                #expect(code == "UNAVAILABLE")
+            }
+        }
+
+        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
+        do {
+            _ = try await demo.handle("skills.install", [
+                "source": .string("clawhub"), "slug": .string("wrong/path/nas-report"), "force": .bool(true),
+            ])
+            Issue.record("force install with a path-like bare ref must not replace nas-report")
         } catch let GatewayError.rpc(code, _, _) {
             #expect(code == "UNAVAILABLE")
         }
