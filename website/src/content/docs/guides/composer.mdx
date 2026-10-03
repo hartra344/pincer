@@ -49,6 +49,8 @@ The composer takes focus immediately even for a very long message; the short ope
 
 The gateway gives the agent the message you replied to, so your text is sent as you wrote it. Older gateways don't accept replies. With those, Pincer quotes the original at the start of your message instead, as `> **Claw:** …`, and keeps doing so on that connection.
 
+**Reply Last** chooses the newest committed message that can receive a reply. A committed user message is available immediately. While Pincer checks a newly received assistant message, Reply Last can be unavailable briefly; it becomes available when the check finishes. It waits for the correct target instead of choosing an older message.
+
 ## Attachments
 
 Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.

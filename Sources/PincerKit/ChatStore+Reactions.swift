@@ -74,6 +74,7 @@ extension ChatStore {
     }
 
     func stopReplyPreviewPublication() {
+        self.cancelReplyLastAvailability()
         self.replyPreviewLifecycle &+= 1
         self.replyPreviewPublication?.cancel()
         self.replyPreviewPublication = nil
@@ -82,9 +83,18 @@ extension ChatStore {
 
     /// The newest committed message a reply can target (for ⇧⌘R).
     public var latestReplyableId: String? {
-        self.items.last { item in
-            item.isReplyable && (item.role == .user || !item.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }?.transcriptId
+        _ = self.replyLastReadyRevision
+        if self.replyLastPreparedRevision == self.contentRevision { return self.replyLastPreparedID }
+        // A newest committed user is immediately eligible; never skip an unknown assistant.
+        for item in self.items.suffix(64).reversed() where item.isReplyable {
+            if item.role == .user { return Self.boundedReplyLastID(item.transcriptId) }
+            break
+        }
+        if self.replyLastUnsupportedGeneration != self.replyLastSourceGeneration {
+            _ = self.replyLastPreparation.admissionRevision
+            self.replyLastPreparation.request(self)
+        }
+        return nil
     }
 
     /// The quote card for a turn that replies to another message: yours by `replyToId`, the agent's by its

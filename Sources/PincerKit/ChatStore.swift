@@ -146,7 +146,9 @@ public final class ChatStore: Identifiable {
 
     public internal(set) var items: [ChatItem] = [] {
         didSet {
+            self.replyLastSourceGeneration &+= 1
             if self.items != oldValue { self.contentRevision += 1 }
+            self.invalidateReplyLastAvailability()
             guard !self.headless else { return }
             self.rebuild(itemsChanged: true)
             self.scheduleSave()
@@ -308,6 +310,12 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var cacheChecked = false
     /// Bumped whenever `items` actually changes, so saves can tell a real change from a refresh
     /// that fetched the same transcript again.
+    @ObservationIgnored package var replyLastPreparation = ReplyLastAvailabilityPreparation.shared
+    @ObservationIgnored package var replyLastSourceGeneration = 0
+    @ObservationIgnored package var replyLastUnsupportedGeneration: Int?
+    @ObservationIgnored package var replyLastPreparedRevision: Int?
+    package var replyLastReadyRevision = 0
+    @ObservationIgnored package var replyLastPreparedID: String?
     @ObservationIgnored package var contentRevision = 0
     /// What the transcript cache holds, as of the last save or restore of this store.
     @ObservationIgnored var savedState: CacheState?
