@@ -129,7 +129,10 @@ extension DemoGateway {
         }
 
         var answered: String?
-        if lowered.range(of: #"\bask\b"#, options: .regularExpression) != nil {
+        if lowered.range(of: #"\bsecure form\b|\blogin\b|\bsign in\b"#, options: .regularExpression) != nil {
+            guard let outcome = await self.simulateSecureFormQuestion(runId: runId, key: key, model: model) else { return }
+            answered = outcome
+        } else if lowered.range(of: #"\bask\b"#, options: .regularExpression) != nil {
             guard let outcome = await self.simulateQuestion(runId: runId, key: key, model: model) else { return }
             answered = outcome
         }

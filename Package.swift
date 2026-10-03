@@ -16,7 +16,7 @@ let package = Package(
         // Web Push decryption and payload parsing, shared with the iOS Notification Service Extension.
         .target(name: "PincerPush"),
         // Shared SwiftUI for macOS and iOS.
-        .target(name: "PincerUI", dependencies: ["PincerKit"], resources: [.process("Resources")]),
+        .target(name: "PincerUI", dependencies: ["PincerKit"], exclude: ["SECURE_FORM_UI_SPEC.md"], resources: [.process("Resources")]),
         // Development entry point so the macOS app can be built with SwiftPM alone.
         .executableTarget(name: "PincerMacDev", dependencies: ["PincerUI"]),
         // Self-checks runnable without XCTest (`swift run PincerChecks`).

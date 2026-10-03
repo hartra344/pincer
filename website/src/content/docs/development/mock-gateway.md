@@ -64,6 +64,7 @@ Mock-only RPC, never advertised in `hello-ok` and never used by the app. Checks 
 | `approve` | Raises an exec approval. |
 | `approve once-only` | Raises an approval whose `allowedDecisions` leave out `allow-always`. **Always allow** then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending. |
 | `approve short-lived` | Raises an approval that expires after 3 seconds, so acting on it afterwards gets `APPROVAL_NOT_FOUND` ("That approval expired. Nothing was run."). Mock only. |
+| `login`, `sign in`, `secure form` | Raises a `secure_form` question for `mail.google.com`, carrying `{requestId, origin, fields, expiresAtMs}` and expecting `question.resolve` answers as `{requestId, answers:{fieldId:value}}`. The mock never echoes the values back. |
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
 | `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |

@@ -46,14 +46,98 @@ public struct AgentQuestion: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A secure browser form the Gateway asked the operator to fill without exposing values to the agent.
+public struct SecureFormQuestion: Hashable, Sendable {
+    public struct Field: Hashable, Sendable {
+        public let fieldId: String
+        public let role: FieldRole
+
+        public init?( _ payload: JSONValue) {
+            guard let fieldId = payload["fieldId"]?.string, !fieldId.isEmpty else { return nil }
+            self.fieldId = fieldId
+            self.role = FieldRole(payload["role"]?.string)
+        }
+    }
+
+    public enum FieldRole: Hashable, Sendable {
+        case username
+        case password
+        case otp
+        case email
+        case other(String)
+
+        public init(_ raw: String?) {
+            switch raw {
+            case "username": self = .username
+            case "password": self = .password
+            case "otp": self = .otp
+            case "email": self = .email
+            default: self = .other(raw ?? "")
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .username: "username"
+            case .password: "password"
+            case .otp: "otp"
+            case .email: "email"
+            case let .other(raw): raw
+            }
+        }
+    }
+
+    public let requestId: String
+    public let origin: String
+    public let fields: [Field]
+
+    public init?(_ payload: JSONValue) {
+        let record = payload["secureForm"]?.object != nil ? payload["secureForm"]! : payload
+        guard let requestId = record["requestId"]?.string, !requestId.isEmpty,
+              let origin = record["origin"]?.string, !origin.isEmpty
+        else { return nil }
+        let fields = (record["fields"]?.array ?? []).compactMap(Field.init)
+        guard !fields.isEmpty else { return nil }
+        self.requestId = requestId
+        self.origin = origin
+        self.fields = fields
+    }
+
+    /// The inner `answers` payload for `question.resolve`, or nil until every field has a value.
+    public func answersPayload(_ values: [String: String]) -> JSONValue? {
+        var answers: [String: JSONValue] = [:]
+        for field in self.fields {
+            guard let value = values[field.fieldId], !value.isEmpty else { return nil }
+            answers[field.fieldId] = .string(value)
+        }
+        return ["requestId": .string(self.requestId), "answers": .object(answers)]
+    }
+}
+
 /// A pending `question.requested` record: up to three questions the agent is blocked on.
 public struct QuestionPrompt: Identifiable, Hashable, Sendable {
+    public enum Kind: Hashable, Sendable {
+        case askUser
+        case secureForm
+        case other(String)
+
+        public init(_ raw: String?) {
+            switch raw {
+            case nil, "", "ask_user": self = .askUser
+            case "secure_form": self = .secureForm
+            default: self = .other(raw ?? "")
+            }
+        }
+    }
+
     public enum Status: String, Sendable {
         case pending, answered, cancelled, expired
     }
 
     public let id: String
+    public let kind: Kind
     public let questions: [AgentQuestion]
+    public let secureForm: SecureFormQuestion?
     public let agentId: String?
     public let sessionKey: String?
     public let runId: String?
@@ -62,18 +146,30 @@ public struct QuestionPrompt: Identifiable, Hashable, Sendable {
     public let status: Status
 
     public init?(_ payload: JSONValue) {
-        let record = payload["question"]?["questions"] != nil ? payload["question"]! : payload
+        let record = payload["question"]?.object != nil ? payload["question"]! : payload
         guard let id = record["id"]?.text else { return nil }
+        let kind = Kind(record["kind"]?.string ?? ((record["requestId"] != nil || record["secureForm"] != nil) ? "secure_form" : nil))
         let questions = (record["questions"]?.array ?? []).compactMap(AgentQuestion.init)
-        guard !questions.isEmpty else { return nil }
+        let secureForm = kind == .secureForm ? SecureFormQuestion(record) : nil
+        guard !questions.isEmpty || secureForm != nil else { return nil }
         self.id = id
+        self.kind = kind
         self.questions = questions
+        self.secureForm = secureForm
         self.agentId = record["agentId"]?.text
         self.sessionKey = record["sessionKey"]?.text
         self.runId = record["runId"]?.text
         self.createdAt = record["createdAtMs"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
         self.expiresAt = record["expiresAtMs"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
         self.status = record["status"]?.string.flatMap(Status.init(rawValue:)) ?? .pending
+    }
+
+    public var promptText: String? {
+        if let first = self.questions.first {
+            let question = first.question.trimmingCharacters(in: .whitespacesAndNewlines)
+            return question.isEmpty ? first.header : question
+        }
+        return self.secureForm.map { "Secure sign-in for \($0.origin)" }
     }
 
     public func isExpired(at date: Date = Date()) -> Bool {
@@ -88,6 +184,13 @@ public struct QuestionPrompt: Identifiable, Hashable, Sendable {
     public func belongs(to sessionKey: String?) -> Bool {
         guard let mine = self.sessionKey, let sessionKey else { return true }
         return mine.caseInsensitiveCompare(sessionKey) == .orderedSame
+    }
+
+    public var cancelPayload: JSONValue { ["id": .string(self.id), "cancel": true] }
+
+    public func secureFormResolvePayload(answers: [String: String]) -> JSONValue? {
+        guard let secureForm, let payload = secureForm.answersPayload(answers) else { return nil }
+        return ["id": .string(self.id), "answers": payload]
     }
 }
 
@@ -158,5 +261,35 @@ public struct QuestionDraft: Equatable, Sendable {
     /// Secrets are sent exactly as typed; everything else is trimmed.
     private static func freeText(_ value: String, secret: Bool) -> String {
         secret ? value : value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// What the user has typed for a secure browser form, and the `question.resolve` payload it makes.
+public struct SecureFormDraft: Equatable, Sendable {
+    public private(set) var values: [String: String] = [:]
+
+    public init() {}
+
+    public func text(for field: SecureFormQuestion.Field) -> String {
+        self.values[field.fieldId] ?? ""
+    }
+
+    public mutating func setText(_ value: String, for field: SecureFormQuestion.Field) {
+        self.values[field.fieldId] = value
+    }
+
+    public func answers(for prompt: QuestionPrompt) -> [String: String]? {
+        guard let secureForm = prompt.secureForm else { return nil }
+        var answers: [String: String] = [:]
+        for field in secureForm.fields {
+            guard let value = self.values[field.fieldId], !value.isEmpty else { return nil }
+            answers[field.fieldId] = value
+        }
+        return answers
+    }
+
+    public func resolvePayload(for prompt: QuestionPrompt) -> JSONValue? {
+        guard let answers = self.answers(for: prompt) else { return nil }
+        return prompt.secureFormResolvePayload(answers: answers)
     }
 }
