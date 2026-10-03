@@ -11,6 +11,7 @@ import UIKit
 private struct CompactChatChromeHost: View {
     let app: AppModel
     let gateway: GatewayStore
+    let geometryProbe: CompactChatHeaderGeometryProbe
 
     var body: some View {
         NavigationStack {
@@ -19,6 +20,8 @@ private struct CompactChatChromeHost: View {
         }
         .environment(self.app)
         .environment(self.gateway)
+        .environment(\.compactChatHeaderGeometryProbe, self.geometryProbe)
+        .defaultAppStorage(self.gateway.defaults)
         .environment(\.horizontalSizeClass, .compact)
     }
 }
@@ -30,18 +33,24 @@ private struct CompactChatChromeToolbarTests {
         let controller: UIHostingController<CompactChatChromeHost>
         let window: UIWindow
         let previous: UIWindow?
+        let geometry: CenteredHeaderGeometryRecorder
 
         init(app: AppModel, gateway: GatewayStore) {
-            let controller = UIHostingController(rootView: CompactChatChromeHost(app: app, gateway: gateway))
+            let geometry = CenteredHeaderGeometryRecorder()
+            self.geometry = geometry
+            let probe = CompactChatHeaderGeometryProbe { part, frame in geometry.frames[part] = frame }
+            let controller = UIHostingController(rootView: CompactChatChromeHost(app: app, gateway: gateway, geometryProbe: probe))
             controller.overrideUserInterfaceStyle = .light
             let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
                 .first { $0.activationState != .unattached }
-            let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            let window: UIWindow
+            if let scene { window = UIWindow(windowScene: scene) }
+            else { window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844)) }
             window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
             window.rootViewController = controller
             self.controller = controller
             self.window = window
-            self.previous = scene?.windows.first(where: \.isKeyWindow)
+            self.previous = scene?.windows.first(where: { $0.isKeyWindow })
             window.makeKeyAndVisible()
         }
 
@@ -93,12 +102,12 @@ private struct CompactChatChromeToolbarTests {
         let host = existingHost ?? NativeHost(app: app, gateway: gateway)
         let controller = host.controller, window = host.window
         defer { if case nil = existingHost { host.close() } }
-        let expectedTitle = chatTitle(gateway, key: key, row: gateway.sessions[key])
         let ready = await eventually(timeout: .seconds(15)) {
             window.layoutIfNeeded()
             controller.view.layoutIfNeeded()
             return self.navigationBars(in: window, controller: controller)
-                .contains { $0.bounds.width > 0 && $0.topItem?.title == expectedTitle }
+                .contains { $0.bounds.width > 0 && $0.topItem != nil }
+                && host.geometry.frames.count == 3 && host.geometry.frames.values.allSatisfy { $0.width > 0 && $0.height > 0 }
         }
         self.diagnose(window, controller: controller)
         try #require(ready, "actual NavigationStack must install its native compact navigation bar")
@@ -138,7 +147,7 @@ private struct CompactChatChromeToolbarTests {
         try #require(image.pngData()).write(to: path)
         print("Compact ChatChrome native navigation bar snapshot: \(path.path)")
         #expect(bar.bounds.width == 390, "the production modifier is hosted at compact iPhone width")
-        try #require(nativeItemFrames.count >= 2, "the measured native hierarchy must contain actual Model and Chat Options hosts")
+        try #require(nativeItemFrames.count >= 1, "the measured native hierarchy must contain the actual Chat Options host")
         return Geometry(itemCount: itemCount, itemWidths: widths, navigationBarWidth: bar.bounds.width, labels: labels,
                         blankReservedFrames: blankFrames, visibleActionCount: visibleActions, trailingGroupWidth: groupWidth)
     }
@@ -147,6 +156,8 @@ private struct CompactChatChromeToolbarTests {
         let scratch = ScratchDefaults()
         let app = AppModel(defaults: scratch.defaults)
         let gateway = app.add(.demo(), secret: nil)
+        gateway.cacheRoot = nil
+        gateway.notifier = nil
         defer { app.remove(gateway.id); scratch.remove() }
         let singleKey = "agent:main:dashboard:trip"
         let branchedKey = "agent:main:dashboard:garden"
@@ -172,47 +183,22 @@ private struct CompactChatChromeToolbarTests {
         await gateway.chat(for: emptyKey).refreshBranches()
         try #require(gateway.chat(for: emptyKey).hasLoaded && gateway.chat(for: emptyKey).branches.isEmpty)
         let empty = try await self.measure(app, gateway: gateway, key: emptyKey)
-        #expect(empty.itemCount == 2, "a loaded real zero-branch Demo chat reserves only Model and Chat Options")
-        #expect(empty.visibleActionCount == 2)
-        #expect(empty.blankReservedFrames.isEmpty, "zero-branch chrome must not reserve a nonzero-width, zero-height native item: \(empty.blankReservedFrames)")
-
-        let single = try await self.measure(app, gateway: gateway, key: singleKey)
-        #expect(single.itemCount == 2,
-                "Model and Chat Options are the only visible trailing actions; absent Branch and Runs must not reserve blank native slots. widths=\(single.itemWidths), labels=\(single.labels)")
-        #expect(single.itemCount == empty.itemCount, "zero and one actual transcript tip both omit Branch and Runs slots")
-        #expect(single.visibleActionCount == 2, "the actual Model and Chat Options remain painted")
-        #expect(single.blankReservedFrames.isEmpty, "a hidden Branch cannot reserve native toolbar space: \(single.blankReservedFrames)")
-        let branched = try await self.measure(app, gateway: gateway, key: branchedKey)
-        #expect(branched.itemCount == 3,
-                "a real multi-branch chat adds exactly its Branch action; hidden Runs must reserve no slot")
-        #expect(branched.itemCount == single.itemCount + 1,
-                "actual Branch availability must change native slot count, rather than occupying an always-present empty slot")
-        #expect(branched.visibleActionCount == 3 && branched.blankReservedFrames.isEmpty,
-                "actual multi-branch chrome paints a real Branch action, not an empty host")
-        #expect(branched.trailingGroupWidth >= single.trailingGroupWidth + 24,
-                "a real Branch action must add meaningful native grouped width; hidden Branch must not reserve nearly the same width. single=\(single.trailingGroupWidth), branched=\(branched.trailingGroupWidth)")
-        let running = try await self.measure(app, gateway: gateway, key: runningKey)
-        #expect(running.itemCount == 3,
-                "a seeded active helper adds the real Runs action to Model and Chat Options")
-        #expect(running.visibleActionCount == 3, "actual seeded running helper paints its Runs action")
-        #expect(running.blankReservedFrames.isEmpty, "a running helper does not justify an empty Branch slot")
-
-        // Keep the same actual SwiftUI/UIKit navigation host alive through selection changes.
-        // Recreating it would miss a stale reserved slot retained after the branch action hides.
+        #expect(empty.itemCount == 1 && empty.visibleActionCount == 1 && empty.blankReservedFrames.isEmpty,
+                "A zero-branch chat paints only compact overflow, with no reserved hidden controls")
         gateway.selectedKey = singleKey
         let transitionHost = NativeHost(app: app, gateway: gateway)
         defer { transitionHost.close() }
-        let before = try await self.measure(app, gateway: gateway, key: singleKey, existingHost: transitionHost)
-        let withBranches = try await self.measure(app, gateway: gateway, key: branchedKey, existingHost: transitionHost)
+        let single = try await self.measure(app, gateway: gateway, key: singleKey, existingHost: transitionHost)
+        let branched = try await self.measure(app, gateway: gateway, key: branchedKey, existingHost: transitionHost)
+        let running = try await self.measure(app, gateway: gateway, key: runningKey, existingHost: transitionHost)
         let after = try await self.measure(app, gateway: gateway, key: singleKey, existingHost: transitionHost)
-        #expect(before.itemCount == 2 && before.visibleActionCount == 2 && before.blankReservedFrames.isEmpty)
-        #expect(withBranches.itemCount == 3 && withBranches.visibleActionCount == 3 && withBranches.blankReservedFrames.isEmpty)
-        #expect(withBranches.trailingGroupWidth >= before.trailingGroupWidth + 24,
-                "the live branch action adds its real native grouped width")
-        #expect(after.itemCount == 2 && after.visibleActionCount == 2 && after.blankReservedFrames.isEmpty,
-                "switching back on the same native host removes the Branch slot")
-        #expect(abs(after.trailingGroupWidth - before.trailingGroupWidth) <= 1,
-                "the same native host returns to its original compact grouped width: before=\(before.trailingGroupWidth), after=\(after.trailingGroupWidth)")
+        for geometry in [single, branched, running, after] {
+            #expect(geometry.itemCount == 1 && geometry.visibleActionCount == 1)
+            #expect(geometry.blankReservedFrames.isEmpty,
+                    "Model, Branch and Runs in overflow do not retain hidden native toolbar slots")
+            #expect(abs(geometry.trailingGroupWidth - single.trailingGroupWidth) <= 1,
+                    "Actual compact side width remains stable across Branch/Runs availability and chat switches")
+        }
     }
 }
 

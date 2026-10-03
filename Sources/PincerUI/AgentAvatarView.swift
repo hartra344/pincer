@@ -19,6 +19,9 @@ struct AgentAvatarView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.appTheme) private var theme
+    #if DEBUG
+    @Environment(\.avatarActivityProbe) private var activityProbe
+    #endif
     @State private var onscreen = false
     /// When the avatar entered `state`, for one-shot moves (the success hop, the error wobble).
     @State private var since = Date.distantPast
@@ -56,6 +59,10 @@ struct AgentAvatarView: View {
         .onAppear { self.onscreen = true }
         .onDisappear { self.onscreen = false }
         .onChange(of: self.state, initial: true) { self.since = .now }
+        #if DEBUG
+        .onAppear { self.activityProbe?.record(seed: self.seed, active: self.active) }
+        .onChange(of: self.active) { _, active in self.activityProbe?.record(seed: self.seed, active: active) }
+        #endif
     }
 
     /// Matches `AvatarArt.drawGlow`, the bitmap version.
@@ -284,3 +291,22 @@ enum AvatarSettings {
                           renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
     }
 }
+
+#if DEBUG
+/// Observes the real avatar animation branch for one bounded identity; never overrides admission.
+struct AvatarActivityProbe {
+    let seed: String
+    let report: @MainActor @Sendable (Bool) -> Void
+    init(seed: String, report: @escaping @MainActor @Sendable (Bool) -> Void) {
+        precondition(seed.isContiguousUTF8 && seed.utf8.withContiguousStorageIfAvailable { $0.count <= 128 } == true)
+        self.seed = seed
+        self.report = report
+    }
+    @MainActor func record(seed: String, active: Bool) {
+        if self.seed == seed { self.report(active) }
+    }
+}
+extension EnvironmentValues {
+    @Entry var avatarActivityProbe: AvatarActivityProbe? = nil
+}
+#endif

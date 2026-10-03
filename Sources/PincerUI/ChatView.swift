@@ -24,6 +24,9 @@ struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
+    #if DEBUG && os(iOS)
+    @Environment(\.chatTopChromeGeometryProbe) private var topChromeGeometryProbe
+    #endif
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @AppStorage(AvatarSettings.animatedKey) private var avatarAnnouncesErrors = true
     @State private var disclosure = TranscriptDisclosure()
@@ -138,8 +141,18 @@ struct ChatView: View {
             .overlay(alignment: .top) {
                 VStack(spacing: 0) {
                     ApprovalsBanner(sessionKey: self.chat.sessionKey)
+                        #if DEBUG && os(iOS)
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                            self.topChromeGeometryProbe?.report(.approvals, $0)
+                        }
+                        #endif
                     if self.find.isPresented {
                         TranscriptFindBar(find: self.find, reasoningOff: self.reasoningOff)
+                            #if DEBUG && os(iOS)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
+                                self.topChromeGeometryProbe?.report(.find, $0)
+                            }
+                            #endif
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
@@ -567,6 +580,14 @@ struct ChatChrome: ViewModifier {
         return self.lastRow.flatMap { $0.key == self.key ? $0 : nil }
     }
 
+    private var showsCompactIdentity: Bool {
+        #if os(iOS)
+        self.sizeClass == .compact && !self.showsSplit
+        #else
+        false
+        #endif
+    }
+
     private var showsSplit: Bool {
         guard self.windowKey == nil else { return false }
         #if os(iOS)
@@ -584,7 +605,7 @@ struct ChatChrome: ViewModifier {
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
             .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
-            .navigationTitle(self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"))
+            .navigationTitle(self.showsCompactIdentity ? "" : (self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat")))
             #if os(macOS)
             .navigationSubtitle(split ? "" : self.subtitle)
             #else
@@ -598,7 +619,7 @@ struct ChatChrome: ViewModifier {
                 #else
                 // The inspector below hides the split view's own sidebar button (#564).
                 ToolbarItem(placement: .topBarLeading) { ShowSidebarButton() }
-                ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
+                ToolbarItem(placement: .topBarLeading) { if !split && !self.showsCompactIdentity { ChatHeaderAvatar() } }
                 #endif
                 #if os(macOS)
                 // A stable container, so a chat without branches doesn't remove the item (#262).
@@ -609,21 +630,30 @@ struct ChatChrome: ViewModifier {
                 }
                 #else
                 // Empty native toolbar items still reserve space in the iOS glass group.
-                if !split, let key, self.gateway.chat(for: key).hasBranchHeaderChip {
+                if !split && !self.showsCompactIdentity, let key, self.gateway.chat(for: key).hasBranchHeaderChip {
                     ToolbarItem(placement: .primaryAction) {
                         BranchHeaderChipView(chat: self.gateway.chat(for: key))
                     }
                 }
                 #endif
+                #if os(macOS)
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
+                #else
+                if !self.showsCompactIdentity {
+                    ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
+                }
+                #endif
                 ToolbarItem(placement: .primaryAction) {
-                    ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row)
+                    ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row, compactActions: self.showsCompactIdentity)
                 }
             }
             .sheet(item: self.$toolsInspector) { inspection in
                 ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
-            .modifier(RunsPanelChrome(isPresented: self.$showRuns, showsToolbarButton: !split))
+            #if os(iOS)
+            .modifier(CompactChatIdentityChrome(active: self.showsCompactIdentity, gateway: self.gateway, key: self.key, row: self.row))
+            #endif
+            .modifier(RunsPanelChrome(isPresented: self.$showRuns, showsToolbarButton: !split && !self.showsCompactIdentity))
             .onChange(of: self.key.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
                 if let row { self.lastRow = row }
             }
@@ -660,6 +690,7 @@ struct ChatSessionMenu: View {
     @FocusedValue(\.chatExport) private var focusedExport
     @Binding var toolsInspector: ChatToolsInspection?
     let row: SessionRow?
+    var compactActions = false
     var handles: ChatPaneHandles?
     /// Called before an item acts, so a split view side takes focus first.
     var willAct: () -> Void = {}
@@ -670,6 +701,11 @@ struct ChatSessionMenu: View {
     var body: some View {
         if let row {
             Menu {
+                if self.compactActions {
+                    ModelPicker(row: row, showsActionTitle: true)
+                    BranchHeaderChipView(chat: self.gateway.chat(for: row.key), showsTitle: true)
+                    Divider()
+                }
                 Button(L("Find in Chat"), systemImage: "magnifyingglass") {
                     self.willAct()
                     self.find?.present()

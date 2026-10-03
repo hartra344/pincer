@@ -23,9 +23,17 @@ struct RunsPanelChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .toolbar {
+                #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {
                     if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
                 }
+                #else
+                if self.showsToolbarButton {
+                    ToolbarItem(placement: .primaryAction) {
+                        RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact)
+                    }
+                }
+                #endif
             }
             .inspector(isPresented: self.presented(false)) {
                 RunsPanel()
