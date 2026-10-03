@@ -150,16 +150,20 @@ struct ReplyTargetTests {
 
     // MARK: Resolution
 
-    @Test func targetResolvesByTranscriptId() throws {
+    @Test func targetResolvesByTranscriptId() async throws {
         let store = self.chat([Self.user("u1", "disk?"), Self.assistant("a1", "40% used"), Self.user("u2", "and memory?"),
                                Self.assistant("a2", "late answer", delivery: #"{"replyToId":"u1"}"#)])
+        _ = store.quote(for: store.items[3])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[3]))
         #expect(quote.targetId == "u1" && quote.sender == .you && quote.text == "disk?")
     }
 
-    @Test func targetResolvesByChannelMessageId() throws {
+    @Test func targetResolvesByChannelMessageId() async throws {
         let store = self.chat([Self.user("u1", "disk?", channelId: "9001"), Self.user("u2", "and memory?", channelId: "9002"),
                                Self.assistant("a1", "late answer", delivery: #"{"replyToId":"9001"}"#)])
+        _ = store.quote(for: store.items[2])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[2]))
         #expect(quote.text == "disk?" && quote.sender == .you)
     }
@@ -188,8 +192,10 @@ struct ReplyTargetTests {
         #expect(byChannel.quote(for: byChannel.items[1]) == nil)
     }
 
-    @Test func quotesAnEarlierMessageWhenAnotherUserMessageIntervenes() throws {
+    @Test func quotesAnEarlierMessageWhenAnotherUserMessageIntervenes() async throws {
         let store = self.chat([Self.user("u1", "first"), Self.user("u2", "second"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)])
+        _ = store.quote(for: store.items[2])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[2]))
         #expect(quote.targetId == "u1" && quote.text == "first")
     }
@@ -215,8 +221,10 @@ struct ReplyTargetTests {
         #expect(quote.targetId == "gone-42" && quote.text == nil)
     }
 
-    @Test func assistantTargetingAnAssistantMessageQuotesIt() throws {
+    @Test func assistantTargetingAnAssistantMessageQuotesIt() async throws {
         let store = self.chat([Self.user("u1"), Self.assistant("a1", "the plan"), Self.user("u2"), Self.assistant("a2", "again", delivery: #"{"replyToId":"a1"}"#)])
+        _ = store.quote(for: store.items[3])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[3]))
         #expect(quote.targetId == "a1" && quote.text == "the plan" && quote.sender == .agent)
     }
@@ -226,8 +234,10 @@ struct ReplyTargetTests {
         #expect(store.quote(for: store.items[1]) == nil)
     }
 
-    @Test func leakedDirectiveDrivesTheQuote() throws {
+    @Test func leakedDirectiveDrivesTheQuote() async throws {
         let store = self.chat([Self.user("u1", "first"), Self.user("u2", "second"), Self.assistant("a1", "[[reply_to:u1]] done")])
+        _ = store.quote(for: store.items[2])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[2]))
         #expect(quote.targetId == "u1" && quote.text == "first")
     }
@@ -277,9 +287,11 @@ struct ReplyTargetTests {
         #expect(target("direct", chatType: nil) == "u1")
     }
 
-    @Test func userQuotesStillWork() throws {
+    @Test func userQuotesStillWork() async throws {
         let store = self.chat([Self.assistant("a1", "Disk status"),
                                Self.item(#"{"role":"user","content":[{"type":"text","text":"that"}],"__openclaw":{"id":"u1","replyToId":"a1"}}"#)])
+        _ = store.quote(for: store.items[1])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[1]))
         #expect(quote.targetId == "a1" && quote.text == "Disk status" && quote.sender == .agent)
     }
@@ -288,10 +300,12 @@ struct ReplyTargetTests {
         Self.item(#"{"role":"user","content":[{"type":"text","text":"\#(text)"}],"__openclaw":{"id":"\#(id)","idempotencyKey":"\#(key)"}}"#)
     }
 
-    @Test func targetResolvesByUserIdempotencyKey() throws {
+    @Test func targetResolvesByUserIdempotencyKey() async throws {
         // Webchat: the model types the run's client id; the user entry is stored as "<runId>:user".
         let store = self.chat([Self.webchatUser("u1", "disk?", key: "run-1:user"), Self.webchatUser("u2", "memory?", key: "run-2:user"),
                                Self.assistant("a1", "late", delivery: #"{"replyToId":"run-1"}"#)])
+        _ = store.quote(for: store.items[2])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[2]))
         #expect(quote.targetId == "u1" && quote.text == "disk?" && quote.sender == .you)
     }
@@ -301,9 +315,11 @@ struct ReplyTargetTests {
         #expect(store.quote(for: store.items[1]) == nil)
     }
 
-    @Test func transcriptIdWinsOverIdempotencyKey() throws {
+    @Test func transcriptIdWinsOverIdempotencyKey() async throws {
         let store = self.chat([Self.webchatUser("u1", "first", key: "shared:user"), Self.user("shared", "second"), Self.user("u3"),
                                Self.assistant("a1", delivery: #"{"replyToId":"shared"}"#)])
+        _ = store.quote(for: store.items[3])
+        await store.waitForQuotePreviewPreparation()
         let quote = try #require(store.quote(for: store.items[3]))
         #expect(quote.targetId == "shared" && quote.text == "second")
     }
@@ -334,9 +350,11 @@ struct ReplyTargetTests {
         #expect(store.notice != nil && store.locatingReplyId == nil)
     }
 
-    @Test func groupChatsKeepTheQuoteOfTheAnsweredMessage() throws {
+    @Test func groupChatsKeepTheQuoteOfTheAnsweredMessage() async throws {
         for row in [#"{"key":"agent:main:main","chatType":"group"}"#, #"{"key":"agent:main:main","chatType":"channel"}"#] {
             let store = self.chat([Self.user("u1", "disk?"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)], row: row)
+            _ = store.quote(for: store.items[1])
+            await store.waitForQuotePreviewPreparation()
             let quote = try #require(store.quote(for: store.items[1]), Comment(rawValue: row))
             #expect(quote.targetId == "u1" && quote.text == "disk?")
         }

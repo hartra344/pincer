@@ -654,6 +654,7 @@ extension ChatStore {
     /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
     func reloadAfterHistoryChange(clearingCache clearCache: @MainActor () async -> Void = {}) async {
+        self.stopQuotePreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
         self.olderTask?.cancel()

@@ -309,6 +309,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.observeFiles()
         self.observeSessions()
         self.observeDecorations()
+        self.observeQuoteReadiness()
         self.observeAck()
         let center = NotificationCenter.default
         self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -369,6 +370,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             self.ack = context.chat?.ackMessageId
             self.reset()
             self.observeDecorations()
+            self.observeQuoteReadiness()
             self.observeAck()
         } else {
             self.settingsChanged()
@@ -673,6 +675,21 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     /// Reactions (yours, shared and the agent's), quotes whose original loaded, and a quote's lookup.
+    /// Quote completion also invalidates cold/in-flight premeasure work through the controller's
+    /// existing full-invalidation callback, rather than only comparing completed cached rows.
+    private func observeQuoteReadiness() {
+        guard let chat = self.context.chat else { return }
+        withObservationTracking {
+            _ = chat.quotePreviewRevision
+        } onChange: { [weak self, weak chat] in
+            Task { @MainActor in
+                guard let self, let chat, chat === self.context.chat else { return }
+                self.invalidateAll()
+                self.observeQuoteReadiness()
+            }
+        }
+    }
+
     private func observeDecorations() {
         guard let chat = self.context.chat else { return }
         let gateway = self.context.gateway

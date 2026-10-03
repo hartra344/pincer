@@ -147,7 +147,10 @@ public final class ChatStore: Identifiable {
     public internal(set) var items: [ChatItem] = [] {
         didSet {
             self.replyLastSourceGeneration &+= 1
-            if self.items != oldValue { self.contentRevision += 1 }
+            if self.items != oldValue {
+                self.contentRevision += 1
+                self.stopQuotePreviewPublication()
+            }
             self.invalidateReplyLastAvailability()
             guard !self.headless else { return }
             self.rebuild(itemsChanged: true)
@@ -249,8 +252,24 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored package var replyPreviewPreparation = ReplyPreviewPreparationService.shared
     @ObservationIgnored var replyPreviewPublication: Task<Void, Never>?
     @ObservationIgnored var replyPreviewLifecycle = 0
+    @ObservationIgnored package var quotePreviewPreparation = QuotePreviewPreparationService.shared
+    @ObservationIgnored package let quotePreviewOwnerID = UUID()
+    @ObservationIgnored package var quotePreviewLifecycle = 0
+    public private(set) var quotePreviewRevision = 0
+
+    func quotePreviewDidComplete() { self.quotePreviewRevision &+= 1 }
+
+    func stopQuotePreviewPublication() {
+        self.quotePreviewLifecycle &+= 1
+        if self.quotePreviewPreparation.remove(ownerID: self.quotePreviewOwnerID) {
+            self.quotePreviewRevision &+= 1
+        }
+    }
+
+    isolated deinit { self.quotePreviewPreparation.remove(ownerID: self.quotePreviewOwnerID) }
 #if DEBUG
     @ObservationIgnored package var replyPreparationDidReserve: (@MainActor (String) -> Void)?
+    @ObservationIgnored package var quotePreviewNormalizationProbe: QuotePreviewNormalizationProbe?
 #endif
     /// The user message being edited (Edit & Resend). Per chat, in memory only.
     public var editTarget: MessageEditTarget?
