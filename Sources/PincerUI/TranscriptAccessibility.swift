@@ -56,7 +56,7 @@ struct TranscriptRowAccessibilityAction {
         }
         let count = layout.messages.count
         let openingExcerpts = layout.messages.map { span in
-            span.openingExcerptSource.flatMap { MessagePartExcerptCache.shared.excerpt(for: $0) }
+            span.openingExcerptSource.flatMap { actions.messagePartExcerptCache.excerpt(for: $0) }
         }
         let names = Self.perMessageActionNames(
             messageCount: count, bookmarked: layout.messages.map { actions.isBookmarked($0.id) },

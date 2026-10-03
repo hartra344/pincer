@@ -467,6 +467,7 @@ struct TranscriptLayoutBuilder {
     var highlight = TranscriptHighlight()
     /// The message to flash, after jumping to it from a quote.
     var flash: String?
+    var messagePartExcerptCache: MessagePartExcerptCache = .shared
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
 
@@ -750,7 +751,7 @@ struct TranscriptLayoutBuilder {
     private func openingExcerptSource(_ message: String, messageCount: Int) -> MessagePartExcerptSource? {
         guard messageCount > 1 else { return nil }
         let source = MessagePartExcerptSource(message)
-        _ = MessagePartExcerptCache.shared.excerpt(for: source)
+        _ = self.messagePartExcerptCache.excerpt(for: source)
         return source
     }
 

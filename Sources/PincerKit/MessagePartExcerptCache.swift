@@ -34,6 +34,11 @@ package final class MessagePartExcerptCache {
     private let queue = BoundedPreparationQueue<String>()
     private let normalize: Normalizer
 
+#if DEBUG
+    /// One bounded observer for deterministic fixtures; production callers never wait for text.
+    package var preparationDidFinishForTesting: (@MainActor (MessagePartExcerptSource) -> Void)?
+#endif
+
     package init(
         entryLimit: Int = MessagePartExcerptCache.entryLimit,
         byteLimit: Int = MessagePartExcerptCache.byteLimit,
@@ -63,6 +68,9 @@ package final class MessagePartExcerptCache {
             guard let self else { return }
             self.inFlight.remove(source)
             _ = self.values.insert(result, for: source, cost: source.retainedByteCount + result.utf8.count)
+#if DEBUG
+            self.preparationDidFinishForTesting?(source)
+#endif
         }
         switch admission {
         case .started, .queued:

@@ -27,7 +27,8 @@ struct TranscriptAccessibilityActionTests {
         #expect(marked.contains("Remove Bookmark") && !marked.contains("Add Reaction"))
     }
 
-    func renderer(reply: @escaping (String) -> Void = { _ in }) -> (TranscriptRenderer, ScratchDefaults) {
+    func renderer(reply: @escaping (String) -> Void = { _ in },
+                  excerptCache: MessagePartExcerptCache? = nil) -> (TranscriptRenderer, ScratchDefaults) {
         let scratch = ScratchDefaults()
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
@@ -36,7 +37,8 @@ struct TranscriptAccessibilityActionTests {
                                         agent: AgentSummary(id: "t", name: "T"), sessionKey: key,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key),
                                         reply: reply)
-        return (TranscriptRenderer(context: context), scratch)
+        return (TranscriptRenderer(context: context,
+                                   messagePartExcerptCache: excerptCache ?? MessagePartExcerptCache()), scratch)
     }
 
     @Test func multiMessageTurnLayoutHasOneAnchorPerMessage() {
@@ -51,18 +53,28 @@ struct TranscriptAccessibilityActionTests {
 
     @Test func renderedPartActionsIdentifyTheirMessageWithoutChangingTargets() async {
         var replyTargets: [String] = []
-        let (renderer, scratch) = self.renderer { replyTargets.append($0) }
+        let cache = MessagePartExcerptCache()
+        let (renderer, scratch) = self.renderer(reply: { replyTargets.append($0) }, excerptCache: cache)
         defer { scratch.remove() }
         var turn = AssistantTurn(id: "multi", timestamp: Date(timeIntervalSince1970: 1))
         turn.text = ["ALPHA-OPEN: First distinctive opening.", "BETA-OPEN: Second distinctive opening."]
         turn.textIds = ["message-alpha", "message-beta"]
+        let prepared = ExcerptPreparationLatch(expected: Set(turn.text.map(MessagePartExcerptSource.init)))
+        cache.preparationDidFinishForTesting = { prepared.finish($0) }
+        defer { cache.preparationDidFinishForTesting = nil }
         let layout = renderer.layout(for: .entry(.assistant(turn)), width: 500)
         let sources = layout.messages.compactMap(\.openingExcerptSource)
-        let excerptsReady = await eventually(timeout: .seconds(3)) {
-            sources.count == 2 && sources.allSatisfy { MessagePartExcerptCache.shared.excerpt(for: $0) != nil }
-        }
-        #expect(excerptsReady, "The actual renderer path should prepare both bounded opening excerpts off-main")
+        #expect(sources.count == 2)
+        #expect(cache.inFlightKeyCount == 2, "the actual renderer must submit both excerpts to its own worker")
+        guard sources.count == 2 && cache.inFlightKeyCount == 2 else { return }
         let anchor = PView(frame: CGRect(x: 0, y: 0, width: 500, height: layout.height))
+        let coldReplies = TranscriptRowAccessibilityAction.actions(for: layout, actions: renderer, anchor: anchor)
+            .filter { $0.name.hasPrefix("Reply") }
+        #expect(coldReplies.map(\.name) == ["Reply, part 1 of 2", "Reply, part 2 of 2"],
+                "cold labels return immediately while the actual renderer's worker prepares its excerpts")
+        await prepared.wait()
+        let excerptsReady = sources.allSatisfy { cache.excerpt(for: $0) != nil }
+        #expect(excerptsReady, "The actual renderer path should prepare both bounded opening excerpts off-main")
         let actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: renderer, anchor: anchor)
         let replies = actions.filter { $0.name.hasPrefix("Reply") }
 
@@ -109,5 +121,28 @@ struct TranscriptAccessibilityActionTests {
         turn.text = ["Whole reply, start to FINAL-TAIL"]
         let label = renderer.layout(for: .entry(.assistant(turn)), width: 500).accessibilityLabel
         #expect(label.contains("FINAL-TAIL"))
+    }
+}
+
+/// Observe the fixture's actual worker completions, independent of unrelated suites and wall time.
+@MainActor
+private final class ExcerptPreparationLatch {
+    private let expected: Set<MessagePartExcerptSource>
+    private var completed: Set<MessagePartExcerptSource> = []
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(expected: Set<MessagePartExcerptSource>) { self.expected = expected }
+
+    func finish(_ source: MessagePartExcerptSource) {
+        self.completed.insert(source)
+        if self.expected.isSubset(of: self.completed) {
+            self.continuation?.resume()
+            self.continuation = nil
+        }
+    }
+
+    func wait() async {
+        guard !self.expected.isSubset(of: self.completed) else { return }
+        await withCheckedContinuation { self.continuation = $0 }
     }
 }
