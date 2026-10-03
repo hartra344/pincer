@@ -161,6 +161,35 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     } catch {
         check(false, "demo empty-publisher force-install preservation check (\(error.localizedDescription))")
     }
+    for reference in ["garbage/nas-report", "wrong/path/nas-report", "nas-report/"] {
+        do {
+            _ = try await gateway.connection.request("skills.detail", ["slug": .string(reference)])
+            check(false, "demo rejects path-like bare detail reference \(reference)")
+        } catch let GatewayError.rpc(code, _, _) {
+            check(code == "UNAVAILABLE", "demo path-like detail reference uses UNAVAILABLE (\(reference))")
+        } catch {
+            check(false, "demo path-like detail error is an RPC error (\(reference))")
+        }
+    }
+    do {
+        let beforeStatus = try await gateway.connection.request("skills.status", [:])
+        let beforeNas = beforeStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        check(beforeNas?["clawhub"]?["installedVersion"]?.text == "1.2.0",
+              "demo path-reference control starts with the seeded installed copy")
+        do {
+            _ = try await gateway.connection.request("skills.install", [
+                "source": .string("clawhub"), "slug": .string("wrong/path/nas-report"), "force": .bool(true),
+            ])
+            check(false, "demo force install rejects a path-like bare reference")
+        } catch let GatewayError.rpc(code, _, _) {
+            check(code == "UNAVAILABLE", "demo path-like force install uses UNAVAILABLE")
+        }
+        let afterStatus = try await gateway.connection.request("skills.status", [:])
+        let afterNas = afterStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        check(afterNas == beforeNas, "demo path-like force install leaves the seeded skill record unchanged")
+    } catch {
+        check(false, "demo path-reference force-install preservation check (\(error.localizedDescription))")
+    }
     do {
         let selected = try await gateway.connection.request("skills.detail", [
             "slug": .string("@clawdia/nas-report"), "version": .string("1.3.0"),
