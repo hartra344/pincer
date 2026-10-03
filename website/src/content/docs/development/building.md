@@ -68,6 +68,19 @@ Text-growth transcript publishes are capped at 60 Hz; status and terminal update
 
 Composer and Quick Capture share one attachment-preparation FIFO: one item is active, with up to 32 pending descriptors and 32 MiB of pending in-memory data. Image codec work runs off-main; the UIKit fallback that turns a pasteboard `UIImage` into PNG data still runs before that queue. `AttachmentPreparationTests` checks the real ingest path and codec executor, while the demo check exercises queue budgets and a small PNG round trip.
 
+Composer autosizing measures the full draft off the main thread, keeping one active measurement and one replaceable pending request. While a compatible measurement is pending, the native editor retains its previous height; width, font and line-cap changes request a new measurement. The hosted tests check the actual native editor height, including long drafts, wrapping and trailing newlines:
+
+```sh
+swift test --filter 'LatestMeasurementWorkerTests|ComposerSizingDiagnosticTests'
+```
+
+A Debug-only macOS probe exercises the same editor with a seeded Demo Gateway chat. It prints measurement counts, elapsed nanoseconds, main-thread counts and native height for 32 KiB and 128 KiB drafts. A successful run reports `main_count: 0` and matching native and measured heights. It uses a non-key window and verifies geometry, rather than foreground keyboard interaction:
+
+```sh
+PINCER_DEV_NAMESPACE=composer-sizing PINCER_KEYCHAIN=memory PINCER_DRAFTS_DIR=off \
+  swift run PincerMacDev --composer-sizing-probe
+```
+
 CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. The hosted UIKit suite also resizes a native transcript from 390 to 600 points and back, checking measured row widths, row tops, collection content geometry, and the reader’s anchored row and screen position. It also verifies settling and measured visible rows through UIKit’s public scroll-to-top delegate callback; this is separate from testing a physical status-bar gesture. To run those rendering suites locally:
 
 ```sh
