@@ -273,7 +273,8 @@ extension TranscriptLayoutBuilder {
             card.gap(8)
             self.inputTitle(into: &card)
             let body = TranscriptSyntaxColors.apply(ToolPresentationCache.highlights(for: tool).arguments,
-                                                    to: self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner))
+                                                    to: self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner),
+                                                    surface: .card, theme: self.settings.theme, increasedContrast: self.settings.increasedContrast)
             card.y += self.textSection("\(tool.id):arguments", body, tool: tool, x: card.x, width: card.inner,
                                        maxHeight: TranscriptMetrics.toolOutputMaxHeight, into: &card)
         } else if presentation.rawArguments == nil, let plain = tool.arguments, !plain.isEmpty {
@@ -588,7 +589,8 @@ extension TranscriptLayoutBuilder {
                 ? CGFloat.greatestFiniteMagnitude : TranscriptMetrics.toolOutputMaxHeight
             let attributed = TranscriptSyntaxColors.apply(
                 ToolPresentationCache.highlights(for: tool).output,
-                to: TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label))
+                to: TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label),
+                surface: isExec ? .terminal : .card, theme: self.settings.theme, increasedContrast: self.settings.increasedContrast)
             if isExec {
                 let padX: CGFloat = 10
                 let padY: CGFloat = 8

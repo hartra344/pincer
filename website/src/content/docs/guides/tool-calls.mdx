@@ -87,7 +87,7 @@ Any tool Pincer has no special layout for uses this list, with its output as pla
 
 ## Syntax highlighting
 
-Output that is JSON, and JSON values in a call's arguments, is lightly coloured: keys, strings, numbers, and `true`, `false` and `null` each get their own colour. A file read is coloured by its file extension (Swift, JavaScript and TypeScript, Python, shell, Ruby, Go, Rust, C-family, JSON and YAML) with strings, numbers, comments and a few keywords. Markdown and unknown types stay plain. The colours meet contrast in light and dark mode, and the text itself never changes, so copying and Find work as before. Highlighting is worked out only when you expand a card.
+Output that is JSON, and JSON values in a call's arguments, is lightly coloured: keys, strings, numbers, and `true`, `false` and `null` each get their own colour. A file read is coloured by its file extension (Swift, JavaScript and TypeScript, Python, shell, Ruby, Go, Rust, C-family, JSON and YAML) with strings, numbers, comments and a few keywords. Markdown and unknown types stay plain. The colours follow light and dark mode and adapt to the card's actual background, including a custom code background. When **Increase Contrast** is on, Pincer targets 7:1 where the background allows it; on mid-tone surfaces it chooses the strongest readable endpoint. The text itself never changes, so copying and Find work as before. Highlighting is worked out only when you expand a card.
 
 <DocScreenshot src={shotRead} alt="An expanded read card showing a Swift file with keywords, comments and numbers in different colours." caption="macOS, built-in demo. A read of a Swift file, with keywords, comments, numbers and literals coloured." narrow />
 

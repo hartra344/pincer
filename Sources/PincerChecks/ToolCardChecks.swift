@@ -53,6 +53,7 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
 
 @MainActor
 private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) {
+    checkToolSyntaxContrast(calls, label: label)
     let exec = ToolCallPresentation.make(calls[0])
     let text = exec.output?.text ?? ""
     check(exec.kind == .exec && exec.headline == "openclaw mcp status --verbose 2>&1 | grep -A4 \"^- Era\"",
@@ -137,6 +138,45 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
     """
     let unwrapped = ToolCallPresentation.make(live).output
     check(unwrapped?.text == "line one\nline two" && unwrapped?.exitCode == 0, "\(label): envelope result is unwrapped (\(unwrapped?.text ?? "nil"))")
+}
+
+@MainActor
+private func checkToolSyntaxContrast(_ calls: [ToolActivity], label: String) {
+    let defaultPairs: [(UInt32, UInt32)] = [
+        (0x0550AE, 0xFFFFFF), (0x953800, 0xFFFFFF), (0x116329, 0xFFFFFF),
+        (0x6639BA, 0xFFFFFF), (0x57606A, 0xFFFFFF),
+        (0x79C0FF, 0x1C1C1E), (0xFFA657, 0x1C1C1E), (0x7EE787, 0x1C1C1E),
+        (0xD2A8FF, 0x1C1C1E), (0x8B949E, 0x1C1C1E),
+    ]
+    check(defaultPairs.allSatisfy { foreground, background in
+        ToolSyntaxContrast.ratio(foreground: foreground, background: background) >= 4.5
+            && ToolSyntaxContrast.foreground(foreground, on: background) == foreground
+    }, "\(label): established light/dark tool syntax shades stay unchanged when readable")
+
+    let custom: UInt32 = 0x0550AE
+    let repaired = ToolSyntaxContrast.foreground(custom, on: custom)
+    check(repaired != custom && ToolSyntaxContrast.ratio(foreground: repaired, background: custom) >= 4.5,
+          "\(label): a custom code background repairs a matching syntax shade")
+
+    let high = ToolSyntaxContrast.foreground(0x0550AE, on: 0x333333, increased: true)
+    check(ToolSyntaxContrast.ratio(foreground: high, background: 0x333333) >= 7,
+          "\(label): increased contrast reaches 7:1 on a surface where it is achievable")
+    let mid: UInt32 = 0x777777
+    let best = max(ToolSyntaxContrast.ratio(foreground: 0, background: mid),
+                   ToolSyntaxContrast.ratio(foreground: 0xFFFFFF, background: mid))
+    let fallback = ToolSyntaxContrast.foreground(0x888888, on: mid, increased: true)
+    check(best < 7 && ToolSyntaxContrast.ratio(foreground: fallback, background: mid) == best,
+          "\(label): impossible 7:1 requests use the best achievable endpoint")
+
+    let seededOutput = ToolCallPresentation.make(calls[4]).output?.text ?? ""
+    let seededTokens = ToolSyntax.jsonTokens(in: seededOutput)
+    let seededKey = seededTokens.first { $0.kind == .key }
+    let seededKeyShade = ToolSyntaxContrast.foreground(0x0550AE, on: 0x0550AE)
+    check(!seededOutput.isEmpty && !seededTokens.isEmpty && seededKey != nil
+          && seededOutput.contains("\"number\"") && seededOutput.contains("\"title\"")
+          && seededKeyShade != 0x0550AE
+          && ToolSyntaxContrast.ratio(foreground: seededKeyShade, background: 0x0550AE) >= 4.5,
+          "\(label): seeded JSON output keeps its source and repairs the key-token shade against a matching code surface")
 }
 
 @MainActor
