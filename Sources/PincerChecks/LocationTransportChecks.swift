@@ -68,11 +68,17 @@ private func runLocationTransportRoundTrip(profile: GatewayProfile, label: Strin
     gateway.outboxRoot = nil
     defer { gateway.stop(); defaults.removePersistentDomain(forName: suite) }
     gateway.start()
-    let connected = await waitFor(label + " connects", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
-    check(connected, label + " connects")
+    let connected = await waitFor(label + " bootstraps", timeout: 25) {
+        gateway.state.isConnected && gateway.bootstrapped && !gateway.sessions.isEmpty
+    }
+    check(connected, label + " bootstraps before creating the isolated chat")
     guard connected, let key = await gateway.createSession(agentId: "main", label: label, select: false) else { return }
+    gateway.selectedKey = key
     let chat = gateway.chat(for: key)
     await chat.load()
+    let ready = await waitFor(label + " history and subscription") { chat.hasLoaded && chat.isSubscribed }
+    check(ready && gateway.selectedKey == key, label + " selected chat is loaded and subscribed before delivery")
+    guard ready, gateway.selectedKey == key else { return }
     let authored = "Nearby cafe \(UUID().uuidString.prefix(6))"
     let now = Date()
     guard let snapshot = LocationContextSnapshot.prepare(LocationFix(latitude: 37.7749, longitude: -122.4194,

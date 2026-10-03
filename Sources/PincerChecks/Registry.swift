@@ -116,6 +116,7 @@ enum Suites {
             Section("Demo agent and model schema") { await runDemoAgentModelsSchemaChecks() },
             Section("Location context") { await runLocationContextChecks() },
             Section("Location transport") { runLocationTransportChecks() },
+            Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
