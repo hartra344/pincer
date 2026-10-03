@@ -50,11 +50,26 @@ func runDemoBookmarkSync() async {
     }
 
     let store = BookmarkStore.shared(gatewayId: gateway.id)
+    let noticeChat = ChatStore(sessionKey: DemoBookmarks.tripSessionKey, agentId: "main", gateway: gateway, headless: true)
+    let ownedNotice = ChatNoticeOperation(noticeChat)
+    ownedNotice.publish("Bookmark saved")
+    check(ownedNotice.publishIfCurrent("Older bookmark dropped") && noticeChat.notice == "Older bookmark dropped",
+          "bookmark demo: an owning operation can publish its completed notice")
+    let differentNotice = ChatNoticeOperation(noticeChat)
+    differentNotice.publish("Bookmark saved")
+    noticeChat.notice = "A newer unrelated notice"
+    check(!differentNotice.publishIfCurrent("Stale bookmark completion") && noticeChat.notice == "A newer unrelated notice",
+          "bookmark demo: a newer notice prevents a stale bookmark completion from replacing it")
+    let repeatedNotice = ChatNoticeOperation(noticeChat)
+    repeatedNotice.publish("Bookmark saved")
+    noticeChat.notice = "Bookmark saved"
+    check(!repeatedNotice.publishIfCurrent("Stale bookmark completion") && noticeChat.notice == "Bookmark saved",
+          "bookmark demo: assigning the same notice text again still transfers ownership")
     // Exercise the same ChatItem entry point as the transcript's star action, with large
     // multiblock text; the existing seeded demo bookmarks remain the round-trip controls.
     var message = ChatItem(id: "sync-check-local", role: .assistant,
                            blocks: [.text("Synced through users.prefs"),
-                                    .text(String(repeating: "\n  Detailed trip planning 👨‍👩‍👧‍👦  ", count: 30_000))])
+                                    .text(String(repeating: "\n  Detailed trip planning 👨‍👩‍👧‍👦  ", count: 4_000))])
     message.transcriptId = "sync-check-1"
     message.timestamp = Date(timeIntervalSince1970: 123)
     let messageID = Bookmark.id(sessionKey: DemoBookmarks.tripSessionKey, messageId: "sync-check-1")

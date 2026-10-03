@@ -470,8 +470,8 @@ struct BookmarkGatewaySyncTests {
             Bookmark(sessionKey: "agent:main:main", messageId: "legacy-\($0)", preview: String(repeating: "p", count: 150),
                      createdAt: Date(timeIntervalSince1970: TimeInterval(1000 + $0)))
         }
-        // The shared bookmark store reads the standard defaults; forget() removes the key again.
-        UserDefaults.standard.set(try JSONEncoder().encode(legacy), forKey: "pincer.bookmarks.\(profile.id.uuidString)")
+        // Seed the same isolated defaults injected into the gateway bookmark store.
+        scratch.defaults.set(try JSONEncoder().encode(legacy), forKey: "pincer.bookmarks.\(profile.id.uuidString)")
         let store = PrefsHarness.makeStore(profile, scratch.defaults)
         defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
         store.start()

@@ -231,7 +231,11 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var branchRefreshGeneration = 0
     @ObservationIgnored var branchRefreshTask: Task<Void, Never>?
     /// A passing, non-error note for the chat's notice bar (not a send failure).
-    public var notice: String?
+    public var notice: String? {
+        didSet { self.noticeRevision &+= 1 }
+    }
+    /// Notice ownership changes on every assignment, including identical repeated text.
+    @ObservationIgnored private(set) var noticeRevision: UInt64 = 0
     /// The quoted message being looked for in older history, while paging.
     public internal(set) var locatingReplyId: String?
     /// How the latest run ended, and when, for the avatar's transient success and error poses.

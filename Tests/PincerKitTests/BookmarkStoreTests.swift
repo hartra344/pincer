@@ -59,13 +59,14 @@ struct BookmarkStoreTests {
         #expect(BookmarkStore(gatewayId: two.gatewayId, defaults: self.defaults).bookmarks.isEmpty)
     }
 
-    @Test func toggleFromChatItemUsesTranscriptId() {
+    @Test func toggleFromChatItemUsesTranscriptId() async {
         let store = BookmarkStore(gatewayId: self.gateway, defaults: self.defaults)
         defer { self.defaults.removePersistentDomain(forName: self.suite) }
         var item = ChatItem(id: "local", role: .assistant, blocks: [.text("Hello\nworld")])
         item.transcriptId = "t-9"
         #expect(store.toggle(item, sessionKey: "main"))
         #expect(store.isBookmarked(sessionKey: "main", messageId: "t-9"))
+        await store.waitForPreviewPreparation()
         #expect(store.bookmarks.first?.preview == "Hello world")
         #expect(store.bookmarks.first?.role == "assistant")
     }

@@ -30,6 +30,8 @@ Right-click a message (Mac) or long-press it (iPhone and iPad) and choose **Book
 
 A bookmarked message shows a filled star (★) at the start of the line under it, next to **Copy**. Click or tap the star to remove the bookmark. VoiceOver reads the message as “Bookmarked”.
 
+The star changes immediately while the short message preview is prepared in the background. Removing a bookmark takes effect immediately, including while its preview is still being prepared. For unusually large messages (over 256 KiB of text or 64 content blocks), text without contiguous UTF-8 storage, unusually long message locators, or a full preview queue, the bookmark remains saved with an empty preview. A preview that exceeds 2 KiB, such as text with very long Unicode combining sequences, also stays empty. Pincer keeps one preview worker shared across gateways, at most 32 waiting previews and at most 8 MiB of retained text and locators.
+
 To find your bookmarks, either:
 
 - press <kbd>⌘</kbd> <kbd>K</kbd> and look in the **Bookmarks** section of the [command palette](../command-palette-and-navigation/), or
