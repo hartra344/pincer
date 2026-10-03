@@ -84,6 +84,79 @@ struct CappedMessageRecoveryTests {
     }
 
 #if DEBUG
+    @Test func bulkRecoveryIsConsumedOnceAndTheNextOrdinaryEventDoesNoScan() async {
+        let (chat, gateway) = self.makeChat()
+        defer { chat.stopCaching(); gateway.stop(); self.scratch.remove() }
+        let id = "bulk-recovery-consumed"
+        let capped = ChatItem(self.message("assistant", id: id, text: "preview", capped: true), fallbackIndex: 0)!
+        let full = ChatItem(self.message("assistant", id: id, text: "restored once"), fallbackIndex: 0)!
+        chat.hasLoaded = true
+        chat.fullMessages[id] = full
+        chat.replaceRecoveryItems([capped])
+
+        chat.handleSessionMessage(["message": self.message("user", id: "consume-bulk-recovery", text: "ordinary event")])
+        #expect(chat.items.first?.plainText == "restored once")
+        chat.resetCappedRecoveryRowsVisitedForTesting()
+
+        chat.handleSessionMessage(["message": self.message("user", id: "after-bulk-recovery", text: "next ordinary event")])
+
+        #expect(chat.items.first?.plainText == "restored once")
+        #expect(chat.acceptedEventRecoveryRowsVisitedForTesting == 0,
+                "after bulk-installed capped content is restored, ordinary events do not rescan the transcript")
+    }
+
+    @Test func applyingHistoryConsumesCachedRecoveryBeforeLaterOrdinaryEvents() {
+        let (chat, gateway) = self.makeChat()
+        defer { chat.stopCaching(); gateway.stop(); self.scratch.remove() }
+        let id = "history-capped"
+        let older = ChatItem(self.message("user", id: "older-row", text: "older"), fallbackIndex: 0)!
+        let capped = ChatItem(self.message("assistant", id: id, text: "preview", capped: true), fallbackIndex: 1)!
+        let full = ChatItem(self.message("assistant", id: id, text: "complete from cache"), fallbackIndex: 1)!
+        chat.hasLoaded = true
+        chat.hasPagedOlder = true
+        chat.replaceRecoveryItems([older, capped])
+        chat.fullMessages[id] = full
+        let history: JSONValue = ["messages": .array([self.message("assistant", id: id, text: "preview", capped: true)])]
+
+        chat.apply(history: history, parsed: [capped])
+
+        #expect(chat.items.map(\.id) == [older.id, capped.id])
+        #expect(chat.items.last?.plainText == "complete from cache",
+                "applying a history page restores the cached full copy in the same apply pass")
+        chat.resetCappedRecoveryRowsVisitedForTesting()
+        chat.handleSessionMessage(["message": self.message("user", id: "after-history", text: "ordinary event")])
+
+        #expect(chat.acceptedEventRecoveryRowsVisitedForTesting == 0,
+                "history-restored content is no longer eligible for repeated recovery scans")
+    }
+
+    @Test func missingGatewayRecoveryRearmsAndRetriesAfterGatewayReturns() async {
+        let (chat, gateway) = self.makeChat()
+        defer { chat.stopCaching(); gateway.stop(); self.scratch.remove() }
+        let id = "temporarily-unavailable-capped"
+        chat.hasLoaded = true
+        chat.items = [ChatItem(self.message("assistant", id: id, text: "preview", capped: true), fallbackIndex: 0)!]
+        chat.gateway = nil
+
+        chat.recoverCappedMessages()
+        #expect(await eventually { !chat.recoveryAttempted.contains(id) },
+                "without a Gateway the failed attempt is cleared so the capped row remains eligible")
+
+        var requests = 0
+        chat.cappedMessageRecoveryRequestForTesting = { requestedId in
+            #expect(requestedId == id)
+            requests += 1
+            return ["ok": .bool(true), "message": self.message("assistant", id: id, text: "restored after Gateway returns")]
+        }
+        chat.gateway = gateway
+        chat.handleSessionMessage(["message": self.message("user", id: "gateway-returned", text: "ordinary event")])
+
+        #expect(await eventually { requests == 1 && chat.items.first?.plainText == "restored after Gateway returns" },
+                "a later accepted event retries recovery after a Gateway is reattached")
+    }
+#endif
+
+#if DEBUG
     @Test func startupUncappedEventStillRecoversExistingCappedRows() async {
         let (chat, gateway) = self.makeChat()
         defer { chat.stopCaching(); gateway.stop(); self.scratch.remove() }

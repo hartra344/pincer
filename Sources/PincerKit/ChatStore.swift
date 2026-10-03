@@ -296,6 +296,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var fullMessages: [String: ChatItem] = [:]
     /// Capped messages being fetched, or that the Gateway couldn't return in full.
     @ObservationIgnored var recoveryAttempted: Set<String> = []
+    /// A bulk transcript install or retryable fetch failure needs one later recovery pass.
+    @ObservationIgnored var cappedRecoveryPending = false
 #if DEBUG
     /// Saturating work counter for the consumed capped-message recovery scan.
     @ObservationIgnored package var cappedRecoveryRowsVisitedForTesting = 0

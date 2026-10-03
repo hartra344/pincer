@@ -5,6 +5,7 @@ extension ChatStore {
     /// Installs a bulk-restored transcript snapshot. Recovery still runs on its existing next pass.
     func replaceRecoveryItems(_ items: [ChatItem]) {
         self.items = items
+        self.cappedRecoveryPending = true
     }
 
     enum ForwardedRefreshPageDisposition: Equatable {
@@ -665,6 +666,7 @@ extension ChatStore {
         self.hasMoreHistory = false
         self.fullMessages = [:]
         self.recoveryAttempted = []
+        self.cappedRecoveryPending = false
         let pending = self.items.filter(\.isPending)
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
@@ -1125,6 +1127,7 @@ extension ChatStore {
     /// History caps each text field (8,000 chars by default) and flags the message; like the
     /// Control UI, fetch the full copy with `chat.message.get` and swap it in.
     func recoverCappedMessages(fromAcceptedMessage: Bool = false) {
+        self.cappedRecoveryPending = false
         var items = self.items
         var substituted = false
         var missing: [String] = []
@@ -1156,17 +1159,20 @@ extension ChatStore {
     func fetchFullMessage(_ messageId: String) async {
         guard let gateway else {
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
 #if DEBUG
         let testRequest = self.cappedMessageRecoveryRequestForTesting
         guard gateway.state.isConnected || testRequest != nil else {
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
 #else
         guard gateway.state.isConnected else {
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
 #endif
@@ -1185,8 +1191,9 @@ extension ChatStore {
             result = try await gateway.connection.request("chat.message.get", .object(params), timeout: 30)
 #endif
         } catch {
-            // Transport failures retry on the next history pass; Gateway refusals below don't.
+            // Transport failures retry on the next recovery pass; Gateway refusals below don't.
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
         guard result["ok"]?.bool == true, let message = result["message"] else { return }
