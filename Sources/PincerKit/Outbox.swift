@@ -41,6 +41,12 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     public private(set) var displayText: String
     public var replyToId: String?
     public var replyPreview: ReplyPreview?
+    /// Launch-local reservation. Nothing after an unfinished preview may be accepted/persisted
+    /// ahead of it within the same session. This flag is deliberately absent from CodingKeys.
+    package var isPreparingReply = false
+    /// Prevents an independent flush claiming the reservation before its send owner crosses the
+    /// readiness/persistence acceptance fence. Also launch-local and never encoded.
+    package var isAwaitingReplyAcceptance = false
     public var createdAt: Date
     public var state: OutboxState
     public var attempts: Int
@@ -239,7 +245,8 @@ public struct Outbox: Codable, Equatable, Sendable {
         for entry in self.entries {
             if let sessionKey, entry.sessionKey != sessionKey { continue }
             if blocked.contains(entry.sessionKey) { continue }
-            if entry.state == .queued, !entry.isMemoryOnly, !holding(entry) { return entry }
+            if entry.state == .queued, !entry.isPreparingReply, !entry.isAwaitingReplyAcceptance,
+               !entry.isMemoryOnly, !holding(entry) { return entry }
             blocked.insert(entry.sessionKey)
         }
         return nil
@@ -344,7 +351,21 @@ public struct Outbox: Codable, Equatable, Sendable {
 
     /// Entries that survive a relaunch (memory-only attachment sends are launch-only).
     public var persistable: Outbox {
-        Outbox(entries: self.entries.filter { !$0.isMemoryOnly })
+        var blocked = Set<String>()
+        let entries = self.entries.filter { entry in
+            if entry.isPreparingReply || entry.isAwaitingReplyAcceptance { blocked.insert(entry.sessionKey) }
+            return !blocked.contains(entry.sessionKey) && !entry.isMemoryOnly
+        }
+        return Outbox(entries: entries)
+    }
+
+    package func hasPreparingReply(beforeOrAt id: String) -> Bool {
+        guard let target = self.entry(id: id) else { return false }
+        for entry in self.entries where entry.sessionKey == target.sessionKey {
+            if entry.id == id { return entry.isPreparingReply }
+            if entry.isPreparingReply || entry.isAwaitingReplyAcceptance { return true }
+        }
+        return false
     }
 
     private mutating func requeueSending() {

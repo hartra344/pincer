@@ -21,6 +21,9 @@ extension DemoGateway {
     // MARK: Runs
 
     func send(_ params: JSONValue) throws -> JSONValue {
+#if DEBUG
+        self.observeSendRequest(params)
+#endif
         guard let idempotencyKey = params["idempotencyKey"]?.string else {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "idempotencyKey is required", details: nil)
         }

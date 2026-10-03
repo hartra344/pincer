@@ -198,6 +198,10 @@ extension GatewayStore {
     }
 
     func outboxChanged(from old: Outbox) {
+        self.wakeReplyAcceptanceWaiters()
+        for (id, task) in self.replyReservationPreparations where self.outbox.entry(id: id) == nil {
+            task.cancel()
+        }
         let changed = Set(old.entries.map(\.sessionKey) + self.outbox.entries.map(\.sessionKey)).filter {
             old.entries(for: $0) != self.outbox.entries(for: $0)
         }

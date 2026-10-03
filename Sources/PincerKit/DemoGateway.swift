@@ -146,6 +146,9 @@ actor DemoGateway {
     func setRepliesMarkUnread(_ marks: Bool) { self.repliesMarkUnread = marks }
     /// `message.action` calls received, oldest first.
     var recordedActions: [JSONValue] = []
+#if DEBUG
+    var sendObservations: [String: [DemoSendRequestObservation]] = [:]
+#endif
     /// MCP servers config and status (DemoGateway+MCP.swift).
     var mcp = DemoMCPState()
 

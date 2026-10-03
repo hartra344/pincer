@@ -169,6 +169,9 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    @ObservationIgnored var replySendLifecycle = 0
+    @ObservationIgnored var replyAcceptanceWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored var replyReservationPreparations: [String: Task<String?, Never>] = [:]
     /// Entries visited while building the cached per-session heads; reset by performance checks.
     @ObservationIgnored var outboxHeadScanVisits = 0
     /// First auto-sendable entry per session for this outbox snapshot. Nil means not built yet.
@@ -446,6 +449,12 @@ public final class GatewayStore: Identifiable {
     }
 
     public func stop() {
+        self.replySendLifecycle &+= 1
+        for task in self.replyReservationPreparations.values { task.cancel() }
+        self.wakeReplyAcceptanceWaiters()
+        for chat in self.chats.values {
+            chat.stopReplyPreviewPublication()
+        }
         let connection = self.connection
         self.pumpTask?.cancel()
         self.pumpTask = nil

@@ -19353,6 +19353,16 @@
           }
         }
       }
+    },
+    "Couldn’t prepare the reply preview. Try replying again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t prepare the reply preview. Try replying again."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -233,6 +233,20 @@ public actor GatewayConnection {
         await self.demo?.recordedActions ?? []
     }
 
+#if DEBUG
+    package func demoTrackSendRequests(matchingText nonce: String) async {
+        await self.demo?.trackSendRequests(matchingText: nonce)
+    }
+
+    package func demoSendRequests(matchingText nonce: String) async -> [DemoSendRequestObservation] {
+        await self.demo?.observedSendRequests(matchingText: nonce) ?? []
+    }
+
+    package func demoUntrackSendRequests(matchingText nonce: String) async {
+        await self.demo?.untrackSendRequests(matchingText: nonce)
+    }
+#endif
+
     /// Makes the built-in demo play a released Gateway whose finished replies don't mark chats unread (#426).
     func setDemoRepliesMarkUnread(_ marks: Bool) async {
         await self.demo?.setRepliesMarkUnread(marks)

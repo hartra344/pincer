@@ -124,7 +124,7 @@ struct Composer: View {
         .onChange(of: self.chat.editTarget) { old, new in
             if let new, new != old { self.focusRequest += 1 }
         }
-        .onChange(of: self.chat.replyTarget) { old, new in
+        .onChange(of: self.chat.replyTarget?.selectionID) { old, new in
             if let new, new != old { self.focusRequest += 1 }
         }
         .padding(.horizontal, Theme.Spacing.row)
@@ -486,7 +486,7 @@ private struct ReplyChip: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Replying to **\(self.target.senderLabel)**", bundle: .module)
                     .font(.caption)
-                Text(Replies.previewLine(self.target.preview))
+                Text(self.target.preview)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

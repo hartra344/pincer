@@ -39,6 +39,8 @@ You can try the setting in the built-in demo; its canned reply can use the share
 
 After you choose **Reply** on a message (see [Replies](../transcript/#replies)), a **Replying to** chip sits above the composer with who wrote the message and how it starts. The composer takes focus, so you can start typing. Send as usual and your message is sent as a reply to that one, and the chip goes away.
 
+The composer takes focus immediately even for a very long message; the short opening preview fills in separately. Sending before that preview appears still quotes the message you chose. Changing or canceling the chip afterward does not change a reply you have already sent. While its quote is being prepared, later messages in the same chat wait their turn; other chats can continue sending. The chip shows only a short opening of the original message. If Pincer cannot prepare that opening, it keeps your draft and asks you to choose Reply again; it does not send an empty or outdated quote.
+
 - To cancel, click the ✕ in the chip, or press <kbd>Esc</kbd>. When slash command suggestions are showing, <kbd>Esc</kbd> hides them first.
 - Choosing **Reply** on another message replaces the one you're replying to.
 - Each chat keeps its own reply while you switch between chats. Replies aren't saved in drafts, so they're gone after you quit Pincer.

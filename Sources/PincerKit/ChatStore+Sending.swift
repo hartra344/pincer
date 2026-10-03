@@ -43,6 +43,18 @@ extension ChatStore {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
+        let replyLifecycle = gateway.replySendLifecycle
+        let replyPreparation: ReplyPreviewPreparationHandle?
+        if let replyTo {
+            guard !replyTo.previewUnavailable, replyTo.previewSource != nil || !replyTo.preview.isEmpty else {
+                return self.failReplyPreviewPreparation()
+            }
+            guard let source = replyTo.previewSource ?? ReplyPreviewSource(text: replyTo.preview),
+                  let handle = self.replyPreviewPreparation.request(source, messageID: replyTo.messageId) else {
+                return self.failReplyPreviewPreparation()
+            }
+            replyPreparation = handle
+        } else { replyPreparation = nil }
         let locationContext = includeLocation ? gateway.locationContext?.context(forMessage: trimmed) : nil
         let connected = gateway.state.isConnected
         let attachmentBytes = attachments.reduce(0) { $0 + $1.data.count }
@@ -65,12 +77,14 @@ extension ChatStore {
         pending.outboxState = .queued
         var entry = OutboxEntry(id: idempotencyKey, sessionKey: self.sessionKey, agentId: self.agentId, text: trimmed, locationContext: locationContext,
                                 createdAt: createdAt, hasAttachments: !attachments.isEmpty)
+        entry.isAwaitingReplyAcceptance = true
         if let replyTo {
-            let preview = ReplyPreview(text: Replies.previewLine(replyTo.preview), senderLabel: replyTo.senderLabel)
+            let preview = ReplyPreview(text: "", senderLabel: replyTo.senderLabel)
             pending.replyToId = replyTo.messageId
             pending.replyToPreview = preview
             entry.replyToId = replyTo.messageId
             entry.replyPreview = preview
+            entry.isPreparingReply = true
         }
         if !attachments.isEmpty {
             if persistsAttachments, let refs = gateway.persistAttachments(attachments, entryId: idempotencyKey) {
@@ -81,7 +95,39 @@ extension ChatStore {
         }
         self.items.append(pending)
         gateway.outbox.enqueue(entry)
-        guard connected, gateway.outbox.isHead(id: idempotencyKey) else {
+#if DEBUG
+        self.replyPreparationDidReserve?(idempotencyKey)
+#endif
+        if let replyPreparation, let replyTo {
+            guard gateway.outbox.entry(id: idempotencyKey) != nil, gateway.replySendLifecycle == replyLifecycle else {
+                self.discardUnsent(idempotencyKey)
+                return self.failReplyPreviewPreparation()
+            }
+            let wait = Task { await replyPreparation.value() }
+            gateway.replyReservationPreparations[idempotencyKey] = wait
+            let line = await withTaskCancellationHandler { await wait.value } onCancel: { wait.cancel() }
+            gateway.replyReservationPreparations[idempotencyKey] = nil
+            guard let line, !Task.isCancelled, gateway.replySendLifecycle == replyLifecycle,
+                  var reserved = gateway.outbox.entry(id: idempotencyKey) else {
+                self.discardUnsent(idempotencyKey)
+                return self.failReplyPreviewPreparation()
+            }
+            reserved.replyPreview = ReplyPreview(text: line, senderLabel: replyTo.senderLabel)
+            reserved.isPreparingReply = false
+            if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == idempotencyKey }) {
+                self.items[index].replyToPreview = reserved.replyPreview
+            }
+            gateway.outbox.enqueue(reserved)
+        }
+        guard await gateway.waitForReplyAcceptance(id: idempotencyKey, lifecycle: replyLifecycle),
+              let ready = gateway.outbox.entry(id: idempotencyKey) else {
+            self.discardUnsent(idempotencyKey)
+            return self.failReplyPreviewPreparation()
+        }
+        entry = ready
+        entry.isAwaitingReplyAcceptance = false
+        gateway.outbox.enqueue(entry)
+        guard gateway.state.isConnected, gateway.outbox.isHead(id: idempotencyKey) else {
             if requiresConnection || entry.isMemoryOnly {
                 // Behind an earlier message of this chat: this send can't wait in the queue.
                 self.discardUnsent(idempotencyKey)
@@ -89,14 +135,20 @@ extension ChatStore {
                 self.errorMessage = message
                 return .failed(message)
             }
-            if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
-            if connected { Task { await gateway.flushOutbox() } }
+            if let replyTo, self.replyTarget?.selectionID == replyTo.selectionID { self.replyTarget = nil }
+            if gateway.state.isConnected { Task { await gateway.flushOutbox() } }
             return .queued
         }
         let outcome = await self.deliver(entry, keepFailure: !requiresConnection, attachments: attachments)
         if case .failed = outcome { return outcome }
-        if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
+        if let replyTo, self.replyTarget?.selectionID == replyTo.selectionID { self.replyTarget = nil }
         return outcome
+    }
+
+    private func failReplyPreviewPreparation() -> SendOutcome {
+        let message = L("Couldn’t prepare the reply preview. Try replying again.")
+        self.errorMessage = message
+        return .failed(message)
     }
 
     /// Sends one outbox entry now, reusing its idempotency key. On success the entry leaves the
@@ -105,6 +157,13 @@ extension ChatStore {
     @discardableResult
     func deliver(_ entry: OutboxEntry, keepFailure: Bool = true, attachments provided: [OutgoingAttachment]? = nil) async -> SendOutcome {
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
+        guard let current = gateway.outbox.entry(id: entry.id) else { return .queued }
+        guard current.state == .queued, !current.isPreparingReply, !current.isAwaitingReplyAcceptance,
+              gateway.outbox.isHead(id: current.id) else { return .queued }
+        let entry = current
+        gateway.outbox.markSending(id: entry.id)
+        self.isSending = true
+        defer { self.isSending = false }
         var key = entry.id
         // Bytes of persisted attachments are read for this send only, never kept in memory.
         var attachments = provided ?? gateway.outboxAttachments[key] ?? []
@@ -118,6 +177,7 @@ extension ChatStore {
                 return .failedInline(message)
             }
         }
+        guard gateway.outbox.entry(id: key)?.state == .sending else { return .queued }
         if entry.hasAttachments, attachments.isEmpty {
             let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
             gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
@@ -133,10 +193,6 @@ extension ChatStore {
             gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
             return .failedInline(message)
         }
-        gateway.outbox.markSending(id: key)
-        self.isSending = true
-        defer { self.isSending = false }
-
         let quoted = entry.replyToId.map { _ in
             Replies.quotedFallback(sender: entry.replyPreview?.senderLabel ?? "", preview: entry.replyPreview?.text ?? "",
                                    text: entry.text)
@@ -277,6 +333,8 @@ extension ChatStore {
                 continue
             }
             if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
+            if items[index].replyToId != entry.replyToId { items[index].replyToId = entry.replyToId }
+            if items[index].replyToPreview != entry.replyPreview { items[index].replyToPreview = entry.replyPreview }
             let blocks = self.outboxPreviewBlocks(for: entry)
             if items[index].blocks != blocks { items[index].blocks = blocks }
             let hold = self.gateway?.hold(for: entry)

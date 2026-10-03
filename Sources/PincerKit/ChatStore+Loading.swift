@@ -676,6 +676,7 @@ extension ChatStore {
 
     /// The session was deleted: nothing more is written to the transcript cache.
     func stopCaching() {
+        self.stopReplyPreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
