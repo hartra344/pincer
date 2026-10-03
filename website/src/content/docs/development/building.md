@@ -85,7 +85,7 @@ PINCER_DEV_NAMESPACE=composer-sizing PINCER_KEYCHAIN=memory PINCER_DRAFTS_DIR=of
   swift run PincerMacDev --composer-sizing-probe
 ```
 
-CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. The hosted UIKit suite also resizes a native transcript from 390 to 600 points and back, checking measured row widths, row tops, collection content geometry, and the reader’s anchored row and screen position. It also verifies settling and measured visible rows through UIKit’s public scroll-to-top delegate callback; this is separate from testing a physical status-bar gesture. To run those rendering suites locally:
+CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. The hosted UIKit suite also resizes a native transcript from 390 to 600 points and back, checking measured row widths, row tops, collection content geometry, and the reader’s anchored row and screen position. Synthetic and seeded Demo transcripts verify that status-bar scroll-to-top is disabled and its delegate rejects the request without changing position, while manual browsing still moves the reader’s anchor. These native checks do not simulate a physical status-bar tap. To run those rendering suites locally:
 
 ```sh
 scripts/ios-test-scheme.sh

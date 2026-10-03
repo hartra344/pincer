@@ -795,7 +795,6 @@ struct TranscriptUIKitHostedTests {
 
         // This is the normal reader path used by scrollViewDidScroll for real drags. Rejecting
         // the status-bar request must not prevent the reader from browsing earlier messages.
-        host.coordinator.scrollViewWillBeginDragging(host.view)
         host.view.contentOffset.y = max(-host.view.adjustedContentInset.top + 2,
                                         offset.y - host.view.bounds.height * 0.75)
         host.coordinator.controller.readerScrolled(movingUp: true)

@@ -50,7 +50,6 @@ struct TranscriptList: UIViewRepresentable {
         /// Ids whose height value changed since the offsets were last built.
         private var dirtyHeights = Set<String>()
         private var isAdjusting = false
-        private var isScrollingToTop = false
         private var lastOffset: CGFloat = 0
         private weak var collectionView: TranscriptCollectionView?
 
@@ -80,6 +79,8 @@ struct TranscriptList: UIViewRepresentable {
             view.allowsSelection = false
             view.keyboardDismissMode = .interactive
             view.alwaysBounceVertical = true
+            // Status-bar taps must not expose an invisible shortcut that moves the chat.
+            view.scrollsToTop = false
             // UIKit adds the safe area (bars, home indicator; the keyboard is handled by SwiftUI
             // resizing the view); the owner's insets only cover chrome floating over the list.
             view.contentInsetAdjustmentBehavior = .always
@@ -302,11 +303,8 @@ struct TranscriptList: UIViewRepresentable {
             self.reportPosition()
             // Only the reader moves the anchor: layout changes and inset changes keep it.
             guard !self.isAdjusting,
-                  scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating || self.isScrollingToTop
+                  scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
             else { return }
-            // The status-bar scroll to top is an animation that setting the offset would cut
-            // short; it finishes at the top and is settled once it gets there.
-            guard !self.isScrollingToTop else { return }
             self.controller.readerScrolled(movingUp: TranscriptListController.isMovingUp(from: self.lastOffset, to: offset))
         }
 
@@ -318,20 +316,8 @@ struct TranscriptList: UIViewRepresentable {
             self.scrollEnded()
         }
 
-        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-            self.isScrollingToTop = false
-        }
-
         func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
-            self.isScrollingToTop = true
-            return true
-        }
-
-        func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
-            self.isScrollingToTop = false
-            self.controller.anchor = .top
-            self.settle()
-            self.scrollEnded()
+            false
         }
 
         private func scrollEnded() {
@@ -356,7 +342,6 @@ struct TranscriptList: UIViewRepresentable {
         /// above the end first, so the animation doesn't lay out the whole history on the way.
         func scrollToBottom() {
             guard let view = self.collectionView, !self.rows.isEmpty else { return }
-            self.isScrollingToTop = false
             self.controller.anchor = .bottom
             let target = self.maxOffset
             let height = view.bounds.height
@@ -394,7 +379,7 @@ extension TranscriptList.Coordinator: TranscriptListHost {
 
     var isScrolling: Bool {
         guard let view = self.collectionView else { return true }
-        return view.isTracking || view.isDecelerating || self.isScrollingToTop
+        return view.isTracking || view.isDecelerating
     }
 
     var viewport: TranscriptViewport? {
