@@ -55,9 +55,12 @@ struct TranscriptRowAccessibilityAction {
             if branch.number < branch.count { result.append(.init(name: L("Next branch")) { [weak actions] in actions?.stepBranch(1) }) }
         }
         let count = layout.messages.count
+        let openingExcerpts = layout.messages.map { span in
+            span.openingExcerptSource.flatMap { actions.messagePartExcerptCache.excerpt(for: $0) }
+        }
         let names = Self.perMessageActionNames(
             messageCount: count, bookmarked: layout.messages.map { actions.isBookmarked($0.id) },
-            reactions: actions.reactionsEnabled)
+            reactions: actions.reactionsEnabled, openingExcerpts: openingExcerpts)
         let perMessage = Self.perMessageKinds(reactions: actions.reactionsEnabled)
         var nameIndex = 0
         for (index, span) in layout.messages.enumerated() {
@@ -92,13 +95,17 @@ struct TranscriptRowAccessibilityAction {
 
     /// Reply, Copy Link, Bookmark and Add Reaction for each message, named `Reply, part 1 of 3` when
     /// the row holds several. Single-message rows keep the plain names.
-    static func perMessageActionNames(messageCount: Int, bookmarked: [Bool], reactions: Bool) -> [String] {
+    static func perMessageActionNames(messageCount: Int, bookmarked: [Bool], reactions: Bool,
+                                      openingExcerpts: [String?] = []) -> [String] {
         var names: [String] = []
         for index in 0..<max(messageCount, 0) {
             let isBookmarked = index < bookmarked.count && bookmarked[index]
+            let opening = index < openingExcerpts.count ? openingExcerpts[index] : nil
             let base = [L("Reply"), L("Copy Link"), isBookmarked ? L("Remove Bookmark") : L("Bookmark")]
                 + (reactions ? [L("Add Reaction")] : [])
-            names += base.map { AccessibilityText.messagePartAction($0, part: index + 1, of: messageCount) }
+            names += base.map {
+                AccessibilityText.messagePartAction($0, part: index + 1, of: messageCount, openingExcerpt: opening)
+            }
         }
         return names
     }
