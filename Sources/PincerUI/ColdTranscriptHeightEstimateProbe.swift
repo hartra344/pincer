@@ -8,6 +8,7 @@ enum ColdTranscriptHeightEstimateProbe {
         var operations = 0
         var joinedSources = 0
         var inputBytes = 0
+        var metadataVisits = 0
     }
     private static let records = Mutex<[String: Stats]>([:])
     static func register(_ rowID: String) {
@@ -20,6 +21,15 @@ enum ColdTranscriptHeightEstimateProbe {
     }
     static func remove(_ rowID: String) { self.records.withLock { $0[rowID] = nil } }
     static func snapshot(_ rowID: String) -> Stats { self.records.withLock { $0[rowID] ?? Stats() } }
+    static func recordWork(_ rowID: String, bytes: Int, visits: Int) {
+        self.records.withLock { records in
+            guard var value = records[rowID], value.operations < 256 else { return }
+            value.operations += 1
+            value.inputBytes += bytes
+            value.metadataVisits += visits
+            records[rowID] = value
+        }
+    }
     static func record(_ rowID: String, text: String, joined: Bool) {
         self.records.withLock { records in
             guard var value = records[rowID], value.operations < 256 else { return }
