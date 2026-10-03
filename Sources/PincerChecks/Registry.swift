@@ -55,6 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
+            Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
@@ -65,6 +66,7 @@ enum Suites {
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
+            Section("Latest measurement worker") { await runLatestMeasurementChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
@@ -116,6 +118,7 @@ enum Suites {
             Section("Demo agent and model schema") { await runDemoAgentModelsSchemaChecks() },
             Section("Location context") { await runLocationContextChecks() },
             Section("Location transport") { runLocationTransportChecks() },
+            Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -193,6 +196,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Image attachment preparation (demo)") { await runDemoAttachmentPreparationChecks() },
         Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
         Section("Sidebar split pane marker (demo)") { await runDemoSidebarSplitPaneChecks() },

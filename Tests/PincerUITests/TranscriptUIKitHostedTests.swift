@@ -125,6 +125,9 @@ struct TranscriptUIKitHostedTests {
         try await AttachmentThumbnailUIKitHostedVerification.verifyDownsamplingAndIdentityReplacement()
     }
     #endif
+    @Test func demoAttachmentPreparationUsesTheSharedQueueAndCommitsAnImage() async throws {
+        try await AttachmentPreparationTests.verifyDemoChatDraftPreparesAndSendsAnOversizedImage()
+    }
 
     @Test func webSearchSnippetUsesAtMostTwoVisibleLinesAtCompactWidth() async throws {
         let host = await Self.makeHost(size: CGSize(width: 360, height: 844))

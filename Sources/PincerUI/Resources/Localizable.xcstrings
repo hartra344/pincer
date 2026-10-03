@@ -19333,6 +19333,26 @@
           }
         }
       }
+    },
+    "%@ exceeds the maximum image source size (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ exceeds the maximum image source size (%2$@)."
+          }
+        }
+      }
+    },
+    "Couldn’t queue %@; attachment preparation is full. Try again after current items finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t queue %@; attachment preparation is full. Try again after current items finish."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
