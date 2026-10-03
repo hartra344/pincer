@@ -136,6 +136,31 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     } catch {
         check(false, "demo wrong-publisher force-install preservation check (\(error.localizedDescription))")
     }
+    do {
+        _ = try await gateway.connection.request("skills.detail", ["slug": .string("@ /nas-report")])
+        check(false, "demo does not resolve a qualified reference with an empty publisher")
+    } catch let GatewayError.rpc(code, _, _) {
+        check(code == "UNAVAILABLE", "demo rejects an empty qualified publisher")
+    } catch {
+        check(false, "demo empty-publisher detail uses UNAVAILABLE (\(error.localizedDescription))")
+    }
+    do {
+        let beforeStatus = try await gateway.connection.request("skills.status", [:])
+        let beforeNas = beforeStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        do {
+            _ = try await gateway.connection.request("skills.install", [
+                "source": .string("clawhub"), "slug": .string("@ /nas-report"), "force": .bool(true),
+            ])
+            check(false, "demo force install rejects an empty qualified publisher")
+        } catch let GatewayError.rpc(code, _, _) {
+            check(code == "UNAVAILABLE", "demo empty-publisher force install uses UNAVAILABLE")
+        }
+        let afterStatus = try await gateway.connection.request("skills.status", [:])
+        let afterNas = afterStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        check(afterNas == beforeNas, "demo empty-publisher force install leaves the installed skill unchanged")
+    } catch {
+        check(false, "demo empty-publisher force-install preservation check (\(error.localizedDescription))")
+    }
     if let notion = skills.skill(key: "notion") {
         let transientKey = "sk-demo_MiXeD-123+/=:@."
         let saved = await skills.setApiKey(notion, transientKey)

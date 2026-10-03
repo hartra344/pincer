@@ -612,6 +612,34 @@ struct SkillsToolsTests {
         #expect(after == before)
     }
 
+    @MainActor @Test func demoClawHubRejectsEmptyQualifiedPublisherWithoutMutation() async throws {
+        let demo = DemoGateway()
+        for reference in ["@ /nas-report", "@   /nas-report"] {
+            do {
+                _ = try await demo.handle("skills.detail", ["slug": .string(reference)])
+                Issue.record("qualified ClawHub reference with an empty owner must not resolve")
+            } catch let GatewayError.rpc(code, _, _) {
+                #expect(code == "UNAVAILABLE")
+            }
+        }
+
+        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        do {
+            _ = try await demo.handle("skills.install", [
+                "source": .string("clawhub"), "slug": .string("@ /nas-report"), "force": .bool(true),
+            ])
+            Issue.record("force install with an empty qualified owner must not replace nas-report")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "UNAVAILABLE")
+        }
+        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        #expect(after == before)
+    }
+
     @MainActor @Test func demoToolsInspector() async throws {
         let demo = DemoGateway()
         let request: ToolsInspectorModel.Request = { method, params in try await demo.handle(method, params) }
