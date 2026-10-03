@@ -7,6 +7,63 @@ import Testing
 import UIKit
 @testable import PincerUI
 
+private actor SpeechPreparationGate {
+    private let messageID: String
+    private var claimed = false
+    private var entered = false
+    private var released = false
+    private var enteredContinuation: CheckedContinuation<Bool, Never>?
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+    private var entryTimeout: Task<Void, Never>?
+
+    init(messageID: String) { self.messageID = messageID }
+
+    func hold(_ messageID: String) async {
+        guard messageID == self.messageID, !self.claimed else { return }
+        self.claimed = true
+        self.entered = true
+        self.entryTimeout?.cancel()
+        self.entryTimeout = nil
+        self.enteredContinuation?.resume(returning: true)
+        self.enteredContinuation = nil
+        await withCheckedContinuation { continuation in
+            if self.released {
+                continuation.resume()
+            } else {
+                self.releaseContinuation = continuation
+            }
+        }
+    }
+
+    func waitUntilEntered(timeout: Duration) async -> Bool {
+        if self.entered { return true }
+        return await withCheckedContinuation { continuation in
+            self.enteredContinuation = continuation
+            self.entryTimeout = Task {
+                try? await Task.sleep(for: timeout)
+                guard !Task.isCancelled else { return }
+                self.expireEntryWait()
+            }
+        }
+    }
+
+    func release() {
+        self.released = true
+        self.entryTimeout?.cancel()
+        self.entryTimeout = nil
+        let continuation = self.releaseContinuation
+        self.releaseContinuation = nil
+        continuation?.resume()
+    }
+
+    private func expireEntryWait() {
+        self.entryTimeout = nil
+        let continuation = self.enteredContinuation
+        self.enteredContinuation = nil
+        continuation?.resume(returning: false)
+    }
+}
+
 /// The UIKit counterpart of `TranscriptPremeasureHosted` (#434): a hosted `UICollectionView` list with counter-based
 /// checks of the off-main path (no wall-clock assertions). Scrolling is driven through `readerScrolled`, which is what
 /// `scrollViewDidScroll` calls for a real drag.
@@ -272,33 +329,37 @@ struct TranscriptUIKitHostedTests {
         let chat = try #require(host.context.chat)
         chat.items = [item]
 
-        let entered = Mutex(false)
-        let release = DispatchSemaphore(value: 0)
-        let firstPreparation = Mutex(true)
-        host.coordinator.renderer.speechPreparationProbe = { _ in
-            let shouldHold = firstPreparation.withLock { first in
-                guard first else { return false }
-                first = false
-                return true
-            }
-            if shouldHold {
-                entered.withLock { $0 = true }
-                _ = release.wait(timeout: .now() + 4)
-            }
+        let gate = SpeechPreparationGate(messageID: messageID)
+        host.coordinator.renderer.speechPreparationGate = { id in await gate.hold(id) }
+        defer {
+            host.coordinator.renderer.speechPreparationGate = nil
+            Task { await gate.release() }
         }
-        defer { release.signal() }
         SpeechText.resetSpeakabilityDebugStats(tracking: messageID)
         defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: messageID) }
         host.coordinator.update(rows: [Self.assistant(messageID, text: prose, at: 1)], context: host.context, insets: (0, 0))
-        await Self.idle(host, cap: 10)
-        let started = await eventually { entered.withLock { $0 } }
-        #expect(started, "the real renderer starts background preparation")
+        let started = await gate.waitUntilEntered(timeout: .seconds(4))
+        guard started else {
+            await gate.release()
+            #expect(Bool(false), "the real renderer starts background preparation")
+            return
+        }
+
+        // Hold longer than the former four-second semaphore auto-release. This bounded causal
+        // check proves the real worker remains paused before the same-ID edit below.
+        try? await Task.sleep(for: .seconds(5))
+        let stillHeld = SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 0
+        #expect(stillHeld, "the worker must still be held for the actual stale-completion fixture")
+        guard stillHeld else {
+            await gate.release()
+            return
+        }
 
         // The store now owns different content under the same transcript ID, while the native row
         // still holds its old projection. This is the interval in which stale work must be rejected.
         item.blocks = [.text(codeOnly)]
         chat.items = [item]
-        release.signal()
+        await gate.release()
         let refreshed = await eventually(timeout: .seconds(4)) {
             host.view.layoutIfNeeded()
             return SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations >= 2
