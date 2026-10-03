@@ -30,14 +30,15 @@ func runDemoCenteredChatHeaderChecks() async {
         let chat = gateway.chat(for: key)
         await chat.load()
         await chat.refreshBranches()
-        guard let row = gateway.sessions[key], let title = row.title else {
+        guard let row = gateway.sessions[key] else {
             check(false, "chat identity: selected seeded chat has its actual current title"); return
         }
+        let title = row.title
         titles.append(title)
         gateway.rememberTitle(title, for: key)
         check(gateway.cachedTitle(for: key) == title && !title.isEmpty,
               "chat identity: real header rememberTitle entry point retains the selected Demo title")
-        check(gateway.agent(row.agentId ?? "main").id == "main",
+        check(gateway.agent(row.agentId).id == "main",
               "chat identity: selected seeded chat resolves its actual agent avatar")
         check(chat.hasLoaded && !chat.branches.isEmpty,
               "chat identity: moving controls into overflow preserves real loaded branch metadata")

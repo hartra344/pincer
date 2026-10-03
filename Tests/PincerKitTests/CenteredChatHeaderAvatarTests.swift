@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Chat identity still avatar poses")
 struct CenteredChatHeaderAvatarTests {
-    @Test(arguments: [AvatarState.idle, .thinking, .streaming, .tool, .awaitingApproval, .success, .error, .compacting])
+    @Test(arguments: [AvatarState.idle, .thinking, .streaming, .tool(.exec), .awaitingApproval, .success, .error, .compacting])
     func nonAnimatedAvatarRetainsMeaningfulStateWithoutClockMotion(_ state: AvatarState) {
         let first = AvatarMotion.pose(for: state, time: 0, elapsed: 0, animated: false, phase: 0)
         let later = AvatarMotion.pose(for: state, time: 10_000, elapsed: 10_000, animated: false, phase: 4)
