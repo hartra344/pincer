@@ -120,6 +120,10 @@ struct TranscriptUIKitHostedTests {
         try WebSearchTruncationStatusTests.verifyAnswerStatus()
     }
 
+    @Test func demoAttachmentPreparationUsesTheSharedQueueAndCommitsAnImage() async throws {
+        try await AttachmentPreparationTests.verifyDemoChatDraftPreparesAndSendsAnOversizedImage()
+    }
+
     @Test func webSearchSnippetUsesAtMostTwoVisibleLinesAtCompactWidth() async throws {
         let host = await Self.makeHost(size: CGSize(width: 360, height: 844))
         let turnID = "snippet-lines-turn-\(UUID().uuidString)"

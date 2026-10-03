@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
@@ -194,6 +195,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Image attachment preparation (demo)") { await runDemoAttachmentPreparationChecks() },
         Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
         Section("Sidebar split pane marker (demo)") { await runDemoSidebarSplitPaneChecks() },
