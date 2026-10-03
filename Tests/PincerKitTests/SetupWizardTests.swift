@@ -116,8 +116,20 @@ final class SetupFakeGateway {
         #expect(needsAttention.label == "Needs Attention" && needsAttention.symbol == "exclamationmark.triangle.fill"
                 && needsAttention.tone == .warning)
 
+        let lockedNeedsAttention = SetupStepPresentation(status: .needsAttention("No default model is set."), step: .agent,
+                                                         needsFullManagement: true)
+        #expect(lockedNeedsAttention == needsAttention)
+
+        let lockedNotChecked = SetupStepPresentation(status: .notChecked("Still loading"), step: .agent,
+                                                    needsFullManagement: true)
+        #expect(lockedNotChecked.label == "Not Checked" && lockedNotChecked.symbol == "circle"
+                && lockedNotChecked.tone == .neutral)
+
         let skipped = SetupStepPresentation(status: .skipped, step: .testMessage)
         #expect(skipped.label == "Skipped" && skipped.symbol == "arrow.uturn.forward.circle" && skipped.tone == .neutral)
+
+        let lockedSkipped = SetupStepPresentation(status: .skipped, step: .agent, needsFullManagement: true)
+        #expect(lockedSkipped == skipped)
     }
 
     // MARK: Persistence and offering

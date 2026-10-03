@@ -104,9 +104,15 @@ public struct SetupStepPresentation: Hashable, Sendable {
     public let symbol: String
     public let tone: Tone
 
-    /// `needsFullManagement` is part of the presentation input even though the initial presentation
-    /// keeps the existing status unchanged; callers should not derive permissions from visual status.
+    /// A configured agent remains a semantic `.done` status for progress, but its presentation is neutral
+    /// when this connection cannot change Gateway defaults.
     public init(status: SetupStepStatus, step: SetupStep, needsFullManagement: Bool = false) {
+        if step == .agent, needsFullManagement, status.isDone {
+            self.label = L("Current default")
+            self.symbol = "info.circle"
+            self.tone = .neutral
+            return
+        }
         if step == .skills, status.isDone {
             self.label = L("Optional")
             self.symbol = "info.circle"
