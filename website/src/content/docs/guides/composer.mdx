@@ -49,6 +49,8 @@ The composer takes focus immediately even for a very long message; the short ope
 
 The gateway gives the agent the message you replied to, so your text is sent as you wrote it. Older gateways don't accept replies. With those, Pincer quotes the original at the start of your message instead, as `> **Claw:** …`, and keeps doing so on that connection.
 
+**Reply Last** chooses the newest committed message that can receive a reply. A committed user message is available immediately. While Pincer checks a newly received assistant message, Reply Last can be unavailable briefly; it becomes available when the check finishes. It waits for the correct target instead of choosing an older message.
+
 ## Attachments
 
 Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.
@@ -160,5 +162,3 @@ The exact list depends on your gateway, its skills and its plugins.
 ## Quick Capture
 
 On macOS, you can send to any chat from any app with <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd>, without switching to Pincer. See [Quick Capture](../quick-capture/).
-
-Reply Last checks the newest committed message without processing its full text on the UI thread. A committed user message is available immediately. When an assistant message still needs its exact text check, Reply Last stays unavailable briefly instead of choosing an older message; it becomes available when background preparation finishes. The check covers every text block, including content after a long whitespace prefix. Prepared results are reused until the transcript changes.
