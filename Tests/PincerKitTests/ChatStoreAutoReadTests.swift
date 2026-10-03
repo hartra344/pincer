@@ -93,6 +93,25 @@ struct ChatStoreAutoReadTests {
                 "disabled Read Aloud must not parse the accepted reply on main")
     }
 
+    @Test func thinkingPresenceIncludesEmptyBlocksAndExcludesOrdinaryText() throws {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        self.message(chat, id: "ordinary-text", text: "No reasoning block.")
+        #expect(!chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == false)
+        #expect(chat.items.last?.thinkingText == nil)
+
+        // Preserve nil-versus-empty getter semantics for locally constructed transcript models.
+        var emptyThinking = try #require(chat.items.last)
+        emptyThinking.id = "empty-thinking"
+        emptyThinking.transcriptId = "empty-thinking"
+        emptyThinking.blocks = [.thinking("")]
+        chat.items.append(emptyThinking)
+        #expect(chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == true)
+        #expect(chat.items.last?.thinkingText == "", "actual text consumers retain the empty reasoning value")
+    }
+
     @Test func acceptedThinkingMessagePresenceDoesNotJoinLongTextOnMain() {
         let (chat, _) = self.chat()
         chat.onFinalAssistantReply = nil

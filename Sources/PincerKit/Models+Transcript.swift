@@ -568,6 +568,14 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         }.joined(separator: "\n\n")
     }
 
+    /// Presence checks inspect block tags without joining the reasoning payload.
+    public var hasThinkingContent: Bool {
+        self.blocks.contains { block in
+            if case .thinking = block { return true }
+            return false
+        }
+    }
+
     public var thinkingText: String? {
         let parts = self.blocks.compactMap { block -> String? in
             if case let .thinking(text) = block { return text }

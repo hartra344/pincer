@@ -44,6 +44,8 @@ func runDemoAccessibilityPass() async {
     _ = await waitFor("demo chat history") { chat.hasLoaded && !chat.entries.isEmpty }
 #if DEBUG
     let thinkingJoins = ChatItem.thinkingTextJoinProbeStats(for: thinkingID)
+    check(chat.items.first(where: \.hasThinkingContent)?.id == thinkingID,
+          "a11y pass: the actual history presence scan reaches the tracked seeded reasoning row")
     check(chat.sawThinking, "a11y pass: demo history detects its seeded thinking block")
     check(thinkingJoins.mainThreadJoins == 0,
           "a11y pass: demo thinking presence does not join transcript text on main (joins \(thinkingJoins.mainThreadJoins))")

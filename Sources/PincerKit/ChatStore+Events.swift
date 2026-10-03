@@ -365,7 +365,7 @@ extension ChatStore {
             self.recoverCappedMessages(fromAcceptedMessage: true)
         }
         if let key = item.idempotencyKey { self.gateway?.reconcileOutbox(committedKeys: [key]) }
-        if item.thinkingText != nil { self.sawThinking = true }
+        if item.hasThinkingContent { self.sawThinking = true }
         if var run = self.live, item.role == .assistant || item.role == .toolResult {
             // Committed output supersedes the streamed preview of the same step.
             let committedToolIds = Set(item.blocks.compactMap { block -> String? in

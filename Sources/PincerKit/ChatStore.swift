@@ -438,7 +438,7 @@ public final class ChatStore: Identifiable {
             let reactions = Reactions.agentReactions(in: self.items)
             if reactions != self.agentReactions { self.agentReactions = reactions }
             if !self.sawThinking {
-                self.sawThinking = self.items.contains { $0.thinkingText != nil }
+                self.sawThinking = self.items.contains { $0.hasThinkingContent }
             }
         }
         var entries: [TranscriptEntry] = []
