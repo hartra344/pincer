@@ -225,3 +225,5 @@ To keep memory in check with many long chats, Pincer keeps only your most recent
 [Search messages](../search/) covers everything in this cache. Where the cache lives, how it handles updates and damaged files, and how to clear it are described in [Local cache](../local-cache/).
 
 Cold rows use a rough height estimate that inspects at most 64 content or reaction metadata entries and 16 KiB of text in total. Uninspected or noncontiguous text receives an extra allowance; this is an estimate, not an exact height. Background premeasurement replaces it with the measured layout while preserving the reader's scroll anchor.
+
+On macOS, VoiceOver rotor results reuse a message’s rendered spoken label when available. For a message that has not been rendered, the cold label uses its speaker and a short text opening: at most 400 UTF-8 bytes across 64 content blocks, with the assistant name bounded to 128 bytes. A text source that cannot supply a contiguous UTF-8 opening can fall back to the speaker alone. Selecting the message still loads its complete rendered label.

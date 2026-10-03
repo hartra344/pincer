@@ -621,18 +621,19 @@ struct TranscriptList: NSViewRepresentable {
             guard case let .entry(entry) = row else { return "" }
             switch entry {
             case let .user(item):
+                let body = ColdRotorTextOpening.capture(blocks: item.blocks)
                 #if DEBUG
-                self.coldRotorLabelProbe?.record(.fullTextJoin, rowID: row.id)
-                self.coldRotorLabelProbe?.record(.characterPrefix, rowID: row.id)
+                self.coldRotorLabelProbe?.boundedCapture(rowID: row.id, bodyBytes: body.inspectedBytes, authorBytes: 0, visitedBlocks: body.visitedBlocks)
                 #endif
-                return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(String(item.plainText.prefix(400)), limit: 80)]
+                return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(body.text, limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .assistant(turn):
+                let body = ColdRotorTextOpening.capture(text: turn.text.first ?? "")
+                let author = ColdRotorTextOpening.author(self.controller.context.agent.name)
                 #if DEBUG
-                self.coldRotorLabelProbe?.record(.characterPrefix, rowID: row.id)
-                self.coldRotorLabelProbe?.record(.authorFormatting, rowID: row.id)
+                self.coldRotorLabelProbe?.boundedCapture(rowID: row.id, bodyBytes: body.inspectedBytes, authorBytes: author.inspectedBytes, visitedBlocks: body.visitedBlocks)
                 #endif
-                return [AccessibilityText.speaker(role: .assistant, author: self.controller.context.agent.name), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
+                return [AccessibilityText.speaker(role: .assistant, author: author.text.isEmpty ? nil : author.text), AccessibilityText.summary(body.text, limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .marker(_, label):
                 return label
