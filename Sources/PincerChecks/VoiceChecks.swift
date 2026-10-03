@@ -356,6 +356,10 @@ func runDemoVoice() async {
         check(readiness.complete(revised, with: editedPrepared, sourceRevision: 2)
               && readiness.value(messageID: demoReply.id)?.isEligible == false,
               "demo same-ID edits replace old Read Aloud eligibility")
+        check(!readiness.complete(first, with: prepared, sourceRevision: 1)
+              && readiness.value(messageID: demoReply.id)?.isEligible == false
+              && readiness.value(messageID: demoReply.id)?.sourceRevision == 2,
+              "demo delayed prose preparation cannot restore eligibility after the same-ID code-only edit")
     } else {
         check(false, "demo assistant fixture exists for prepared Read Aloud coverage")
     }
