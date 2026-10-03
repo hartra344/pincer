@@ -52,6 +52,11 @@ func runDemoSetup() async {
     // Seeded statuses: Health and Channels aren't setup steps any more (#175).
     check(SetupStep.allCases == [.agent, .skills, .testMessage], "setup steps are Agent & Model, Skills, Test Message")
     check(setup.status(of: .agent).isDone, "demo Agent & Model is Done (\(setup.status(of: .agent)))")
+    let agentPresentation = SetupStepPresentation(status: setup.status(of: .agent), step: .agent,
+                                                  needsFullManagement: setup.needsFullManagement(.agent))
+    check(agentPresentation.label == "Current default" && agentPresentation.symbol == "info.circle"
+          && agentPresentation.tone == .neutral,
+          "demo Agent & Model shows a neutral Current default status without Full Management")
     let skills = setup.status(of: .skills)
     // The wizard reads the Skills page's seed: every Needs Setup skill there (not disabled, blocked or other-OS) is missing.
     await gateway.skills.load(agentId: nil)
