@@ -97,6 +97,41 @@ final class SetupFakeGateway {
         #expect(SetupStep.allCases.allSatisfy { !$0.summary.isEmpty && !$0.title.isEmpty })
     }
 
+    @Test func lockedAgentPresentationIsNeutral() {
+        let presentation = SetupStepPresentation(status: .done("Claw · claude-opus-4-8"), step: .agent,
+                                                needsFullManagement: true)
+        #expect(presentation.label == "Current default")
+        #expect(presentation.symbol == "info.circle")
+        #expect(presentation.tone == .neutral)
+    }
+
+    @Test func setupStepPresentationKeepsOtherStatuses() {
+        let optional = SetupStepPresentation(status: .done("1 skill is ready."), step: .skills)
+        #expect(optional.label == "Optional" && optional.symbol == "info.circle" && optional.tone == .neutral)
+
+        let editable = SetupStepPresentation(status: .done("Claw · claude-opus-4-8"), step: .agent)
+        #expect(editable.label == "Done" && editable.symbol == "checkmark.circle.fill" && editable.tone == .positive)
+
+        let needsAttention = SetupStepPresentation(status: .needsAttention("No default model is set."), step: .agent)
+        #expect(needsAttention.label == "Needs Attention" && needsAttention.symbol == "exclamationmark.triangle.fill"
+                && needsAttention.tone == .warning)
+
+        let lockedNeedsAttention = SetupStepPresentation(status: .needsAttention("No default model is set."), step: .agent,
+                                                         needsFullManagement: true)
+        #expect(lockedNeedsAttention == needsAttention)
+
+        let lockedNotChecked = SetupStepPresentation(status: .notChecked("Still loading"), step: .agent,
+                                                    needsFullManagement: true)
+        #expect(lockedNotChecked.label == "Not Checked" && lockedNotChecked.symbol == "circle"
+                && lockedNotChecked.tone == .neutral)
+
+        let skipped = SetupStepPresentation(status: .skipped, step: .testMessage)
+        #expect(skipped.label == "Skipped" && skipped.symbol == "arrow.uturn.forward.circle" && skipped.tone == .neutral)
+
+        let lockedSkipped = SetupStepPresentation(status: .skipped, step: .agent, needsFullManagement: true)
+        #expect(lockedSkipped == skipped)
+    }
+
     // MARK: Persistence and offering
 
     @Test func progressPersistsPerGateway() throws {

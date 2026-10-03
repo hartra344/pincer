@@ -1423,6 +1423,16 @@
         }
       }
     },
+    "Current default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current default"
+          }
+        }
+      }
+    },
     "Hide Sidebar": {
       "localizations": {
         "en": {

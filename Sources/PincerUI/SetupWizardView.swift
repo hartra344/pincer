@@ -155,28 +155,27 @@ private struct SetupIntroView: View {
 private struct SetupStatusIcon: View {
     let status: SetupStepStatus
     let step: SetupStep
+    var needsFullManagement = false
+
+    private var presentation: SetupStepPresentation {
+        SetupStepPresentation(status: self.status, step: self.step, needsFullManagement: self.needsFullManagement)
+    }
 
     var body: some View {
-        Image(systemName: Self.isOptional(self.status, self.step) ? "info.circle" : self.status.symbol)
-            .foregroundStyle(Self.color(self.status, self.step))
-            .accessibilityLabel(Self.label(self.status, self.step))
+        Image(systemName: self.presentation.symbol)
+            .foregroundStyle(Self.color(self.presentation.tone))
+            .accessibilityLabel(self.presentation.label)
     }
 
-    /// Skills are informational: once checked they read "Optional", never Done or a demand.
-    static func isOptional(_ status: SetupStepStatus, _ step: SetupStep) -> Bool {
-        step == .skills && status.isDone
+    static func presentation(_ status: SetupStepStatus, _ step: SetupStep, needsFullManagement: Bool = false) -> SetupStepPresentation {
+        SetupStepPresentation(status: status, step: step, needsFullManagement: needsFullManagement)
     }
 
-    static func label(_ status: SetupStepStatus, _ step: SetupStep) -> String {
-        self.isOptional(status, step) ? L("Optional") : status.label
-    }
-
-    static func color(_ status: SetupStepStatus, _ step: SetupStep) -> Color {
-        if self.isOptional(status, step) { return .secondary }
-        switch status {
-        case .done: return .green
-        case .needsAttention: return .orange
-        case .skipped, .notChecked: return .secondary
+    static func color(_ tone: SetupStepPresentation.Tone) -> Color {
+        switch tone {
+        case .positive: .green
+        case .warning: .orange
+        case .neutral: .secondary
         }
     }
 }
@@ -196,11 +195,13 @@ private struct SetupStepList: View {
             List(SetupStep.allCases, selection: Binding(get: { self.setup.currentStep },
                                                          set: { if let step = $0 { self.setup.currentStep = step } })) { step in
                 let status = self.setup.status(of: step)
+                let presentation = SetupStatusIcon.presentation(status, step,
+                                                                 needsFullManagement: self.setup.needsFullManagement(step))
                 HStack(spacing: Theme.Spacing.md) {
-                    SetupStatusIcon(status: status, step: step)
+                    SetupStatusIcon(status: status, step: step, needsFullManagement: self.setup.needsFullManagement(step))
                     VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                         Text(step.title)
-                        Text(SetupStatusIcon.label(status, step)).font(.caption).foregroundStyle(.secondary)
+                        Text(presentation.label).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, Theme.Spacing.xxs)
@@ -223,9 +224,11 @@ private struct SetupStepStrip: View {
             HStack(spacing: Theme.Spacing.md) {
                 ForEach(SetupStep.allCases) { step in
                     let status = self.setup.status(of: step)
+                    let presentation = SetupStatusIcon.presentation(status, step,
+                                                                     needsFullManagement: self.setup.needsFullManagement(step))
                     Button { self.setup.currentStep = step } label: {
                         HStack(spacing: Theme.Spacing.xs) {
-                            SetupStatusIcon(status: status, step: step)
+                            SetupStatusIcon(status: status, step: step, needsFullManagement: self.setup.needsFullManagement(step))
                             Text(step.title)
                         }
                         .font(.subheadline)
@@ -234,7 +237,7 @@ private struct SetupStepStrip: View {
                         .background(Capsule().fill(step == self.setup.currentStep ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(step.title), \(SetupStatusIcon.label(status, step))")
+                    .accessibilityLabel("\(step.title), \(presentation.label)")
                 }
             }
             .padding(.horizontal)
@@ -257,6 +260,8 @@ private struct SetupStepDetail: View {
     var body: some View {
         let step = self.setup.currentStep
         let status = self.setup.status(of: step)
+        let presentation = SetupStatusIcon.presentation(status, step,
+                                                        needsFullManagement: self.setup.needsFullManagement(step))
         VStack(spacing: 0) {
             Form {
                 Section {
@@ -265,8 +270,8 @@ private struct SetupStepDetail: View {
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             Text(step.heading).font(.title3.bold()).accessibilityAddTraits(.isHeader)
                             HStack(spacing: Theme.Spacing.xs) {
-                                SetupStatusIcon(status: status, step: step)
-                                Text(SetupStatusIcon.label(status, step)).foregroundStyle(SetupStatusIcon.color(status, step))
+                                SetupStatusIcon(status: status, step: step, needsFullManagement: self.setup.needsFullManagement(step))
+                                Text(presentation.label).foregroundStyle(SetupStatusIcon.color(presentation.tone))
                             }
                             .font(.callout)
                             Text(step.summary).font(.callout).foregroundStyle(.secondary)

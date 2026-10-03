@@ -91,6 +91,44 @@ public enum SetupStepStatus: Hashable, Sendable {
     public var needsAttention: Bool { if case .needsAttention = self { true } else { false } }
 }
 
+/// The compact status presentation shared by the wizard's step list, strip, and detail page.
+/// Keeping the semantic presentation in Kit lets offline and demo checks cover the same policy the UI uses.
+public struct SetupStepPresentation: Hashable, Sendable {
+    public enum Tone: Hashable, Sendable {
+        case positive
+        case warning
+        case neutral
+    }
+
+    public let label: String
+    public let symbol: String
+    public let tone: Tone
+
+    /// A configured agent remains a semantic `.done` status for progress, but its presentation is neutral
+    /// when this connection cannot change Gateway defaults.
+    public init(status: SetupStepStatus, step: SetupStep, needsFullManagement: Bool = false) {
+        if step == .agent, needsFullManagement, status.isDone {
+            self.label = L("Current default")
+            self.symbol = "info.circle"
+            self.tone = .neutral
+            return
+        }
+        if step == .skills, status.isDone {
+            self.label = L("Optional")
+            self.symbol = "info.circle"
+            self.tone = .neutral
+            return
+        }
+        self.label = status.label
+        self.symbol = status.symbol
+        switch status {
+        case .done: self.tone = .positive
+        case .needsAttention: self.tone = .warning
+        case .notChecked, .skipped: self.tone = .neutral
+        }
+    }
+}
+
 // MARK: Gateway results
 
 /// One entry of `skills.status` (operator.read) `skills[]`.
