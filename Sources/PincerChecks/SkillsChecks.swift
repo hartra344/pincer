@@ -95,6 +95,41 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     check(skills.loadError == nil && skills.skills.count >= 6, "demo skills load (\(skills.skills.count))")
     check(Set(skills.skills.map(\.state)) == Set(SkillState.allCases), "demo covers every state")
     check(skills.skill(key: "video-frames")?.primaryReason == "Missing binary: ffmpeg", "demo missing binary")
+
+    do {
+        let qualified = try await gateway.connection.request("skills.detail", ["slug": .string("@clawdia/nas-report")])
+        let bare = try await gateway.connection.request("skills.detail", ["slug": .string("nas-report")])
+        check(qualified["skill"]?["slug"]?.text == "nas-report" && bare["skill"]?["slug"]?.text == "nas-report",
+              "demo resolves exact-owner and bare skill references")
+    } catch {
+        check(false, "demo resolves seeded publisher references (\(error.localizedDescription))")
+    }
+    do {
+        _ = try await gateway.connection.request("skills.detail", ["slug": .string("@someone-else/nas-report")])
+        check(false, "demo does not resolve another publisher by bare slug")
+    } catch let GatewayError.rpc(code, _, _) {
+        check(code == "UNAVAILABLE", "demo rejects a mismatched publisher")
+    } catch {
+        check(false, "demo wrong-publisher detail uses UNAVAILABLE (\(error.localizedDescription))")
+    }
+    do {
+        let beforeStatus = try await gateway.connection.request("skills.status", [:])
+        let beforeNas = beforeStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        check(beforeNas?["clawhub"]?["installedVersion"]?.text == "1.2.0", "demo publisher control starts with the seeded installed copy")
+        do {
+            _ = try await gateway.connection.request("skills.install", [
+                "source": .string("clawhub"), "slug": .string("@someone-else/nas-report"), "force": .bool(true),
+            ])
+            check(false, "demo force install rejects a mismatched publisher")
+        } catch let GatewayError.rpc(code, _, _) {
+            check(code == "UNAVAILABLE", "demo wrong-publisher force install uses UNAVAILABLE")
+        }
+        let afterStatus = try await gateway.connection.request("skills.status", [:])
+        let afterNas = afterStatus["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+        check(afterNas == beforeNas, "demo wrong-publisher force install leaves the installed skill unchanged")
+    } catch {
+        check(false, "demo wrong-publisher force-install preservation check (\(error.localizedDescription))")
+    }
     if let notion = skills.skill(key: "notion") {
         let transientKey = "sk-demo_MiXeD-123+/=:@."
         let saved = await skills.setApiKey(notion, transientKey)

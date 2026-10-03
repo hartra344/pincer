@@ -572,6 +572,44 @@ struct SkillsToolsTests {
         #expect(response["message"]?.text == "Installed")
     }
 
+    @MainActor @Test func demoClawHubReferenceRequiresMatchingPublisher() async throws {
+        let demo = DemoGateway()
+
+        let qualified = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report")])
+        let bare = try await demo.handle("skills.detail", ["slug": .string("nas-report")])
+        #expect(qualified["skill"]?["slug"]?.text == "nas-report")
+        #expect(bare["skill"]?["slug"]?.text == "nas-report")
+
+        do {
+            _ = try await demo.handle("skills.detail", ["slug": .string("@someone-else/nas-report")])
+            Issue.record("a qualified reference from another publisher must not resolve by bare slug")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "UNAVAILABLE")
+        }
+    }
+
+    @MainActor @Test func demoClawHubWrongPublisherForceInstallDoesNotReplaceKnownSkill() async throws {
+        let demo = DemoGateway()
+        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
+
+        do {
+            _ = try await demo.handle("skills.install", [
+                "source": .string("clawhub"), "slug": .string("@someone-else/nas-report"), "force": .bool(true),
+            ])
+            Issue.record("force install from a different publisher must not replace nas-report")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "UNAVAILABLE")
+        }
+
+        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
+            $0["name"]?.text == "nas-report"
+        }
+        #expect(after == before)
+    }
+
     @MainActor @Test func demoToolsInspector() async throws {
         let demo = DemoGateway()
         let request: ToolsInspectorModel.Request = { method, params in try await demo.handle(method, params) }
