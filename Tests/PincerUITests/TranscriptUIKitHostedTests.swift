@@ -120,6 +120,11 @@ struct TranscriptUIKitHostedTests {
         try WebSearchTruncationStatusTests.verifyAnswerStatus()
     }
 
+    #if DEBUG
+    @Test func attachmentThumbnailDownsamplesOnUIKitWithoutBreakingSameIDReplacement() async throws {
+        try await AttachmentThumbnailUIKitHostedVerification.verifyDownsamplingAndIdentityReplacement()
+    }
+    #endif
     @Test func demoAttachmentPreparationUsesTheSharedQueueAndCommitsAnImage() async throws {
         try await AttachmentPreparationTests.verifyDemoChatDraftPreparesAndSendsAnOversizedImage()
     }

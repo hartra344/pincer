@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
             Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },

@@ -7,15 +7,30 @@ public struct OutgoingAttachment: Identifiable, Hashable, Sendable {
     public let fileName: String
     public let mimeType: String
     public let data: Data
+    /// Identifies this immutable payload instance for local preview work. It is deliberately
+    /// excluded from equality and hashing, which keep their existing upload semantics.
+    public let previewIdentity: UUID
 
     public init(id: UUID = UUID(), fileName: String, mimeType: String, data: Data) {
         self.id = id
         self.fileName = fileName
         self.mimeType = mimeType
         self.data = data
+        self.previewIdentity = UUID()
     }
 
     public var isImage: Bool { self.mimeType.hasPrefix("image/") }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id && lhs.fileName == rhs.fileName && lhs.mimeType == rhs.mimeType && lhs.data == rhs.data
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.id)
+        hasher.combine(self.fileName)
+        hasher.combine(self.mimeType)
+        hasher.combine(self.data)
+    }
 }
 
 /// The Gateway's upload policy from its hello, saved per Gateway so limits are known offline.
