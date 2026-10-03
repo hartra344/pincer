@@ -45,6 +45,12 @@ struct TranscriptList: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, TranscriptListHost {
         /// Rows, heights, the anchor and measuring, shared with the UIKit list.
         let controller: TranscriptListController
+        private var messagePartSelection = TranscriptMessagePartSelection()
+#if DEBUG
+        /// Observes the actual keyboard menu after native event/target resolution. Returning
+        /// true suppresses only its blocking presentation in an opted-in hosted test.
+        var keyboardMenuProbe: (@MainActor (String?, NSMenu) -> Bool)?
+#endif
         var renderer: TranscriptRenderer { self.controller.renderer }
         private var rows: [TranscriptRow] { self.controller.rows }
         private var anchor: TranscriptAnchor {
@@ -135,6 +141,7 @@ struct TranscriptList: NSViewRepresentable {
         func update(rows newRows: [TranscriptRow], context: TranscriptContext,
                     insets: (top: CGFloat, bottom: CGFloat), isConnected: Bool = true) {
             let contextChanged = self.controller.beginUpdate(context: context, rowCount: newRows.count)
+            if contextChanged { self.messagePartSelection.reconcile(rowID: nil, messageIDs: []) }
             var acceptedRows = false
             defer {
                 self.controller.revealPending()
@@ -402,7 +409,12 @@ struct TranscriptList: NSViewRepresentable {
             let layout = self.renderer.layout(for: item, width: self.layoutWidth)
             self.controller.correctHeight(item.id, width: self.layoutWidth, height: layout.height)
             cell.apply(layout, actions: self.renderer)
-            cell.showsFocusRing = self.showsFocusRing(at: row)
+            let focused = self.showsFocusRing(at: row)
+            if focused {
+                cell.keyboardMessageID = self.messagePartSelection.reconcile(rowID: item.id,
+                                                                             messageIDs: cell.keyboardMessageIDs)
+            }
+            cell.showsFocusRing = focused
             return cell
         }
 
@@ -479,7 +491,13 @@ struct TranscriptList: NSViewRepresentable {
         fileprivate func refreshFocusRing() {
             guard let table, let visible = self.visibleRows else { return }
             for row in visible {
-                (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell)?.showsFocusRing = self.showsFocusRing(at: row)
+                guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell else { continue }
+                let focused = self.showsFocusRing(at: row)
+                if focused {
+                    cell.keyboardMessageID = self.messagePartSelection.reconcile(rowID: self.rows[row].id,
+                                                                                 messageIDs: cell.keyboardMessageIDs)
+                }
+                cell.showsFocusRing = focused
             }
         }
 
@@ -501,6 +519,8 @@ struct TranscriptList: NSViewRepresentable {
             switch event.keyCode {
             case 126: self.navigate(forward: false)
             case 125: self.navigate(forward: true)
+            case 123: return self.moveMessagePart(forward: false)
+            case 124: return self.moveMessagePart(forward: true)
             case 36, 76, 49: self.openActions()
             case 53: self.returnToComposer()
             default: return false
@@ -510,9 +530,30 @@ struct TranscriptList: NSViewRepresentable {
 
         /// Return and Space: the current message's actions menu, as a right-click would show.
         private func openActions() {
-            guard let table, let id = self.controller.navigationRowId, let row = self.rows.firstIndex(where: { $0.id == id }),
-                  let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell else { return }
+            guard let (id, cell) = self.keyboardCell else { return }
+            cell.keyboardMessageID = self.messagePartSelection.reconcile(rowID: id, messageIDs: cell.keyboardMessageIDs)
+#if DEBUG
+            cell.keyboardMenuProbe = self.keyboardMenuProbe
+#endif
             cell.popUpActions()
+        }
+
+        /// Keys only use a visible cell's finished span metadata. They must not materialize a
+        /// missing cell or synchronously ask the renderer to measure a new row.
+        private var keyboardCell: (String, TranscriptCell)? {
+            guard let table, let id = self.controller.navigationRowId,
+                  let row = self.rows.firstIndex(where: { $0.id == id }),
+                  let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell,
+                  cell.layoutRowID == id else { return nil }
+            return (id, cell)
+        }
+
+        private func moveMessagePart(forward: Bool) -> Bool {
+            guard let (id, cell) = self.keyboardCell else { return false }
+            let ids = cell.keyboardMessageIDs
+            guard ids.count > 1 else { return false }
+            cell.keyboardMessageID = self.messagePartSelection.move(forward: forward, rowID: id, messageIDs: ids)
+            return true
         }
 
         private func returnToComposer() {
@@ -740,16 +781,40 @@ private final class TranscriptCell: NSView {
     override func isAccessibilityFocused() -> Bool { self.showsFocusRing }
 
     var spokenLabel: String? { self.content.layout?.accessibilityLabel }
+    var layoutRowID: String? { self.content.layout?.id }
+    var keyboardMessageIDs: [String] { self.content.layout?.messages.map(\.id) ?? [] }
+    var keyboardMessageID: String? {
+        didSet { self.updateFocusRingFrame() }
+    }
 
-    /// The row's actions menu at its first message, as a right-click there would open it.
+    private func updateFocusRingFrame() {
+        guard let layout = self.content.layout, layout.messages.count > 1,
+              let selected = layout.messages.first(where: { $0.id == self.keyboardMessageID }) else {
+            self.ring.autoresizingMask = [.width, .height]
+            self.ring.frame = self.bounds
+            return
+        }
+        self.ring.autoresizingMask = [.width]
+        self.ring.frame = CGRect(x: 0, y: selected.minY, width: self.bounds.width,
+                                 height: max(0, selected.maxY - selected.minY))
+    }
+#if DEBUG
+    var keyboardMenuProbe: (@MainActor (String?, NSMenu) -> Bool)?
+#endif
+
+    /// The selected message's existing menu, as a right-click inside its span would open it.
     func popUpActions() {
-        guard let window, let layout = self.content.layout else { return }
-        let point = CGPoint(x: min(24, layout.width / 2), y: (layout.messages.first?.minY ?? 0) + 4)
+        guard let window, let layout = self.content.layout,
+              let span = layout.messages.first(where: { $0.id == self.keyboardMessageID }) ?? layout.messages.first else { return }
+        let point = CGPoint(x: min(24, layout.width / 2), y: span.minY + min(4, max(0, span.maxY - span.minY) / 2))
         let windowPoint = self.content.convert(point, to: nil)
         guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: windowPoint, modifierFlags: [],
                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                                              context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
               let menu = self.content.menu(for: event) else { NSSound.beep(); return }
+#if DEBUG
+        if self.keyboardMenuProbe?(layout.message(at: point.y), menu) == true { return }
+#endif
         menu.popUp(positioning: nil, at: point, in: self.content)
     }
 
@@ -767,6 +832,7 @@ private final class TranscriptCell: NSView {
         self.serial = layout.serial
         self.actions = actions
         self.content.apply(layout, actions: actions)
+        self.updateFocusRingFrame()
     }
 
     // One labelled group per message; its buttons and text stay reachable inside it.
