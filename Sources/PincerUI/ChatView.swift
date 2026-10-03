@@ -493,11 +493,12 @@ private struct TranscriptPane: View {
                     toggleBookmark: { [chat = self.chat, gateway = self.gateway] id in
                         let item = chat.items.first { $0.transcriptId == id || $0.id == id }
                         let store = BookmarkStore.shared(gatewayId: gateway.id)
-                        let added = store.toggle(Bookmark(
-                            sessionKey: chat.sessionKey, messageId: id, preview: Bookmark.preview(item?.plainText ?? ""),
-                            role: item?.role.rawValue ?? "assistant", messageDate: item?.timestamp))
-                        chat.notice = added && store.droppedCount > 0 ? L("To make room, Pincer removed an older bookmark.")
-                            : added ? L("Bookmarked") : L("Bookmark removed")
+                        let notice = ChatNoticeOperation(chat)
+                        let added = store.toggle(item, sessionKey: chat.sessionKey, messageId: id) { dropped in
+                            if dropped > 0 { notice.publishIfCurrent(L("To make room, Pincer removed an older bookmark.")) }
+                        }
+                        notice.publish(added && store.droppedCount > 0 ? L("To make room, Pincer removed an older bookmark.")
+                            : added ? L("Bookmarked") : L("Bookmark removed"))
                     },
                     isBookmarked: { [key = self.chat.sessionKey, id = self.gateway.id] in
                         BookmarkStore.shared(gatewayId: id).isBookmarked(sessionKey: key, messageId: $0)

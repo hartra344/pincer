@@ -97,6 +97,13 @@ public final class BookmarkStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var index: Set<String> = []
     @ObservationIgnored private var persistenceRevision = 0
+    @ObservationIgnored var previewPreparationQueue = BookmarkPreviewPreparationQueue.shared
+    @ObservationIgnored private var previewOperations: [String: UUID] = [:]
+#if DEBUG
+    /// Causal probe for the actual item-toggle preview preparation, never for removal.
+    @ObservationIgnored var previewPreparationProbe: (@Sendable (String, Bool) -> Void)?
+    func waitForPreviewPreparation() async { await self.previewPreparationQueue.waitUntilIdle() }
+#endif
 
     /// Most bookmarks kept per gateway; adding beyond drops the oldest.
     public static let limit = 150
@@ -150,6 +157,7 @@ public final class BookmarkStore {
     }
 
     public func add(_ bookmark: Bookmark) {
+        self.invalidatePreview(bookmark.id)
         guard !self.index.contains(bookmark.id) else { return }
         var changes: [String: String?] = [bookmark.id: bookmark.syncedValue]
         self.bookmarks.insert(bookmark, at: 0)
@@ -165,6 +173,7 @@ public final class BookmarkStore {
 
     public func remove(sessionKey: String, messageId: String) {
         let id = Bookmark.id(sessionKey: sessionKey, messageId: messageId)
+        self.invalidatePreview(id)
         guard self.index.remove(id) != nil else { return }
         self.bookmarks.removeAll { $0.id == id }
         self.save()
@@ -185,14 +194,60 @@ public final class BookmarkStore {
     /// Stars `item` (by its transcript id) in `sessionKey`, or un-stars it.
     @discardableResult
     public func toggle(_ item: ChatItem, sessionKey: String) -> Bool {
-        self.toggle(Bookmark(sessionKey: sessionKey, messageId: item.transcriptId ?? item.id,
-                             preview: Bookmark.preview(item.plainText), role: item.role.rawValue,
-                             messageDate: item.timestamp))
+        self.toggle(item, sessionKey: sessionKey, messageId: item.transcriptId ?? item.id)
+    }
+
+    /// Applies the star immediately. A text-only worker fills its preview afterward; removing
+    /// a star skips admission and preparation entirely. An explicit id preserves the action's
+    /// transcript locator even when its original item is no longer loaded.
+    @discardableResult
+    public func toggle(_ item: ChatItem?, sessionKey: String, messageId: String,
+                       onPreviewPrepared: (@MainActor @Sendable (Int) -> Void)? = nil) -> Bool {
+        let id = Bookmark.id(sessionKey: sessionKey, messageId: messageId)
+        if self.index.contains(id) {
+            self.remove(sessionKey: sessionKey, messageId: messageId)
+            return false
+        }
+        self.add(Bookmark(sessionKey: sessionKey, messageId: messageId, preview: "",
+                          role: item?.role.rawValue ?? "assistant", messageDate: item?.timestamp))
+        guard self.index.contains(id),
+              let input = BookmarkPreviewInput.capture(item, sessionKey: sessionKey, messageId: messageId) else { return true }
+        let token = UUID()
+        self.previewOperations[id] = token
+#if DEBUG
+        let probe = self.previewPreparationProbe
+#else
+        let probe: (@Sendable (String, Bool) -> Void)? = nil
+#endif
+        let admitted = self.previewPreparationQueue.submit(token: token, id: id, input: input, probe: probe) { [weak self] preview in
+            guard let self, self.previewOperations[id] == token,
+                  let index = self.bookmarks.firstIndex(where: { $0.id == id }) else { return }
+            self.previewOperations[id] = nil
+            self.bookmarks[index].preview = preview
+            let bookmark = self.bookmarks[index]
+            let dropped = self.trim(shard: Bookmark.shard(ofKey: id))
+            self.droppedCount = dropped.count
+            if !dropped.isEmpty { self.dropNotice += 1 }
+            self.save()
+            var changes: [String: String?] = [:]
+            if self.index.contains(id) { changes[id] = bookmark.syncedValue }
+            for victim in dropped { changes[victim.id] = .some(nil) }
+            self.onChange?(changes)
+            onPreviewPrepared?(dropped.count)
+        }
+        if !admitted { self.previewOperations[id] = nil }
+        return true
+    }
+
+    private func invalidatePreview(_ id: String) {
+        guard let token = self.previewOperations.removeValue(forKey: id) else { return }
+        self.previewPreparationQueue.cancel(token)
     }
 
     public func removeAll(sessionKey: String) {
         let removed = self.bookmarks.filter { $0.sessionKey == sessionKey }
         guard !removed.isEmpty else { return }
+        for bookmark in removed { self.invalidatePreview(bookmark.id) }
         self.bookmarks.removeAll { $0.sessionKey == sessionKey }
         self.index = Set(self.bookmarks.map(\.id))
         self.save()
@@ -204,6 +259,7 @@ public final class BookmarkStore {
     func removeConfirmedSessions(_ sessionKeys: Set<String>) async {
         let removed = self.bookmarks.filter { sessionKeys.contains($0.sessionKey) }
         guard !removed.isEmpty else { return }
+        for bookmark in removed { self.invalidatePreview(bookmark.id) }
         self.bookmarks.removeAll { sessionKeys.contains($0.sessionKey) }
         for bookmark in removed { self.index.remove(bookmark.id) }
         self.persistenceRevision += 1
@@ -245,6 +301,7 @@ public final class BookmarkStore {
     }
 
     private func remove(_ bookmark: Bookmark) {
+        self.invalidatePreview(bookmark.id)
         self.bookmarks.removeAll { $0.id == bookmark.id }
         self.index.remove(bookmark.id)
     }
@@ -253,16 +310,26 @@ public final class BookmarkStore {
     /// ones and leaving other shards alone. Doesn't fire `onChange`.
     func apply(synced: [String: String], shard: Int) {
         let local = Dictionary(self.bookmarks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        // Synced previews are shortened; keep the full one when this device has it.
         let decoded = synced.compactMap { Bookmark(syncedKey: $0.key, value: $0.value) }
             .filter { Bookmark.shard(ofKey: $0.id) == shard }
-            .map { remote -> Bookmark in
-                guard let known = local[remote.id] else { return remote }
+        let remote = Dictionary(decoded.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // A wire-identical echo of our immediate placeholder must preserve its preparation.
+        // Compare canonical wire values (including millisecond dates and shortened previews),
+        // rather than Date equality. A missing or genuinely changed value supersedes it.
+        let superseded = Set(self.previewOperations.keys.filter { id in
+            guard Bookmark.shard(ofKey: id) == shard else { return false }
+            guard let known = local[id], let incoming = remote[id] else { return true }
+            return known.syncedValue != incoming.syncedValue
+        })
+        for id in superseded { self.invalidatePreview(id) }
+        // Synced previews are shortened; keep the full one when this device has it.
+        let merged = decoded.map { remote -> Bookmark in
+                guard !superseded.contains(remote.id), let known = local[remote.id] else { return remote }
                 var merged = remote
                 merged.preview = known.preview
                 return merged
             }
-        let next = (self.bookmarks.filter { Bookmark.shard(ofKey: $0.id) != shard } + decoded)
+        let next = (self.bookmarks.filter { Bookmark.shard(ofKey: $0.id) != shard } + merged)
             .sorted { ($0.createdAt, $0.id) > ($1.createdAt, $1.id) }
         guard next != self.bookmarks else { return }
         self.bookmarks = next
@@ -282,6 +349,7 @@ public final class BookmarkStore {
     }
 
     public func removeAll() {
+        for id in Array(self.previewOperations.keys) { self.invalidatePreview(id) }
         self.persistenceRevision += 1
         self.bookmarks = []
         self.index = []

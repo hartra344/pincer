@@ -758,22 +758,50 @@ struct TranscriptUIKitHostedTests {
         await resize(to: initialWidth)
     }
 
-    @Test func scrollToTopDelegateSettlesMeasuredRowsAtTheTop() async {
+    @Test func statusBarTapCannotChangeChatPosition() async {
         let host = await Self.makeHost()
         host.coordinator.update(rows: Self.rows(count: 240, salt: "scroll-to-top"),
                                 context: host.context, insets: (0, 0))
+        await Self.verifyStatusBarTapDoesNotMove(host)
+    }
+
+    @Test func demoStatusBarTapCannotChangeChatPosition() async {
+        let rows = await Task.detached(priority: .utility) {
+            let items = DemoGateway.seedLongChatTranscript().enumerated().compactMap { index, message in
+                ChatItem(message, fallbackIndex: index)
+            }
+            return TranscriptBuilder.build(items).map { TranscriptRow.entry($0) }
+        }.value
+        #expect(!rows.isEmpty, "the native fixture uses the actual Try the Demo long-chat transcript")
+        let host = await Self.makeHost()
+        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
+        await Self.verifyStatusBarTapDoesNotMove(host)
+    }
+
+    static func verifyStatusBarTapDoesNotMove(_ host: Host) async {
         await Self.idle(host)
         #expect((host.coordinator.visibleRows?.lowerBound ?? 0) > 0)
-        #expect(host.coordinator.scrollViewShouldScrollToTop(host.view))
-        #expect(host.coordinator.isScrolling, "the native delegate marks the scroll-to-top transition active")
-        // Model UIKit's completed offset, then invoke its public delegate callback. This is not
-        // an automated OS status-bar gesture.
-        host.view.contentOffset.y = -host.view.adjustedContentInset.top
-        host.coordinator.scrollViewDidScrollToTop(host.view)
-        await Self.idle(host)
+        let offset = host.view.contentOffset
+        let anchor = host.coordinator.controller.anchor
+        let visibleRows = host.coordinator.visibleRows
         #expect(!host.coordinator.isScrolling)
-        #expect(host.coordinator.controller.anchor == .top)
-        #expect(host.coordinator.visibleRows?.lowerBound == 0)
+        #expect(!host.view.scrollsToTop, "the actual UIKit transcript must opt out of the invisible status-bar target")
+        #expect(!host.coordinator.scrollViewShouldScrollToTop(host.view), "the actual delegate rejects status-bar scroll requests")
+        await Self.idle(host)
+        #expect(!host.coordinator.isScrolling, "a rejected request must not leave transcript scrolling active")
+        #expect(host.view.contentOffset == offset)
+        #expect(host.coordinator.controller.anchor == anchor)
+        #expect(host.coordinator.visibleRows == visibleRows)
+
+        // This is the normal reader path used by scrollViewDidScroll for real drags. Rejecting
+        // the status-bar request must not prevent the reader from browsing earlier messages.
+        host.view.contentOffset.y = max(-host.view.adjustedContentInset.top + 2,
+                                        offset.y - host.view.bounds.height * 0.75)
+        host.coordinator.controller.readerScrolled(movingUp: true)
+        await Self.idle(host)
+        #expect(host.view.contentOffset.y < offset.y)
+        #expect(host.coordinator.controller.anchor != anchor)
+        #expect(host.coordinator.controller.anchor == host.coordinator.controller.currentAnchor())
         Self.expectConsistentGeometry(host, width: host.view.bounds.width)
     }
 

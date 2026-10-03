@@ -196,6 +196,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Explicit transcript history navigation (demo)") { await runDemoTranscriptManualNavigationChecks() },
         Section("Image attachment preparation (demo)") { await runDemoAttachmentPreparationChecks() },
         Section("Cold-launch routes (demo)") { await runDemoColdLaunchRouteChecks() },
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
