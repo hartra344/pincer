@@ -41,15 +41,39 @@ func runDemoAccessibilityPass() async {
         if case let .assistant(turn) = entry { turn } else { nil }
     }
     check(!replies.isEmpty, "a11y pass: demo chat has replies to navigate (\(chat.entries.count) entries)")
+    let excerptCache = MessagePartExcerptCache()
+    var checkedGroupedReplies = 0
     for turn in replies where !turn.body.isEmpty {
         let excerpt = AccessibilityText.streamingExcerpt(turn.body)
         check(!excerpt.isEmpty && excerpt.count <= 241, "a11y pass: streaming label of \(turn.id) starts with the reply")
         let count = turn.text.count
         if count > 1 {
+            checkedGroupedReplies += 1
             check(AccessibilityText.messagePartAction("Reply", part: 1, of: count) == "Reply, part 1 of \(count)",
                   "a11y pass: multi-message reply numbers its actions")
+            let sources = turn.text.map(MessagePartExcerptSource.init)
+            for source in sources { _ = excerptCache.excerpt(for: source) }
+            let prepared = await waitFor("a11y opening excerpts for \(turn.id)") {
+                sources.allSatisfy { excerptCache.excerpt(for: $0) != nil }
+            }
+            let excerpts = sources.map { excerptCache.excerpt(for: $0) ?? "" }
+            let spokenActions = excerpts.enumerated().map {
+                AccessibilityText.messagePartAction("Reply", part: $0.offset + 1, of: count, openingExcerpt: $0.element)
+            }
+            let identifyOpenings = zip(spokenActions, excerpts).enumerated().allSatisfy { item in
+                !item.element.1.isEmpty && item.element.0.contains("part \(item.offset + 1) of \(count)")
+                    && item.element.0.contains(item.element.1)
+            }
+            check(prepared && spokenActions.count == count && identifyOpenings,
+                  "a11y pass: each seeded multi-message action identifies its own opening")
+            check(excerptCache.cachedCount <= MessagePartExcerptCache.entryLimit
+                  && excerptCache.cachedByteCount <= MessagePartExcerptCache.byteLimit
+                  && excerptCache.activeCount <= 1 && excerptCache.pendingCount <= 32
+                  && excerptCache.pendingByteCount <= MessagePartExcerptSource.snapshotByteLimit * 32,
+                  "a11y pass: opening excerpts use bounded cache and worker budgets")
         }
     }
+    check(checkedGroupedReplies > 0, "a11y pass: demo includes a grouped reply for part-specific action labels")
 
     check(ShortcutCommand.nextMessage.defaultCombo?.displayString == "⌥⌘↓"
           && ShortcutCommand.previousMessage.defaultCombo?.displayString == "⌥⌘↑", "a11y pass: message navigation shortcuts")

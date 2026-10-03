@@ -431,4 +431,17 @@ struct AccessibilityPassLabelTests {
         #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 3) == "Reply, part 1 of 3")
         #expect(AccessibilityText.messagePartAction("Copy Link", part: 3, of: 3) == "Copy Link, part 3 of 3")
     }
+
+    @Test func messagePartActionAddsOnlyTheBoundedOpeningExcerpt() {
+        let longBody = "**Opening detail** " + String(repeating: "more words ", count: 100) + "SECRET-TAIL"
+        let excerpt = AccessibilityText.streamingExcerpt(longBody, limit: 44)
+        let label = AccessibilityText.messagePartAction("Reply", part: 2, of: 3, openingExcerpt: excerpt)
+
+        #expect(label.hasPrefix("Reply, part 2 of 3, Opening detail"))
+        #expect(label.hasSuffix("…"))
+        #expect(label.count < 80)
+        #expect(!label.contains("SECRET-TAIL"))
+        #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 1, openingExcerpt: excerpt) == "Reply")
+        #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 2, openingExcerpt: " \n") == "Reply, part 1 of 2")
+    }
 }

@@ -57,6 +57,11 @@ struct TranscriptAccessibilityActionTests {
         turn.text = ["ALPHA-OPEN: First distinctive opening.", "BETA-OPEN: Second distinctive opening."]
         turn.textIds = ["message-alpha", "message-beta"]
         let layout = renderer.layout(for: .entry(.assistant(turn)), width: 500)
+        let sources = layout.messages.compactMap(\.openingExcerptSource)
+        let excerptsReady = await eventually(timeout: .seconds(3)) {
+            sources.count == 2 && sources.allSatisfy { MessagePartExcerptCache.shared.excerpt(for: $0) != nil }
+        }
+        #expect(excerptsReady, "The actual renderer path should prepare both bounded opening excerpts off-main")
         let anchor = PView(frame: CGRect(x: 0, y: 0, width: 500, height: layout.height))
         let actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: renderer, anchor: anchor)
         let replies = actions.filter { $0.name.hasPrefix("Reply") }
