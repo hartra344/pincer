@@ -113,14 +113,39 @@ export async function run() {
     });
     assert.equal(emptyOwnerInstall.error.code, 'UNAVAILABLE');
     assert.equal(byName(await reader.send('skills.status', {}))['nas-report'].clawhub.installedVersion, '1.2.0');
+    for (const params of [
+      { slug: '@clawdia/nas-report', version: '' },
+      { slug: '@clawdia/nas-report', version: 1 },
+      { slug: '@clawdia/nas-report', version: null },
+      { slug: '' },
+      { slug: 1 },
+      { slug: null },
+      {},
+      { slug: '@clawdia/nas-report', unexpected: true },
+    ]) {
+      assert.equal((await reader.call('skills.detail', params)).error.code, 'INVALID_REQUEST');
+    }
+    const installOnlyDetail = await reader.call('skills.detail', { slug: ext.installRef });
+    assert.equal(installOnlyDetail.error.code, 'INVALID_REQUEST');
+    assert.equal(installOnlyDetail.error.message,
+      `ClawHub cannot return details for ${ext.installRef}; external skill sources are install-only. Install it directly, or run "openclaw skills install ${ext.installRef}".`);
     const detail = await reader.send('skills.detail', { slug: '@clawdia/nas-report' });
     assert.equal(detail.skill.slug, 'nas-report');
     assert.equal(detail.latestVersion.version, '1.3.0');
     assert.equal(detail.owner.handle, 'clawdia');
     const normalizedPublisher = await reader.send('skills.detail', { slug: '@CLAWDIA/ nas-report ' });
     assert.equal(normalizedPublisher.skill.slug, 'nas-report');
+    const selectedCurrent = await reader.send('skills.detail', { slug: '@clawdia/nas-report', version: '1.3.0' });
+    assert.equal(selectedCurrent.latestVersion.version, '1.3.0');
+    assert.equal(selectedCurrent.selectedRelease.version, '1.3.0');
+    const defaultCurrent = await reader.send('skills.detail', { slug: '@clawdia/nas-report' });
+    assert.equal(defaultCurrent.selectedRelease.version, '1.3.0');
+    const whitespaceCurrent = await reader.send('skills.detail', { slug: '@clawdia/nas-report', version: '   ' });
+    assert.equal(whitespaceCurrent.selectedRelease.version, '1.3.0');
+    const unseededOlder = await reader.send('skills.detail', { slug: '@clawdia/nas-report', version: '1.2.0' });
+    assert.equal(unseededOlder.latestVersion.version, '1.3.0');
+    assert.equal(unseededOlder.selectedRelease, null);
     assert.equal((await reader.send('skills.detail', { slug: 'home-assistant' })).skill.isOfficial, true);
-    assert.match((await reader.call('skills.detail', { slug: ext.installRef })).error.message, /external skill sources are install-only/);
     const missingDetail = await reader.call('skills.detail', { slug: 'nope' });
     assert.equal(missingDetail.error.code, 'UNAVAILABLE');
     assert.match(missingDetail.error.message, /404/);
