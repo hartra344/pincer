@@ -280,7 +280,7 @@ const fieldType = {
 const SCHEMAS = {
   'skills.status': [{ fields: { agentId: 'nonEmpty', sessionKey: 'nonEmpty' } }],
   'skills.search': [{ fields: { query: 'nonEmpty', limit: 'limit' } }],
-  'skills.detail': [{ required: ['slug'], fields: { slug: 'minString' } }],
+  'skills.detail': [{ required: ['slug'], fields: { slug: 'minString', version: 'minString' } }],
   'skills.install': [
     { required: ['name', 'installId'], fields: { agentId: 'nonEmpty', name: 'nonEmpty', installId: 'nonEmpty', dangerouslyForceUnsafeInstall: 'boolean', timeoutMs: 'timeoutMs' } },
     { required: ['source', 'slug'], fields: { agentId: 'nonEmpty', source: 'clawhub', slug: 'minString', version: 'nonEmpty', force: 'boolean', timeoutMs: 'timeoutMs' } },
@@ -513,7 +513,8 @@ export function skillsSearch(state, { query, limit }) {
     .map(({ item, score }) => searchResult(item, score));
 }
 
-function detailPayload(item) {
+function detailPayload(item, selectedVersion = item.version) {
+  const latestVersion = { version: item.version, createdAt: item.updatedAt, ...(item.changelog ? { changelog: item.changelog } : {}) };
   return {
     skill: {
       slug: item.slug,
@@ -526,7 +527,8 @@ function detailPayload(item) {
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     },
-    latestVersion: { version: item.version, createdAt: item.updatedAt, ...(item.changelog ? { changelog: item.changelog } : {}) },
+    latestVersion,
+    selectedRelease: selectedVersion === item.version ? latestVersion : null,
     metadata: { os: item.os ?? null, systems: null },
     owner: item.owner ? { ...item.owner, image: null } : null,
   };
@@ -797,7 +799,7 @@ export function handleSkillsRequest(state, conn, msg, { sendRes, sendErr }) {
       if (clawHubOffline()) return unavailable('ClawHub request failed: fetch failed');
       const item = findCatalogItem(skills.catalog, ref);
       if (!item) return unavailable(`ClawHub /api/v1/skills/${encodeURIComponent(ref.slug)} failed (404): Skill not found`);
-      sendRes(conn, id, detailPayload(item));
+      sendRes(conn, id, detailPayload(item, params.version?.trim() || item.version));
       return true;
     }
     case 'skills.install': {

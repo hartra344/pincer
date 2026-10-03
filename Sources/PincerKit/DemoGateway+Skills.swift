@@ -30,15 +30,19 @@ extension DemoGateway {
             try Self.checkKeys(method, params, ["query", "limit"])
             return ["results": .array(self.searchClawHub(params["query"]?.text, limit: params["limit"]?.int ?? 20))]
         case "skills.detail":
-            try Self.checkKeys(method, params, ["slug"])
+            try Self.checkKeys(method, params, ["slug", "version"])
             guard let ref = params["slug"]?.text else { throw Self.skillsInvalid("invalid skills.detail params: must have required property 'slug'") }
+            let rawVersion = params["version"]
+            if let rawVersion, rawVersion.string == nil || rawVersion.string?.isEmpty == true {
+                throw Self.skillsInvalid("invalid skills.detail params: version must be a non-empty string")
+            }
             guard let entry = self.catalogEntry(ref) else {
                 throw GatewayError.rpc(code: "UNAVAILABLE", message: "ClawHub skill \"\(ref)\" not found", details: nil)
             }
             if entry["installOnly"]?.bool == true {
-                throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only.")
+                throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
             }
-            return Self.detail(entry)
+            return Self.detail(entry, selectedVersion: rawVersion?.text ?? entry["version"]?.text)
         case "skills.install":
             return try self.installSkill(params)
         case "skills.update":
@@ -248,7 +252,7 @@ extension DemoGateway {
         }
     }
 
-    private static func detail(_ entry: JSONValue) -> JSONValue {
+    private static func detail(_ entry: JSONValue, selectedVersion: String?) -> JSONValue {
         let updatedAt = entry["updatedAt"] ?? Self.now()
         var skill: [String: JSONValue] = ["slug": entry["slug"] ?? "", "displayName": entry["displayName"] ?? entry["slug"] ?? "",
                                           "createdAt": entry["createdAt"] ?? updatedAt, "updatedAt": updatedAt]
@@ -258,6 +262,7 @@ extension DemoGateway {
             var latest: [String: JSONValue] = ["version": version, "createdAt": updatedAt]
             if let changelog = entry["changelog"] { latest["changelog"] = changelog }
             result["latestVersion"] = .object(latest)
+            result["selectedRelease"] = selectedVersion == version.text ? .object(latest) : .null
         }
         if let os = entry["os"] { result["metadata"] = ["os": os] }
         result["owner"] = ["handle": entry["ownerHandle"] ?? .null, "displayName": entry["ownerName"] ?? entry["ownerHandle"] ?? .null,
