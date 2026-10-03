@@ -58,12 +58,41 @@ func runDemoSetup() async {
           && agentPresentation.tone == .neutral,
           "demo Agent & Model shows a neutral Current default status without Full Management")
     let skills = setup.status(of: .skills)
+    if let report = setup.skills {
+        let presentation = report.presentation
+        let rowsByID = Dictionary(uniqueKeysWithValues: presentation.rows.map { ($0.id, $0) })
+        check(presentation.readyCount == report.ready.count && presentation.notSetUpCount == report.missing.count,
+              "demo Skills presentation retains the report's ready and not-set-up counts")
+        let expectedDisclosure = presentation.notSetUpCount == 1
+            ? "Show 1 skill that isn't set up"
+            : "Show \(presentation.notSetUpCount) skills that aren't set up"
+        check(presentation.disclosureLabel == expectedDisclosure,
+              "demo Skills disclosure pluralizes from the loaded report count (\(presentation.disclosureLabel))")
+        check(presentation.visibleNotSetUpRows(expanded: false).isEmpty
+              && presentation.visibleNotSetUpRows(expanded: true).map(\.id) == presentation.rows.map(\.id),
+              "demo Skills collapsed presentation hides rows while expanded presentation preserves their stable order")
+        let summarizeRow = rowsByID["summarize"]
+        let notionRow = rowsByID["notion"]
+        let voiceCallRow = rowsByID["voice-call"]
+        check(summarizeRow?.emoji == "🧾" && summarizeRow?.requirementSummary?.localizedCaseInsensitiveContains("command-line") == true
+              && summarizeRow?.installerLabel == "Install summarize (brew)",
+              "demo summarize row names its CLI requirement and keeps the upstream installer label")
+        check(notionRow?.emoji == "📝" && notionRow?.requirementSummary?.localizedCaseInsensitiveContains("environment") == true
+              && notionRow?.requirementSummary?.contains("NOTION_API_KEY") == false,
+              "demo Notion row describes an environment setting without exposing its raw key")
+        check(voiceCallRow?.emoji == "📞"
+              && voiceCallRow?.requirementSummary?.localizedCaseInsensitiveContains("configuration") == true
+              && voiceCallRow?.requirementSummary?.contains("plugins.entries") == false,
+              "demo voice-call row describes a Gateway configuration requirement without its raw path")
+    }
     // The wizard reads the Skills page's seed: every Needs Setup skill there (not disabled, blocked or other-OS) is missing.
     await gateway.skills.load(agentId: nil)
     let seedMissing = gateway.skills.skills.filter { $0.state == .needsSetup && !$0.platformIncompatible }.map(\.name)
     let wizardMissing = setup.skills?.missing.map(\.name) ?? []
     check(wizardMissing.contains("summarize") && Set(wizardMissing) == Set(seedMissing),
           "demo Skills: the seed's needs-setup skills are missing, summarize included (\(wizardMissing) vs \(seedMissing))")
+    check(Set(setup.skills?.presentation.rows.map(\.id) ?? []) == Set(wizardMissing),
+          "demo Skills presentation excludes disabled, blocked, and other-platform skills from setup rows")
     check(skills.isDone && !skills.needsAttention, "optional skills never need attention (\(skills))")
     check(setup.skills?.missing.first { $0.name == "summarize" }?.missing == ["summarize"], "demo summarize is missing its CLI")
     check(!setup.hasAdmin && setup.needsFullManagement(.agent) && !setup.needsFullManagement(.skills),

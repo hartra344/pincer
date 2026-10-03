@@ -425,33 +425,38 @@ private struct SetupSkillsStep: View {
     let setup: SetupWizardModel
     let openSettings: (SettingsDestination) -> Void
     @Environment(GatewayStore.self) private var gateway
+    @State private var expanded = false
 
     var body: some View {
         Section(L("Skills")) {
             if let report = self.setup.skills {
-                let missing = report.missing
-                if missing.isEmpty {
+                let presentation = report.presentation
+                if presentation.notSetUpCount == 0 {
                     Label(L("Every skill has what it needs."), systemImage: "checkmark.circle").foregroundStyle(.secondary)
                 } else {
-                    Text("Not set up", bundle: .module).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                ForEach(missing) { skill in
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Label {
-                            Text(skill.name)
-                        } icon: {
-                            if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
+                    DisclosureGroup(isExpanded: self.$expanded) {
+                        ForEach(presentation.visibleNotSetUpRows(expanded: self.expanded)) { skill in
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                                Label {
+                                    Text(skill.name)
+                                } icon: {
+                                    if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
+                                }
+                                if let requirementSummary = skill.requirementSummary {
+                                    Text("Needs \(requirementSummary)", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                                }
+                                if let installerLabel = skill.installerLabel {
+                                    Text(verbatim: installerLabel)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        if !skill.missing.isEmpty {
-                            Text("Needs \(skill.missing.joined(separator: ", "))", bundle: .module).font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !skill.installOptions.isEmpty {
-                            Text("Install: \(skill.installOptions.joined(separator: " · "))", bundle: .module)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    } label: {
+                        Text(verbatim: presentation.disclosureLabel)
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     }
                 }
-                LabeledContent(L("Ready"), value: "\(report.ready.count)")
+                LabeledContent(L("Ready"), value: "\(presentation.readyCount)")
             } else if let failure = self.setup.skillsFailure {
                 Text(failure).foregroundStyle(.secondary)
             } else {

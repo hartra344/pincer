@@ -131,6 +131,13 @@ public struct SetupStepPresentation: Hashable, Sendable {
 
 // MARK: Gateway results
 
+fileprivate struct SetupSkillMissingCounts: Hashable, Sendable {
+    let bins: Int
+    let hasAnyBins: Bool
+    let environment: Int
+    let config: Int
+}
+
 /// One entry of `skills.status` (operator.read) `skills[]`.
 public struct SetupSkill: Identifiable, Hashable, Sendable {
     public let name: String
@@ -140,8 +147,9 @@ public struct SetupSkill: Identifiable, Hashable, Sendable {
     public let disabled: Bool
     public let blocked: Bool
     public let platformIncompatible: Bool
-    /// `missing.bins`, `missing.anyBins`, `missing.env`, `missing.config`, flattened for display.
+    /// Raw values from `missing.bins`, `missing.anyBins`, `missing.env`, and `missing.config` for existing consumers.
     public let missing: [String]
+    fileprivate let missingRequirementCounts: SetupSkillMissingCounts
     /// `install[].label`: ways the Gateway can install what's missing (`skills.install`, admin).
     public let installOptions: [String]
 
@@ -157,13 +165,18 @@ public struct SetupSkill: Identifiable, Hashable, Sendable {
         self.blocked = json["blockedByAllowlist"]?.bool == true || json["blockedByAgentFilter"]?.bool == true
         self.platformIncompatible = json["platformIncompatible"]?.bool == true
         let missing = json["missing"]
+        let bins = missing?["bins"]?.array?.compactMap(\.text) ?? []
         var parts: [String] = []
-        parts += (missing?["bins"]?.array ?? []).compactMap(\.text)
+        parts += bins
         let anyBins = (missing?["anyBins"]?.array ?? []).compactMap(\.text)
         if !anyBins.isEmpty { parts.append(anyBins.joined(separator: " or ")) }
-        parts += (missing?["env"]?.array ?? []).compactMap(\.text)
-        parts += (missing?["config"]?.array ?? []).compactMap(\.text)
+        let env = (missing?["env"]?.array ?? []).compactMap(\.text)
+        let config = (missing?["config"]?.array ?? []).compactMap(\.text)
+        parts += env
+        parts += config
         self.missing = parts
+        self.missingRequirementCounts = SetupSkillMissingCounts(
+            bins: bins.count, hasAnyBins: !anyBins.isEmpty, environment: env.count, config: config.count)
         self.installOptions = (json["install"]?.array ?? []).compactMap { $0["label"]?.text }
     }
 
@@ -173,14 +186,73 @@ public struct SetupSkill: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A prepared presentation snapshot for the optional Skills setup step.
+/// The source values stay on `SetupSkill` for existing consumers; the wizard renders this small projection.
+public struct SetupSkillsPresentation: Hashable, Sendable {
+    public struct Row: Hashable, Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let emoji: String?
+        public let requirementSummary: String?
+        public let installerLabel: String?
+
+        fileprivate init(skill: SetupSkill) {
+            self.id = skill.id
+            self.name = skill.name
+            self.emoji = skill.emoji
+            self.requirementSummary = SetupSkillsPresentation.requirementSummary(for: skill.missingRequirementCounts)
+            self.installerLabel = skill.installOptions.isEmpty ? nil : skill.installOptions.joined(separator: " · ")
+        }
+    }
+
+    public let readyCount: Int
+    public let notSetUpCount: Int
+    public let disclosureLabel: String
+    public let rows: [Row]
+
+    fileprivate init(skills: [SetupSkill]) {
+        self.readyCount = skills.filter { $0.eligible && !$0.disabled }.count
+        self.rows = skills.filter(\.isMissingRequirements).map { Row(skill: $0) }
+        self.notSetUpCount = self.rows.count
+        self.disclosureLabel = self.notSetUpCount == 1
+            ? L("Show 1 skill that isn't set up")
+            : L("Show \(self.notSetUpCount) skills that aren't set up")
+    }
+
+    private static func requirementSummary(for counts: SetupSkillMissingCounts) -> String? {
+        var summary: [String] = []
+        if counts.bins > 0 {
+            summary.append(counts.bins == 1 ? L("a command-line tool") : L("\(counts.bins) command-line tools"))
+        }
+        if counts.hasAnyBins { summary.append(L("one supported command-line tool")) }
+        if counts.environment > 0 {
+            summary.append(counts.environment == 1
+                ? L("a Gateway environment setting")
+                : L("\(counts.environment) Gateway environment settings"))
+        }
+        if counts.config > 0 {
+            summary.append(counts.config == 1
+                ? L("a Gateway configuration setting")
+                : L("\(counts.config) Gateway configuration settings"))
+        }
+        return summary.isEmpty ? nil : summary.joined(separator: ", ")
+    }
+
+    public func visibleNotSetUpRows(expanded: Bool) -> [Row] { expanded ? self.rows : [] }
+}
+
 public struct SetupSkillsReport: Hashable, Sendable {
     public let skills: [SetupSkill]
+    public let presentation: SetupSkillsPresentation
 
-    public init(skills: [SetupSkill]) { self.skills = skills }
+    public init(skills: [SetupSkill]) {
+        self.skills = skills
+        self.presentation = SetupSkillsPresentation(skills: skills)
+    }
 
     public init?(_ json: JSONValue) {
         guard let skills = json["skills"]?.array else { return nil }
-        self.skills = skills.compactMap(SetupSkill.init)
+        self.init(skills: skills.compactMap(SetupSkill.init))
     }
 
     public var missing: [SetupSkill] { self.skills.filter(\.isMissingRequirements) }
@@ -204,9 +276,9 @@ public enum SetupRules {
     /// Missing requirements never need attention.
     public static func skills(_ report: SetupSkillsReport?, failure: String? = nil) -> SetupStepStatus {
         guard let report else { return .notChecked(failure) }
-        let ready = report.ready.count
+        let ready = report.presentation.readyCount
         let readyText = ready == 1 ? "1 skill is ready." : "\(ready) skills are ready."
-        let notSetUp = report.missing.count
+        let notSetUp = report.presentation.notSetUpCount
         guard notSetUp > 0 else { return .done(readyText) }
         return .done("\(readyText) \(notSetUp) \(notSetUp == 1 ? "isn't" : "aren't") set up.")
     }
@@ -751,7 +823,7 @@ public final class SetupWizardModel {
         }
         do {
             let result = try await self.environment.request("skills.status", [:])
-            self.skills = SetupSkillsReport(result)
+            self.skills = await Task.detached(priority: .userInitiated) { SetupSkillsReport(result) }.value
             self.skillsFailure = self.skills == nil ? "The Gateway sent an unexpected skill status." : nil
         } catch {
             self.skills = nil
