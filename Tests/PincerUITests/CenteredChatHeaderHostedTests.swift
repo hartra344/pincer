@@ -204,12 +204,29 @@ private struct CenteredChatHeaderHostedTests {
         gateway.selectedKey = "agent:main:dashboard:trip"
         for (width, height, type) in [(CGFloat(320), CGFloat(844), DynamicTypeSize.accessibility5), (430, 390, .large)] {
             let host = CenteredChatHeaderNativeFixtures.Host(app: app, gateway: gateway, width: width,
-                                                           height: height, dynamicTypeSize: type)
+                                                           height: height, dynamicTypeSize: .large)
             defer { host.close() }
             try #require(await eventually(timeout: .seconds(15)) {
                 host.geometry.frames.count == 3 && host.geometry.frames.values.allSatisfy { $0.height > 0 }
                     && CenteredChatHeaderNativeFixtures.views(host.window).contains { $0 is ComposerUITextView && $0.bounds.height > 0 }
             })
+            let baselineTitle = try #require(host.geometry.frames[.title])
+            let baselineReservation = try #require(host.geometry.frames[.reservation])
+            if type == .accessibility5 {
+                var content = host.controller.rootView
+                content.dynamicTypeSize = type
+                host.controller.rootView = content
+                try #require(await eventually(timeout: .seconds(15)) {
+                    host.window.layoutIfNeeded()
+                    host.controller.view.layoutIfNeeded()
+                    return (host.geometry.frames[.title]?.height ?? 0) > baselineTitle.height
+                        && (host.geometry.frames[.reservation]?.height ?? 0) > baselineReservation.height
+                }, "The same actual host must report its larger finished title and reservation")
+            }
+            await Task.yield()
+            host.window.layoutIfNeeded()
+            await Task.yield()
+            host.controller.view.layoutIfNeeded()
             let avatar = try #require(host.geometry.frames[.avatar])
             let title = try #require(host.geometry.frames[.title])
             let reservation = try #require(host.geometry.frames[.reservation])
@@ -227,6 +244,28 @@ private struct CenteredChatHeaderHostedTests {
             #expect(transcript.bounds.height > 44, "The actual compact transcript retains a usable viewport")
             try CenteredChatHeaderNativeFixtures.snapshot(host.window, width: width,
                 suffix: type == .accessibility5 ? "accessibility5" : "landscape", avatar: avatar)
+            if type == .accessibility5 {
+                var content = host.controller.rootView
+                content.dynamicTypeSize = .large
+                host.controller.rootView = content
+                try #require(await eventually(timeout: .seconds(15)) {
+                    host.window.layoutIfNeeded()
+                    host.controller.view.layoutIfNeeded()
+                    guard let title = host.geometry.frames[.title], let reservation = host.geometry.frames[.reservation] else { return false }
+                    return abs(title.height - baselineTitle.height) < 1
+                        && abs(reservation.height - baselineReservation.height) < 1
+                }, "Same-host AX5→large must shrink both real finished title and reserved space")
+                await Task.yield()
+                host.window.layoutIfNeeded()
+                let shrunkTitle = try #require(host.geometry.frames[.title])
+                let shrunkReservation = try #require(host.geometry.frames[.reservation])
+                #expect(shrunkTitle.maxY <= shrunkReservation.maxY + 1)
+                #expect(abs(shrunkReservation.height - baselineReservation.height) < 1,
+                        "The actual host must return to its measured baseline without an excess header gap")
+                #expect(host.geometry.frames[.avatar] == avatar)
+                print("Centered header actual same-host shrink title=\(shrunkTitle) reservation=\(shrunkReservation) baseline=\(baselineReservation)")
+                try CenteredChatHeaderNativeFixtures.snapshot(host.window, width: width, suffix: "accessibility5-to-large", avatar: avatar)
+            }
         }
     }
 
@@ -297,7 +336,10 @@ private struct CenteredChatHeaderHostedTests {
         _ = await chat.sendMessage("approve", includeLocation: false)
         try #require(await eventually(timeout: .seconds(20)) { gateway.approvals.contains { $0.sessionKey == key } },
                      "Real Demo approval event must populate the actual chat banner")
-        app.open(Notifier.Target(gatewayId: gateway.id, sessionKey: key), find: "trip", match: nil)
+        // Inject the production request consumed by ChatView.onChange. Full route activation
+        // is verified in the real app UI test; package-host AppModel.open also clears OS
+        // notifications, whose bundle proxy is unavailable in this UIKit test process.
+        app.findRequest = FindRequest(target: Notifier.Target(gatewayId: gateway.id, sessionKey: key), query: "trip", match: nil)
         try #require(await eventually(timeout: .seconds(15)) {
             (host.topChrome.frames[.find]?.height ?? 0) > 0 && (host.topChrome.frames[.approvals]?.height ?? 0) > 0
         }, "Real Find presentation and Demo approval must report actual finished control frames")

@@ -15,9 +15,10 @@ struct CompactChatIdentityHeader: View {
     static let reservedHeight: CGFloat = 60
     static let navigationOverlap: CGFloat = 44
     @ScaledMetric(relativeTo: .headline) private var titleLineAllowance: CGFloat = 22
+    @State private var measuredTitleHeight: CGFloat = 0
 
     private var reservedHeight: CGFloat {
-        max(Self.reservedHeight, Self.avatarSize + 4 + self.titleLineAllowance + 12 - Self.navigationOverlap)
+        max(Self.reservedHeight, Self.avatarSize + 4 + max(self.measuredTitleHeight, self.titleLineAllowance + 12) - Self.navigationOverlap)
     }
 
     private var agent: AgentSummary {
@@ -27,15 +28,9 @@ struct CompactChatIdentityHeader: View {
     var body: some View {
         Color.clear
             .frame(height: self.reservedHeight)
-            .background(alignment: .bottom) {
-                // Cover only the identity chrome plus its native navigation-row overlap.
-                // Material also continues into the status-bar safe area, keeping text behind
-                // the transparent navigation bar from competing with the avatar and title.
-                Rectangle()
-                    .fill(.regularMaterial)
-                    .frame(height: self.reservedHeight + Self.navigationOverlap)
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+            // The native style fills the actual reserved region and extends through the
+            // navigation/status safe area without changing the header's measured height.
+            .background(.regularMaterial, ignoresSafeAreaEdges: .top)
             .overlay(alignment: .top) {
                 VStack(spacing: 4) {
                     ChatAgentAvatar(chat: self.gateway.chat(for: self.key), agent: self.agent,
@@ -58,6 +53,9 @@ struct CompactChatIdentityHeader: View {
                         .frame(maxWidth: 240)
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("compact-chat-header-title")
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            if self.measuredTitleHeight != height { self.measuredTitleHeight = height }
+                        }
                         #if DEBUG
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {
                             self.geometryProbe?.report(.title, $0)
