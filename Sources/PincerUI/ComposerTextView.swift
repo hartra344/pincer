@@ -106,6 +106,8 @@ struct ComposerTextView: View {
     var onKey: (ComposerKey) -> Bool = { _ in false }
     /// Whether the caret is an insertion point at the end of the text.
     var onCaretAtEnd: (Bool) -> Void = { _ in }
+    /// Native input composition state, reported before text changes.
+    var onMarkedTextChange: (Bool) -> Void = { _ in }
     /// The selection in UTF-16 units, each time it changes.
     var onSelectionChange: (NSRange) -> Void = { _ in }
     /// Where to put the caret after the text was set from outside (dictation); nil leaves it at the end.
@@ -123,7 +125,7 @@ struct ComposerTextView: View {
             maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
             escapeActive: self.escapeActive, canSubmit: self.canSubmit, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onCommandSubmit: self.onCommandSubmit,
-            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
+            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onMarkedTextChange: self.onMarkedTextChange, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
             caretRequest: self.caretRequest, autoFocus: self.autoFocus)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
@@ -427,6 +429,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let onMarkedTextChange: (Bool) -> Void
     let onSelectionChange: (NSRange) -> Void
     let onFocusChange: (Bool) -> Void
     let caretRequest: CaretRequest?
@@ -535,6 +538,9 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             self.heightMeasurement.textDidChange()
+            self.parent.onMarkedTextChange(textView.hasMarkedText())
+            let selection = textView.selectedRange()
+            self.parent.onCaretAtEnd(selection.length == 0 && selection.location == textView.textStorage?.length)
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
@@ -546,6 +552,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
+            self.parent.onMarkedTextChange(textView.hasMarkedText())
             self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.string as NSString).length)
             self.parent.onSelectionChange(range)
         }
@@ -720,6 +727,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let onMarkedTextChange: (Bool) -> Void
     let onSelectionChange: (NSRange) -> Void
     let onFocusChange: (Bool) -> Void
     let caretRequest: CaretRequest?
@@ -818,6 +826,9 @@ private struct PlatformComposerTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             self.heightMeasurement.textDidChange()
+            self.parent.onMarkedTextChange(textView.markedTextRange != nil)
+            let selection = textView.selectedRange
+            self.parent.onCaretAtEnd(selection.length == 0 && selection.location == textView.textStorage.length)
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }
@@ -828,6 +839,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
+            self.parent.onMarkedTextChange(textView.markedTextRange != nil)
             self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.text as NSString).length)
             self.parent.onSelectionChange(range)
         }

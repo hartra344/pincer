@@ -19,6 +19,7 @@ struct Composer: View {
     /// Text the suggestion menu was dismissed at (Escape); it comes back once the text changes.
     @State private var dismissedMenuText: String?
     @State private var caretAtEnd = true
+    @State private var hasMarkedText = false
     @State private var focusRequest = 0
     @State private var sendPending = false
     @State private var selection: NSRange?
@@ -36,6 +37,7 @@ struct Composer: View {
         #if DEBUG
         let _ = BodyCounter.hit("Composer")
         #endif
+        let suggestions = self.suggestions
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             if let attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
@@ -69,7 +71,7 @@ struct Composer: View {
             }
             HStack(alignment: .bottom, spacing: Theme.Spacing.md) {
                 self.attachMenu
-                self.textField
+                self.textField(menuActive: !suggestions.isEmpty)
                 self.dictationButton
                 ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
@@ -106,7 +108,6 @@ struct Composer: View {
             .animation(.snappy, value: self.canSend)
             // An overlay, so the floating chrome's measured height (and the transcript's inset) stays put.
             .overlay(alignment: .top) {
-                let suggestions = self.suggestions
                 if !suggestions.isEmpty {
                     // A fixed-height box whose bottom sits just above the field, so the menu grows upward.
                     let box = SlashCommandMenu.maxHeight + 40
@@ -119,7 +120,11 @@ struct Composer: View {
                     .transition(.opacity)
                 }
             }
-            .onChange(of: self.suggestions.map(\.id)) { self.menuSelection = 0 }
+            .onChange(of: suggestions.map(\.id)) { self.menuSelection = 0 }
+            .onChange(of: self.text) { _, _ in
+                guard self.isTypingCommand, self.caretAtEnd, !self.hasMarkedText, self.text != self.dismissedMenuText else { return }
+                AccessibilityAnnouncer.announce(SlashSuggestionAnnouncement.count(suggestions.count))
+            }
         }
         .onChange(of: self.chat.editTarget) { old, new in
             if let new, new != old { self.focusRequest += 1 }
@@ -262,8 +267,7 @@ struct Composer: View {
         return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
     }
 
-    private var textField: some View {
-        let menuActive = !self.suggestions.isEmpty
+    private func textField(menuActive: Bool) -> some View {
         return ComposerTextView(
             placeholder: self.placeholder,
             text: self.$chat.draft.text,
@@ -277,6 +281,7 @@ struct Composer: View {
             onMedia: self.ingest,
             onKey: self.menuKey,
             onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
+            onMarkedTextChange: { if self.hasMarkedText != $0 { self.hasMarkedText = $0 } },
             onSelectionChange: self.selectionChanged,
             caretRequest: self.caretRequest,
             onFocusChange: { self.fieldFocused = $0 },
@@ -359,7 +364,7 @@ struct Composer: View {
     private var isTypingCommand: Bool { self.text.hasPrefix("/") }
 
     private var suggestions: [SlashSuggestion] {
-        guard self.isTypingCommand, self.caretAtEnd, self.text != self.dismissedMenuText else { return [] }
+        guard self.isTypingCommand, self.caretAtEnd, !self.hasMarkedText, self.text != self.dismissedMenuText else { return [] }
         // A fully typed command stays listed; Return sends it since accepting wouldn't change anything.
         return SlashCompletion.suggestions(
             for: self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey), choices: self.choices)
@@ -407,9 +412,17 @@ struct Composer: View {
         }
         switch key {
         case .up:
-            self.menuSelection = (self.menuSelection - 1 + suggestions.count) % suggestions.count
+            let next = (self.menuSelection - 1 + suggestions.count) % suggestions.count
+            if next != self.menuSelection {
+                self.menuSelection = next
+                AccessibilityAnnouncer.announce(SlashSuggestionAnnouncement.selected(suggestions[next]))
+            }
         case .down:
-            self.menuSelection = (self.menuSelection + 1) % suggestions.count
+            let next = (self.menuSelection + 1) % suggestions.count
+            if next != self.menuSelection {
+                self.menuSelection = next
+                AccessibilityAnnouncer.announce(SlashSuggestionAnnouncement.selected(suggestions[next]))
+            }
         case .tab:
             self.accept(suggestions[min(self.menuSelection, suggestions.count - 1)])
         case .escape:

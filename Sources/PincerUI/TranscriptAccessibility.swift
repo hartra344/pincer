@@ -9,6 +9,30 @@ import UIKit
 /// VoiceOver announcements shared by the AppKit and UIKit transcripts and SwiftUI views.
 @MainActor
 enum AccessibilityAnnouncer {
+    #if DEBUG
+    /// A scoped, exact-text observer at the real posting boundary. No messages outside this
+    /// bounded allowlist change VoiceOver eligibility or get retained by the probe.
+    @MainActor
+    final class DebugPostingProbe {
+        private let matching: Set<String>
+        let voiceOverEnabled: Bool
+        private(set) var posts: [String] = []
+
+        init(matching: [String], voiceOverEnabled: Bool = true) {
+            precondition(matching.count <= 16 && matching.allSatisfy { !$0.isEmpty && $0.utf8.count <= 256 })
+            self.matching = Set(matching)
+            self.voiceOverEnabled = voiceOverEnabled
+        }
+
+        fileprivate func matches(_ text: String) -> Bool { self.matching.contains(text) }
+        fileprivate func record(_ text: String) {
+            if self.posts.count < 16 { self.posts.append(text) }
+        }
+    }
+
+    static var debugPostingProbe: DebugPostingProbe?
+    #endif
+
     static var isVoiceOverRunning: Bool {
         #if os(macOS)
         NSWorkspace.shared.isVoiceOverEnabled
@@ -19,6 +43,13 @@ enum AccessibilityAnnouncer {
 
     /// Speaks `text` when VoiceOver is on; a no-op otherwise.
     static func announce(_ text: String) {
+        #if DEBUG
+        if let probe = self.debugPostingProbe, probe.matches(text) {
+            guard probe.voiceOverEnabled, !text.isEmpty else { return }
+            probe.record(text)
+            return // Observe the real posting boundary without speaking in a native test host.
+        }
+        #endif
         guard self.isVoiceOverRunning, !text.isEmpty else { return }
         AccessibilityNotification.Announcement(text).post()
     }
