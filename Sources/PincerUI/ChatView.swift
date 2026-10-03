@@ -600,12 +600,21 @@ struct ChatChrome: ViewModifier {
                 ToolbarItem(placement: .topBarLeading) { ShowSidebarButton() }
                 ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
                 #endif
+                #if os(macOS)
                 // A stable container, so a chat without branches doesn't remove the item (#262).
                 ToolbarItem(placement: .primaryAction) {
                     ZStack {
                         if !split, let key { BranchHeaderChipView(chat: self.gateway.chat(for: key)) }
                     }
                 }
+                #else
+                // Empty native toolbar items still reserve space in the iOS glass group.
+                if !split, let key, self.gateway.chat(for: key).hasBranchHeaderChip {
+                    ToolbarItem(placement: .primaryAction) {
+                        BranchHeaderChipView(chat: self.gateway.chat(for: key))
+                    }
+                }
+                #endif
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
                 ToolbarItem(placement: .primaryAction) {
                     ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row)

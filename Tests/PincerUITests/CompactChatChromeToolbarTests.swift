@@ -26,6 +26,29 @@ private struct CompactChatChromeHost: View {
 @MainActor
 @Suite("Compact chat chrome toolbar", .serialized)
 struct CompactChatChromeToolbarTests {
+    @MainActor
+    private struct NativeHost {
+        let controller: UIHostingController<CompactChatChromeHost>
+        let window: UIWindow
+        let previous: UIWindow?
+
+        init(app: AppModel, gateway: GatewayStore) {
+            let controller = UIHostingController(rootView: CompactChatChromeHost(app: app, gateway: gateway))
+            controller.overrideUserInterfaceStyle = .light
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+                .first { $0.activationState != .unattached }
+            let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+            window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+            window.rootViewController = controller
+            self.controller = controller
+            self.window = window
+            self.previous = scene?.windows.first(where: \.isKeyWindow)
+            window.makeKeyAndVisible()
+        }
+
+        func close() { self.window.isHidden = true; self.previous?.makeKeyAndVisible() }
+    }
+
     private struct Geometry {
         let itemCount: Int
         let itemWidths: [CGFloat]
@@ -66,23 +89,17 @@ struct CompactChatChromeToolbarTests {
         }
     }
 
-    private func measure(_ app: AppModel, gateway: GatewayStore, key: String) async throws -> Geometry {
+    private func measure(_ app: AppModel, gateway: GatewayStore, key: String, existingHost: NativeHost? = nil) async throws -> Geometry {
         gateway.selectedKey = key
-        let controller = UIHostingController(rootView: CompactChatChromeHost(app: app, gateway: gateway))
-        controller.overrideUserInterfaceStyle = .light
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState != .unattached }
-        let previous = scene?.windows.first(where: \.isKeyWindow)
-        let window = scene.map(UIWindow.init(windowScene:)) ?? UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-        defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+        let host = existingHost ?? NativeHost(app: app, gateway: gateway)
+        let controller = host.controller, window = host.window
+        defer { if case nil = existingHost { host.close() } }
+        let expectedTitle = chatTitle(gateway, key: key, row: gateway.sessions[key])
         let ready = await eventually(timeout: .seconds(15)) {
             window.layoutIfNeeded()
             controller.view.layoutIfNeeded()
             return self.navigationBars(in: window, controller: controller)
-                .contains { $0.bounds.width > 0 && $0.topItem != nil }
+                .contains { $0.bounds.width > 0 && $0.topItem?.title == expectedTitle }
         }
         self.diagnose(window, controller: controller)
         try #require(ready, "actual NavigationStack must install its native compact navigation bar")
@@ -181,6 +198,23 @@ struct CompactChatChromeToolbarTests {
                 "a seeded active helper adds the real Runs action to Model and Chat Options")
         #expect(running.visibleActionCount == 3, "actual seeded running helper paints its Runs action")
         #expect(running.blankReservedFrames.isEmpty, "a running helper does not justify an empty Branch slot")
+
+        // Keep the same actual SwiftUI/UIKit navigation host alive through selection changes.
+        // Recreating it would miss a stale reserved slot retained after the branch action hides.
+        gateway.selectedKey = singleKey
+        let transitionHost = NativeHost(app: app, gateway: gateway)
+        defer { transitionHost.close() }
+        let before = try await self.measure(app, gateway: gateway, key: singleKey, existingHost: transitionHost)
+        let withBranches = try await self.measure(app, gateway: gateway, key: branchedKey, existingHost: transitionHost)
+        let after = try await self.measure(app, gateway: gateway, key: singleKey, existingHost: transitionHost)
+        #expect(before.itemCount == 2 && before.visibleActionCount == 2 && before.blankReservedFrames.isEmpty)
+        #expect(withBranches.itemCount == 3 && withBranches.visibleActionCount == 3 && withBranches.blankReservedFrames.isEmpty)
+        #expect(withBranches.trailingGroupWidth >= before.trailingGroupWidth + 24,
+                "the live branch action adds its real native grouped width")
+        #expect(after.itemCount == 2 && after.visibleActionCount == 2 && after.blankReservedFrames.isEmpty,
+                "switching back on the same native host removes the Branch slot")
+        #expect(abs(after.trailingGroupWidth - before.trailingGroupWidth) <= 1,
+                "the same native host returns to its original compact grouped width: before=\(before.trailingGroupWidth), after=\(after.trailingGroupWidth)")
     }
 }
 #endif
