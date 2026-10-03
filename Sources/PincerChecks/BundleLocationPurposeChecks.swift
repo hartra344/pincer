@@ -1,19 +1,19 @@
 import Darwin
 import Foundation
 
-private struct BundleLocationHarnessResult: Sendable {
+struct BundleLocationHarnessResult: Sendable {
     var status: Int32
     var timedOut: Bool
     var outputWasTruncated: Bool
     var output: String
 }
 
-private func runBundleHarness(script: URL) -> BundleLocationHarnessResult {
+func runBundleHarness(script: URL, arguments: [String] = []) -> BundleLocationHarnessResult {
     let outputLimit = 32 * 1024
     let process = Process()
     let pipe = Pipe()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["python3", script.path]
+    process.arguments = ["python3", script.path] + arguments
     process.currentDirectoryURL = script.deletingLastPathComponent().deletingLastPathComponent()
     process.standardOutput = pipe
     process.standardError = pipe.fileHandleForWriting

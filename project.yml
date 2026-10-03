@@ -9,9 +9,21 @@ options:
   deploymentTarget:
     macOS: "15.0"
     iOS: "18.0"
+  postGenCommand: |
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+      python3 scripts/test_xcode_dev_suffix.py --existing-project Pincer.xcodeproj
+    fi
 packages:
   Pincer:
     path: .
+targetTemplates:
+  validateDevelopmentSuffix:
+    preBuildScripts:
+      - name: Validate development bundle suffix
+        script: /bin/sh "${SRCROOT}/scripts/validate-xcode-dev-suffix.sh"
+        inputFiles:
+          - "$(SRCROOT)/scripts/validate-xcode-dev-suffix.sh"
+        basedOnDependencyAnalysis: false
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -24,6 +36,7 @@ settings:
     PINCER_DEV_SUFFIX: ""
 targets:
   Pincer-macOS:
+    templates: [validateDevelopmentSuffix]
     type: application
     scheme: {}
     platform: macOS
@@ -52,6 +65,7 @@ targets:
         INFOPLIST_KEY_NSLocationUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
   Pincer-iOS:
+    templates: [validateDevelopmentSuffix]
     type: application
     scheme: {}
     platform: iOS
@@ -86,6 +100,7 @@ targets:
   # Share extensions: send text, links and files into a chat. They connect as the app's paired
   # device, reading gateways from the App Group and credentials from the shared Keychain group.
   PincerShare-macOS:
+    templates: [validateDevelopmentSuffix]
     type: app-extension
     platform: macOS
     sources: [Apps/ShareExtension/macOS, Apps/ShareExtension/Shared]
@@ -104,6 +119,7 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer$(PINCER_DEV_SUFFIX)
   PincerShare-iOS:
+    templates: [validateDevelopmentSuffix]
     type: app-extension
     platform: iOS
     sources: [Apps/ShareExtension/iOS, Apps/ShareExtension/Shared]
@@ -122,6 +138,7 @@ targets:
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
         TARGETED_DEVICE_FAMILY: "1,2"
   PincerNotifications-iOS:
+    templates: [validateDevelopmentSuffix]
     # Decrypts relayed Gateway Web Push messages into chat and approval notifications.
     type: app-extension
     platform: iOS
