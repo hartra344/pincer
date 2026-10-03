@@ -383,8 +383,8 @@ private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
     check(disabledReplyArrived, "demo: the accepted reply remains in the transcript while Read Aloud is disabled")
     guard disabledReplyArrived else { return }
 
-    var callbacks: [String] = []
-    chat.onFinalAssistantReply = { callbacks.append($0.id) }
+    var callbacks: [ChatItem] = []
+    chat.onFinalAssistantReply = { callbacks.append($0) }
     defer { chat.onFinalAssistantReply = nil }
     check(callbacks.isEmpty, "demo: installing Read Aloud does not replay a disabled-period reply")
 
@@ -398,8 +398,22 @@ private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
         callbacks.count == 1 && chat.items.contains { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
     }
     let newestReply = chat.items.last { $0.role == .assistant && !$0.isPending && !beforeNext.contains($0.id) }
-    check(delivered && callbacks == newestReply.map { [$0.id] },
+    check(delivered && callbacks.map(\.id) == newestReply.map { [$0.id] },
           "demo: a fresh enabled run delivers its committed reply once")
+    guard let selected = callbacks.first, delivered else { return }
+    let (prepared, ranOffMain) = await Task.detached(priority: .utility) {
+        prepareSelectedAutoReadReply(selected)
+    }.value
+    check(ranOffMain && prepared?.messageId == (selected.transcriptId ?? selected.id)
+          && prepared?.text.isEmpty == false,
+          "demo: the selected callback payload prepares its spoken text off-main without changing the reply target")
+    check(chat.items.first { $0.id == selected.id } == selected,
+          "demo: preparing the selected callback leaves its committed transcript item unchanged")
+}
+
+/// Synchronous worker-only probe: Foundation permits thread inspection outside an async body.
+private func prepareSelectedAutoReadReply(_ item: ChatItem) -> (SpeechText.PreparedReply?, Bool) {
+    (SpeechText.latestSpeakableReply(in: [item]), !Thread.isMainThread)
 }
 
 @MainActor
