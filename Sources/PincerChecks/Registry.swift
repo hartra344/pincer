@@ -243,6 +243,7 @@ enum Suites {
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
+        Section("Chat window notification visibility (demo)") { await runDemoChatWindowNotificationVisibility() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },

@@ -14,6 +14,19 @@ public struct ChatWindowRef: Codable, Hashable, Sendable {
 }
 
 extension AppModel {
+    /// Registers a particular native window's residency.
+    public func chatWindowOpened(_ ref: ChatWindowRef, windowID: UUID) {
+        self.chatWindowOpened(ref)
+    }
+
+    /// Reports visibility separately from a native window's residency.
+    public func chatWindowVisibilityChanged(_ ref: ChatWindowRef, windowID: UUID, isVisible: Bool) {}
+
+    /// Releases a particular native window's residency.
+    public func chatWindowClosed(_ ref: ChatWindowRef, windowID: UUID) {
+        self.chatWindowClosed(ref)
+    }
+
     /// A chat window appeared: its chat stays loaded and live, and isn't notified while the app is active.
     public func chatWindowOpened(_ ref: ChatWindowRef) {
         guard let gateway = self.gateways.first(where: { $0.id == ref.gatewayId }) else { return }
