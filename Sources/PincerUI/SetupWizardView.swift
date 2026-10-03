@@ -434,22 +434,26 @@ private struct SetupSkillsStep: View {
                 if presentation.notSetUpCount == 0 {
                     Label(L("Every skill has what it needs."), systemImage: "checkmark.circle").foregroundStyle(.secondary)
                 } else {
-                    Text("Not set up", bundle: .module).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                ForEach(presentation.visibleNotSetUpRows(expanded: self.expanded)) { skill in
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-                        Label {
-                            Text(skill.name)
-                        } icon: {
-                            if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
+                    DisclosureGroup(isExpanded: self.$expanded) {
+                        ForEach(presentation.visibleNotSetUpRows(expanded: self.expanded)) { skill in
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                                Label {
+                                    Text(skill.name)
+                                } icon: {
+                                    if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
+                                }
+                                if let requirementSummary = skill.requirementSummary {
+                                    Text("Needs \(requirementSummary)", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                                }
+                                if let installerLabel = skill.installerLabel {
+                                    Text(verbatim: installerLabel)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        if let requirementSummary = skill.requirementSummary {
-                            Text("Needs \(requirementSummary)", bundle: .module).font(.caption).foregroundStyle(.secondary)
-                        }
-                        if let installerLabel = skill.installerLabel {
-                            Text(verbatim: installerLabel)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
+                    } label: {
+                        Text(verbatim: presentation.disclosureLabel)
+                            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     }
                 }
                 LabeledContent(L("Ready"), value: "\(presentation.readyCount)")

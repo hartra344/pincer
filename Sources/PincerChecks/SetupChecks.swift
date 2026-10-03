@@ -63,6 +63,11 @@ func runDemoSetup() async {
         let rowsByID = Dictionary(uniqueKeysWithValues: presentation.rows.map { ($0.id, $0) })
         check(presentation.readyCount == report.ready.count && presentation.notSetUpCount == report.missing.count,
               "demo Skills presentation retains the report's ready and not-set-up counts")
+        let expectedDisclosure = presentation.notSetUpCount == 1
+            ? "Show 1 skill that isn't set up"
+            : "Show \(presentation.notSetUpCount) skills that aren't set up"
+        check(presentation.disclosureLabel == expectedDisclosure,
+              "demo Skills disclosure pluralizes from the loaded report count (\(presentation.disclosureLabel))")
         check(presentation.visibleNotSetUpRows(expanded: false).isEmpty
               && presentation.visibleNotSetUpRows(expanded: true).map(\.id) == presentation.rows.map(\.id),
               "demo Skills collapsed presentation hides rows while expanded presentation preserves their stable order")
@@ -86,6 +91,8 @@ func runDemoSetup() async {
     let wizardMissing = setup.skills?.missing.map(\.name) ?? []
     check(wizardMissing.contains("summarize") && Set(wizardMissing) == Set(seedMissing),
           "demo Skills: the seed's needs-setup skills are missing, summarize included (\(wizardMissing) vs \(seedMissing))")
+    check(Set(setup.skills?.presentation.rows.map(\.id) ?? []) == Set(wizardMissing),
+          "demo Skills presentation excludes disabled, blocked, and other-platform skills from setup rows")
     check(skills.isDone && !skills.needsAttention, "optional skills never need attention (\(skills))")
     check(setup.skills?.missing.first { $0.name == "summarize" }?.missing == ["summarize"], "demo summarize is missing its CLI")
     check(!setup.hasAdmin && setup.needsFullManagement(.agent) && !setup.needsFullManagement(.skills),

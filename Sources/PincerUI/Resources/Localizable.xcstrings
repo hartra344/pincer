@@ -691,6 +691,36 @@
         }
       }
     },
+    "%lld command-line tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld command-line tools"
+          }
+        }
+      }
+    },
+    "%lld Gateway configuration settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Gateway configuration settings"
+          }
+        }
+      }
+    },
+    "%lld Gateway environment settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Gateway environment settings"
+          }
+        }
+      }
+    },
     "%lld Unsaved": {
       "localizations": {
         "en": {
@@ -1153,6 +1183,36 @@
         }
       }
     },
+    "a command-line tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a command-line tool"
+          }
+        }
+      }
+    },
+    "a Gateway configuration setting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a Gateway configuration setting"
+          }
+        }
+      }
+    },
+    "a Gateway environment setting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a Gateway environment setting"
+          }
+        }
+      }
+    },
     "A one-line preview of the latest message in the chat list.": {
       "localizations": {
         "en": {
@@ -1443,6 +1503,16 @@
         }
       }
     },
+    "one supported command-line tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "one supported command-line tool"
+          }
+        }
+      }
+    },
     "Provider %@": {
       "localizations": {
         "en": {
@@ -1459,6 +1529,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Search in output"
+          }
+        }
+      }
+    },
+    "Show %lld skills that aren't set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %lld skills that aren't set up"
+          }
+        }
+      }
+    },
+    "Show 1 skill that isn't set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show 1 skill that isn't set up"
           }
         }
       }
