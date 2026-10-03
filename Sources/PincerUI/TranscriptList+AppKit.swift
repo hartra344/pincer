@@ -50,6 +50,7 @@ struct TranscriptList: NSViewRepresentable {
         /// Observes the actual keyboard menu after native event/target resolution. Returning
         /// true suppresses only its blocking presentation in an opted-in hosted test.
         var keyboardMenuProbe: (@MainActor (String?, NSMenu) -> Bool)?
+        var coldRotorLabelProbe: ColdRotorLabelProbe?
 #endif
         var renderer: TranscriptRenderer { self.controller.renderer }
         private var rows: [TranscriptRow] { self.controller.rows }
@@ -620,9 +621,17 @@ struct TranscriptList: NSViewRepresentable {
             guard case let .entry(entry) = row else { return "" }
             switch entry {
             case let .user(item):
+                #if DEBUG
+                self.coldRotorLabelProbe?.record(.fullTextJoin, rowID: row.id)
+                self.coldRotorLabelProbe?.record(.characterPrefix, rowID: row.id)
+                #endif
                 return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(String(item.plainText.prefix(400)), limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .assistant(turn):
+                #if DEBUG
+                self.coldRotorLabelProbe?.record(.characterPrefix, rowID: row.id)
+                self.coldRotorLabelProbe?.record(.authorFormatting, rowID: row.id)
+                #endif
                 return [AccessibilityText.speaker(role: .assistant, author: self.controller.context.agent.name), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .marker(_, label):
