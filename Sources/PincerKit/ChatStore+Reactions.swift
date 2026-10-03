@@ -83,7 +83,12 @@ extension ChatStore {
     /// The newest committed message a reply can target (for ⇧⌘R).
     public var latestReplyableId: String? {
         self.items.last { item in
-            item.isReplyable && (item.role == .user || !item.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            guard item.isReplyable else { return false }
+            if item.role == .user { return true }
+            #if DEBUG
+            if let id = item.transcriptId { ReplyLastAvailabilityDebugProbe.record(tracking: id) }
+            #endif
+            return !item.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }?.transcriptId
     }
 
