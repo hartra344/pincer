@@ -345,12 +345,34 @@ func runDemoReactionsReply() async {
     let located = await chat.locate("demo-main-status")
     check(located && chat.items.count == before && chat.locatingReplyId == nil, "locating a loaded message doesn't page")
 
+    // Exercise the actual reply action against a large version of the loaded seeded
+    // status message, retaining its transcript locator and sender metadata.
+    #if DEBUG
+    let trackedReplyID = "demo-main-status"
+    ReplyPreviewDebugProbe.reset(tracking: trackedReplyID)
+    defer { ReplyPreviewDebugProbe.unregister(tracking: trackedReplyID) }
+    if let index = chat.items.firstIndex(where: { $0.transcriptId == trackedReplyID }) {
+        chat.items[index].blocks = [.text("Disk status " + String(repeating: "a", count: 200_000))]
+        chat.rebuild(itemsChanged: true)
+    } else {
+        check(false, "reply preparation demo: seeded status item is loaded")
+        return
+    }
+    await chat.waitForReplyPreviewPreparation()
+    #endif
+
     // Replying persists replyToId and a preview (AC-40).
     guard let target = chat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
         check(false, "reply target for the disk status")
         return
     }
     check(target.isAssistant && target.senderLabel == agentName && !target.preview.isEmpty, "reply target names the agent")
+    #if DEBUG
+    check(target.messageId == trackedReplyID && ReplyPreviewDebugProbe.stats(for: trackedReplyID).mainThreadNormalizations == 0,
+          "reply preparation demo: actual seeded Reply target preserves identity without normalizing full text on Main")
+    check(target.preview.count <= 280 && target.preview.utf8.count <= 2_048,
+          "reply preparation demo: large single-line text produces a bounded prepared target")
+    #endif
     check(chat.replyTarget(for: "nope", you: "You", agent: agentName) == nil, "no reply target for an unknown id")
     chat.replyTarget = target
     let nonce = UUID().uuidString.prefix(6)

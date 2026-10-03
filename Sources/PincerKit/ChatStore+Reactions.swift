@@ -4,6 +4,12 @@ import Observation
 extension ChatStore {
     // MARK: Replies
 
+#if DEBUG
+    /// Neutral readiness seam for the causal regression. The synchronous implementation has no
+    /// pending preparation; the bounded worker implementation will await its actual completion.
+    package func waitForReplyPreviewPreparation() async {}
+#endif
+
     /// A loaded, committed message by transcript id.
     public func message(withId id: String) -> ChatItem? {
         self.itemsByTranscriptId[id]
@@ -12,6 +18,9 @@ extension ChatStore {
     /// What a Reply on `messageId` would target. `you` and `agent` name the senders.
     public func replyTarget(for messageId: String, you: String, agent: String) -> ReplyTarget? {
         guard let item = self.message(withId: messageId) else { return nil }
+#if DEBUG
+        ReplyPreviewDebugProbe.recordNormalization(for: messageId)
+#endif
         let text = MediaDirectives.extract(from: item.plainText).text.trimmingCharacters(in: .whitespacesAndNewlines)
         let preview = text.isEmpty ? (item.blocks.contains { if case .image = $0 { true } else { false } } ? "Image" : "Attachment") : text
         return ReplyTarget(messageId: messageId, senderLabel: item.senderName(you: you, agent: agent, agents: self.gateway?.agents ?? []),
