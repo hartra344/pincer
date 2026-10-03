@@ -54,6 +54,82 @@ struct ChatStoreAutoReadTests {
         #expect(recorder.items.count == 1)
     }
 
+    @Test func acceptedFinalSessionMessageIsNormalizedOnceWhenReadAloudIsEnabled() async {
+        let (chat, recorder) = self.chat()
+        let id = "accepted-final-reply-\(UUID().uuidString)"
+        SpeechText.resetSpeakabilityDebugStats(tracking: id)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
+
+        self.final(chat, "run-accepted-final")
+        self.message(chat, id: id, text: "**A committed answer** with `details`.")
+
+        #expect(await eventually { recorder.items.count == 1 && chat.items.contains { $0.id == id } })
+        let committed = chat.items.first { $0.id == id }
+        #expect(committed?.role == .assistant && committed?.isPending == false)
+        #expect(recorder.items.map(\.id) == [id], "the successful final-reply callback receives the accepted item once")
+        #expect(recorder.items.first?.plainText == committed?.plainText)
+
+        let stats = SpeechText.speakabilityDebugStats(for: id)
+        #expect(stats.mainThreadNormalizations + stats.offMainNormalizations >= 1,
+                "the enabled final-reply path checks the accepted item's speakability")
+    }
+
+    @Test func acceptedFinalMessageWithoutReadAloudCallbackStillCommitsAndClearsWait() async {
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let chat = store.chat(for: Self.key)
+        let id = "accepted-final-disabled-\(UUID().uuidString)"
+        SpeechText.resetSpeakabilityDebugStats(tracking: id)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
+        chat.noteRunSucceeded("run-disabled")
+        #expect(!chat.awaitingFinalReply, "without a callback, success does not arm a future delivery")
+
+        self.message(chat, id: id, text: "The reply remains in the transcript.")
+
+        #expect(await eventually { chat.items.contains { $0.id == id } })
+        #expect(chat.items.first { $0.id == id }?.plainText == "The reply remains in the transcript.")
+        #expect(!chat.awaitingFinalReply, "the disabled path leaves no pending final-reply delivery")
+        #expect(chat.onFinalAssistantReply == nil, "the disabled path has no playback callback installed")
+        #expect(SpeechText.speakabilityDebugStats(for: id).mainThreadNormalizations == 0,
+                "disabled Read Aloud must not parse the accepted reply on main")
+    }
+
+    @Test func uninstallingReadAloudDropsPreviouslyEligibleReply() {
+        let (chat, recorder) = self.chat()
+        self.message(chat, id: "prepared-before-uninstall", text: "This arrived with auto-read enabled.")
+        #expect(chat.liveReplyCandidate?.id == "prepared-before-uninstall")
+        chat.onFinalAssistantReply = nil
+        #expect(chat.liveReplyCandidate == nil && !chat.awaitingFinalReply)
+        chat.onFinalAssistantReply = { recorder.items.append($0) }
+        self.final(chat, "finished-after-uninstall")
+        #expect(recorder.items.isEmpty, "reinstalling a callback must not resurrect discarded reply text")
+    }
+
+    @Test func reenabledReadAloudDoesNotReplayReplyObservedWhileDisabled() {
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let chat = store.chat(for: Self.key)
+        let id = "accepted-final-disabled-before-enable-\(UUID().uuidString)"
+        SpeechText.resetSpeakabilityDebugStats(tracking: id)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
+
+        self.message(chat, id: id, text: "This arrived while Read Aloud was disabled.")
+        #expect(chat.liveReplyCandidate == nil)
+        self.final(chat, "run-disabled")
+        #expect(!chat.awaitingFinalReply)
+
+        let recorder = Recorder()
+        chat.onFinalAssistantReply = { recorder.items.append($0) }
+        self.final(chat, "run-disabled")
+
+        #expect(recorder.items.isEmpty, "reenabling Read Aloud must not replay a disabled-period candidate")
+        #expect(!chat.awaitingFinalReply, "replaying the disabled run's final event does not arm a stale wait")
+        self.final(chat, "run-next")
+        self.message(chat, id: "next-enabled-reply", text: "A fresh run's answer.")
+        #expect(recorder.items.map(\.id) == ["next-enabled-reply"], "a later enabled run still delivers its own reply")
+        let stats = SpeechText.speakabilityDebugStats(for: id)
+        #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations == 0,
+                "a reply received with no callback is discarded without speech normalization")
+    }
+
     @Test func runWithoutSpeakableTextDoesNotArmTheNextMessage() {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "a1", toolCall: true)

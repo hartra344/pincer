@@ -179,7 +179,11 @@ public final class ChatStore: Identifiable {
     public var errorMessage: String?
     /// Called once when a run ends successfully, with its last assistant message that has speakable text (never for
     /// history loads, aborted or failed runs). Read Aloud's auto-read uses it.
-    @ObservationIgnored public var onFinalAssistantReply: (@MainActor (ChatItem) -> Void)?
+    @ObservationIgnored public var onFinalAssistantReply: (@MainActor (ChatItem) -> Void)? {
+        didSet {
+            if self.onFinalAssistantReply == nil { self.dropPendingReply() }
+        }
+    }
     /// Who installed `onFinalAssistantReply`, so a closing window only removes its own handler.
     @ObservationIgnored public weak var onFinalAssistantReplyOwner: AnyObject?
     /// The newest live assistant message with speakable text since the last live user message, and whether a
