@@ -247,6 +247,9 @@ final class TranscriptPremeasurer: @unchecked Sendable {
     /// The same builder and measurer main uses, so the sizes are what main would compute.
     private func measure(_ job: PremeasureJob, env: TextBuildEnvironment, epoch: TranscriptPremeasureEpoch) -> PremeasuredRow {
         #if DEBUG
+        PremeasureAdmissionProbe.record(job.rowId, operation: .measured)
+        #endif
+        #if DEBUG
         dispatchPrecondition(condition: .notOnQueue(.main))
         #endif
         var row = PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth,
@@ -451,7 +454,12 @@ final class TranscriptPremeasureDriver {
                 now.append(index)
                 continue
             }
-            if keys.allSatisfy({ TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }) {
+            if keys.allSatisfy({
+                #if DEBUG
+                PremeasureAdmissionProbe.record(row.id, operation: .warmLookup, source: $0.source)
+                #endif
+                return TranscriptText.isWarm($0.textKey, contentWidth: contentWidth)
+            }) {
                 memo.warmWidth = contentWidth
                 memo.warmCacheRevision = TranscriptText.warmCacheRevision
                 self.store(memo, for: row.id)
@@ -487,6 +495,9 @@ final class TranscriptPremeasureDriver {
     private func computeEligibility(for row: TranscriptRow, revision: UInt64,
                                     renderer: TranscriptRenderer) -> (memo: RowMemo, transientKeys: [PremeasureKey]?) {
         let keys = renderer.premeasureBodies(for: row)
+        #if DEBUG
+        for key in keys ?? [] { PremeasureAdmissionProbe.record(row.id, operation: .sourceSize, source: key.source) }
+        #endif
         let sourceBytes = keys?.reduce(0) { $0 + $1.source.utf8.count } ?? 0
         let sourceCost = max(sourceBytes, 1)
         let styleGeneration = renderer.premeasureStyleGeneration

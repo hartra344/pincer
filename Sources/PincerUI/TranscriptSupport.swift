@@ -488,6 +488,9 @@ final class TranscriptRenderer: TranscriptRowActions {
         switch row {
         case let .entry(.user(item)):
             sources = [(item.plainText, .primary)]
+            #if DEBUG
+            PremeasureAdmissionProbe.record(row.id, operation: .joinedSource, source: sources.first?.0)
+            #endif
         case let .entry(.assistant(turn)):
             guard !turn.isStreaming else { return nil }
             sources = turn.text.map { ($0, turn.isError ? .error : .primary) }
