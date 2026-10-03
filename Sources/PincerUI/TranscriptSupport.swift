@@ -210,6 +210,19 @@ final class TranscriptRenderer: TranscriptRowActions {
             guard !Task.isCancelled else { return nil }
             return SpeechText.prepare(item)
         }
+
+#if DEBUG
+        func prepare(_ item: ChatItem, probe: (@Sendable (String) -> Void)?,
+                     gate: (@Sendable (String) async -> Void)?) async -> SpeechEligibilityCache.Prepared?
+        {
+            guard !Task.isCancelled else { return nil }
+            probe?(item.id)
+            guard !Task.isCancelled else { return nil }
+            await gate?(item.id)
+            guard !Task.isCancelled else { return nil }
+            return self.prepare(item, probe: nil)
+        }
+#endif
     }
 
     private static let speechPreparationWorker = SpeechPreparationWorker()
@@ -239,10 +252,12 @@ final class TranscriptRenderer: TranscriptRowActions {
     var pendingSpeechPreparationOrderCount: Int { self.pendingSpeechOrder.count - self.pendingSpeechHead }
     var activeSpeechPreparationCount: Int { self.speechWorkerCount }
     #endif
-    #if DEBUG
+#if DEBUG
     /// A bounded test seam invoked on the worker before normalization; it never receives text.
     var speechPreparationProbe: (@Sendable (String) -> Void)?
-    #endif
+    /// An async test gate before normalization. Production builds compile out the overload entirely.
+    var speechPreparationGate: (@Sendable (String) async -> Void)?
+#endif
     private var imageRows: [String: Set<String>] = [:]
     private var imageStates: [String: ImageState] = [:]
     private var imageRefs: [String: ImageRef] = [:]
@@ -908,12 +923,15 @@ final class TranscriptRenderer: TranscriptRowActions {
         let revision = chat.contentRevision
         #if DEBUG
         let probe = self.speechPreparationProbe
-        #else
-        let probe: (@Sendable (String) -> Void)? = nil
+        let gate = self.speechPreparationGate
         #endif
         self.speechWorkerCount += 1
         let task = Task { [weak self, weak chat] in
-            let prepared = await Self.speechPreparationWorker.prepare(item, probe: probe)
+            #if DEBUG
+            let prepared = await Self.speechPreparationWorker.prepare(item, probe: probe, gate: gate)
+            #else
+            let prepared = await Self.speechPreparationWorker.prepare(item, probe: nil)
+            #endif
             guard let self else { return }
             self.speechWorkerCount = max(0, self.speechWorkerCount - 1)
             guard !Task.isCancelled, let prepared, let chat else {
