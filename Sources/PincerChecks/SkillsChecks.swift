@@ -95,6 +95,58 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     check(skills.loadError == nil && skills.skills.count >= 6, "demo skills load (\(skills.skills.count))")
     check(Set(skills.skills.map(\.state)) == Set(SkillState.allCases), "demo covers every state")
     check(skills.skill(key: "video-frames")?.primaryReason == "Missing binary: ffmpeg", "demo missing binary")
+    do {
+        let selected = try await gateway.connection.request("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("1.3.0"),
+        ])
+        check(selected["latestVersion"]?["version"]?.text == "1.3.0"
+              && selected["selectedRelease"]?["version"]?.text == "1.3.0",
+              "demo detail selects the seeded current release")
+        let older = try await gateway.connection.request("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("1.2.0"),
+        ])
+        check(older["latestVersion"]?["version"]?.text == "1.3.0" && older["selectedRelease"]?.isNull == true,
+              "demo detail does not relabel latest metadata as an unseeded older release")
+        let whitespace = try await gateway.connection.request("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("   "),
+        ])
+        check(whitespace["latestVersion"]?["version"]?.text == "1.3.0"
+              && whitespace["selectedRelease"]?["version"]?.text == "1.3.0",
+              "blank normalized detail version falls back to current")
+    } catch {
+        check(false, "demo detail accepts selected-release requests (\(error.localizedDescription))")
+    }
+    do {
+        _ = try await gateway.connection.request("skills.detail", [
+            "slug": .string("skills-sh:vaultsmith/obsidian-skills/obsidian-daily"),
+        ])
+        check(false, "demo install-only skill has no details")
+    } catch let GatewayError.rpc(code, message, _) {
+        check(code == "INVALID_REQUEST"
+              && message == "ClawHub cannot return details for skills-sh:vaultsmith/obsidian-skills/obsidian-daily; external skill sources are install-only. Install it directly, or run \"openclaw skills install skills-sh:vaultsmith/obsidian-skills/obsidian-daily\".",
+              "demo install-only detail includes upstream installation guidance")
+    } catch {
+        check(false, "demo install-only detail returns INVALID_REQUEST (\(error.localizedDescription))")
+    }
+    let invalidDetailParams: [(String, JSONValue)] = [
+        ("empty version", ["slug": .string("@clawdia/nas-report"), "version": .string("")]),
+        ("non-string version", ["slug": .string("@clawdia/nas-report"), "version": .number(1)]),
+        ("null version", ["slug": .string("@clawdia/nas-report"), "version": .null]),
+        ("empty slug", ["slug": .string("")]),
+        ("non-string slug", ["slug": .number(1)]),
+        ("missing slug", [:]),
+        ("unknown detail key", ["slug": .string("@clawdia/nas-report"), "unexpected": true]),
+    ]
+    for (label, params) in invalidDetailParams {
+        do {
+            _ = try await gateway.connection.request("skills.detail", params)
+            check(false, "demo detail rejects \(label)")
+        } catch let GatewayError.rpc(code, _, _) {
+            check(code == "INVALID_REQUEST", "demo detail rejects \(label) with INVALID_REQUEST")
+        } catch {
+            check(false, "demo detail rejects \(label) with an RPC validation error")
+        }
+    }
     if let notion = skills.skill(key: "notion") {
         let transientKey = "sk-demo_MiXeD-123+/=:@."
         let saved = await skills.setApiKey(notion, transientKey)

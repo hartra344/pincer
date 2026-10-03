@@ -572,6 +572,83 @@ struct SkillsToolsTests {
         #expect(response["message"]?.text == "Installed")
     }
 
+    @MainActor @Test func demoSkillsDetailHonorsSelectedVersionWithoutRelabelingLatest() async throws {
+        let demo = DemoGateway()
+
+        let current = try await demo.handle("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("1.3.0"),
+        ])
+        #expect(current["latestVersion"]?["version"]?.text == "1.3.0")
+        #expect(current["selectedRelease"]?["version"]?.text == "1.3.0")
+    }
+
+    @MainActor @Test func demoSkillsDetailDefaultsVersionAndDoesNotRelabelLatest() async throws {
+        let demo = DemoGateway()
+        let currentByDefault = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report")])
+        #expect(currentByDefault["latestVersion"]?["version"]?.text == "1.3.0")
+        #expect(currentByDefault["selectedRelease"]?["version"]?.text == "1.3.0")
+    }
+
+    @MainActor @Test func demoSkillsDetailWhitespaceAndUnseededVersionKeepLatestMetadata() async throws {
+        let demo = DemoGateway()
+        let whitespaceUsesLatest = try await demo.handle("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("   "),
+        ])
+        #expect(whitespaceUsesLatest["latestVersion"]?["version"]?.text == "1.3.0")
+        #expect(whitespaceUsesLatest["selectedRelease"]?["version"]?.text == "1.3.0")
+
+        let unseededOlderRelease = try await demo.handle("skills.detail", [
+            "slug": .string("@clawdia/nas-report"), "version": .string("1.2.0"),
+        ])
+        #expect(unseededOlderRelease["latestVersion"]?["version"]?.text == "1.3.0")
+        #expect(unseededOlderRelease["selectedRelease"]?.isNull == true)
+    }
+
+    @MainActor @Test func demoSkillsDetailRejectsInvalidParams() async throws {
+        let demo = DemoGateway()
+        for invalid in [JSONValue.string(""), .number(1), .null] {
+            do {
+                _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "version": invalid])
+                Issue.record("invalid detail version should be rejected: \(invalid)")
+            } catch let GatewayError.rpc(code, _, _) {
+                #expect(code == "INVALID_REQUEST")
+            }
+        }
+        for invalidSlug in [JSONValue.string(""), .number(1), .null] {
+            do {
+                _ = try await demo.handle("skills.detail", ["slug": invalidSlug])
+                Issue.record("invalid detail slug should be rejected: \(invalidSlug)")
+            } catch let GatewayError.rpc(code, _, _) {
+                #expect(code == "INVALID_REQUEST")
+            }
+        }
+        do {
+            _ = try await demo.handle("skills.detail", [:])
+            Issue.record("detail requires a slug")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "INVALID_REQUEST")
+        }
+        do {
+            _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "unexpected": true])
+            Issue.record("detail should reject unknown request fields")
+        } catch let GatewayError.rpc(code, _, _) {
+            #expect(code == "INVALID_REQUEST")
+        }
+    }
+
+    @MainActor @Test func demoInstallOnlyDetailErrorMatchesGatewayGuidance() async throws {
+        let demo = DemoGateway()
+        do {
+            _ = try await demo.handle("skills.detail", [
+                "slug": .string("skills-sh:vaultsmith/obsidian-skills/obsidian-daily"),
+            ])
+            Issue.record("install-only skill detail should fail")
+        } catch let GatewayError.rpc(code, message, _) {
+            #expect(code == "INVALID_REQUEST")
+            #expect(message == "ClawHub cannot return details for skills-sh:vaultsmith/obsidian-skills/obsidian-daily; external skill sources are install-only. Install it directly, or run \"openclaw skills install skills-sh:vaultsmith/obsidian-skills/obsidian-daily\".")
+        }
+    }
+
     @MainActor @Test func demoToolsInspector() async throws {
         let demo = DemoGateway()
         let request: ToolsInspectorModel.Request = { method, params in try await demo.handle(method, params) }
