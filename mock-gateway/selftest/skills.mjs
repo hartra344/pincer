@@ -101,10 +101,18 @@ export async function run() {
     assert.equal((await reader.send('skills.search', { query: 'a', limit: 2 })).results.length, 2);
     assert.match((await reader.call('skills.search', { limit: 0 })).error.message, /^invalid skills\.search params: at \/limit: must be >= 1/);
     assert.match((await reader.call('skills.search', { query: '' })).error.message, /at \/query: must NOT have fewer than 1 characters/);
+    assert.equal((await reader.call('skills.detail', { slug: '@someone-else/nas-report' })).error.code, 'UNAVAILABLE');
+    const wrongOwnerInstall = await admin.call('skills.install', {
+      source: 'clawhub', slug: '@someone-else/nas-report', force: true,
+    });
+    assert.equal(wrongOwnerInstall.error.code, 'UNAVAILABLE');
+    assert.equal(byName(await reader.send('skills.status', {}))['nas-report'].clawhub.installedVersion, '1.2.0');
     const detail = await reader.send('skills.detail', { slug: '@clawdia/nas-report' });
     assert.equal(detail.skill.slug, 'nas-report');
     assert.equal(detail.latestVersion.version, '1.3.0');
     assert.equal(detail.owner.handle, 'clawdia');
+    const normalizedPublisher = await reader.send('skills.detail', { slug: '@CLAWDIA/ nas-report ' });
+    assert.equal(normalizedPublisher.skill.slug, 'nas-report');
     assert.equal((await reader.send('skills.detail', { slug: 'home-assistant' })).skill.isOfficial, true);
     assert.match((await reader.call('skills.detail', { slug: ext.installRef })).error.message, /external skill sources are install-only/);
     const missingDetail = await reader.call('skills.detail', { slug: 'nope' });

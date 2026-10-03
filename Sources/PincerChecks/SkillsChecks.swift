@@ -105,6 +105,12 @@ func runDemoSkills(_ gateway: GatewayStore) async {
         check(false, "demo resolves seeded publisher references (\(error.localizedDescription))")
     }
     do {
+        let normalized = try await gateway.connection.request("skills.detail", ["slug": .string("@CLAWDIA/ nas-report ")])
+        check(normalized["skill"]?["slug"]?.text == "nas-report", "demo trims slug and normalizes publisher casing")
+    } catch {
+        check(false, "demo normalizes publisher casing and slug whitespace (\(error.localizedDescription))")
+    }
+    do {
         _ = try await gateway.connection.request("skills.detail", ["slug": .string("@someone-else/nas-report")])
         check(false, "demo does not resolve another publisher by bare slug")
     } catch let GatewayError.rpc(code, _, _) {

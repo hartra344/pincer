@@ -586,6 +586,8 @@ struct SkillsToolsTests {
         } catch let GatewayError.rpc(code, _, _) {
             #expect(code == "UNAVAILABLE")
         }
+        let normalized = try await demo.handle("skills.detail", ["slug": .string("@CLAWDIA/ nas-report ")])
+        #expect(normalized["skill"]?["slug"]?.text == "nas-report")
     }
 
     @MainActor @Test func demoClawHubWrongPublisherForceInstallDoesNotReplaceKnownSkill() async throws {
