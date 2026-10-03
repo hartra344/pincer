@@ -24,8 +24,7 @@ private struct CompactChatChromeHost: View {
 }
 
 @MainActor
-@Suite("Compact chat chrome toolbar", .serialized)
-struct CompactChatChromeToolbarTests {
+private struct CompactChatChromeToolbarTests {
     @MainActor
     private struct NativeHost {
         let controller: UIHostingController<CompactChatChromeHost>
@@ -144,7 +143,6 @@ struct CompactChatChromeToolbarTests {
                         blankReservedFrames: blankFrames, visibleActionCount: visibleActions, trailingGroupWidth: groupWidth)
     }
 
-    @Test(.timeLimit(.minutes(2)))
     func actualCompactNavigationBarReservesOnlyVisibleChatActions() async throws {
         let scratch = ScratchDefaults()
         let app = AppModel(defaults: scratch.defaults)
@@ -215,6 +213,14 @@ struct CompactChatChromeToolbarTests {
                 "switching back on the same native host removes the Branch slot")
         #expect(abs(after.trailingGroupWidth - before.trailingGroupWidth) <= 1,
                 "the same native host returns to its original compact grouped width: before=\(before.trailingGroupWidth), after=\(after.trailingGroupWidth)")
+    }
+}
+
+@MainActor
+extension TranscriptUIKitHostedTests {
+    @Test(.timeLimit(.minutes(2)))
+    func compactChatChromeOmitsBlankBranchSlots() async throws {
+        try await CompactChatChromeToolbarTests().actualCompactNavigationBarReservesOnlyVisibleChatActions()
     }
 }
 #endif
