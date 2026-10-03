@@ -33,6 +33,10 @@ struct ColdRotorLabelTests {
             self.scroll.frame = NSRect(x: 0, y: 0, width: 600, height: 0)
             self.coordinator.update(rows: [row], context: context, insets: (0, 0))
             try #require(self.table.numberOfRows == 1)
+            // Initial table settling may warm a user layout even without a viewport. Use the
+            // renderer's real cache reset and cancel its epoch before testing cold enumeration.
+            self.coordinator.controller.premeasure.cancelAll()
+            self.coordinator.renderer.reset()
         }
 
         func search() throws -> NSAccessibilityCustomRotor.ItemResult? {
@@ -78,7 +82,8 @@ struct ColdRotorLabelTests {
         }.value
         let host = try Host(row: row)
         defer { host.stop() }
-        try #require(host.coordinator.renderer.cachedLabel(for: row) == nil, "Exercise the actual cold cache-miss path")
+        let isCold = host.coordinator.renderer.cachedLabel(for: row) == nil
+        try #require(isCold, "Exercise the actual cold cache-miss path without dumping a large label")
         try #require(host.table.view(atColumn: 0, row: 0, makeIfNecessary: false) == nil)
         let probe = ColdRotorLabelProbe(rowIDs: [row.id])
         host.coordinator.coldRotorLabelProbe = probe
@@ -101,7 +106,8 @@ struct ColdRotorLabelTests {
         }.value
         let host = try Host(row: row)
         defer { host.stop() }
-        try #require(host.coordinator.renderer.cachedLabel(for: row) == nil)
+        let isCold = host.coordinator.renderer.cachedLabel(for: row) == nil
+        try #require(isCold)
         let probe = ColdRotorLabelProbe(rowIDs: [row.id])
         host.coordinator.coldRotorLabelProbe = probe
         let result = try #require(try host.search())
@@ -122,7 +128,8 @@ struct ColdRotorLabelTests {
         }.value
         let host = try Host(row: fixture.row, agentName: fixture.author)
         defer { host.stop() }
-        try #require(host.coordinator.renderer.cachedLabel(for: fixture.row) == nil)
+        let isCold = host.coordinator.renderer.cachedLabel(for: fixture.row) == nil
+        try #require(isCold)
         let probe = ColdRotorLabelProbe(rowIDs: [fixture.row.id])
         host.coordinator.coldRotorLabelProbe = probe
         let result = try #require(try host.search())
@@ -140,7 +147,8 @@ struct ColdRotorLabelTests {
         let row = Self.user("cold-short-blocks", blocks: [.text("First opening"), .text("Second block")])
         let host = try Host(row: row)
         defer { host.stop() }
-        try #require(host.coordinator.renderer.cachedLabel(for: row) == nil)
+        let isCold = host.coordinator.renderer.cachedLabel(for: row) == nil
+        try #require(isCold)
         let result = try #require(try host.search())
         let label = try #require(result.customLabel)
         #expect(result.itemLoadingToken as? String == row.id)
