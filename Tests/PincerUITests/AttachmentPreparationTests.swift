@@ -95,7 +95,8 @@ struct AttachmentPreparationTests {
         #expect(ordered.imageMessages == [nil] && ordered.textMessages == [nil])
         let image = try #require(ordered.attachments.first)
         #expect(image.fileName == url.lastPathComponent)
-        #expect(image.mimeType == "image/jpeg" && image.data.count <= limits.imageBytes)
+        #expect(image.mimeType == "image/png" && image.data.count <= limits.imageBytes,
+                "a fitting PNG keeps its PNG upload contract")
         let decoded = await Task.detached(priority: .utility) { ImageCodec.decode(image.data) != nil }.value
         #expect(decoded)
         let counts = ImageCodec.PreparationProbe.counts()
