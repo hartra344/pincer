@@ -11,17 +11,18 @@ import Testing
 private struct AttachmentThumbnailHost: View {
     let attachment: OutgoingAttachment
     let revision: Int
+    var mountIdentity = 0
+    var size: CGFloat = 64
+    var scale: CGFloat = 2
 
     var body: some View {
         VStack {
-            AttachmentThumb(attachment: self.attachment, size: 64) {}
-                // Replacing this actual thumbnail subview models detaching and reattaching the
-                // same pending attachment as SwiftUI rebuilds surrounding composer content.
-                .id(self.revision)
+            AttachmentThumb(attachment: self.attachment, size: self.size) {}
+                .id(self.mountIdentity)
             Text("fixture \(self.revision)")
         }
         .frame(width: 320, height: 120)
-        .environment(\.displayScale, 2)
+        .environment(\.displayScale, self.scale)
     }
 }
 
@@ -31,8 +32,9 @@ struct AttachmentThumbnailDecodeTests {
         // The compressed fixture is generated away from the main actor, as real ingestion does.
         let data = await Task.detached(priority: .utility) { Self.png(width: 3000, height: 1500) }.value
         let attachment = OutgoingAttachment(fileName: "thumbnail-fixture.png", mimeType: "image/png", data: data)
+        var watchedAttachment = attachment
         AttachmentThumbnailDecodeProbe.watch(attachment)
-        defer { AttachmentThumbnailDecodeProbe.stopWatching(attachment) }
+        defer { AttachmentThumbnailDecodeProbe.stopWatching(watchedAttachment) }
 
         let host = NSHostingView(rootView: AttachmentThumbnailHost(attachment: attachment, revision: 0))
         host.frame = NSRect(x: 0, y: 0, width: 320, height: 120)
@@ -48,7 +50,9 @@ struct AttachmentThumbnailDecodeTests {
         #expect(await self.waitForBodyEvaluations(1, attachment: attachment), "the real AttachmentThumb body was hosted")
         #expect(await self.waitForSamples(1, attachment: attachment), "the real AttachmentThumb body decoded its hosted image")
         let first = AttachmentThumbnailDecodeProbe.samples(for: attachment)
-        #expect(first.first?.attachmentID == attachment.id && first.first?.fileName == attachment.fileName)
+        #expect(first.first?.attachmentID == attachment.id
+                && first.first?.previewIdentity == attachment.previewIdentity
+                && first.first?.fileName == attachment.fileName)
         #expect((first.first?.width ?? 0) > 0 && (first.first?.height ?? 0) > 0,
                 "the fixture produces an actual decoded image")
         #expect(first.first?.maxPixel == 128, "a 64pt thumbnail at 2x needs at most 128 pixels")
@@ -57,7 +61,7 @@ struct AttachmentThumbnailDecodeTests {
                 "the actual decoded image is bounded to its display size")
 
         let priorEvaluations = AttachmentThumbnailDecodeProbe.bodyEvaluationCount(for: attachment)
-        host.rootView = AttachmentThumbnailHost(attachment: attachment, revision: 1)
+        host.rootView = AttachmentThumbnailHost(attachment: attachment, revision: 1, mountIdentity: 1)
         host.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         #expect(await self.waitForBodyEvaluations(priorEvaluations + 1, attachment: attachment),
@@ -65,6 +69,49 @@ struct AttachmentThumbnailDecodeTests {
         try? await Task.sleep(for: .milliseconds(80))
         #expect(AttachmentThumbnailDecodeProbe.samples(for: attachment).count == 1,
                 "rebuilding the hosted thumbnail reuses its bounded decoded image")
+
+        let largerPreview = OutgoingAttachment(id: attachment.id, fileName: attachment.fileName,
+                                               mimeType: attachment.mimeType,
+                                               data: await Task.detached(priority: .utility) {
+            Self.png(width: 1200, height: 600)
+        }.value)
+        #expect(largerPreview == OutgoingAttachment(id: attachment.id, fileName: attachment.fileName,
+                                                    mimeType: attachment.mimeType, data: largerPreview.data))
+        #expect(largerPreview.previewIdentity != attachment.previewIdentity,
+                "a newly initialized payload with a reused public ID receives a distinct preview identity")
+        watchedAttachment = largerPreview
+        AttachmentThumbnailDecodeProbe.watch(largerPreview)
+        host.rootView = AttachmentThumbnailHost(attachment: largerPreview, revision: 2, mountIdentity: 1)
+        host.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        #expect(await self.waitForSamples(1, attachment: largerPreview),
+                "the replacement payload is decoded by the hosted thumbnail")
+        let replacement = AttachmentThumbnailDecodeProbe.samples(for: largerPreview)
+        #expect(replacement.first?.previewIdentity == largerPreview.previewIdentity)
+        #expect(replacement.first?.maxPixel == 128)
+        #expect(replacement.first?.isMainThread == false)
+        #expect((replacement.first?.width ?? 0) > 0 && (replacement.first?.height ?? 0) > 0)
+
+        let smallScaleAttachment = OutgoingAttachment(fileName: "thumbnail-scale.png", mimeType: "image/png", data: data)
+        watchedAttachment = smallScaleAttachment
+        AttachmentThumbnailDecodeProbe.watch(smallScaleAttachment)
+        host.rootView = AttachmentThumbnailHost(attachment: smallScaleAttachment, revision: 3, size: 52, scale: 2)
+        host.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        #expect(await self.waitForSamples(1, attachment: smallScaleAttachment),
+                "the actual view decodes the smaller Quick Capture thumbnail")
+        #expect(AttachmentThumbnailDecodeProbe.samples(for: smallScaleAttachment).first?.maxPixel == 104,
+                "52pt at 2x uses 104 pixels")
+
+        let oneXAttachment = OutgoingAttachment(fileName: "thumbnail-one-x.png", mimeType: "image/png", data: data)
+        watchedAttachment = oneXAttachment
+        AttachmentThumbnailDecodeProbe.watch(oneXAttachment)
+        host.rootView = AttachmentThumbnailHost(attachment: oneXAttachment, revision: 4, scale: 1)
+        host.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        #expect(await self.waitForSamples(1, attachment: oneXAttachment), "the actual view decodes at 1x")
+        #expect(AttachmentThumbnailDecodeProbe.samples(for: oneXAttachment).first?.maxPixel == 64,
+                "64pt at 1x uses 64 pixels")
     }
 
     private func waitForSamples(_ count: Int, attachment: OutgoingAttachment) async -> Bool {

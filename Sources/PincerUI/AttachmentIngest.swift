@@ -164,14 +164,29 @@ struct AttachmentThumb: View {
     let attachment: OutgoingAttachment
     var size: CGFloat = 64
     let remove: () -> Void
+    @Environment(\.displayScale) private var displayScale
+    @State private var renderedPreview: RenderedPreview?
+    @State private var loaderOwner = UUID()
 
     var body: some View {
         #if DEBUG
-        let _ = AttachmentThumbnailDecodeProbe.bodyEvaluated(self.attachment)
+        let _ = AttachmentThumbnailDecodeProbe.bodyEvaluated(self.attachment, owner: self.loaderOwner)
+        #endif
+        let loader = AttachmentThumbnailLoader.shared
+        let key = AttachmentThumbnailLoader.Key(
+            previewIdentity: self.attachment.previewIdentity,
+            maxPixel: AttachmentThumbnailLoader.targetPixelSize(points: Double(self.size), displayScale: Double(self.displayScale)))
+        let retryRevision = loader.revision
+        let currentImage = self.renderedPreview.flatMap { preview in
+            preview.previewIdentity == self.attachment.previewIdentity ? preview.image : nil
+        }
+        #if DEBUG
+        let _ = AttachmentThumbnailDecodeProbe.displayed(self.attachment,
+            previewIdentity: currentImage == nil ? nil : self.renderedPreview?.previewIdentity)
         #endif
         return ZStack(alignment: .topTrailing) {
             Group {
-                if self.attachment.isImage, let image = self.decodedThumbnail {
+                if self.attachment.isImage, let image = currentImage {
                     Image(cgImage: image).resizable().aspectRatio(contentMode: .fill)
                 } else {
                     VStack(spacing: Theme.Spacing.xs) {
@@ -196,14 +211,37 @@ struct AttachmentThumb: View {
             .accessibilityLabel("Remove \(self.attachment.fileName)")
         }
         .padding(.top, 5)
+        .task(id: ThumbnailRequestTrigger(key: key, revision: retryRevision)) {
+            guard self.attachment.isImage else { return }
+            if self.renderedPreview?.previewIdentity != key.previewIdentity {
+                self.renderedPreview = nil
+            }
+            if self.renderedPreview?.previewIdentity == key.previewIdentity,
+               self.renderedPreview?.maxPixel == key.maxPixel { return }
+            if let image = loader.cached(self.attachment, maxPixel: key.maxPixel) {
+                self.renderedPreview = RenderedPreview(previewIdentity: key.previewIdentity,
+                                                        maxPixel: key.maxPixel, image: image)
+                return
+            }
+            _ = loader.request(self.attachment, maxPixel: key.maxPixel, owner: self.loaderOwner)
+        }
+        .onChange(of: key) { oldKey, _ in
+            loader.release(oldKey, owner: self.loaderOwner)
+        }
+        .onDisappear {
+            loader.release(key, owner: self.loaderOwner)
+        }
     }
 
-    private var decodedThumbnail: CGImage? {
-        #if DEBUG
-        AttachmentThumbnailDecodeProbe.decode(self.attachment, maxPixel: 2400)
-        #else
-        ImageCodec.decode(self.attachment.data)
-        #endif
+    private struct RenderedPreview {
+        let previewIdentity: UUID
+        let maxPixel: Int
+        let image: CGImage
+    }
+
+    private struct ThumbnailRequestTrigger: Hashable {
+        let key: AttachmentThumbnailLoader.Key
+        let revision: UInt64
     }
 }
 
@@ -213,6 +251,7 @@ struct AttachmentThumb: View {
 enum AttachmentThumbnailDecodeProbe {
     struct Sample: Sendable {
         let attachmentID: UUID
+        let previewIdentity: UUID
         let fileName: String
         let maxPixel: Int
         let isMainThread: Bool
@@ -222,65 +261,99 @@ enum AttachmentThumbnailDecodeProbe {
 
     private struct State: Sendable {
         var attachmentID: UUID?
+        var previewIdentity: UUID?
         var fileName: String?
+        var loaderOwner: UUID?
+        var displayedPreviewIdentity: UUID?
         var bodyEvaluations = 0
         var samples: [Sample] = []
     }
 
     private static let state = Mutex(State())
 
-    static func watch(_ attachment: OutgoingAttachment) {
+    @MainActor static func watch(_ attachment: OutgoingAttachment) {
         self.state.withLock { state in
             state.attachmentID = attachment.id
+            state.previewIdentity = attachment.previewIdentity
             state.fileName = attachment.fileName
+            state.loaderOwner = nil
+            state.displayedPreviewIdentity = nil
             state.bodyEvaluations = 0
             state.samples.removeAll(keepingCapacity: true)
+        }
+        AttachmentThumbnailLoader.shared.debugDecodeObserver = { id, previewIdentity, fileName, maxPixel, isMainThread, image in
+            let sample = Sample(attachmentID: id, previewIdentity: previewIdentity, fileName: fileName, maxPixel: maxPixel,
+                                isMainThread: isMainThread, width: image?.width, height: image?.height)
+            self.state.withLock { state in
+                guard state.attachmentID == id, state.previewIdentity == previewIdentity, state.fileName == fileName,
+                      state.samples.count < 32 else { return }
+                state.samples.append(sample)
+            }
         }
     }
 
     static func bodyEvaluationCount(for attachment: OutgoingAttachment) -> Int {
         self.state.withLock { state in
-            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return 0 }
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return 0 }
             return state.bodyEvaluations
         }
     }
 
-    static func bodyEvaluated(_ attachment: OutgoingAttachment) {
+    static func bodyEvaluated(_ attachment: OutgoingAttachment, owner: UUID) {
         self.state.withLock { state in
-            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return }
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return }
             state.bodyEvaluations = min(state.bodyEvaluations + 1, 32)
+            state.loaderOwner = owner
+        }
+    }
+
+    static func loaderOwner(for attachment: OutgoingAttachment) -> UUID? {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return nil }
+            return state.loaderOwner
+        }
+    }
+
+    static func displayed(_ attachment: OutgoingAttachment, previewIdentity: UUID?) {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return }
+            state.displayedPreviewIdentity = previewIdentity
+        }
+    }
+
+    static func displayedPreviewIdentity(for attachment: OutgoingAttachment) -> UUID? {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return nil }
+            return state.displayedPreviewIdentity
         }
     }
 
     static func samples(for attachment: OutgoingAttachment) -> [Sample] {
         self.state.withLock { state in
-            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return [] }
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return [] }
             return state.samples
         }
     }
 
-    static func stopWatching(_ attachment: OutgoingAttachment) {
+    @MainActor static func stopWatching(_ attachment: OutgoingAttachment) {
         self.state.withLock { state in
-            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return }
+            guard state.attachmentID == attachment.id, state.previewIdentity == attachment.previewIdentity,
+                  state.fileName == attachment.fileName else { return }
             state.attachmentID = nil
+            state.previewIdentity = nil
             state.fileName = nil
+            state.loaderOwner = nil
+            state.displayedPreviewIdentity = nil
             state.bodyEvaluations = 0
             state.samples.removeAll(keepingCapacity: true)
         }
-    }
-
-    static func decode(_ attachment: OutgoingAttachment, maxPixel: Int) -> CGImage? {
-        let watched = self.state.withLock { $0.attachmentID == attachment.id && $0.fileName == attachment.fileName }
-        let image = ImageCodec.decode(attachment.data, maxPixel: maxPixel)
-        guard watched else { return image }
-        let sample = Sample(attachmentID: attachment.id, fileName: attachment.fileName, maxPixel: maxPixel,
-                            isMainThread: Thread.isMainThread, width: image?.width, height: image?.height)
-        self.state.withLock { state in
-            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName,
-                  state.samples.count < 32 else { return }
-            state.samples.append(sample)
-        }
-        return image
+        AttachmentThumbnailLoader.shared.debugDecodeObserver = nil
     }
 }
 #endif

@@ -120,6 +120,12 @@ struct TranscriptUIKitHostedTests {
         try WebSearchTruncationStatusTests.verifyAnswerStatus()
     }
 
+    #if DEBUG
+    @Test func attachmentThumbnailDownsamplesOnUIKitWithoutBreakingSameIDReplacement() async throws {
+        try await AttachmentThumbnailUIKitHostedVerification.verifyDownsamplingAndIdentityReplacement()
+    }
+    #endif
+
     @Test func webSearchSnippetUsesAtMostTwoVisibleLinesAtCompactWidth() async throws {
         let host = await Self.makeHost(size: CGSize(width: 360, height: 844))
         let turnID = "snippet-lines-turn-\(UUID().uuidString)"

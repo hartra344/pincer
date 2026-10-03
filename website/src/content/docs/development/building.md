@@ -12,6 +12,8 @@ The SwiftUI macros only ship inside Xcode.app, so the Command Line Tools alone w
 
 Background transcript fills establish a complete cache fingerprint baseline before saving so the search index can update only the changed tail. Visible chat opens keep their nonblocking cache path. The `TranscriptCachePrefillTests` repro and offline prefill indexing checks measure the number of built search documents and verify that old and appended messages remain searchable; token or schema mismatches still require a full recovery pass.
 
+Composer and Quick Capture attachment thumbnails decode away from the main thread and downsample to their displayed pixel size, capped at 512 pixels. Decoded previews use a shared 16 MiB LRU; each visible thumbnail keeps only its own current small bitmap while mounted.
+
 ## Quick build with SwiftPM
 
 ```sh

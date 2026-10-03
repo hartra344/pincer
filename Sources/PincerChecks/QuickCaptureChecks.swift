@@ -284,6 +284,41 @@ func runQuickCaptureDemo() async {
     let offlineSent = await model.send()
     check(!offlineSent && model.text == "nowhere" && model.target?.gatewayId == offline.id
           && model.settings.lastTarget?.gatewayId == second.id, "a refused send keeps the draft and the last target")
+
+    // The same bounded preview path backs Quick Capture's image attachment strip. Keep the
+    // thumbnail local while sending the real attachment through the in-process Demo Gateway.
+    let previewBytes = await Task.detached(priority: .utility) {
+        attachmentThumbnailFixture(width: 1800, height: 900)
+    }.value
+    let preview = OutgoingAttachment(fileName: "demo-thumbnail.png", mimeType: "image/png", data: previewBytes)
+    let previewLoader = AttachmentThumbnailLoader.shared
+    let previewOwner = UUID()
+    let previewPixels = AttachmentThumbnailLoader.targetPixelSize(points: 52, displayScale: 2)
+    let previewQueued = previewLoader.request(preview, maxPixel: previewPixels, owner: previewOwner)
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:main"))
+    model.prepare()
+    model.text = "Preview this image"
+    model.attachments = [preview]
+    let previewSent = await model.send()
+    let previewReady = await waitFor("Quick Capture thumbnail", timeout: 2) {
+        previewLoader.cached(preview, maxPixel: previewPixels) != nil
+    }
+    let previewAppearsInDemo = await waitFor("Demo attachment row", timeout: 2) {
+        gateway.chat(for: "agent:main:main").items.contains { item in
+            item.role == .user && item.plainText.contains("Preview this image")
+                && item.blocks.contains { block in
+                    switch block {
+                    case let .file(file): return file.name == preview.fileName
+                    case let .image(image): return image.alt == preview.fileName
+                    default: return false
+                    }
+                }
+        }
+    }
+    check(previewQueued && previewSent && previewAppearsInDemo && previewReady
+          && previewLoader.cached(preview, maxPixel: previewPixels).map { max($0.width, $0.height) <= previewPixels } == true,
+          "Quick Capture sends its real image attachment while the local thumbnail is decoded to display size")
+    previewLoader.release(preview, maxPixel: previewPixels, owner: previewOwner)
 }
 
 /// Quick Capture's send flows against the mock, across two Gateways (both on the same mock).
