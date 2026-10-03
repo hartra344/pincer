@@ -97,6 +97,11 @@ public final class BookmarkStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var index: Set<String> = []
     @ObservationIgnored private var persistenceRevision = 0
+#if DEBUG
+    /// Causal probe for the actual item-toggle preview preparation, never for removal.
+    @ObservationIgnored var previewPreparationProbe: (@Sendable (String, Bool) -> Void)?
+    func waitForPreviewPreparation() async {}
+#endif
 
     /// Most bookmarks kept per gateway; adding beyond drops the oldest.
     public static let limit = 150
@@ -185,7 +190,10 @@ public final class BookmarkStore {
     /// Stars `item` (by its transcript id) in `sessionKey`, or un-stars it.
     @discardableResult
     public func toggle(_ item: ChatItem, sessionKey: String) -> Bool {
-        self.toggle(Bookmark(sessionKey: sessionKey, messageId: item.transcriptId ?? item.id,
+#if DEBUG
+        self.previewPreparationProbe?(Bookmark.id(sessionKey: sessionKey, messageId: item.transcriptId ?? item.id), Thread.isMainThread)
+#endif
+        return self.toggle(Bookmark(sessionKey: sessionKey, messageId: item.transcriptId ?? item.id,
                              preview: Bookmark.preview(item.plainText), role: item.role.rawValue,
                              messageDate: item.timestamp))
     }
