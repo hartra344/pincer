@@ -292,7 +292,18 @@ struct TranscriptUIKitHostedTests {
         host.coordinator.update(rows: [Self.assistant(messageID, text: prose, at: 1)], context: host.context, insets: (0, 0))
         await Self.idle(host, cap: 10)
         let started = await eventually { entered.withLock { $0 } }
-        #expect(started, "the real renderer starts background preparation")
+        guard started else {
+            #expect(Bool(false), "the real renderer starts background preparation")
+            return
+        }
+
+        // Cross the probe's four-second timeout deliberately. This is one bounded causal check,
+        // not a performance budget: it proves whether the real worker is still held before the
+        // same-ID edit that the stale-completion assertions below are meant to exercise.
+        try? await Task.sleep(for: .seconds(5))
+        let stillHeld = SpeechText.speakabilityDebugStats(for: messageID).offMainNormalizations == 0
+        #expect(stillHeld, "the worker must still be held for the actual stale-completion fixture")
+        guard stillHeld else { return }
 
         // The store now owns different content under the same transcript ID, while the native row
         // still holds its old projection. This is the interval in which stale work must be rejected.
