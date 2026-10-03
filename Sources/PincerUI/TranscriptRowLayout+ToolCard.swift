@@ -527,7 +527,7 @@ extension TranscriptLayoutBuilder {
         }
         if hasSearch, let searchTool {
             let open = card.search != nil
-            card.controls.append(.init(id: "search-output", title: "", symbol: open ? "magnifyingglass.circle.fill" : "magnifyingglass",
+            card.controls.append(.init(id: "search-output", title: "", symbol: open ? "magnifyingglass.circle" : "magnifyingglass",
                                        frame: CGRect(x: card.x + card.inner - copy.width - 6 - searchIcon.width,
                                                      y: card.y + (height - searchIcon.height) / 2,
                                                      width: searchIcon.width, height: searchIcon.height),
