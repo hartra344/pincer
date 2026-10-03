@@ -1,4 +1,7 @@
 import PincerKit
+import CoreGraphics
+import Foundation
+import Synchronization
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -163,9 +166,12 @@ struct AttachmentThumb: View {
     let remove: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        #if DEBUG
+        let _ = AttachmentThumbnailDecodeProbe.bodyEvaluated(self.attachment)
+        #endif
+        return ZStack(alignment: .topTrailing) {
             Group {
-                if self.attachment.isImage, let image = ImageCodec.decode(self.attachment.data) {
+                if self.attachment.isImage, let image = self.decodedThumbnail {
                     Image(cgImage: image).resizable().aspectRatio(contentMode: .fill)
                 } else {
                     VStack(spacing: Theme.Spacing.xs) {
@@ -191,4 +197,90 @@ struct AttachmentThumb: View {
         }
         .padding(.top, 5)
     }
+
+    private var decodedThumbnail: CGImage? {
+        #if DEBUG
+        AttachmentThumbnailDecodeProbe.decode(self.attachment, maxPixel: 2400)
+        #else
+        ImageCodec.decode(self.attachment.data)
+        #endif
+    }
 }
+
+#if DEBUG
+/// Records only explicitly watched attachment decodes, so hosted tests can prove the real view's
+/// decode count, thread, and target without logging image bytes or changing Release behavior.
+enum AttachmentThumbnailDecodeProbe {
+    struct Sample: Sendable {
+        let attachmentID: UUID
+        let fileName: String
+        let maxPixel: Int
+        let isMainThread: Bool
+        let width: Int?
+        let height: Int?
+    }
+
+    private struct State: Sendable {
+        var attachmentID: UUID?
+        var fileName: String?
+        var bodyEvaluations = 0
+        var samples: [Sample] = []
+    }
+
+    private static let state = Mutex(State())
+
+    static func watch(_ attachment: OutgoingAttachment) {
+        self.state.withLock { state in
+            state.attachmentID = attachment.id
+            state.fileName = attachment.fileName
+            state.bodyEvaluations = 0
+            state.samples.removeAll(keepingCapacity: true)
+        }
+    }
+
+    static func bodyEvaluationCount(for attachment: OutgoingAttachment) -> Int {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return 0 }
+            return state.bodyEvaluations
+        }
+    }
+
+    static func bodyEvaluated(_ attachment: OutgoingAttachment) {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return }
+            state.bodyEvaluations = min(state.bodyEvaluations + 1, 32)
+        }
+    }
+
+    static func samples(for attachment: OutgoingAttachment) -> [Sample] {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return [] }
+            return state.samples
+        }
+    }
+
+    static func stopWatching(_ attachment: OutgoingAttachment) {
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName else { return }
+            state.attachmentID = nil
+            state.fileName = nil
+            state.bodyEvaluations = 0
+            state.samples.removeAll(keepingCapacity: true)
+        }
+    }
+
+    static func decode(_ attachment: OutgoingAttachment, maxPixel: Int) -> CGImage? {
+        let watched = self.state.withLock { $0.attachmentID == attachment.id && $0.fileName == attachment.fileName }
+        let image = ImageCodec.decode(attachment.data, maxPixel: maxPixel)
+        guard watched else { return image }
+        let sample = Sample(attachmentID: attachment.id, fileName: attachment.fileName, maxPixel: maxPixel,
+                            isMainThread: Thread.isMainThread, width: image?.width, height: image?.height)
+        self.state.withLock { state in
+            guard state.attachmentID == attachment.id, state.fileName == attachment.fileName,
+                  state.samples.count < 32 else { return }
+            state.samples.append(sample)
+        }
+        return image
+    }
+}
+#endif
