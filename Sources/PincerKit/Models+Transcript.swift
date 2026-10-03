@@ -1,5 +1,8 @@
 import Foundation
 import UniformTypeIdentifiers
+#if DEBUG
+import Synchronization
+#endif
 
 // MARK: Transcript
 
@@ -262,6 +265,59 @@ public struct ReplyPreview: Hashable, Codable, Sendable {
 }
 
 public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
+#if DEBUG
+    package struct ThinkingTextJoinProbeStats: Sendable, Equatable {
+        package var mainThreadJoins = 0
+        package var offMainJoins = 0
+    }
+
+    private struct ThinkingTextJoinProbeRecord: Sendable {
+        var stats = ThinkingTextJoinProbeStats()
+        var lastUse: UInt64
+    }
+
+    private struct ThinkingTextJoinProbeState: Sendable {
+        static let capacity = 16
+        var records: [String: ThinkingTextJoinProbeRecord] = [:]
+        var clock: UInt64 = 0
+        mutating func tick() -> UInt64 { self.clock &+= 1; return self.clock }
+    }
+
+    private static let thinkingTextJoinProbe = Mutex(ThinkingTextJoinProbeState())
+
+    package static func resetThinkingTextJoinProbe(tracking itemID: String) {
+        self.thinkingTextJoinProbe.withLock { state in
+            if state.records[itemID] == nil, state.records.count >= ThinkingTextJoinProbeState.capacity,
+               let oldest = state.records.min(by: { $0.value.lastUse < $1.value.lastUse })?.key
+            { state.records[oldest] = nil }
+            state.records[itemID] = ThinkingTextJoinProbeRecord(lastUse: state.tick())
+        }
+    }
+
+    package static func thinkingTextJoinProbeStats(for itemID: String) -> ThinkingTextJoinProbeStats {
+        self.thinkingTextJoinProbe.withLock { state in
+            guard var record = state.records[itemID] else { return ThinkingTextJoinProbeStats() }
+            record.lastUse = state.tick()
+            state.records[itemID] = record
+            return record.stats
+        }
+    }
+
+    package static func unregisterThinkingTextJoinProbe(tracking itemID: String) {
+        self.thinkingTextJoinProbe.withLock { $0.records[itemID] = nil }
+    }
+
+    private func recordThinkingTextJoin() {
+        Self.thinkingTextJoinProbe.withLock { state in
+            guard var record = state.records[self.id] else { return }
+            if Thread.isMainThread { record.stats.mainThreadJoins += 1 }
+            else { record.stats.offMainJoins += 1 }
+            record.lastUse = state.tick()
+            state.records[self.id] = record
+        }
+    }
+#endif
+
     public var id: String
     public var transcriptId: String?
     public var role: ChatRole
@@ -512,12 +568,24 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         }.joined(separator: "\n\n")
     }
 
+    /// Presence checks inspect block tags without joining the reasoning payload.
+    public var hasThinkingContent: Bool {
+        self.blocks.contains { block in
+            if case .thinking = block { return true }
+            return false
+        }
+    }
+
     public var thinkingText: String? {
         let parts = self.blocks.compactMap { block -> String? in
             if case let .thinking(text) = block { return text }
             return nil
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+        guard !parts.isEmpty else { return nil }
+#if DEBUG
+        self.recordThinkingTextJoin()
+#endif
+        return parts.joined(separator: "\n\n")
     }
 }
 

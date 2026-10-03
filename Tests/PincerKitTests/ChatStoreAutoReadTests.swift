@@ -101,6 +101,49 @@ struct ChatStoreAutoReadTests {
                 "disabled Read Aloud must not parse the accepted reply on main")
     }
 
+    @Test func thinkingPresenceIncludesEmptyBlocksAndExcludesOrdinaryText() throws {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        self.message(chat, id: "ordinary-text", text: "No reasoning block.")
+        #expect(!chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == false)
+        #expect(chat.items.last?.thinkingText == nil)
+
+        // Preserve nil-versus-empty getter semantics for locally constructed transcript models.
+        var emptyThinking = try #require(chat.items.last)
+        emptyThinking.id = "empty-thinking"
+        emptyThinking.transcriptId = "empty-thinking"
+        emptyThinking.blocks = [.thinking("")]
+        chat.items.append(emptyThinking)
+        #expect(chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == true)
+        #expect(chat.items.last?.thinkingText == "", "actual text consumers retain the empty reasoning value")
+    }
+
+    @Test func acceptedThinkingMessagePresenceDoesNotJoinLongTextOnMain() {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        let id = "accepted-thinking-presence-\(UUID().uuidString)"
+        ChatItem.resetThinkingTextJoinProbe(tracking: id)
+        defer { ChatItem.unregisterThinkingTextJoinProbe(tracking: id) }
+
+        let longThinking = String(repeating: "thinking-token ", count: 8_000)
+        chat.handleSessionMessage(["message": [
+            "role": "assistant",
+            "content": .array([
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "text", "text": .string("Committed reply")],
+            ]),
+            "__openclaw": ["id": .string(id)],
+        ]])
+
+        #expect(chat.sawThinking)
+        #expect(chat.items.contains { $0.id == id })
+        #expect(ChatItem.thinkingTextJoinProbeStats(for: id).mainThreadJoins == 0,
+                "presence-only accepted-message and rebuild checks must not join the thinking payload")
+    }
+
     @Test func uninstallingReadAloudDropsPreviouslyEligibleReply() async {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "prepared-before-uninstall", text: "This arrived with auto-read enabled.")

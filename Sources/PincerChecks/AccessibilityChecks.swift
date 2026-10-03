@@ -34,9 +34,22 @@ func runDemoAccessibilityPass() async {
     check(AccessibilityText.sectionState(isCollapsed: true) == "Collapsed"
           && AccessibilityText.sectionState(isCollapsed: false) == "Expanded", "a11y pass: section state values")
 
+#if DEBUG
+    let thinkingID = "demo-main-thinking"
+    ChatItem.resetThinkingTextJoinProbe(tracking: thinkingID)
+    defer { ChatItem.unregisterThinkingTextJoinProbe(tracking: thinkingID) }
+#endif
     let chat = gateway.chat(for: "agent:main:main")
     await chat.load()
     _ = await waitFor("demo chat history") { chat.hasLoaded && !chat.entries.isEmpty }
+#if DEBUG
+    let thinkingJoins = ChatItem.thinkingTextJoinProbeStats(for: thinkingID)
+    check(chat.items.first(where: \.hasThinkingContent)?.id == thinkingID,
+          "a11y pass: the actual history presence scan reaches the tracked seeded reasoning row")
+    check(chat.sawThinking, "a11y pass: demo history detects its seeded thinking block")
+    check(thinkingJoins.mainThreadJoins == 0,
+          "a11y pass: demo thinking presence does not join transcript text on main (joins \(thinkingJoins.mainThreadJoins))")
+#endif
     let replies = chat.entries.compactMap { entry -> AssistantTurn? in
         if case let .assistant(turn) = entry { turn } else { nil }
     }
