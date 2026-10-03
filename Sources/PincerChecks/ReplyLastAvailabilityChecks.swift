@@ -16,6 +16,7 @@ func runDemoReplyLastAvailabilityChecks() async {
     guard connected else { return }
     let chat = gateway.chat(for: "agent:main:dashboard:trip")
     await chat.load()
+    await chat.replyLastPreparation.waitUntilIdle()
     let expected = chat.items.last { $0.isReplyable && ($0.role == .user || !$0.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }?.transcriptId
     check(expected != nil && chat.latestReplyableId == expected, "actual seeded transcript preserves Reply Last eligibility")
     #if DEBUG
@@ -29,8 +30,11 @@ func runDemoReplyLastAvailabilityChecks() async {
     chat.items.append(large)
     ReplyLastAvailabilityDebugProbe.reset(tracking: id)
     defer { ReplyLastAvailabilityDebugProbe.unregister(tracking: id) }
+    check(chat.latestReplyableId == nil, "cold unknown connected target cannot select an older message")
+    await chat.replyLastPreparation.waitUntilIdle()
     check(chat.latestReplyableId == id, "connected actual availability keeps content beyond a giant whitespace prefix")
     check(ReplyLastAvailabilityDebugProbe.stats(for: id).mainNormalizations == 0,
           "connected actual Reply Last validation does not normalize 2 MiB on Main")
+    check(ReplyLastAvailabilityDebugProbe.stats(for: id).offMainNormalizations > 0, "actual connected availability predicate runs off-main")
     #endif
 }
