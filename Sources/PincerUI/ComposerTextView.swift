@@ -144,14 +144,96 @@ struct ComposerTextView: View {
 private func composerHeight(for text: String, font: PlatformFont, lineHeight: CGFloat, width: CGFloat, maxLines: Int) -> CGFloat {
     var height = lineHeight
     if !text.isEmpty, width > 0 {
+#if DEBUG
+        let probeStart = ComposerSizingProbe.isEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        let attributed = NSAttributedString(string: text, attributes: [.font: font])
+        let bounds = attributed.boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            context: nil)
+        let attributedLength = attributed.length
+#else
         let bounds = NSAttributedString(string: text, attributes: [.font: font]).boundingRect(
             with: CGSize(width: width, height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             context: nil)
+#endif
         height = max(lineHeight, bounds.height + (text.hasSuffix("\n") ? lineHeight : 0))
+#if DEBUG
+        if let probeStart {
+            let elapsedNanoseconds = UInt64(max(0, (ProcessInfo.processInfo.systemUptime - probeStart) * 1_000_000_000))
+            ComposerSizingProbe.record(.init(
+                elapsedNanoseconds: elapsedNanoseconds,
+                attributedLength: attributedLength,
+                isMainThread: Thread.isMainThread,
+                width: Double(width),
+                lineHeight: Double(lineHeight),
+                maxLines: maxLines,
+                returnedHeight: Double(ceil(min(height, lineHeight * CGFloat(maxLines))))))
+        }
+#endif
     }
     return ceil(min(height, lineHeight * CGFloat(maxLines)))
 }
+
+#if DEBUG
+struct ComposerSizingSample: Sendable, Equatable {
+    let elapsedNanoseconds: UInt64
+    let attributedLength: Int
+    let isMainThread: Bool
+    let width: Double
+    let lineHeight: Double
+    let maxLines: Int
+    let returnedHeight: Double
+}
+
+enum ComposerSizingProbe {
+    private static let storage = ComposerSizingProbeStorage()
+
+    static var isEnabled: Bool { self.storage.isEnabled }
+    static var samples: [ComposerSizingSample] { self.storage.samples }
+
+    static func reset(enabled: Bool) {
+        self.storage.reset(enabled: enabled)
+    }
+
+    static func record(_ sample: ComposerSizingSample) {
+        self.storage.record(sample)
+    }
+}
+
+private final class ComposerSizingProbeStorage: @unchecked Sendable {
+    private let lock = NSLock()
+    private var enabled = false
+    private var recorded: [ComposerSizingSample] = []
+
+    var isEnabled: Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.enabled
+    }
+
+    var samples: [ComposerSizingSample] {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.recorded
+    }
+
+    func reset(enabled: Bool) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.recorded.removeAll(keepingCapacity: true)
+        self.enabled = enabled
+    }
+
+    func record(_ sample: ComposerSizingSample) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        guard self.enabled, self.recorded.count < 64 else { return }
+        self.recorded.append(sample)
+    }
+}
+#endif
 
 #if os(macOS)
 private typealias PlatformFont = NSFont
