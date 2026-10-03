@@ -72,6 +72,8 @@ struct ChatStoreAutoReadTests {
         let stats = SpeechText.speakabilityDebugStats(for: id)
         #expect(stats.mainThreadNormalizations + stats.offMainNormalizations >= 1,
                 "the enabled final-reply path checks the accepted item's speakability")
+        #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations == 1,
+                "the actual accepted-reply path must normalize once off-main without delaying transcript delivery")
     }
 
     @Test func acceptedFinalMessageWithoutReadAloudCallbackStillCommitsAndClearsWait() async {
