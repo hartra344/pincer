@@ -89,8 +89,12 @@ private struct ChatWindowContent: View {
         .environment(\.openAutomations, AutomationsOpener { gateway in
             self.openWindow(id: "automations", value: gateway.id)
         })
+        #if os(macOS)
+        .background(ChatWindowNotificationVisibility(app: self.app, ref: self.ref))
+        #else
         .onAppear { self.app.chatWindowOpened(self.ref) }
         .onDisappear { self.app.chatWindowClosed(self.ref) }
+        #endif
         .modifier(ChatWindowVisibility(gateway: self.gateway, key: self.ref.sessionKey))
         #if os(macOS)
         .modifier(MainWindowForLinks(gateway: self.gateway))

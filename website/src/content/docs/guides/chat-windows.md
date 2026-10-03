@@ -23,7 +23,7 @@ It uses the same Gateway connection as the main window, so it doesn't open anoth
 ## While a window is open
 
 - The chat stays loaded and live. It isn't unloaded to save memory.
-- Pincer doesn't show [notifications](../approvals-and-notifications/) for it while Pincer is active, just like the chat open in the main window.
+- Pincer doesn't show [notifications](../approvals-and-notifications/) for it while Pincer is active and at least one of its chat windows is visible, even if another window has keyboard focus. A minimized, hidden or fully covered window keeps its chat loaded but allows notifications.
 - Opening the window marks the chat as read.
 
 Clicking a subagent, run or chat link inside a chat window opens it in the main window, which comes to the front. See [Subagents & runs](../subagents-and-runs/).
