@@ -12,6 +12,8 @@ struct ChatStoreAutoReadTests {
     func chat() -> (ChatStore, Recorder) {
         let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
         let chat = store.chat(for: Self.key)
+        // Each test owns an isolated worker; the production singleton is shared across chats.
+        chat.liveReplyPreparationQueue = LiveReplyPreparationQueue()
         let recorder = Recorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
         return (chat, recorder)
@@ -30,27 +32,30 @@ struct ChatStoreAutoReadTests {
         chat.handleChat(["runId": .string(runId), "sessionKey": .string(Self.key), "state": .string(state)])
     }
 
-    @Test func speaksOnlyTheLastReplyWhenTheRunSucceeds() {
+    @Test func speaksOnlyTheLastReplyWhenTheRunSucceeds() async {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "a1", text: "Let me check.", toolCall: true)
         self.message(chat, id: "a2", text: "Here is the answer.")
         #expect(recorder.items.isEmpty)
         self.final(chat, "r1")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
         #expect(recorder.items.map(\.plainText) == ["Here is the answer."])
     }
 
-    @Test func abortedRunSpeaksNothing() {
+    @Test func abortedRunSpeaksNothing() async {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "a1", text: "Half an answer")
         self.final(chat, "r1", state: "aborted")
         self.message(chat, id: "a2", text: "Later message")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle })
         #expect(recorder.items.isEmpty)
     }
 
-    @Test func replyArrivingAfterFinalIsSpoken() {
+    @Test func replyArrivingAfterFinalIsSpoken() async {
         let (chat, recorder) = self.chat()
         self.final(chat, "r1")
         self.message(chat, id: "a1", text: "Late but final.")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
         #expect(recorder.items.count == 1)
     }
 
@@ -72,11 +77,14 @@ struct ChatStoreAutoReadTests {
         let stats = SpeechText.speakabilityDebugStats(for: id)
         #expect(stats.mainThreadNormalizations + stats.offMainNormalizations >= 1,
                 "the enabled final-reply path checks the accepted item's speakability")
+        #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations == 1,
+                "the actual accepted-reply path must normalize once off-main without delaying transcript delivery")
     }
 
     @Test func acceptedFinalMessageWithoutReadAloudCallbackStillCommitsAndClearsWait() async {
         let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
         let chat = store.chat(for: Self.key)
+        chat.liveReplyPreparationQueue = LiveReplyPreparationQueue()
         let id = "accepted-final-disabled-\(UUID().uuidString)"
         SpeechText.resetSpeakabilityDebugStats(tracking: id)
         defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
@@ -93,9 +101,53 @@ struct ChatStoreAutoReadTests {
                 "disabled Read Aloud must not parse the accepted reply on main")
     }
 
-    @Test func uninstallingReadAloudDropsPreviouslyEligibleReply() {
+    @Test func thinkingPresenceIncludesEmptyBlocksAndExcludesOrdinaryText() throws {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        self.message(chat, id: "ordinary-text", text: "No reasoning block.")
+        #expect(!chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == false)
+        #expect(chat.items.last?.thinkingText == nil)
+
+        // Preserve nil-versus-empty getter semantics for locally constructed transcript models.
+        var emptyThinking = try #require(chat.items.last)
+        emptyThinking.id = "empty-thinking"
+        emptyThinking.transcriptId = "empty-thinking"
+        emptyThinking.blocks = [.thinking("")]
+        chat.items.append(emptyThinking)
+        #expect(chat.sawThinking)
+        #expect(chat.items.last?.hasThinkingContent == true)
+        #expect(chat.items.last?.thinkingText == "", "actual text consumers retain the empty reasoning value")
+    }
+
+    @Test func acceptedThinkingMessagePresenceDoesNotJoinLongTextOnMain() {
+        let (chat, _) = self.chat()
+        chat.onFinalAssistantReply = nil
+        let id = "accepted-thinking-presence-\(UUID().uuidString)"
+        ChatItem.resetThinkingTextJoinProbe(tracking: id)
+        defer { ChatItem.unregisterThinkingTextJoinProbe(tracking: id) }
+
+        let longThinking = String(repeating: "thinking-token ", count: 8_000)
+        chat.handleSessionMessage(["message": [
+            "role": "assistant",
+            "content": .array([
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "thinking", "thinking": .string(longThinking)],
+                ["type": "text", "text": .string("Committed reply")],
+            ]),
+            "__openclaw": ["id": .string(id)],
+        ]])
+
+        #expect(chat.sawThinking)
+        #expect(chat.items.contains { $0.id == id })
+        #expect(ChatItem.thinkingTextJoinProbeStats(for: id).mainThreadJoins == 0,
+                "presence-only accepted-message and rebuild checks must not join the thinking payload")
+    }
+
+    @Test func uninstallingReadAloudDropsPreviouslyEligibleReply() async {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "prepared-before-uninstall", text: "This arrived with auto-read enabled.")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && chat.liveReplyCandidate?.id == "prepared-before-uninstall" })
         #expect(chat.liveReplyCandidate?.id == "prepared-before-uninstall")
         chat.onFinalAssistantReply = nil
         #expect(chat.liveReplyCandidate == nil && !chat.awaitingFinalReply)
@@ -104,9 +156,10 @@ struct ChatStoreAutoReadTests {
         #expect(recorder.items.isEmpty, "reinstalling a callback must not resurrect discarded reply text")
     }
 
-    @Test func reenabledReadAloudDoesNotReplayReplyObservedWhileDisabled() {
+    @Test func reenabledReadAloudDoesNotReplayReplyObservedWhileDisabled() async {
         let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
         let chat = store.chat(for: Self.key)
+        chat.liveReplyPreparationQueue = LiveReplyPreparationQueue()
         let id = "accepted-final-disabled-before-enable-\(UUID().uuidString)"
         SpeechText.resetSpeakabilityDebugStats(tracking: id)
         defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
@@ -124,19 +177,21 @@ struct ChatStoreAutoReadTests {
         #expect(!chat.awaitingFinalReply, "replaying the disabled run's final event does not arm a stale wait")
         self.final(chat, "run-next")
         self.message(chat, id: "next-enabled-reply", text: "A fresh run's answer.")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
         #expect(recorder.items.map(\.id) == ["next-enabled-reply"], "a later enabled run still delivers its own reply")
         let stats = SpeechText.speakabilityDebugStats(for: id)
         #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations == 0,
                 "a reply received with no callback is discarded without speech normalization")
     }
 
-    @Test func runWithoutSpeakableTextDoesNotArmTheNextMessage() {
+    @Test func runWithoutSpeakableTextDoesNotArmTheNextMessage() async {
         let (chat, recorder) = self.chat()
         self.message(chat, id: "a1", toolCall: true)
         self.final(chat, "r1")
         // The next run starts; its streamed status clears the wait.
         chat.handleChat(["runId": "r2", "sessionKey": .string(Self.key), "state": "status", "phase": "thinking"])
         self.message(chat, id: "a2", text: "Intermediate text of the next run.")
+        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle })
         #expect(recorder.items.isEmpty)
     }
 }

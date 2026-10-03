@@ -1074,20 +1074,31 @@ extension ChatStore {
 
     func apply(history: JSONValue, parsed: [ChatItem]) {
         let messages = history["messages"]?.array ?? []
+        var incomingItemIDs: Set<String>? = self.hasPagedOlder ? [] : nil
+        let trackedLiveReplyIDs = Set(self.liveReplyItemTokens.keys)
+            .union(self.liveReplyCandidate.map { [$0.id] } ?? [])
+        var matchingLiveReplyRows: [String: (item: ChatItem, parsedIndex: Int)] = [:]
         // Keep optimistic sends that the transcript hasn't committed yet.
-        let committedKeys = Set(parsed.compactMap(\.idempotencyKey))
+        var committedKeys: Set<String> = []
+        for (parsedIndex, item) in parsed.enumerated() {
+            if let key = item.idempotencyKey { committedKeys.insert(key) }
+            incomingItemIDs?.insert(item.id)
+            if trackedLiveReplyIDs.contains(item.id) {
+                matchingLiveReplyRows[item.id] = (item: item, parsedIndex: parsedIndex)
+            }
+        }
         let pending = self.items.filter { $0.isPending && !committedKeys.contains($0.idempotencyKey ?? "") }
         self.gateway?.reconcileOutbox(committedKeys: committedKeys)
         // The latest page replaces the tail; older pages the user scrolled back through stay put.
         // Overlap is found through a transcript id (index-based fallback ids aren't stable across
         // pages); no overlap means the loaded history is stale (e.g. the session was reset).
         var older: [ChatItem] = []
-        if self.hasPagedOlder, let anchor = parsed.firstIndex(where: { $0.transcriptId != nil }),
+        if self.hasPagedOlder, let incomingItemIDs,
+           let anchor = parsed.firstIndex(where: { $0.transcriptId != nil }),
            let match = self.items.firstIndex(where: { $0.transcriptId == parsed[anchor].transcriptId }),
            match >= anchor
         {
-            let latest = Set(parsed.map(\.id))
-            older = self.items[..<(match - anchor)].filter { !$0.isPending && !latest.contains($0.id) }
+            older = self.items[..<(match - anchor)].filter { !$0.isPending && !incomingItemIDs.contains($0.id) }
         } else {
             self.hasPagedOlder = false
             self.olderOffset = history["nextOffset"]?.int ?? messages.count
@@ -1097,6 +1108,10 @@ extension ChatStore {
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
+        let refreshedRows = matchingLiveReplyRows.values.map {
+            (item: $0.item, fallbackIndex: older.count + $0.parsedIndex)
+        }
+        self.refreshLiveReplyPreparations(matching: refreshedRows)
         self.releaseCommittedOutboxImagePreviews(committedKeys)
         self.pruneRecoveryState(keeping: parsed)
         self.recoverCappedMessages()
@@ -1130,6 +1145,7 @@ extension ChatStore {
         self.cappedRecoveryPending = false
         var items = self.items
         var substituted = false
+        var refreshedRows: [(item: ChatItem, fallbackIndex: Int)] = []
         var missing: [String] = []
         for index in items.indices {
 #if DEBUG
@@ -1144,13 +1160,20 @@ extension ChatStore {
             guard items[index].isCapped else { continue }
             guard let messageId = items[index].transcriptId else { continue }
             if let full = self.fullMessages[messageId] {
-                items[index] = Self.restoring(full, over: items[index])
+                let restored = Self.restoring(full, over: items[index])
+                items[index] = restored
+                if self.liveReplyItemTokens[restored.id] != nil || self.liveReplyCandidate?.id == restored.id {
+                    refreshedRows.append((item: restored, fallbackIndex: index))
+                }
                 substituted = true
             } else if self.recoveryAttempted.insert(messageId).inserted {
                 missing.append(messageId)
             }
         }
-        if substituted { self.items = items }
+        if substituted {
+            self.items = items
+            self.refreshLiveReplyPreparations(matching: refreshedRows)
+        }
         for messageId in missing {
             Task { [weak self] in await self?.fetchFullMessage(messageId) }
         }
@@ -1203,7 +1226,9 @@ extension ChatStore {
         guard let full = parsed, !full.isCapped else { return }
         self.fullMessages[messageId] = full
         guard let index = self.items.firstIndex(where: { $0.transcriptId == messageId && $0.isCapped }) else { return }
-        self.items[index] = Self.restoring(full, over: self.items[index])
+        let restored = Self.restoring(full, over: self.items[index])
+        self.items[index] = restored
+        self.refreshLiveReplyPreparations(matching: [(item: restored, fallbackIndex: index)])
     }
 
     /// The full copy with the capped row's identity, so the row keeps its place and scroll anchor.

@@ -64,13 +64,13 @@ public enum SpeechText {
         self.speakabilityDebug.withLock { $0.records[itemID] = nil }
     }
 
-    private static func recordSpeakabilityNormalization(for item: ChatItem) {
+    private static func recordSpeakabilityNormalization(for itemID: String) {
         self.speakabilityDebug.withLock { state in
-            guard var record = state.records[item.id] else { return }
+            guard var record = state.records[itemID] else { return }
             if Thread.isMainThread { record.stats.mainThreadNormalizations += 1 }
             else { record.stats.offMainNormalizations += 1 }
             record.lastUse = state.tick()
-            state.records[item.id] = record
+            state.records[itemID] = record
         }
     }
 #endif
@@ -173,11 +173,22 @@ public enum SpeechText {
     /// What Read Aloud speaks for `item`: an assistant message's text blocks, never tool or thinking content.
     public static func speakableText(for item: ChatItem) -> String? {
         guard item.role == .assistant, !item.isPending, !item.isError else { return nil }
-#if DEBUG
-        self.recordSpeakabilityNormalization(for: item)
-#endif
-        let text = self.plain(fromMarkdown: item.plainText)
+        let text = Self.normalizedSpeakableText(item.plainText, itemID: item.id)
         return text.isEmpty ? nil : text
+    }
+
+    /// Eligibility from the bounded text-only accepted-message queue. Joining and Markdown cleanup
+    /// happen on its worker instead of the event's Main-actor turn.
+    package static func isSpeakable(textBlocks: [String], itemID: String) -> Bool {
+        let joined = textBlocks.joined(separator: "\n\n")
+        return !Self.normalizedSpeakableText(joined, itemID: itemID).isEmpty
+    }
+
+    private static func normalizedSpeakableText(_ source: String, itemID: String) -> String {
+#if DEBUG
+        self.recordSpeakabilityNormalization(for: itemID)
+#endif
+        return self.plain(fromMarkdown: source)
     }
 
     /// Prepares only the newest reply the command can read. Call this from a worker; each candidate
