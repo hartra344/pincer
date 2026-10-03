@@ -238,8 +238,7 @@ extension DemoGateway {
                 $0["ownerHandle"]?.text?.lowercased() == owner && $0["slug"]?.text == slug
             }
         }
-        let bare = ref.split(separator: "/").last.map(String.init) ?? ref
-        return self.clawHubCatalog.first { $0["slug"]?.text == ref || $0["slug"]?.text == bare }
+        return self.clawHubCatalog.first { $0["slug"]?.text == ref }
     }
 
     private func searchClawHub(_ query: String?, limit: Int) -> [JSONValue] {
