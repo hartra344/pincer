@@ -324,6 +324,8 @@ struct TranscriptRowLayout {
         let id: String
         let minY: CGFloat
         let maxY: CGFloat
+        /// Bounded raw prefix key only; the plain-text excerpt is prepared off-main on demand.
+        var openingExcerptSource: MessagePartExcerptSource?
     }
 
     /// The chat a forwarded message came from, which the row can open.
@@ -465,6 +467,7 @@ struct TranscriptLayoutBuilder {
     var highlight = TranscriptHighlight()
     /// The message to flash, after jumping to it from a quote.
     var flash: String?
+    var messagePartExcerptCache: MessagePartExcerptCache = .shared
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
 
@@ -718,7 +721,10 @@ struct TranscriptLayoutBuilder {
                     self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
                 }
                 if showFooters { self.messageFooter(turn, message: index, layout: layout, into: &stack) }
-                if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
+                if let id {
+                    let opening = self.openingExcerptSource(message, messageCount: turn.text.count)
+                    layout.messages.append(.init(id: id, minY: start, maxY: stack.y, openingExcerptSource: opening))
+                }
             }
             self.images(turn.images, into: &stack, layout: &layout)
             for file in turn.files { self.file(file, into: &stack, layout: &layout) }
@@ -728,13 +734,25 @@ struct TranscriptLayoutBuilder {
                     self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
                 }
                 if showFooters { self.messageFooter(turn, message: last, layout: layout, into: &stack) }
-                if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
+                if let id {
+                    let opening = self.openingExcerptSource(turn.text[last], messageCount: turn.text.count)
+                    layout.messages.append(.init(id: id, minY: start, maxY: stack.y, openingExcerptSource: opening))
+                }
             }
             let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
             if turn.isStreaming, turn.text.isEmpty, !showsActivity {
                 stack.add(.typing, height: 14, width: 26)
             }
         }
+    }
+
+    /// Captures at most the fixed prefix on main and immediately queues plain-text normalization
+    /// off-main. Only grouped messages need per-part labels.
+    private func openingExcerptSource(_ message: String, messageCount: Int) -> MessagePartExcerptSource? {
+        guard messageCount > 1 else { return nil }
+        let source = MessagePartExcerptSource(message)
+        _ = self.messagePartExcerptCache.excerpt(for: source)
+        return source
     }
 
     /// The quote above one of an assistant turn's messages that answers an earlier message.

@@ -104,6 +104,7 @@ struct TranscriptBranchEntry {
 /// What row views can ask of the list they're in.
 @MainActor
 protocol TranscriptRowActions: AnyObject {
+    var messagePartExcerptCache: MessagePartExcerptCache { get }
     func setExpanded(_ key: String, _ expanded: Bool, row: String)
     func openRun(_ sessionKey: String)
     /// Opens another chat, e.g. the one a forwarded message came from.
@@ -166,6 +167,7 @@ protocol TranscriptRowActions: AnyObject {
 }
 
 extension TranscriptRowActions {
+    var messagePartExcerptCache: MessagePartExcerptCache { .shared }
     func canReadAloud(_ messageId: String, rowID: String) -> Bool { self.canReadAloud(messageId) }
     func readAloud(_ messageId: String, rowID: String) { self.readAloud(messageId) }
 }
@@ -175,6 +177,7 @@ extension TranscriptRowActions {
 /// setting or the text size changed.
 @MainActor
 final class TranscriptRenderer: TranscriptRowActions {
+    let messagePartExcerptCache: MessagePartExcerptCache
     private struct Entry {
         let row: TranscriptRow
         var layout: TranscriptRowLayout
@@ -298,8 +301,9 @@ final class TranscriptRenderer: TranscriptRowActions {
     /// Scrolls a row into view the way Find does, at its `matchY`.
     var onReveal: ((_ id: String) -> Void)?
 
-    init(context: TranscriptContext) {
+    init(context: TranscriptContext, messagePartExcerptCache: MessagePartExcerptCache? = nil) {
         self.context = context
+        self.messagePartExcerptCache = messagePartExcerptCache ?? .shared
         self.settings = .current(for: context)
         self.observeImages()
         self.observeFiles()
@@ -442,7 +446,8 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.layoutBuildCount += 1
         var layout = TranscriptSignposts.measure("RowLayout") {
             TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight,
-                                    flash: self.flash).layout(row, width: width)
+                                    flash: self.flash, messagePartExcerptCache: self.messagePartExcerptCache)
+                .layout(row, width: width)
         }
         self.serial += 1
         layout.serial = self.serial
@@ -657,7 +662,8 @@ final class TranscriptRenderer: TranscriptRowActions {
         var stale: Set<String> = []
         for id in self.spawnRows {
             guard let entry = self.cache[id], case let .entry(.assistant(turn)) = entry.row else { continue }
-            let builder = TranscriptLayoutBuilder(context: self.context, settings: self.settings)
+            let builder = TranscriptLayoutBuilder(context: self.context, settings: self.settings,
+                                                  messagePartExcerptCache: self.messagePartExcerptCache)
             for tool in turn.tools where builder.spawnedRun(tool) != entry.layout.runs[tool.id] {
                 stale.insert(id)
                 break
@@ -692,7 +698,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     private func decorationsChanged() {
-        let builder = TranscriptLayoutBuilder(context: self.context, settings: self.settings, flash: self.flash)
+        let builder = TranscriptLayoutBuilder(context: self.context, settings: self.settings, flash: self.flash,
+                                              messagePartExcerptCache: self.messagePartExcerptCache)
         var stale: Set<String> = []
         for (id, entry) in self.cache where builder.decoration(for: entry.row) != entry.layout.decoration {
             stale.insert(id)

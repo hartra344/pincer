@@ -95,9 +95,16 @@ public enum AccessibilityText {
         return cutShort && !text.hasSuffix("…") ? text + "…" : text
     }
 
-    /// Per-message action name on a multi-message row: `Reply, part 1 of 3`; unchanged for one part.
-    public static func messagePartAction(_ action: String, part: Int, of total: Int) -> String {
-        total <= 1 ? action : L("\(action), part \(part) of \(total)")
+    /// Per-message action name on a multi-message row: `Reply, part 1 of 3, Opening words…`;
+    /// unchanged for one part. `openingExcerpt` should already be a bounded, plain-text excerpt.
+    public static func messagePartAction(
+        _ action: String,
+        part: Int,
+        of total: Int,
+        openingExcerpt: String? = nil
+    ) -> String {
+        guard total > 1 else { return action }
+        return Self.join([L("\(action), part \(part) of \(total)"), openingExcerpt])
     }
 
     /// `1 tool call`, `3 tool calls`. Returns nil for zero so it drops out of a `join`.
