@@ -222,6 +222,7 @@ enum Suites {
         Section("Transcript headless fill (demo, #299)") { await runDemoTranscriptHeadlessFillChecks() },
         Section("Resize streaming inputs (demo, #353)") { await runDemoResizeStreamingInputs() },
         Section("Streaming clock rollback (demo, #649)") { await runDemoStreamingClockChecks() },
+        Section("Capped recovery scan budget (demo)") { await runDemoCappedRecoveryBudget() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },

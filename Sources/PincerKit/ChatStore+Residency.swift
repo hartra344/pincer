@@ -47,6 +47,7 @@ extension ChatStore {
         self.olderInCache = false
         self.fullMessages = [:]
         self.recoveryAttempted = []
+        self.cappedRecoveryPending = false
         self.sawThinking = false
         // Unsent rows survive; the restore guard accepts pending-only items.
         let pending = self.items.filter(\.isPending)

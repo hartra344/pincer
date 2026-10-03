@@ -2,6 +2,12 @@ import Foundation
 import Observation
 
 extension ChatStore {
+    /// Installs a bulk-restored transcript snapshot. Recovery still runs on its existing next pass.
+    func replaceRecoveryItems(_ items: [ChatItem]) {
+        self.items = items
+        self.cappedRecoveryPending = true
+    }
+
     enum ForwardedRefreshPageDisposition: Equatable {
         case more(nextOffset: Int)
         case complete(nextOffset: Int)
@@ -271,7 +277,7 @@ extension ChatStore {
         self.olderInCache = moreInCache
         self.hasMoreHistory = !cached.complete
         self.hasPagedOlder = true
-        self.items = cached.items + self.items
+        self.replaceRecoveryItems(cached.items + self.items)
         if outcome == .loaded, self.items == cached.items { self.savedState = self.currentCacheState }
     }
 
@@ -293,7 +299,7 @@ extension ChatStore {
         self.olderInCache = more
         self.hasMoreHistory = !complete
         self.hasPagedOlder = true
-        self.items = older + self.items
+        self.replaceRecoveryItems(older + self.items)
     }
 
     /// Brings back the draft saved on disk, unless one was started here in the meantime.
@@ -525,7 +531,7 @@ extension ChatStore {
                 }
             }
             guard let reconciled else { return }
-            self.items = reconciled
+            self.replaceRecoveryItems(reconciled)
             self.hasMoreHistory = hasMore
             self.olderInCache = false
             self.olderOffset = offset
@@ -660,6 +666,7 @@ extension ChatStore {
         self.hasMoreHistory = false
         self.fullMessages = [:]
         self.recoveryAttempted = []
+        self.cappedRecoveryPending = false
         let pending = self.items.filter(\.isPending)
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
@@ -862,7 +869,7 @@ extension ChatStore {
                 if attempt == 1 { return }
             }
             guard let reconciled, current() else { return }
-            self.items = reconciled
+            self.replaceRecoveryItems(reconciled)
             // A refresh only becomes consumed once its full disk snapshot has been applied to the
             // rows currently held by this chat. Earlier guards leave the marker set on failure.
             self.forwardedSenderRefreshPending = false
@@ -946,7 +953,7 @@ extension ChatStore {
         self.olderInCache = !reachedStart && !fresh.isEmpty
         self.hasPagedOlder = true
         if !self.olderInCache { self.olderOffset = self.committedCount + fresh.count }
-        if !fresh.isEmpty { self.items = fresh + self.items }
+        if !fresh.isEmpty { self.replaceRecoveryItems(fresh + self.items) }
         return true
     }
 
@@ -1119,11 +1126,22 @@ extension ChatStore {
 
     /// History caps each text field (8,000 chars by default) and flags the message; like the
     /// Control UI, fetch the full copy with `chat.message.get` and swap it in.
-    func recoverCappedMessages() {
+    func recoverCappedMessages(fromAcceptedMessage: Bool = false) {
+        self.cappedRecoveryPending = false
         var items = self.items
         var substituted = false
         var missing: [String] = []
-        for index in items.indices where items[index].isCapped {
+        for index in items.indices {
+#if DEBUG
+            // Keep the diagnostic bounded even if a long-lived store performs many scans.
+            if self.cappedRecoveryRowsVisitedForTesting < 100_000 {
+                self.cappedRecoveryRowsVisitedForTesting += 1
+            }
+            if fromAcceptedMessage, self.acceptedEventRecoveryRowsVisitedForTesting < 100_000 {
+                self.acceptedEventRecoveryRowsVisitedForTesting += 1
+            }
+#endif
+            guard items[index].isCapped else { continue }
             guard let messageId = items[index].transcriptId else { continue }
             if let full = self.fullMessages[messageId] {
                 items[index] = Self.restoring(full, over: items[index])
@@ -1139,19 +1157,43 @@ extension ChatStore {
     }
 
     func fetchFullMessage(_ messageId: String) async {
-        guard let gateway, gateway.state.isConnected else {
+        guard let gateway else {
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
+#if DEBUG
+        let testRequest = self.cappedMessageRecoveryRequestForTesting
+        guard gateway.state.isConnected || testRequest != nil else {
+            self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
+            return
+        }
+#else
+        guard gateway.state.isConnected else {
+            self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
+            return
+        }
+#endif
         var params = self.params(keyName: "sessionKey")
         params["messageId"] = .string(messageId)
         params["maxChars"] = .number(Double(self.fullMessageMaxChars))
         let result: JSONValue
         do {
+#if DEBUG
+            if let testRequest {
+                result = try await testRequest(messageId)
+            } else {
+                result = try await gateway.connection.request("chat.message.get", .object(params), timeout: 30)
+            }
+#else
             result = try await gateway.connection.request("chat.message.get", .object(params), timeout: 30)
+#endif
         } catch {
-            // Transport failures retry on the next history pass; Gateway refusals below don't.
+            // Transport failures retry on the next recovery pass; Gateway refusals below don't.
             self.recoveryAttempted.remove(messageId)
+            if !self.isDehydrated { self.cappedRecoveryPending = true }
             return
         }
         guard result["ok"]?.bool == true, let message = result["message"] else { return }

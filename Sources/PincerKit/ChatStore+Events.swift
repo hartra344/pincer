@@ -361,7 +361,9 @@ extension ChatStore {
         if let key = item.idempotencyKey {
             self.releaseCommittedOutboxImagePreviews([key])
         }
-        self.recoverCappedMessages()
+        if item.isCapped || !self.hasLoaded || self.cappedRecoveryPending {
+            self.recoverCappedMessages(fromAcceptedMessage: true)
+        }
         if let key = item.idempotencyKey { self.gateway?.reconcileOutbox(committedKeys: [key]) }
         if item.thinkingText != nil { self.sawThinking = true }
         if var run = self.live, item.role == .assistant || item.role == .toolResult {

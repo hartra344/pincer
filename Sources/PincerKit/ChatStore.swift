@@ -296,6 +296,21 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var fullMessages: [String: ChatItem] = [:]
     /// Capped messages being fetched, or that the Gateway couldn't return in full.
     @ObservationIgnored var recoveryAttempted: Set<String> = []
+    /// A bulk transcript install or retryable fetch failure needs one later recovery pass.
+    @ObservationIgnored var cappedRecoveryPending = false
+#if DEBUG
+    /// Saturating work counter for the consumed capped-message recovery scan.
+    @ObservationIgnored package var cappedRecoveryRowsVisitedForTesting = 0
+    /// Rows visited by scans started synchronously from accepted `session.message` events.
+    @ObservationIgnored package var acceptedEventRecoveryRowsVisitedForTesting = 0
+    /// A narrow transport seam for exercising the real full-message recovery completion/catch path.
+    @ObservationIgnored package var cappedMessageRecoveryRequestForTesting: (@MainActor (String) async throws -> JSONValue)?
+
+    package func resetCappedRecoveryRowsVisitedForTesting() {
+        self.cappedRecoveryRowsVisitedForTesting = 0
+        self.acceptedEventRecoveryRowsVisitedForTesting = 0
+    }
+#endif
     /// Largest text field requested per message, matching the Control UI.
     @ObservationIgnored let fullMessageMaxChars = 500_000
     @ObservationIgnored var draftChecked = false
