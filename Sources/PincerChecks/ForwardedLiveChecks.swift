@@ -15,7 +15,7 @@ private struct ForwardedSeed {
 
 /// Checks the loaded exchange: Kiko, Claw, Kiko, Claw, then you, each in its own group.
 @MainActor
-private func checkForwardedExchange(_ gateway: GatewayStore, _ chat: ChatStore, _ seed: ForwardedSeed, label: String) {
+private func checkForwardedExchange(_ gateway: GatewayStore, _ chat: ChatStore, _ seed: ForwardedSeed, label: String) async {
     let agents = gateway.agents
     let claw = agents.first { $0.id == "main" }?.name ?? "Claw"
     check(agents.contains { $0.id == "kiko" && $0.name == "Kiko" }, "\(label): Kiko is on the roster (\(agents.map(\.name)))")
@@ -67,7 +67,15 @@ private func checkForwardedExchange(_ gateway: GatewayStore, _ chat: ChatStore, 
     check(chat.replyTarget(for: seed.intro, you: "You", agent: claw)?.senderLabel == "Kiko", "\(label): replying to Kiko names Kiko")
     check(chat.replyTarget(for: seed.reply, you: "You", agent: claw)?.senderLabel == claw, "\(label): replying to \(claw) names \(claw)")
     let replyJSON = #"{"role":"user","content":"Can you share that budget?","__openclaw":{"id":"quote-check","replyToId":"\#(seed.intro)"}}"#
-    if let reply = ChatItem(json(replyJSON), fallbackIndex: 0), let quote = chat.quote(for: reply) {
+    if let reply = ChatItem(json(replyJSON), fallbackIndex: 0) {
+        // The real cold quote request admits preparation. Await that work before inspecting
+        // its text; the public quote API preserves sender metadata immediately.
+        _ = chat.quote(for: reply)
+        await chat.quotePreviewPreparation.drain()
+        guard let quote = chat.quote(for: reply) else {
+            check(false, "\(label): quote card of a reply to Kiko")
+            return
+        }
         check(quote.sender == .label("Kiko") && quote.text?.hasPrefix("Hi Claw!") == true,
               "\(label): quote card of a reply to Kiko names Kiko (\(String(describing: quote.sender)))")
     } else {
@@ -145,7 +153,7 @@ func runDemoForwarded() async {
     let loaded = await waitFor("demo main history with Kiko") { chat.message(withId: "demo-kiko-intro") != nil }
     check(loaded, "demo main history has Kiko's intro")
     guard loaded else { return }
-    checkForwardedExchange(gateway, chat, ForwardedSeed(intro: "demo-kiko-intro", reply: "demo-claw-to-kiko", thanks: "demo-kiko-thanks",
+    await checkForwardedExchange(gateway, chat, ForwardedSeed(intro: "demo-kiko-intro", reply: "demo-claw-to-kiko", thanks: "demo-kiko-thanks",
                                                         note: "demo-claw-kiko-note", you: "demo-main-thanks-both"), label: "demo")
     await checkForwardedSearch(gateway, label: "demo")
     await checkForwardedWithOutbox(gateway, chat)
@@ -323,7 +331,7 @@ func runLiveForwarded(url: String, token: String) async {
     }
     check(chat.message(withId: "seed-kiko-intro") != nil, "mock main history has Kiko's intro")
     guard chat.message(withId: "seed-kiko-intro") != nil else { return }
-    checkForwardedExchange(gateway, chat, ForwardedSeed(intro: "seed-kiko-intro", reply: "seed-claw-to-kiko", thanks: "seed-kiko-thanks",
+    await checkForwardedExchange(gateway, chat, ForwardedSeed(intro: "seed-kiko-intro", reply: "seed-claw-to-kiko", thanks: "seed-kiko-thanks",
                                                         note: "seed-claw-kiko-note", you: "seed-thanks-both"), label: "mock")
 
     let briefing = chat.message(withId: "seed-briefing-prompt")
