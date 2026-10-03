@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
             Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
@@ -197,6 +198,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
         Section("Reply Last availability (demo)") { await runDemoReplyLastAvailabilityChecks() },
         Section("Slash suggestion announcements (demo)") { await runDemoSlashSuggestionAnnouncementChecks() },
         Section("Compact chat toolbar branches (demo)") { await runDemoCompactBranchToolbarChecks() },

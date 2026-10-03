@@ -1249,6 +1249,9 @@ enum TranscriptLayout {
         let textWidth = max(width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 120)
         let charactersPerLine = max(textWidth / 7, 10)
         func lines(_ text: String) -> CGFloat {
+            #if DEBUG
+            ColdTranscriptHeightEstimateProbe.record(row.id, text: text, joined: true)
+            #endif
             var total: CGFloat = 0
             for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
                 total += max(1, (CGFloat(line.count) / charactersPerLine).rounded(.up))
