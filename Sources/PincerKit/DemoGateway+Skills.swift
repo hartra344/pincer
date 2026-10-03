@@ -115,7 +115,7 @@ extension DemoGateway {
         if let anyBins = missing["anyBins"]?.array, anyBins.contains(where: { bins.contains($0.text ?? "") }) { missing["anyBins"] = [] }
         self.skillEntries[index] = Self.recomputed(Self.setting(entry, "missing", .object(missing)))
         let label = option["label"]?.text ?? installId
-        return ["ok": true, "message": .string("\(label): done"), "stdout": .string("==> \(label)\n"), "stderr": "", "code": 0]
+        return ["ok": true, "message": .string("Installed"), "stdout": .string("==> \(label)\n"), "stderr": "", "code": 0]
     }
 
     // MARK: skills.update
