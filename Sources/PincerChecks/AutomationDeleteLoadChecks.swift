@@ -93,7 +93,7 @@ private actor AutomationListGate {
 }
 
 @MainActor func runLiveAutomationDeleteLoadChecks(url: String, token: String) async {
-    let profile = GatewayProfile(name: "Automation delete ownership", url: url, authMode: .token)
+    let profile = GatewayProfile(name: "Automation delete ownership", url: url, authMode: .token, access: .admin)
     profile.secret = token
     let connection = GatewayConnection(profile: profile)
     let hello = Scripted<GatewayHello?>(nil)
