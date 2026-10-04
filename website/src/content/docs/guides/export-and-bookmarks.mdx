@@ -50,3 +50,5 @@ Bookmarks sync between your devices through your gateway, separately for each ga
 :::
 
 Bookmark stars update immediately. Pincer encodes the full local saved collection in the background, coalescing newer edits; clearing bookmarks prevents an older pending save from restoring them.
+
+Quick Look previews keep separate temporary files for each chat window. Replacing or closing a preview removes only that preview’s file; leaving its chat also retires the current file. Cleanup runs in the background. Files left by an interrupted app session are not swept by this cleanup.

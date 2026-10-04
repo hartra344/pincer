@@ -21,9 +21,9 @@ import Testing
         #expect(first.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/"))
         #expect(first.lastPathComponent == "escape.pdf")
         #expect(try Data(contentsOf: first) == Data("one".utf8))
-        // A new preview replaces the old one.
+        // Another window's preview retains the first owner's file.
         let second = try FilePreviewFiles.write(Data("two".utf8), name: "b.csv", mimeType: "text/csv", in: root)
-        #expect(!FileManager.default.fileExists(atPath: first.path))
+        #expect(FileManager.default.fileExists(atPath: first.path))
         #expect(FileManager.default.fileExists(atPath: second.path))
         FilePreviewFiles.clear(in: root)
         #expect(!FileManager.default.fileExists(atPath: root.path))

@@ -179,6 +179,7 @@ enum Suites {
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Tool diff line number boundary") { await runToolDiffLineNumberBoundaryChecks(); await runToolDiffCursorExhaustionChecks() },
             Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
+            Section("Quick Look file ownership") { await runQuickLookFileOwnershipChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },
@@ -388,6 +389,7 @@ enum Suites {
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
+        Section("Quick Look file ownership (demo)") { await runDemoQuickLookFileOwnershipChecks() },
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG

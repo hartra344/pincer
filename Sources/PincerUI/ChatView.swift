@@ -195,11 +195,7 @@ struct ChatView: View {
         .sheet(item: self.$previewingHTML) { item in
             HTMLPreviewSheet(item: item)
         }
-        .quickLookPreview(self.$quickLookURL)
-        .onChange(of: self.quickLookURL) { _, url in
-            // The downloaded copy only lives while it's on screen.
-            if url == nil { FilePreviewFiles.clear() }
-        }
+        .modifier(ChatQuickLookLifecycle(url: self.$quickLookURL))
         .fileExporter(
             isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
             document: self.exporting,
