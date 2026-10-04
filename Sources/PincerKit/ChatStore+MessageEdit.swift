@@ -18,6 +18,14 @@ public struct MessageEditTarget: Equatable, Sendable {
 }
 
 extension ChatStore {
+    /// Explicit authority only for the history refresh initiated by an admitted edit.
+    struct MessageEditFeedbackAuthority {
+        let owner: UUID
+        let selection: UUID
+        @MainActor func isCurrent(in chat: ChatStore) -> Bool {
+            chat.messageEditSendOwner == self.owner && chat.messageEditSelection == self.selection && chat.editTarget != nil
+        }
+    }
     static let forkMethod = "sessions.fork"
 
     // MARK: Availability
@@ -117,6 +125,7 @@ extension ChatStore {
         guard self.canEdit(messageId), let found = self.committedItem(messageId), let entryId = found.item.transcriptId else { return false }
         let saved = self.editTarget?.savedDraft ?? self.draft
         let text = found.item.plainText
+        self.messageEditSelection = UUID() // A same-message reselection is a new intent too.
         self.replyTarget = nil
         self.editTarget = MessageEditTarget(messageId: found.item.id, entryId: entryId, originalText: text, savedDraft: saved)
         self.draft = ComposerDraft(text: text)
@@ -133,22 +142,40 @@ extension ChatStore {
     /// rewound message carried. After the rewind the pre-edit draft comes back; on a rewind failure
     /// edit mode and the edited text stay. Ignored while an earlier `sendEdit` is still running.
     public func sendEdit(_ text: String, attachments: [OutgoingAttachment]) async -> SendOutcome {
+        guard !Task.isCancelled else { return self.obsoleteEditOutcome() }
         guard let target = self.editTarget else { return await self.sendMessage(text, attachments: attachments) }
         guard !self.isSendingEdit else { return .failed(L("Couldn’t edit: the previous edit is still being sent.")) }
+        let owner = UUID()
+        let selection = self.messageEditSelection
+        self.messageEditSendOwner = owner
         self.isSendingEdit = true
-        defer { self.isSendingEdit = false }
+        defer {
+            if self.messageEditSendOwner == owner {
+                self.messageEditSendOwner = nil
+                self.isSendingEdit = false
+            }
+        }
         let outcome: RewindOutcome
         do {
-            outcome = try await self.rewind(to: target.entryId)
+            outcome = try await self.rewind(to: target.entryId,
+                                           feedbackAuthority: MessageEditFeedbackAuthority(owner: owner, selection: selection))
         } catch {
+            guard !Task.isCancelled, self.messageEditSendOwner == owner,
+                  self.messageEditSelection == selection, self.editTarget != nil else { return self.obsoleteEditOutcome() }
             let message = L("Couldn’t edit: \(error.localizedDescription)")
             self.errorMessage = message
             return .failed(message)
         }
+        guard !Task.isCancelled, self.messageEditSendOwner == owner,
+              self.messageEditSelection == selection, self.editTarget != nil else { return self.obsoleteEditOutcome() }
         let savedDraft = self.editTarget?.savedDraft ?? target.savedDraft
         self.editTarget = nil
         self.draft = savedDraft
         return await self.sendMarkingBranchAnchor { await self.sendMessage(text, attachments: attachments + outcome.attachments) }
+    }
+
+    private func obsoleteEditOutcome() -> SendOutcome {
+        .failed(L("Couldn’t edit: \(CancellationError().localizedDescription)"))
     }
 
     /// Sends, then remembers the sent message's key as the place the chat's branches fork.
@@ -192,18 +219,29 @@ extension ChatStore {
     }
 
     /// `sessions.rewind`, then drops the cached transcript so the cut path reloads before anything is sent.
-    private func rewind(to entryId: String) async throws -> RewindOutcome {
+    private func rewind(to entryId: String, feedbackAuthority: MessageEditFeedbackAuthority? = nil) async throws -> RewindOutcome {
         guard let gateway else { throw GatewayError.notConnected }
         var params: [String: JSONValue] = ["sessionKey": .string(self.sessionKey), "entryId": .string(entryId)]
         if let agentId { params["agentId"] = .string(agentId) }
-        let result = try await gateway.connection.request(SessionManager.rewindMethod, .object(params), timeout: 30)
+        let result: JSONValue
+        do {
+            result = try await gateway.connection.request(SessionManager.rewindMethod, .object(params), timeout: 30)
+        } catch {
+            #if DEBUG
+            await self.messageEditRewindCompletionProbe?(false)
+            #endif
+            throw error
+        }
+        #if DEBUG
+        await self.messageEditRewindCompletionProbe?(true)
+        #endif
         let attachments = (result["editorAttachments"]?.array ?? []).enumerated().compactMap { index, value -> OutgoingAttachment? in
             guard let mime = value["mimeType"]?.text, let base64 = value["data"]?.text,
                   let data = Data(base64Encoded: base64) else { return nil }
             let ext = mime.split(separator: "/").last.map(String.init) ?? "bin"
             return OutgoingAttachment(fileName: "image-\(index + 1).\(ext)", mimeType: mime, data: data)
         }
-        await gateway.transcriptChanged(key: self.sessionKey, change: .changed(editorText: nil))
+        await gateway.transcriptChanged(key: self.sessionKey, change: .changed(editorText: nil), feedbackAuthority: feedbackAuthority)
         return RewindOutcome(editorText: result["editorText"]?.text, attachments: attachments)
     }
 }

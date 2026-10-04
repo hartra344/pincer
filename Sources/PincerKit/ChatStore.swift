@@ -196,7 +196,10 @@ public final class ChatStore: Identifiable {
     /// Whether anything older than what's loaded can still be paged in, from the cache or the Gateway.
     public var hasOlderItems: Bool { self.olderInCache || self.hasMoreHistory }
     public internal(set) var isLoadingOlder = false
-    public var errorMessage: String?
+    @ObservationIgnored var errorMessageRevision: UInt64 = 0
+    public var errorMessage: String? {
+        didSet { self.errorMessageRevision &+= 1 }
+    }
     /// Called once when a run ends successfully, with its last assistant message that has speakable text (never for
     /// history loads, aborted or failed runs). Read Aloud's auto-read uses it.
     @ObservationIgnored public var onFinalAssistantReply: (@MainActor (ChatItem) -> Void)? {
@@ -275,11 +278,22 @@ public final class ChatStore: Identifiable {
 
     isolated deinit { self.quotePreviewPreparation.remove(ownerID: self.quotePreviewOwnerID) }
 #if DEBUG
+    /// Neutral test gate after the real rewind request completes; never substitutes a response.
+    @ObservationIgnored var messageEditRewindCompletionProbe: (@MainActor (Bool) async -> Void)?
     @ObservationIgnored package var replyPreparationDidReserve: (@MainActor (String) -> Void)?
     @ObservationIgnored package var quotePreviewNormalizationProbe: QuotePreviewNormalizationProbe?
 #endif
     /// The user message being edited (Edit & Resend). Per chat, in memory only.
-    public var editTarget: MessageEditTarget?
+    @ObservationIgnored var messageEditSelection = UUID()
+    @ObservationIgnored var messageEditSendOwner: UUID?
+    public var editTarget: MessageEditTarget? {
+        didSet {
+            // Saved-draft attachment updates keep the selection; replacement/clear does not.
+            if oldValue?.messageId != self.editTarget?.messageId || oldValue?.entryId != self.editTarget?.entryId {
+                self.messageEditSelection = UUID()
+            }
+        }
+    }
     /// The chat's transcript tips (`sessions.branches.list`), oldest first; see `refreshBranches()`.
     public internal(set) var branches: [SessionBranch] = []
     /// An Edit & Resend is in flight (rewind, then send); Send is off meanwhile.

@@ -114,6 +114,7 @@ enum Suites {
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
+            Section("Shutdown restart delay bounds") { runShutdownRestartDelayBoundsChecks() },
             Section("MCP numeric value display") { runMCPNumericValueDisplayChecks() },
             Section("MCP refresh outcomes") { await runMCPRefreshOutcomeChecks() },
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
@@ -201,6 +202,9 @@ enum Suites {
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership" }) {
+            sections.insert(Section("Message edit completion ownership") { await runMessageEditCompletionOwnershipChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Channel QR ownership") { await runChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
@@ -245,6 +249,7 @@ enum Suites {
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
+        Section("Shutdown restart delay bounds (demo)") { await runDemoShutdownRestartDelayBoundsChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
         Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
         Section("Centered chat identity (demo)") { await runDemoCenteredChatHeaderChecks() },
@@ -319,6 +324,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership (demo)" }) {
+            sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
