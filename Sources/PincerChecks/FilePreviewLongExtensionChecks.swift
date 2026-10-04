@@ -5,7 +5,7 @@ import Foundation
     let names = await Task.detached {
         [119, 120, 130].map { FilePreviewFiles.fileName("a." + String(repeating: "x", count: $0), mimeType: nil) }
     }.value
-    check(names.allSatisfy { !$0.isEmpty && $0.count <= 120 && !$0.contains("/") }, "actual Quick Look extension boundaries stay within one bounded filename without trapping")
+    check(names.allSatisfy { !$0.isEmpty && $0.count <= 120 && !$0.contains("/") && !$0.hasPrefix(".") && !($0 as NSString).deletingPathExtension.isEmpty }, "actual Quick Look extension boundaries stay within one bounded filename without trapping")
 }
 
 /// Actual Demo PDF download; only the filename input below is a LOCAL safety fixture.
@@ -40,7 +40,8 @@ import Foundation
               ordinary.lastPathComponent == "rate-limiter-design.pdf", (try? Data(contentsOf: ordinary)) == data,
               let local = try? FilePreviewFiles.write(data, name: "attachment." + String(repeating: "x", count: 130), mimeType: pdf.mimeType, in: root)
         else { return false }
-        return local.lastPathComponent.count <= 120 && (try? Data(contentsOf: local)) == data
+        return local.lastPathComponent.count <= 120 && !local.lastPathComponent.hasPrefix(".")
+            && !(local.lastPathComponent as NSString).deletingPathExtension.isEmpty && (try? Data(contentsOf: local)) == data
             && local.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/")
     }.value
     check(result, "real downloaded PDF retains exact bytes in task-owned Quick Look path with explicit LOCAL long-extension filename input")

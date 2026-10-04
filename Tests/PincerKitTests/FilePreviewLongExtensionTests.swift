@@ -11,7 +11,8 @@ struct FilePreviewLongExtensionTests {
         }.value
         #expect(!name.isEmpty && name.count <= 120)
         #expect(!name.contains("/") && !name.contains("\\"))
-        if length == 119 { #expect(name == "." + String(repeating: "x", count: 119)) }
+        #expect(!name.hasPrefix("."))
+        #expect(!(name as NSString).deletingPathExtension.isEmpty)
     }
     @Test func existingOrdinaryAndPathControlsRemainExact() async {
         let names = await Task.detached {
