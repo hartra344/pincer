@@ -1,4 +1,5 @@
 import Foundation
+import PincerKit
 
 /// A throwaway defaults suite; call `remove()` when done.
 struct ScratchDefaults {
@@ -48,13 +49,25 @@ enum PerfBudget {
 /// Polls `condition` on the main actor until it holds or `timeout` passes.
 @MainActor
 func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {
+    #if DEBUG
+    return await uiTestEventually(timeout: timeout, condition)
+    #else
     let deadline = ContinuousClock.now + timeout
-    while !condition() {
+    while true {
+        guard !Task.isCancelled else { return false }
+        let ready = condition()
+        guard !Task.isCancelled else { return false }
+        if ready { return true }
         if ContinuousClock.now >= deadline {
-            try? await Task.sleep(for: .milliseconds(50))
-            return condition()
+            do { try await Task.sleep(for: .milliseconds(50)) }
+            catch { return false }
+            guard !Task.isCancelled else { return false }
+            let finalReady = condition()
+            return !Task.isCancelled && finalReady
         }
-        try? await Task.sleep(for: .milliseconds(5))
+        do { try await Task.sleep(for: .milliseconds(5)) }
+        catch { return false }
+        guard !Task.isCancelled else { return false }
     }
-    return true
+    #endif
 }
