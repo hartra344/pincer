@@ -11,7 +11,8 @@ struct TranscriptFindSelectionRefreshTests {
         let capture = state.capture(matches: old, rowIndex: ["a": 0, "b": 1, "c": 2], preferred: old[2])
         state.select(1)
         let fresh = [self.match("inserted")] + old
-        let index = try #require(state.complete(capture, matches: fresh, rowIndex: ["inserted": 0, "a": 1, "b": 2, "c": 3]))
+        let completed = state.complete(capture, matches: fresh, rowIndex: ["inserted": 0, "a": 1, "b": 2, "c": 3])
+        let index = try #require(completed)
         #expect(fresh[index] == old[1])
         #expect(index == 2)
     }
