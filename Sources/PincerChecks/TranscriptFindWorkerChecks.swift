@@ -46,15 +46,15 @@ private func checkFindWorkers(entries: [TranscriptEntry], query: String, nextQue
     }
     first.cancel()
     let second = Task { await preparation.prepare(query: nextQuery, entries: entries, options: .init()) }
-    let enteredSecond = await waitFor("second actual Find worker", timeout: 25) { probe.snapshot.entered == 2 }
-    check(enteredSecond, "changed query reaches actual second worker admission")
-    if enteredSecond { check(probe.snapshot.maximumActive == 1, "canceled Find caller retains the worker lease until completion") }
+    let admittedSecond = await waitFor("second Find request decision", timeout: 25) { probe.snapshot.requested == 2 }
+    check(admittedSecond, "changed query reaches actual second request decision")
+    if admittedSecond { check(probe.snapshot.maximumLeases == 1, "canceled Find caller retains the worker lease until completion") }
     await gate.releaseAll()
     let old = await first.value
     let current = await second.value
     check(old.matches == expected.0 && current.matches == expected.1 && current.rowIndex == expected.2,
           "actual completed matcher results and row indices remain exact")
-    check(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.mainEntries == 0,
+    check(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.leases == 0 && probe.snapshot.mainEntries == 0,
           "both actual workers finish off-main before fixture cleanup")
 }
 

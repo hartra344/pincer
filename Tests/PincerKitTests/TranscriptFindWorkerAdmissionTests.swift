@@ -49,14 +49,18 @@ struct TranscriptFindWorkerAdmissionTests {
             first.cancel()
             let next = Task { await preparation.prepare(query: "message", entries: rows, options: .init()) }
             second = next
-            try await self.entered(probe, count: 2)
-            #expect(probe.snapshot.maximumActive == 1)
+            while probe.snapshot.requested < 2 {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try Task.checkCancellation()
+            #expect(probe.snapshot.maximumLeases == 1)
             await gate.releaseAll()
             let oldResult = await first.value
             let newResult = await next.value
             #expect(oldResult.matches.count == 3 && newResult.matches.count == 3)
             #expect(newResult.rowIndex == Dictionary(rows.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a }))
-            #expect(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.mainEntries == 0)
+            #expect(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.leases == 0 && probe.snapshot.mainEntries == 0)
         } catch {
             first.cancel()
             second?.cancel()

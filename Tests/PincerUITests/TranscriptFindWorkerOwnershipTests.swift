@@ -49,17 +49,17 @@ struct TranscriptFindWorkerOwnershipTests {
             find.query = "message"
             current = find.activeSearchForChecks
             let currentTask = try #require(current)
-            while probe.snapshot.entered < 2 {
+            while probe.snapshot.requested < 2 {
                 try Task.checkCancellation()
                 try await Task.sleep(for: .milliseconds(10))
             }
             try Task.checkCancellation()
-            #expect(probe.snapshot.maximumActive == 1)
+            #expect(probe.snapshot.maximumLeases == 1)
             await gate.releaseAll()
             await oldTask.value
             await currentTask.value
             #expect(!find.isSearching && find.matches == rows.map { .init(entryId: $0.id, section: .message(0), occurrence: 0) })
-            #expect(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.mainEntries == 0)
+            #expect(probe.snapshot.completed == 2 && probe.snapshot.active == 0 && probe.snapshot.leases == 0 && probe.snapshot.mainEntries == 0)
             find.dismiss()
         } catch {
             find.dismiss()

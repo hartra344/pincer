@@ -14,6 +14,9 @@ package final class TranscriptFindPreparation {
     package func prepare(query: String, entries: [TranscriptEntry], options: TranscriptSearch.Options) async -> Result {
         #if DEBUG
         let probe = self.probe
+        probe?.request()
+        probe?.reserveLease()
+        defer { probe?.releaseLease() }
         #endif
         return await Task.detached(priority: .userInitiated) {
             #if DEBUG
@@ -31,6 +34,9 @@ package final class TranscriptFindPreparation {
 /// Per-instance, fixed scalar diagnostics at actual worker entry and completion. No transcript data.
 package final class TranscriptFindWorkerProbe: @unchecked Sendable {
     package struct Snapshot: Sendable {
+        package let requested: Int
+        package let leases: Int
+        package let maximumLeases: Int
         package let entered: Int
         package let completed: Int
         package let active: Int
@@ -38,6 +44,9 @@ package final class TranscriptFindWorkerProbe: @unchecked Sendable {
         package let mainEntries: Int
     }
     private let lock = NSLock()
+    private var requested = 0
+    private var leases = 0
+    private var maximumLeases = 0
     private var entered = 0
     private var completed = 0
     private var active = 0
@@ -45,6 +54,24 @@ package final class TranscriptFindWorkerProbe: @unchecked Sendable {
     private var mainEntries = 0
     private let gate: (@Sendable (Int) async -> Void)?
     package init(gate: (@Sendable (Int) async -> Void)? = nil) { self.gate = gate }
+    // Request and lease decisions are synchronous on Main before worker launch/first await.
+    // A lease is released only after the actual detached task value has returned.
+    fileprivate func request() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.requested = min(32, self.requested + 1)
+    }
+    fileprivate func reserveLease() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.leases = min(32, self.leases + 1)
+        self.maximumLeases = max(self.maximumLeases, self.leases)
+    }
+    fileprivate func releaseLease() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.leases = max(0, self.leases - 1)
+    }
     fileprivate func enter() -> Int {
         self.lock.lock()
         defer { self.lock.unlock() }
@@ -64,7 +91,7 @@ package final class TranscriptFindWorkerProbe: @unchecked Sendable {
     package var snapshot: Snapshot {
         self.lock.lock()
         defer { self.lock.unlock() }
-        return Snapshot(entered: self.entered, completed: self.completed, active: self.active,
+        return Snapshot(requested: self.requested, leases: self.leases, maximumLeases: self.maximumLeases, entered: self.entered, completed: self.completed, active: self.active,
                         maximumActive: self.maximumActive, mainEntries: self.mainEntries)
     }
 }
