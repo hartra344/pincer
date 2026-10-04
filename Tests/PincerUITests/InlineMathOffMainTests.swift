@@ -190,10 +190,17 @@ struct InlineMathOffMainTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func prewarmWarmsTheWindowAtTheFinalWidth() async {
+        let clock = ContinuousClock()
+        let fixtureStarted = clock.now
+        var phase = "cache-lease"
         let acquiredCacheLease = await TranscriptSharedCacheLease.shared.acquire()
+        if !acquiredCacheLease {
+            print("Inline prewarm phase=\(phase) elapsed=\(fixtureStarted.duration(to: clock.now)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount)")
+        }
         #expect(acquiredCacheLease, "the actual cache fixture must acquire its cancellable isolation lease")
         guard acquiredCacheLease else { return }
         defer { TranscriptSharedCacheLease.shared.release() }
+        phase = "fixture"
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
@@ -214,19 +221,31 @@ struct InlineMathOffMainTests {
         #expect(cold.allSatisfy { keys in !keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
         // A zero-budget pass is optional; actual asynchronous adoption must warm the whole window.
         // Isolate admission from other suites while retaining the real serialized measurement worker.
+        phase = "prewarm"
         let warmed = driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer, budget: 0)
         #expect((0...rows.count).contains(warmed))
+        phase = "split"
         let remaining = driver.split(Array(rows.indices), all: rows, width: width, renderer: renderer).offload
         if !remaining.isEmpty {
             let completed = InlineMathBatchCompletion()
+            var callbacks = 0
+            var firstCallback: Duration?
+            var lastCallback: Duration?
+            phase = "submit"
             driver.submit(remaining, width: width, env: renderer.textEnvironment) {
+                callbacks += 1
+                let elapsed = fixtureStarted.duration(to: clock.now)
+                if firstCallback == nil { firstCallback = elapsed }
+                lastCallback = elapsed
+                phase = "callback"
                 // A discarded/rejected terminal batch must also wake the test, then fail the
                 // exact adoption assertion instead of hanging behind its success predicate.
                 if driver.inFlightCount == 0 { completed.finish(true) }
             }
+            phase = "await-batch"
             let finished = await completed.wait()
             if !finished || driver.stats.adopted != rows.count {
-                print("Inline math actual batch completion: finished=\(finished) stats=\(driver.stats) inFlight=\(driver.inFlightCount) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
+                print("Inline prewarm phase=\(phase) elapsed=\(fixtureStarted.duration(to: clock.now)) finished=\(finished) submitted=\(remaining.count) callbacks=\(callbacks) firstCallback=\(String(describing: firstCallback)) lastCallback=\(String(describing: lastCallback)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount) inFlight=\(driver.inFlightCount) offloaded=\(driver.stats.offloaded) adopted=\(driver.stats.adopted) discarded=\(driver.stats.discardedStale) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
             }
             #expect(finished, "the real batch completion event must arrive before test cancellation")
             #expect(driver.inFlightCount == 0 && driver.stats.adopted == rows.count,
