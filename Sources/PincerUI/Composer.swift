@@ -3,6 +3,18 @@ import PincerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if DEBUG
+private struct ComposerEditTaskObserverKey: EnvironmentKey {
+    static let defaultValue: (@MainActor @Sendable (String, Task<Void, Never>) -> Void)? = nil
+}
+extension EnvironmentValues {
+    var composerEditTaskObserver: (@MainActor @Sendable (String, Task<Void, Never>) -> Void)? {
+        get { self[ComposerEditTaskObserverKey.self] }
+        set { self[ComposerEditTaskObserverKey.self] = newValue }
+    }
+}
+#endif
+
 struct Composer: View {
     @Bindable var chat: ChatStore
     let placeholder: String
@@ -11,6 +23,9 @@ struct Composer: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
+    #if DEBUG
+    @Environment(\.composerEditTaskObserver) private var editTaskObserver
+    #endif
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var attachmentError: String?
@@ -373,10 +388,16 @@ struct Composer: View {
         let attachments = self.attachments
         if self.chat.editTarget != nil, !self.isTypingCommand {
             self.attachmentError = nil
-            Task {
+            let ownerID = self.chat.draft.ownerID
+            let editingMessageID = self.chat.editTarget?.messageId
+            let task = Task { [weak chat = self.chat] in
+                guard let chat, chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else { return }
                 // The store restores the pre-edit draft on success; on failure the edit stays in progress.
-                _ = await self.chat.sendEdit(text, attachments: attachments)
+                _ = await chat.sendEdit(text, attachments: attachments)
             }
+            #if DEBUG
+            self.editTaskObserver?(self.chat.sessionKey, task)
+            #endif
             return
         }
         let draft = self.chat.draft
