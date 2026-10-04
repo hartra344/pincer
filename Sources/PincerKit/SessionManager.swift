@@ -132,7 +132,7 @@ public enum SessionManager {
         return max(0, now.timeIntervalSince1970 - started / 1000)
     }
 
-    /// "4s", "2m 5s", "1h 3m".
+    /// Localized short units: "4 sec", "2 min 5 sec", "1 hr 3 min".
     public static func formatDuration(_ seconds: TimeInterval) -> String {
         let total: Int
         if !seconds.isFinite || seconds <= 0 {
@@ -144,9 +144,9 @@ public enum SessionManager {
             total = Int(seconds.rounded(.down))
         }
         let (hours, minutes, secs) = (total / 3600, (total % 3600) / 60, total % 60)
-        if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
-        if minutes > 0 { return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m" }
-        return "\(secs)s"
+        if hours > 0 { return minutes > 0 ? L("\(String(hours)) hr \(String(minutes)) min") : L("\(String(hours)) hr") }
+        if minutes > 0 { return secs > 0 ? L("\(String(minutes)) min \(String(secs)) sec") : L("\(String(minutes)) min") }
+        return L("\(String(secs)) sec")
     }
 
     /// "Archived 3 sessions", "Deleted 1 session; 2 failed".
@@ -254,13 +254,13 @@ public enum SessionRunState: String, Sendable {
 
     public var title: String {
         switch self {
-        case .idle: "Idle"
-        case .queued: "Queued"
-        case .running: "Running"
-        case .done: "Done"
-        case .failed: "Error"
-        case .killed: "Stopped"
-        case .timeout: "Timed Out"
+        case .idle: L("Idle")
+        case .queued: L("Queued")
+        case .running: L("Running")
+        case .done: L("Done")
+        case .failed: L("Error")
+        case .killed: L("Stopped")
+        case .timeout: L("Timed Out")
         }
     }
 }

@@ -13,25 +13,33 @@ struct SessionManagerTests {
         let finished = Self.row("huge-duration", ["status": "done", "runtimeMs": .number(1e30)])
         let seconds = try #require(SessionManager.runDuration(finished, now: Date(timeIntervalSince1970: 0)))
         #expect(seconds > Double(Int.max) && seconds.isFinite)
-        let expected = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+        let expected = "\(Int.max / 3600) hr \((Int.max % 3600) / 60) min"
         let formatted = SessionManager.formatDuration(seconds)
         #expect(formatted == expected, "Oversized finite durations saturate at Int.max seconds using the existing hour/minute display")
     }
 
     @Test func durationFormatterHandlesIntegerBoundaryAndNonfiniteInputs() {
-        let saturated = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+        let saturated = "\(Int.max / 3600) hr \((Int.max % 3600) / 60) min"
         #expect(SessionManager.formatDuration(Double(Int.max)) == saturated,
                 "Double rounds Int.max above the convertible range on 64-bit platforms")
         let below = Double(Int.max).nextDown
         let whole = Int(below)
-        #expect(SessionManager.formatDuration(below) == "\(whole / 3600)h \((whole % 3600) / 60)m")
-        #expect(SessionManager.formatDuration(.nan) == "0s")
-        #expect(SessionManager.formatDuration(.infinity) == "0s")
-        #expect(SessionManager.formatDuration(-.infinity) == "0s")
-        #expect(SessionManager.formatDuration(Double(Int.min)) == "0s")
-        #expect(SessionManager.formatDuration(59.99) == "59s")
-        #expect(SessionManager.formatDuration(60) == "1m")
-        #expect(SessionManager.formatDuration(3601) == "1h")
+        #expect(SessionManager.formatDuration(below) == "\(whole / 3600) hr \((whole % 3600) / 60) min")
+        #expect(SessionManager.formatDuration(.nan) == "0 sec")
+        #expect(SessionManager.formatDuration(.infinity) == "0 sec")
+        #expect(SessionManager.formatDuration(-.infinity) == "0 sec")
+        #expect(SessionManager.formatDuration(Double(Int.min)) == "0 sec")
+        #expect(SessionManager.formatDuration(59.99) == "59 sec")
+        #expect(SessionManager.formatDuration(60) == "1 min")
+        #expect(SessionManager.formatDuration(3601) == "1 hr")
+    }
+
+    @Test(arguments: [
+        (SessionRunState.idle, "Idle"), (.queued, "Queued"), (.running, "Running"),
+        (.done, "Done"), (.failed, "Error"), (.killed, "Stopped"), (.timeout, "Timed Out"),
+    ])
+    func runStateTitlesKeepEnglishFallback(state: SessionRunState, expected: String) {
+        #expect(state.title == expected)
     }
 
     // MARK: Fixtures
@@ -127,12 +135,12 @@ struct SessionManagerTests {
         #expect(SessionManager.runDuration(Self.alpha, now: now) == nil)
         #expect(SessionManager.runDuration(stale, now: now) == nil, "a stale running status doesn't tick")
 
-        #expect(SessionManager.formatDuration(4.9) == "4s")
-        #expect(SessionManager.formatDuration(125) == "2m 5s")
-        #expect(SessionManager.formatDuration(120) == "2m")
-        #expect(SessionManager.formatDuration(3780) == "1h 3m")
-        #expect(SessionManager.formatDuration(3600) == "1h")
-        #expect(SessionManager.formatDuration(-5) == "0s")
+        #expect(SessionManager.formatDuration(4.9) == "4 sec")
+        #expect(SessionManager.formatDuration(125) == "2 min 5 sec")
+        #expect(SessionManager.formatDuration(120) == "2 min")
+        #expect(SessionManager.formatDuration(3780) == "1 hr 3 min")
+        #expect(SessionManager.formatDuration(3600) == "1 hr")
+        #expect(SessionManager.formatDuration(-5) == "0 sec")
     }
 
     @Test func summariesAndRecoverability() {

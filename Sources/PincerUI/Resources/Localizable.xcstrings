@@ -1,6 +1,56 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ hr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hr"
+          }
+        }
+      }
+    },
+    "%@ hr %@ min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ hr %2$@ min"
+          }
+        }
+      }
+    },
+    "%@ min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ min"
+          }
+        }
+      }
+    },
+    "%@ min %@ sec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ min %2$@ sec"
+          }
+        }
+      }
+    },
+    "%@ sec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sec"
+          }
+        }
+      }
+    },
     "%lld pending, %lld claimed, %lld blocked": {
       "localizations": {
         "en": {

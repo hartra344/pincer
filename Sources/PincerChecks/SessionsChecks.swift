@@ -29,20 +29,24 @@ func checkSessionManager() async {
           "archivedOnly iff archived")
     check(SessionManager.patchManyBatches((0..<201).map { row("k\($0)") }).map(\.count) == [100, 100, 1], "patchMany batches of 100")
 
+    let titles: [(SessionRunState, String)] = [(.idle, "Idle"), (.queued, "Queued"),
+        (.running, "Running"), (.done, "Done"), (.failed, "Error"),
+        (.killed, "Stopped"), (.timeout, "Timed Out")]
+    check(titles.allSatisfy { $0.0.title == $0.1 }, "localized run states retain English fallback")
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let running = row("r", ["status": "running", "hasActiveRun": true, "startedAt": .number(now.timeIntervalSince1970 * 1000 - 125_000)])
     let failed = row("f", ["status": "failed", "runtimeMs": 94_000, "startedAt": 1, "endedAt": 2])
     check(SessionRunState(row: running) == .running && SessionManager.runDuration(running, now: now) == 125, "running duration ticks")
     check(SessionRunState(row: failed).isError && SessionManager.runDuration(failed, now: now) == 94, "failed run: runtimeMs")
     check(SessionRunState(row: row("s", ["status": "running"])) == .idle, "running status without an active run → idle")
-    check(SessionManager.formatDuration(125) == "2m 5s" && SessionManager.formatDuration(3780) == "1h 3m" && SessionManager.formatDuration(4) == "4s",
+    check(SessionManager.formatDuration(125) == "2 min 5 sec" && SessionManager.formatDuration(3780) == "1 hr 3 min" && SessionManager.formatDuration(4) == "4 sec",
           "duration text")
     let huge = row("huge", ["status": "failed", "runtimeMs": .number(1e30)])
-    let saturated = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+    let saturated = "\(Int.max / 3600) hr \((Int.max % 3600) / 60) min"
     check(SessionManager.runDuration(huge, now: now).map(SessionManager.formatDuration) == saturated,
           "actual oversized session runtime safely saturates before integer conversion")
     check([Double.nan, Double.infinity, -Double.infinity, -Double.greatestFiniteMagnitude].allSatisfy {
-        SessionManager.formatDuration($0) == "0s"
+        SessionManager.formatDuration($0) == "0 sec"
     }, "nonfinite and negative durations are safe")
     check(SessionManager.formatDuration(Double(Int.max)) == saturated
           && !SessionManager.formatDuration(Double(Int.max).nextDown).isEmpty,
@@ -145,6 +149,9 @@ func runDemoSessions(_ gateway: GatewayStore) async {
         let elapsed = SessionManager.runDuration(running, now: Date()) ?? -1
         // The seeded run finishes on its own 90 s after connecting, so a slow run may see it done.
         let state = SessionRunState(row: running)
+        check((state == .running && state.title == "Running" || state == .done && state.title == "Done")
+              && SessionRunState(row: failed).title == "Error",
+              "actual Demo run state titles use localized English fallback")
         check((state == .running || state == .done) && elapsed >= 300, "demo running session with duration (\(state), \(elapsed))")
         check(SessionRunState(row: failed) == .failed && SessionManager.runDuration(failed, now: Date()) == 94, "demo failed run 1m 34s")
         checkDemoSessionDurationFormatting(running: running, failed: failed)
@@ -382,7 +389,7 @@ func runLiveSessions(profile: GatewayProfile, admin: GatewayStore) async {
 @MainActor
 private func checkDemoSessionDurationFormatting(running: SessionRow, failed: SessionRow) {
     let elapsed = SessionManager.runDuration(running, now: Date())
-    check(SessionManager.runDuration(failed, now: Date()).map(SessionManager.formatDuration) == "1m 34s"
+    check(SessionManager.runDuration(failed, now: Date()).map(SessionManager.formatDuration) == "1 min 34 sec"
           && elapsed.map(SessionManager.formatDuration).map { !$0.isEmpty } == true,
           "actual connected Demo run durations retain their visible formatting")
 }
