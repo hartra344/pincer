@@ -66,6 +66,7 @@ enum Suites {
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
+            Section("Voice settings value bounds") { runVoiceSettingsValueBoundsChecks() },
             Section("Voice playback ownership") { runVoicePlaybackOwnershipChecks() },
             Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },
             Section("Voice catalog request ownership") { await runVoiceListRequestOwnershipChecks() },
@@ -109,6 +110,7 @@ enum Suites {
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
             Section("MCP refresh outcomes") { await runMCPRefreshOutcomeChecks() },
+            Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Quoted row preview preparation") { await runQuotePreviewChecks() },
@@ -214,6 +216,7 @@ enum Suites {
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
+        Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
@@ -277,6 +280,7 @@ enum Suites {
         Section("MCP tool links (demo)") { await runDemoMCPToolLinks() },
         Section("Voice playback ownership (demo)") { await runDemoVoicePlaybackOwnershipChecks() },
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
+        Section("Voice settings value bounds (demo)") { await runDemoVoiceSettingsValueBoundsChecks() },
         Section("Voice catalog request ownership (demo)") { await runDemoVoiceListRequestOwnershipChecks() },
         Section("Voice settings draft ownership (demo)") { await runDemoVoiceSettingsDraftChecks() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },

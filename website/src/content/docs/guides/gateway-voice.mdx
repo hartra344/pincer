@@ -152,4 +152,6 @@ Some gateway examples write the ElevenLabs model as `model`. The ElevenLabs prov
 
 In [the demo](../../getting-started/try-the-demo/), ElevenLabs starts as **Needs Key**. Paste any key to make it **Ready**, then pick a model and voice and choose **Test Voice**. A key that starts with `sk_invalid` or `bad` shows what a rejected key looks like, and the model `eleven_bogus` shows a rejected model.
 
+Voice settings use the provider’s runtime defaults when a stored numeric value is non-finite or outside its supported range: stability, similarity and style accept 0–1, and speed accepts 0.5–2. Opening the settings does not rewrite the Gateway configuration.
+
 Voice browsing keeps the most recently requested catalog. An older request that finishes later cannot replace its voices or account key; a failed current request keeps the previously loaded catalog.
