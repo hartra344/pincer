@@ -327,6 +327,14 @@ public enum TranscriptCache {
         }
     }
 
+    /// Inventory shares the writer's executor; callers still decide current live ownership after awaiting it.
+    static func cachedDigestsAsync(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)? = nil,
+                                   didPrepare: (@Sendable () async -> Void)? = nil) async -> [String]
+    {
+        await Writer.shared.inventory(gatewayId: gatewayId, root: root,
+                                      beforeEnumeration: beforeEnumeration, didPrepare: didPrepare)
+    }
+
     /// Removes sidecars left behind without their transcript manifest. The scan and deletion run
     /// through the writer actor so a cache save cannot race the inventory on the main actor.
     package static func removeOrphanedSidecars(gatewayId: UUID, root: URL? = Self.root) async {
@@ -887,6 +895,15 @@ public enum TranscriptCache {
             try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
             try? FileManager.default.removeItem(at: url)
             try? FileManager.default.removeItem(at: TranscriptCache.segmentsDirectory(of: url))
+        }
+
+        func inventory(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)?,
+                       didPrepare: (@Sendable () async -> Void)?) async -> [String]
+        {
+            let inventory = TranscriptCache.cachedDigests(gatewayId: gatewayId, root: root,
+                                                         beforeEnumeration: beforeEnumeration)
+            await didPrepare?()
+            return inventory
         }
 
         /// Sweeps only recognized transcript sidecars whose matching manifest is absent. Runs on

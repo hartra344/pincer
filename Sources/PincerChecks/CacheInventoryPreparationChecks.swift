@@ -71,5 +71,41 @@ func runDemoCacheInventoryPreparationChecks() async {
     check(preserved, "actual reconciliation deletes orphan and preserves listed, current-chat and outbox manifests")
     check(gateway.chats[currentKey] != nil && gateway.outbox.entries(for: queuedKey).count == 1,
           "reconciliation preserves actual local chat and pending failed-send owners")
+
+    let lateKey = "agent:main:inventory-late-outbox"
+    do {
+        try await Task.detached {
+            let payload = try JSONEncoder().encode(TranscriptCache.Snapshot(items: [], complete: true))
+            try payload.write(to: TranscriptCache.file(gatewayId: id, sessionKey: lateKey, root: root)!, options: .atomic)
+        }.value
+    } catch { check(false, "completed inventory ownership fixture is created"); return }
+    let entered = Scripted(false), gate = InventoryCompletionGate()
+    gateway.cacheInventoryDidPrepare = {
+        await MainActor.run { entered.value = true }
+        await gate.hold()
+    }
+    defer { gateway.cacheInventoryDidPrepare = nil; Task { await gate.release() } }
+    let actual = Task { await gateway.reconcileOrphanedTranscripts(epoch: gateway.connectionEpoch) }
+    await withTaskCancellationHandler {
+        let prepared = await waitFor("actual completed inventory", timeout: 30) { entered.value }
+        check(prepared, "actual inventory worker reaches completed-result gate")
+        if prepared {
+            gateway.outbox.enqueue(OutboxEntry(id: "late-inventory-send", sessionKey: lateKey, text: "retained intent",
+                createdAt: Date(), state: .failed(.init(message: "fixture held", retryable: true))))
+        }
+        await gate.release()
+        await actual.value
+        let exists = await Task.detached {
+            FileManager.default.fileExists(atPath: TranscriptCache.file(gatewayId: id, sessionKey: lateKey, root: root)!.path)
+        }.value
+        check(prepared && exists, "new outbox owner admitted after inventory completion keeps its manifest")
+    } onCancel: { actual.cancel(); Task { await gate.release() } }
+}
+
+private actor InventoryCompletionGate {
+    private var open = false
+    private var held: CheckedContinuation<Void, Never>?
+    func hold() async { if !self.open { await withCheckedContinuation { self.held = $0 } } }
+    func release() { self.open = true; self.held?.resume(); self.held = nil }
 }
 #endif

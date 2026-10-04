@@ -588,10 +588,12 @@ extension GatewayStore {
         let listedDigests = Set(listed.map(TranscriptCache.digest(of:)))
         #if DEBUG
         let probe = self.cacheInventoryProbe
-        let inventory = TranscriptCache.cachedDigests(gatewayId: self.id, root: root, beforeEnumeration: { probe?.record() })
+        let inventory = await TranscriptCache.cachedDigestsAsync(gatewayId: self.id, root: root,
+            beforeEnumeration: { probe?.record() }, didPrepare: self.cacheInventoryDidPrepare)
         #else
-        let inventory = TranscriptCache.cachedDigests(gatewayId: self.id, root: root)
+        let inventory = await TranscriptCache.cachedDigestsAsync(gatewayId: self.id, root: root)
         #endif
+        guard self.isCurrent(epoch) else { return }
         for digest in inventory where !listedDigests.contains(digest) {
             guard self.isCurrent(epoch) else { return }
             // A chat created, or sends queued, since the list was read may own this file.
