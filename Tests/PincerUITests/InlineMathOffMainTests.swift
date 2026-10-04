@@ -10,6 +10,28 @@ import UIKit
 #endif
 
 @MainActor
+private final class InlineMathBatchCompletion {
+    private var result: Bool?
+    private var waiter: CheckedContinuation<Bool, Never>?
+    func finish(_ completed: Bool) {
+        guard self.result == nil else { return }
+        self.result = completed
+        let waiter = self.waiter
+        self.waiter = nil
+        waiter?.resume(returning: completed)
+    }
+    func wait() async -> Bool {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { waiter in
+                if let result = self.result { waiter.resume(returning: result) }
+                else if Task.isCancelled { self.finish(false); waiter.resume(returning: false) }
+                else { self.waiter = waiter }
+            }
+        } onCancel: { Task { @MainActor in self.finish(false) } }
+    }
+}
+
+@MainActor
 @Suite("InlineMathOffMain", .serialized)
 struct InlineMathOffMainTests {
     static let source = "Energy scales as $x^2 + \\frac{a}{b}$ and \\(y_i\\) in a sentence long enough to wrap a couple of times at narrow widths."
@@ -185,6 +207,7 @@ struct InlineMathOffMainTests {
         let width: CGFloat = 612
         let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
         let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
+        defer { driver.cancelAll() }
         driver.currentRow = { id in rows.first { $0.id == id } }
         let cold = rows.compactMap { renderer.premeasureBodies(for: $0) }
         #expect(cold.count == rows.count)
@@ -195,10 +218,19 @@ struct InlineMathOffMainTests {
         #expect((0...rows.count).contains(warmed))
         let remaining = driver.split(Array(rows.indices), all: rows, width: width, renderer: renderer).offload
         if !remaining.isEmpty {
-            driver.submit(remaining, width: width, env: renderer.textEnvironment) {}
-            #expect(await eventually(timeout: .seconds(15)) {
-                driver.inFlightCount == 0 && driver.stats.adopted == rows.count
-            }, "every actual row must finish adoption before checking the warmed window")
+            let completed = InlineMathBatchCompletion()
+            driver.submit(remaining, width: width, env: renderer.textEnvironment) {
+                // A discarded/rejected terminal batch must also wake the test, then fail the
+                // exact adoption assertion instead of hanging behind its success predicate.
+                if driver.inFlightCount == 0 { completed.finish(true) }
+            }
+            let finished = await completed.wait()
+            if !finished || driver.stats.adopted != rows.count {
+                print("Inline math actual batch completion: finished=\(finished) stats=\(driver.stats) inFlight=\(driver.inFlightCount) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
+            }
+            #expect(finished, "the real batch completion event must arrive before test cancellation")
+            #expect(driver.inFlightCount == 0 && driver.stats.adopted == rows.count,
+                    "every actual row must finish adoption before checking the warmed window")
         }
         #expect(cold.allSatisfy { keys in keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
         // A second pass finds everything warm and sends nothing.
