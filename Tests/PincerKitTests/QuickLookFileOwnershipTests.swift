@@ -14,7 +14,13 @@ import Testing
             let afterOpen = await Task.detached { (try? Data(contentsOf: first), try? Data(contentsOf: second)) }.value
             #expect(afterOpen.0 == bytes, "opening B must retain A's presented file")
             #expect(afterOpen.1 == bytes && first != second && second.lastPathComponent == "B.pdf")
+            #if DEBUG
+            let probe = QuickLookCleanupProbe()
+            FilePreviewFiles.dismiss(first, in: root, probe: probe)
+            #expect(probe.counts.main == 0 && probe.counts.worker == 1, "actual dismissal disk cleanup must run off Main")
+            #else
             FilePreviewFiles.dismiss(first, in: root)
+            #endif
             let afterClose = await Task.detached { try? Data(contentsOf: second) }.value
             #expect(afterClose == bytes, "dismissing A must retain B's presented file")
         } catch {

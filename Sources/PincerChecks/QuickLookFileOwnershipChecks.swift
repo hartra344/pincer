@@ -11,7 +11,13 @@ import Foundation
         let opened = await Task.detached { (try? Data(contentsOf: a), try? Data(contentsOf: b)) }.value
         check(opened.0 == data, "opening another preview retains first presented file")
         check(opened.1 == data && a != b, "second preview has exact bytes and distinct URL")
-        FilePreviewFiles.dismiss(a, in: root) // Same actual helper used by ChatView's dismissal.
+        #if DEBUG
+        let probe = QuickLookCleanupProbe()
+        FilePreviewFiles.dismiss(a, in: root, probe: probe)
+        check(probe.counts.main == 0 && probe.counts.worker == 1, "actual dismissal cleanup runs off Main")
+        #else
+        FilePreviewFiles.dismiss(a, in: root)
+        #endif
         let remaining = await Task.detached { try? Data(contentsOf: b) }.value
         check(remaining == data, "dismissing first preview retains second presented file")
     } catch { check(false, "actual owned Quick Look writes completed") }
