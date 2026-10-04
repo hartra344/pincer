@@ -82,6 +82,8 @@ Anything in the server's config that Pincer doesn't have a field for is kept whe
 
 Use the **Enabled** switch to turn a server off without losing its settings. Choose **Remove** to delete it. Like edits, both wait for **Review & Save**.
 
+Undoing a removal resets only that server’s fields. Names containing a dot, such as `acme.docs`, remain separate servers: their unsaved text and validation errors are preserved when you undo changes to `acme`.
+
 ## Review & Save
 
 Changes stay in a draft until you choose **Review & Save**, the same as the other Gateway Settings pages. You see what will change first, then save. The Gateway applies MCP changes live, so **no Gateway restart is needed**, and the list refreshes when it does. **Revert** throws the draft away.
