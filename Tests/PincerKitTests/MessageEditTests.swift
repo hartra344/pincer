@@ -309,7 +309,15 @@ struct MessageEditTests {
         let (chat, user) = await self.editableFork(gateway)
         #expect(chat.beginEdit(user.id))
         let image = OutgoingAttachment(fileName: "a.png", mimeType: "image/png", data: Data([1, 2, 3]))
-        _ = await chat.sendEdit("with a picture", attachments: [image])
+        let outcome = await chat.sendEdit("with a picture", attachments: [image])
+        if case .sent = outcome {} else { Issue.record("Image edit was not accepted: \(outcome)") }
+        // Acceptance initially leaves lightweight .file metadata; the authoritative history event
+        // supplies the image block. Wait for that actual state rather than racing the optimistic row.
+        await self.settle {
+            chat.items.last { $0.role == .user && $0.plainText == "with a picture" }?.blocks.contains {
+                if case .image = $0 { true } else { false }
+            } == true
+        }
         let sent = chat.items.last { $0.role == .user && $0.plainText == "with a picture" }
         #expect(sent?.blocks.contains { if case .image = $0 { true } else { false } } == true)
         await self.finish(gateway)

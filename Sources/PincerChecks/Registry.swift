@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Compact graduated header policy") { runCompactGraduatedHeaderChecks() },
             Section("Bounded cold rotor labels") { await runColdRotorLabelChecks() },
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
@@ -202,6 +203,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
