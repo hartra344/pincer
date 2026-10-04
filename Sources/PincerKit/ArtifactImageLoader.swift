@@ -60,7 +60,7 @@ public final class ArtifactImageLoader {
     @ObservationIgnored private var inFlight: Set<String> = []
     @ObservationIgnored private var cache: DecodedImageCache
     @ObservationIgnored private let limiter = DownloadLimiter(limit: ArtifactImageLoader.maxConcurrentDownloads)
-    @ObservationIgnored private let inlineDecodeLimiter = DownloadLimiter(limit: ArtifactImageLoader.maxConcurrentDownloads)
+    @ObservationIgnored private let inlineDecodeLimiter = DownloadLimiter(limit: 1)
     @ObservationIgnored private var pressureMonitor: MemoryPressureMonitor?
     @ObservationIgnored private var pins: [ObjectIdentifier: Set<String>] = [:]
     @ObservationIgnored private var dataSlot: (key: String, data: Data)?
@@ -311,7 +311,7 @@ public final class ArtifactImageLoader {
     }
 
     /// A separate lease avoids holding a download slot while waiting for an inline worker.
-    /// Waiters retain only their existing COW source; at most four decoded buffers are active.
+    /// Waiters retain only their existing COW source; at most one decoded buffer is active.
     private func decodeInline(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) async throws -> Data? {
         try Task.checkCancellation()
         try await self.inlineDecodeLimiter.acquire()
