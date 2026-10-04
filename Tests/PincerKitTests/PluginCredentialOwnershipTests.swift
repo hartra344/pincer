@@ -83,4 +83,25 @@ struct PluginCredentialOwnershipTests {
         #expect(model.credentials["example"]?.first?.label == "Catalog 1")
         #expect(model.credentials["example.docs"]?.first?.label == "Catalog 2")
     }
+    @Test(.timeLimit(.minutes(2))) func preCanceledCallerDoesNotDisplaceHealthyInspection() async throws {
+        let requests = Requests(), model = model(requests)
+        let selected = try plugin("example")
+        let healthy = Task { await model.loadCredentials(for: selected) }
+        defer { requests.releaseAll(); healthy.cancel() }
+        try #require(await eventually { requests.entered == 1 })
+        let canceled = Task { await model.loadCredentials(for: selected) }
+        canceled.cancel(); await canceled.value
+        #expect(requests.entered == 1)
+        requests.release(1); await healthy.value
+        #expect(model.credentials["example"]?.first?.label == "Catalog 1")
+    }
+    @Test(.timeLimit(.minutes(2))) func canceledCurrentInspectionDoesNotPublishCompletedTransportResponse() async throws {
+        let requests = Requests(), model = model(requests)
+        let selected = try plugin("example")
+        let current = Task { await model.loadCredentials(for: selected) }
+        defer { requests.releaseAll(); current.cancel() }
+        try #require(await eventually { requests.entered == 1 })
+        current.cancel(); requests.release(1); await current.value
+        #expect(model.credentials["example"] == nil)
+    }
 }
