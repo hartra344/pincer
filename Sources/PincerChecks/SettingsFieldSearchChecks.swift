@@ -1,0 +1,52 @@
+#if DEBUG
+import Foundation
+@testable import PincerKit
+
+@MainActor private func checkActualFieldSearch(_ model: GatewaySettingsModel, query: String) async {
+    let probe = SettingsFieldSearchProbe()
+    model.fieldSearchProbe = probe
+    defer { model.fieldSearchProbe = nil }
+    _ = model.searchFields(matching: query)
+    await model.waitForFieldSearchPreparation()
+    let found = model.searchFields(matching: query)
+    check(!found.isEmpty && found.count <= 60, "actual field search publishes matching fields within the existing result limit")
+    let counts = probe.snapshot()
+    check(counts.mainTraversals == 0 && counts.mainNormalizations == 0,
+          "actual field index traversal and normalization run off Main")
+    check(counts.mainTraversals + counts.offMainTraversals > 0
+          && counts.mainNormalizations + counts.offMainNormalizations > 0,
+          "bounded counter observes actual field search work")
+}
+
+@MainActor func runSettingsFieldSearchChecks() async {
+    let model = GatewaySettingsModel(request: { method, _, _ in
+        switch method {
+        case "config.get": return ["config": ["example": "value"], "hash": "search-check"]
+        case "config.schema": return ["schema": ["type": "object", "properties": ["example":
+            ["type": "string", "title": "Example label", "description": "Distinct help"]]]]
+        case "plugins.list": return ["plugins": []]
+        default: throw GatewayError.protocolViolation("unexpected fixture request")
+        }
+    }, scopes: { [] })
+    await model.load()
+    await checkActualFieldSearch(model, query: "distinct example")
+}
+
+@MainActor func runDemoSettingsFieldSearchChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
+    defer { gateway.stop() }
+    gateway.start(); gateway.reconnectIfNeeded()
+    let connected = await waitFor("settings search Demo", timeout: 25) { gateway.state.isConnected && gateway.bootstrapped }
+    check(connected, "connect to genuine Demo for actual schema/config field search")
+    guard connected else { return }
+    let model = GatewaySettingsModel(request: { method, params, timeout in
+        try await gateway.connection.request(method, params, timeout: timeout)
+    }, scopes: { gateway.connection.scopes })
+    await model.load()
+    check(model.hasLoaded && model.schema != nil, "actual Demo loads config and schema before searching")
+    await checkActualFieldSearch(model, query: "sentry")
+}
+#endif

@@ -202,6 +202,9 @@ enum Suites {
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Settings save reconciliation" }) {
+            sections.insert(Section("Settings field search work") { await runSettingsFieldSearchChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership" }) {
             sections.insert(Section("Message edit completion ownership") { await runMessageEditCompletionOwnershipChecks() }, at: index + 1)
         }
@@ -324,6 +327,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Settings save (demo)" }) {
+            sections.insert(Section("Settings field search work (demo)") { await runDemoSettingsFieldSearchChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership (demo)" }) {
             sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks() }, at: index + 1)
         }

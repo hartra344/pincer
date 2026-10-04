@@ -536,11 +536,7 @@ private struct SearchResults: View {
     }
 
     private var results: [ConfigField] {
-        let terms = self.query.lowercased().split(separator: " ").map(String.init)
-        return Array(self.gateway.settings.searchIndex.filter { field in
-            let haystack = ([field.label, field.help ?? ""] + field.path).joined(separator: " ").lowercased()
-            return terms.allSatisfy { haystack.contains($0) }
-        }.prefix(60))
+        self.gateway.settings.searchFields(matching: self.query)
     }
 
     static func breadcrumb(_ path: [String]) -> String {

@@ -44,6 +44,9 @@ public final class GatewaySettingsModel {
     @ObservationIgnored private var credentialLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private let scopes: () -> [String]
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
+    #if DEBUG
+    @ObservationIgnored package var fieldSearchProbe: SettingsFieldSearchProbe?
+    #endif
     @ObservationIgnored private var schemaGeneration = 0
     @ObservationIgnored private var editRevision = 0
     @ObservationIgnored private var snapshotRevision = 0
@@ -215,10 +218,29 @@ public final class GatewaySettingsModel {
     public var searchIndex: [ConfigField] {
         let key = "\(self.schemaGeneration)|\(self.snapshot?.hash ?? "")"
         if let cache = self.searchCache, cache.key == key { return cache.fields }
+        #if DEBUG
+        self.fieldSearchProbe?.record(.traversal)
+        #endif
         let fields = (self.schema ?? .open).searchIndex(config: self.edits.base)
         self.searchCache = (key, fields)
         return fields
     }
+
+    /// The same eager field matching used by the settings search view.
+    package func searchFields(matching query: String) -> [ConfigField] {
+        let terms = query.lowercased().split(separator: " ").map(String.init)
+        return Array(self.searchIndex.filter { field in
+            #if DEBUG
+            self.fieldSearchProbe?.record(.normalization)
+            #endif
+            let haystack = ([field.label, field.help ?? ""] + field.path).joined(separator: " ").lowercased()
+            return terms.allSatisfy { haystack.contains($0) }
+        }.prefix(60))
+    }
+    #if DEBUG
+    /// Neutral drain seam; search remains synchronous until its causal repro is committed.
+    package func waitForFieldSearchPreparation() async {}
+    #endif
 
     // MARK: Editing
 
