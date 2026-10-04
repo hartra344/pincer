@@ -110,7 +110,7 @@ extension TranscriptUIKitHostedTests {
                 && approvals.minY + geometryTolerance >= title.maxY
                 && find.minY + geometryTolerance >= approvals.maxY
         }
-        if !overlaysReady { print("Header size actual AX5 overlays ready=\(overlaysReady) identity=\(host.geometry.frames) controls=\(host.topChrome.frames) window=\(host.window.bounds) findRequest=\(String(describing: app.findRequest)) approvals=\(gateway.approvals.count)") }
+        if !overlaysReady { print(diagnostic.report()) }
         try #require(overlaysReady, "Actual Find and Demo approval controls must remain below the expanded header")
         phase(.reopened)
         let reopened = CenteredChatHeaderNativeFixtures.Host(app: app, gateway: gateway, width: 390)
