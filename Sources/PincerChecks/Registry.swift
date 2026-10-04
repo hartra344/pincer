@@ -149,6 +149,7 @@ enum Suites {
             Section("Location transport") { runLocationTransportChecks() },
             Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
+            Section("Cron run timestamp IDs") { runCronRunTimestampIDChecks() },
             Section("Activity notification timestamps") { runActivityNotificationTimestampChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -241,6 +242,7 @@ enum Suites {
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
+        Section("Cron run timestamp IDs (demo)") { await runDemoCronRunTimestampIDChecks() },
         Section("Activity notification timestamps (demo)") { await runDemoActivityNotificationTimestampChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
@@ -345,6 +347,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
