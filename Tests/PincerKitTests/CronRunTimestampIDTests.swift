@@ -23,4 +23,17 @@ struct CronRunTimestampIDTests {
         #expect(first.jobId == "job-fixture" && first.status == .ok)
         #expect(first.startedAt == Date(timeIntervalSince1970: 1700000000.123))
     }
+    @Test func conversionBoundariesAndExplicitPrecedenceRemainDeterministic() throws {
+        for value in [Double(Int.max).nextDown, Double(Int.max), Double(Int.min), 1e30, -1e30,
+                      Double.infinity, -Double.infinity, Double.nan] {
+            let source: JSONValue = ["jobId": "boundary", "ts": .number(value), "runAtMs": 1000]
+            let first = try #require(CronRun(source))
+            #expect(!first.id.isEmpty && first.id == CronRun(source)?.id)
+            #expect(CronRun(source.applyingMergePatch(["runId": "authoritative"]))?.id == "authoritative")
+        }
+        #expect(CronRun(["jobId": "fraction", "ts": 123.9])?.id == "fraction@123")
+        #expect(CronRun(["jobId": "fraction", "ts": -123.9])?.id == "fraction@-123")
+        let safe = Double(Int.max).nextDown
+        #expect(CronRun(["jobId": "boundary", "ts": .number(safe)])?.id == "boundary@\(Int(safe))")
+    }
 }

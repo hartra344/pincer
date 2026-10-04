@@ -142,6 +142,7 @@ enum Suites {
             Section("Location transport") { runLocationTransportChecks() },
             Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
+            Section("Cron run timestamp IDs") { runCronRunTimestampIDChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
@@ -223,6 +224,7 @@ enum Suites {
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
+        Section("Cron run timestamp IDs (demo)") { await runDemoCronRunTimestampIDChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
@@ -309,6 +311,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
         LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },

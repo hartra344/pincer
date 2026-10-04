@@ -190,7 +190,7 @@ public struct CronRun: Identifiable, Equatable, Sendable {
     public init?(_ json: JSONValue) {
         guard let jobId = json["jobId"]?.text, let ts = json["ts"]?.double else { return nil }
         let started = json["runAtMs"]?.double ?? ts
-        self.id = json["runId"]?.text ?? "\(jobId)@\(Int(ts))"
+        self.id = json["runId"]?.text ?? "\(jobId)@\(Self.timestampIdentity(ts))"
         self.jobId = jobId
         self.jobName = json["jobName"]?.text
         self.startedAt = Date(timeIntervalSince1970: started / 1000)
@@ -201,6 +201,11 @@ public struct CronRun: Identifiable, Equatable, Sendable {
         self.sessionKey = json["sessionKey"]?.text
         self.model = json["model"]?.text
         self.deliveryStatus = json["deliveryStatus"]?.text
+    }
+    private static func timestampIdentity(_ value: Double) -> String {
+        // Preserve legacy truncating IDs when representable; schema timestamps have no Int ceiling.
+        if let integer = Int(exactly: value.rounded(.towardZero)) { return String(integer) }
+        return String(value)
     }
 }
 
