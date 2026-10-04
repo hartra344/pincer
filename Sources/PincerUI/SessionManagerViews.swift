@@ -292,8 +292,7 @@ struct SessionManagerRowView: View {
     }
 
     static func spokenDuration(_ seconds: TimeInterval) -> String {
-        let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes, .seconds], width: .wide)
-        return Duration.seconds(max(0, Int(seconds))).formatted(style)
+        SessionManager.spokenDuration(seconds)
     }
 
     private var subtitle: String {
