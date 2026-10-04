@@ -29,10 +29,20 @@ import Foundation
     guard await waitFor("actual held approval history", timeout: 15, { gate.entered }) else {
         check(false, "approval history reaches actual held response"); healthy.cancel(); gate.release(); await healthy.value; return
     }
+    guard let raw = page["items"]?.array, !raw.isEmpty else {
+        check(false, "actual held ledger page contains seeded terminal records")
+        healthy.cancel(); gate.release(); await healthy.value; return
+    }
+    let expected = raw.compactMap(ApprovalRecord.init)
+    guard expected.count == raw.count, expected.allSatisfy({ $0.status != .pending }) else {
+        check(false, "all actual held ledger records decode completely and are terminal")
+        healthy.cancel(); gate.release(); await healthy.value; return
+    }
+    check(true, "actual held page has fully decoded nonempty terminal records")
     let canceled = Task { await model.load() }; canceled.cancel(); await canceled.value
     gate.release(); await healthy.value
     check(attempts == 1, "pre-canceled load admits no second ledger request")
-    check(model.items == (page["items"]?.array ?? []).compactMap(ApprovalRecord.init), "full actual terminal records survive canceled admission")
+    check(model.items == expected, "full actual terminal records survive canceled admission")
     check(model.nextCursor == page["nextCursor"]?.string && model.hasLoaded && model.loadState == .idle, "actual cursor and terminal load state survive canceled admission")
 }
 @MainActor func runApprovalHistoryCanceledAdmissionChecks() async {
