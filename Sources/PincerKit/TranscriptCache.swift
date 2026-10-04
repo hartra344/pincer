@@ -312,8 +312,13 @@ public enum TranscriptCache {
 
     /// Digests of the transcripts on disk for a Gateway (the file names carry no session key).
     public static func cachedDigests(gatewayId: UUID, root: URL? = Self.root) -> [String] {
-        guard let directory = self.directory(gatewayId: gatewayId, root: root),
-              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
+        self.cachedDigests(gatewayId: gatewayId, root: root, beforeEnumeration: nil)
+    }
+
+    static func cachedDigests(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)?) -> [String] {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root) else { return [] }
+        beforeEnumeration?()
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
         else { return [] }
         return names.compactMap { name in
             guard name.hasSuffix(".json") else { return nil }
