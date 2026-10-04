@@ -144,9 +144,12 @@ public enum PaletteMatcher {
     public static func rank(_ items: [PaletteItem], query: String) -> [PaletteItem] {
         let words = Self.words(query)
         guard !words.isEmpty else { return items }
-        return items.enumerated()
+        let matches = items.enumerated()
             .compactMap { index, item in Self.score(item, words: words).map { (item, $0, index) } }
-            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.2 < $1.2 }
+        #if DEBUG
+        PaletteSearchDiagnostics.probe?.record(2)
+        #endif
+        return matches.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.2 < $1.2 }
             .map(\.0)
     }
 
@@ -156,6 +159,9 @@ public enum PaletteMatcher {
 
     /// Scores `query` against one string, or `nil` when it doesn't match.
     public static func score(_ query: String, in text: String) -> Int? {
+        #if DEBUG
+        PaletteSearchDiagnostics.probe?.record(1)
+        #endif
         let needle = Array(Self.normalized(query))
         let haystack = Array(Self.normalized(text))
         guard !needle.isEmpty else { return 0 }
@@ -199,7 +205,10 @@ public enum PaletteMatcher {
     }
 
     static func normalized(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        #if DEBUG
+        PaletteSearchDiagnostics.probe?.record(0)
+        #endif
+        return text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
     private static func isWordStart(_ text: [Character], _ index: Int) -> Bool {
