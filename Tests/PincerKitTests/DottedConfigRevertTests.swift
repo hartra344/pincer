@@ -62,4 +62,27 @@ struct DottedConfigRevertTests {
         #expect(settings.inputError(for: field) == nil)
         #expect(settings.saveBlocker == nil && !settings.hasChanges)
     }
+    @Test
+    func structuralBuffersDistinguishIdenticalDisplayPathsAndSurviveAcknowledgment() {
+        let literal = ["a.b"]
+        let nested = ["a", "b"]
+        var edits = ConfigEdits(base: ["a.b": 1, "a": ["b": 2]])
+        edits.texts[literal] = "literal invalid"
+        edits.texts[nested] = "nested invalid"
+        edits.inputErrors[literal] = "literal error"
+        edits.inputErrors[nested] = "nested error"
+        #expect(ConfigPath.string(literal) == ConfigPath.string(nested))
+        let acknowledged = ConfigEdits.acknowledging(intent: .init(), latest: edits, base: edits.base)
+        #expect(acknowledged.texts == edits.texts && acknowledged.inputErrors == edits.inputErrors)
+        edits.revert(nested)
+        #expect(edits.texts[literal] == "literal invalid" && edits.inputErrors[literal] == "literal error")
+        #expect(edits.texts[nested] == nil && edits.inputErrors[nested] == nil)
+        edits.revert([])
+        #expect(edits.texts.isEmpty && edits.inputErrors.isEmpty)
+        edits.texts[literal] = "again"
+        edits.inputErrors[literal] = "again"
+        edits.discardAll()
+        #expect(edits.texts.isEmpty && edits.inputErrors.isEmpty && !edits.hasChanges)
+    }
+
 }

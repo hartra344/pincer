@@ -736,8 +736,9 @@ struct ReviewChangesSheet: View {
     }
 
     private var problems: [Problem] {
-        var problems = self.settings.edits.inputErrors.map { Problem(path: ConfigPath.parse($0.key), message: $0.value) }
-        for (id, message) in self.settings.validationProblems where self.settings.edits.inputErrors[id] == nil {
+        var problems = self.settings.edits.inputErrors.map { Problem(path: $0.key, message: $0.value) }
+        let inputErrorIDs = Set(self.settings.edits.inputErrors.keys.map(ConfigPath.string))
+        for (id, message) in self.settings.validationProblems where !inputErrorIDs.contains(id) {
             problems.append(Problem(path: ConfigPath.parse(id), message: message))
         }
         return problems.sorted { ConfigPath.string($0.path) < ConfigPath.string($1.path) }
