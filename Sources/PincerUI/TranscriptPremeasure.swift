@@ -152,6 +152,7 @@ struct PremeasureJob: Sendable {
     var rowRevision: UInt64 = 0
     #if DEBUG
     var beforeSourcePreparation: (@Sendable (String) -> Void)? = nil
+    var observeWorkerPhase: (@Sendable (Int) -> Void)? = nil
     #endif
 }
 
@@ -224,11 +225,22 @@ final class TranscriptPremeasurer: @unchecked Sendable {
         self.queue.async {
             var rows: [PremeasuredRow] = []
             for job in jobs {
+                #if DEBUG
+                job.observeWorkerPhase?(1) // Actual serial queue entry.
+                #endif
                 rows.append(epoch.current == job.epoch ? self.measure(job, env: env, epoch: epoch)
                     : PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth,
                                      rowRevision: job.rowRevision, discarded: true))
+                #if DEBUG
+                job.observeWorkerPhase?(2) // Actual measurement return.
+                #endif
             }
-            DispatchQueue.main.async { MainActor.assumeIsolated { completion(rows) } }
+            DispatchQueue.main.async { MainActor.assumeIsolated {
+                #if DEBUG
+                for job in jobs { job.observeWorkerPhase?(3) }
+                #endif
+                completion(rows)
+            } }
         }
     }
 

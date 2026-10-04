@@ -272,7 +272,8 @@ public struct ConfigField: Identifiable, Hashable, Sendable {
     }
 
     private static func format(_ number: Double) -> String {
-        number.rounded() == number ? String(Int64(number)) : String(number)
+        if let integer = Int64(exactly: number) { return String(integer) }
+        return String(number)
     }
 }
 

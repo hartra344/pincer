@@ -61,6 +61,7 @@ final class TranscriptPremeasureAdmission {
     var observationCount: Int { self.observationCounter.value.withLock { $0 } }
     #if DEBUG
     var beforeSourcePreparation: (@Sendable (String) -> Void)?
+    var observeWorkerPhase: (@Sendable (Int) -> Void)?
     #endif
 
     func submit(_ job: PremeasureJob, env: TextBuildEnvironment, epoch: TranscriptPremeasureEpoch,
@@ -87,6 +88,7 @@ final class TranscriptPremeasureAdmission {
         else { captured = job }
         #if DEBUG
         captured?.beforeSourcePreparation = self.beforeSourcePreparation
+        captured?.observeWorkerPhase = self.observeWorkerPhase
         #endif
         return captured
     }
@@ -99,6 +101,9 @@ final class TranscriptPremeasureAdmission {
         }
         let lease = UUID()
         self.lease = lease
+        #if DEBUG
+        job.observeWorkerPhase?(0) // Submitted to the real serial queue.
+        #endif
         TranscriptPremeasurer.shared.submit([job], env: work.env, epoch: work.epoch) { [weak self] rows in
             guard let self else { return }
             // Publish/adopt before another source is captured. No completed result backlog.
