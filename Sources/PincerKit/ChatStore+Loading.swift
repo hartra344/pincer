@@ -250,6 +250,7 @@ extension ChatStore {
     func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
+        let exportRevision = self.exportCacheRevision
         let limit = self.windowLimit + Self.windowExtension
         let loaded: (items: [ChatItem], complete: Bool, outcome: TranscriptCache.LoadOutcome,
                      forwardedSenderRefreshPending: Bool)
@@ -264,6 +265,16 @@ extension ChatStore {
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
         self.cacheOutcome = outcome
+        #if DEBUG
+        if let gate = self.exportCacheCompletionGate { await gate() }
+        #endif
+        let exportAuthorityCurrent = exportRevision == self.exportCacheRevision
+        let completeUsableCache: Bool
+        switch outcome {
+        case .loaded, .migrated: completeUsableCache = cached.complete
+        default: completeUsableCache = false
+        }
+        if exportAuthorityCurrent { self.exportCacheComplete = false }
         if case .unavailable = outcome {
             // Retried on the next load; until then a save would replace the cached history.
             self.cacheChecked = false
@@ -273,11 +284,13 @@ extension ChatStore {
         self.forwardedSenderRefreshPending = loaded.forwardedSenderRefreshPending
         // Unsent messages shown before the cache arrived stay, after it.
         guard !cached.items.isEmpty else {
+            if exportAuthorityCurrent, self.items.allSatisfy(\.isPending) { self.exportCacheComplete = completeUsableCache }
             self.cacheUnreadable = false
             return
         }
         guard self.items.allSatisfy(\.isPending) else {
-            self.mergeCached(cached.items, complete: cached.complete, moreInCache: moreInCache)
+            let overlaps = self.mergeCached(cached.items, complete: cached.complete, moreInCache: moreInCache)
+            if exportAuthorityCurrent && overlaps { self.exportCacheComplete = completeUsableCache }
             return
         }
         self.cacheUnreadable = false
@@ -289,28 +302,30 @@ extension ChatStore {
         self.hasMoreHistory = !cached.complete
         self.hasPagedOlder = true
         self.replaceRecoveryItems(cached.items + self.items)
+        if exportAuthorityCurrent { self.exportCacheComplete = completeUsableCache }
         if outcome == .loaded, self.items == cached.items { self.savedState = self.currentCacheState }
     }
 
     /// The cache arrived after the Gateway's newest page (a retry after `.unavailable`): puts the
     /// cached items that come before that page in front, so a save keeps the older history.
-    private func mergeCached(_ cachedItems: [ChatItem], complete: Bool, moreInCache: Bool) {
+    private func mergeCached(_ cachedItems: [ChatItem], complete: Bool, moreInCache: Bool) -> Bool {
         defer { self.cacheUnreadable = false }
         let loaded = Set(self.items.map(\.id))
         // Without an overlap, messages may be missing between the cache and the loaded page, so
         // nothing is spliced in: the Gateway pages older history and the next save replaces the cache.
         guard let firstLoaded = self.items.first(where: { !$0.isPending }),
               let cut = cachedItems.firstIndex(where: { $0.id == firstLoaded.id })
-        else { return }
+        else { return false }
         let older = Array(cachedItems[..<cut]).filter { !loaded.contains($0.id) }
         let more = moreInCache
-        guard !older.isEmpty || more else { return }
+        guard !older.isEmpty || more else { return true }
         let committed = self.items.filter { !$0.isPending }.count
         self.olderOffset = more ? nil : committed + older.count
         self.olderInCache = more
         self.hasMoreHistory = !complete
         self.hasPagedOlder = true
         self.replaceRecoveryItems(older + self.items)
+        return true
     }
 
     /// Brings back the draft saved on disk, unless one was started here in the meantime.
@@ -671,6 +686,8 @@ extension ChatStore {
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cacheChecked = true
+        self.exportCacheComplete = false
+        self.exportCacheRevision &+= 1
         self.cacheUnreadable = false
         self.savedState = nil
         self.hasPagedOlder = false

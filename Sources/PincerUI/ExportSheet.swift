@@ -97,16 +97,14 @@ enum ChatExportBuilder {
     /// Nil if the full history couldn't be loaded or the file came out empty.
     @MainActor
     static func build(chat: ChatStore, format: TranscriptExport.Format, options: TranscriptExport.Options,
-                      header: TranscriptExport.Header) async -> ExportedFile? {
+                      header: TranscriptExport.Header, preparation: ChatTextExportPreparation? = nil) async -> ExportedFile? {
         guard let items = await chat.exportItems() else { return nil }
-        let data: Data
-        switch format {
-        case .markdown: data = Data(TranscriptExport.markdown(items, header: header, options: options).utf8)
-        case .plainText: data = Data(TranscriptExport.plainText(items, header: header, options: options).utf8)
-        case .pdf:
-            data = TranscriptPDF.render(markdown: TranscriptExport.markdown(items, header: header, options: options),
-                                        title: header.title)
+        if format != .pdf {
+            guard let file = await (preparation ?? ChatTextExportPreparation()).prepare(items, format: format, options: options, header: header) else { return nil }
+            return ExportedFile(name: file.name, data: file.data)
         }
+        let data = TranscriptPDF.render(markdown: TranscriptExport.markdown(items, header: header, options: options),
+                                        title: header.title)
         guard !data.isEmpty else { return nil }
         return ExportedFile(name: TranscriptExport.fileName(title: header.title, format: format), data: data)
     }

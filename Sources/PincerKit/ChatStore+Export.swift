@@ -7,6 +7,7 @@ extension ChatStore {
     @discardableResult
     public func loadFullHistory() async -> Bool {
         if !self.hasLoaded { await self.load() }
+        guard self.hasLoaded || self.exportCacheComplete else { return false }
         var lastCount = -1
         while self.hasOlderItems, !Task.isCancelled {
             guard await self.loadOlder(cachePageSize: Int.max) else { return false }

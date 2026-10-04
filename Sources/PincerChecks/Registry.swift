@@ -119,6 +119,7 @@ enum Suites {
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
+            Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },
             Section("Skills load admission") { await runSkillsLoadAdmissionChecks() },
             Section(nil) { await checkSessionManager() },
             Section("Session spoken duration") { runSessionSpokenDurationChecks(); runSessionSpokenDurationSafetyChecks() },
@@ -234,6 +235,8 @@ enum Suites {
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
         sections.append(Section("Export file staging") { await runExportFileStagingChecks() })
         sections.append(Section("Export file staging ownership") { await runExportFileStagingOwnershipChecks() })
+        sections.append(Section("Chat text Export preparation") { await runChatTextExportPreparationChecks() })
+        sections.append(Section("Chat text Export options") { await runChatTextExportWorkerChecks() })
         sections.append(Section("Tools Inspector search preparation") { await runToolsInspectorSearchPreparationChecks() })
         sections.append(Section("UI readiness cancellation") { await runUITestReadinessCancellationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
@@ -347,6 +350,7 @@ enum Suites {
         Section("Agent file write authority (demo)") { await runDemoAgentFileWriteAuthorityChecks() },
         Section("Skills feedback ownership (demo)") { await runDemoSkillsFeedbackOwnershipChecks() },
         Section("Numeric config bound validation (demo)") { await runDemoConfigBoundValidationSafetyChecks() },
+        Section("Chat export initial history (demo)") { await runDemoChatExportInitialHistoryChecks() },
         Section("Skills load admission (demo)") { await runDemoSkillsLoadAdmissionChecks() },
         Section("Settings save (demo)") { await runSettingsSaveRebaseDemoChecks() },
         Section("Raw config editor ownership (demo)") { await runDemoRawConfigEditorChecks() },
@@ -388,6 +392,7 @@ enum Suites {
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
         sections.append(Section("Export file staging (demo)") { await runDemoExportFileStagingChecks() })
+        sections.append(Section("Chat text Export preparation (demo)") { await runDemoChatTextExportPreparationChecks() })
         sections.append(Section("Tools Inspector search preparation (demo)") { await runDemoToolsInspectorSearchPreparationChecks() })
         sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
