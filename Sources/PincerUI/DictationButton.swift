@@ -178,7 +178,7 @@ extension View {
     func dictationLifecycle(_ model: DictationModel, draft: String, chatKey: String) -> some View {
         self
             .onChange(of: draft) { _, text in model.draftChangedExternally(text) }
-            .onChange(of: chatKey) { model.finish() }
-            .onDisappear { model.finish() }
+            .onChange(of: chatKey) { model.invalidateDeferredSend(); model.finish() }
+            .onDisappear { model.invalidateDeferredSend(); model.finish() }
     }
 }

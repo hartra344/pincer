@@ -343,10 +343,21 @@ struct Composer: View {
             self.send()
             return
         }
+        let ownerID = self.chat.draft.ownerID
+        let editingMessageID = self.chat.editTarget?.messageId
+        let dictation = self.dictation
+        let sendRevision = dictation.deferredSendRevision
         self.sendPending = true
-        Task {
-            await self.dictation.finishForSend()
+        Task { [weak chat = self.chat] in
+            guard dictation.deferredSendRevision == sendRevision,
+                  let chat, chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else {
+                self.sendPending = false
+                return
+            }
+            let accepted = await dictation.finishForSend()
             self.sendPending = false
+            guard accepted, dictation.deferredSendRevision == sendRevision,
+                  chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else { return }
             self.send()
         }
     }

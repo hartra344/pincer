@@ -20,7 +20,7 @@ private final class HeldSendDictationEngine: DictationEngine {
 }
 
 @MainActor
-private func exerciseActualDictationSend(cancelEdit: Bool) async throws {
+private func exerciseActualDictationSend(cancelEdit: Bool, restartBeforeTask: Bool = false) async throws {
     let scratch = ScratchDefaults()
     defer { scratch.remove() }
     let app = AppModel(defaults: scratch.defaults)
@@ -76,6 +76,20 @@ private func exerciseActualDictationSend(cancelEdit: Bool) async throws {
     let command = try #require(textView.keyCommands?.first { $0.input == "\r" && $0.modifierFlags.isEmpty })
     let action = try #require(command.action)
     _ = textView.perform(action, with: command)
+    if restartBeforeTask {
+        let draft = chat.draft
+        let rows = chat.items
+        model.cancel()
+        model.toggle(draft: chat.draft.text, caret: nil) { [weak chat] text in chat?.draft.text = text }
+        try await wait("new session after queued Return") {
+            host.view.layoutIfNeeded()
+            return textView.canSubmit && (model.isListening || model.phase == .idle)
+        }
+        #expect(model.isListening, "the queued old Return must not cancel the restarted session")
+        #expect(!engine.stopped && chat.draft == draft && chat.items == rows,
+                "the stale submit never touches the new engine or sends its draft")
+        return
+    }
     try await wait("Return stopped dictation") { engine.stopped && model.phase == .finishing }
     try await wait("native submit disabled") {
         host.view.layoutIfNeeded()
@@ -113,6 +127,9 @@ private func exerciseActualDictationSend(cancelEdit: Bool) async throws {
 extension TranscriptUIKitHostedTests {
     @Test(.timeLimit(.minutes(2))) func actualDictationReturnCannotSendAfterEditCancellation() async throws {
         try await exerciseActualDictationSend(cancelEdit: true)
+    }
+    @Test(.timeLimit(.minutes(2))) func queuedActualDictationReturnCannotStopRestartedSession() async throws {
+        try await exerciseActualDictationSend(cancelEdit: false, restartBeforeTask: true)
     }
     @Test(.timeLimit(.minutes(2))) func actualDictationReturnStillSendsUnchangedEdit() async throws {
         try await exerciseActualDictationSend(cancelEdit: false)
