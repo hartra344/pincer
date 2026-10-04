@@ -133,7 +133,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     func notifyActivity(row: SessionRow, gateway: GatewayStore) {
         self.post(
-            id: "reply:\(row.key):\(Int(row.activityMs))",
+            id: ActivityNotificationIdentity.make(key: row.key, activityMs: row.activityMs),
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(row.preview ?? "New activity"),
             target: Target(gatewayId: gateway.id, sessionKey: row.key),

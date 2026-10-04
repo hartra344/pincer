@@ -25,4 +25,13 @@ struct ActivityNotificationTimestampTests {
         #expect(result.requests.count == 1 && result.cursor.activityMs == 1e30)
         #expect(try plan(1e30).requests.first?.identifier == request.identifier)
     }
+    @Test func sharedIdentityPreservesBoundariesAndTruncation() {
+        for value in [Double(Int.max).nextDown, Double(Int.max), Double(Int.min), 1e30,
+                      Double.infinity, -Double.infinity, Double.nan] {
+            #expect(ActivityNotificationIdentity.make(key: "k", activityMs: value)
+                    == ActivityNotificationIdentity.make(key: "k", activityMs: value))
+        }
+        #expect(ActivityNotificationIdentity.make(key: "k", activityMs: 123.9) == "reply:k:123")
+        #expect(ActivityNotificationIdentity.make(key: "k", activityMs: -123.9) == "reply:k:-123")
+    }
 }
