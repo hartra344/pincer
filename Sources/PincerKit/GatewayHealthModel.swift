@@ -137,6 +137,8 @@ public final class GatewayHealthModel {
     @ObservationIgnored private var restartTimer: Task<Void, Never>?
     @ObservationIgnored private var notBackTimer: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
+    // Health events supersede only in-flight health RPCs, including their errors.
+    @ObservationIgnored private var healthEventRevision = 0
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, localDeviceId: String?,
          simulatedRestart: Bool = false, quietsInitialIssues: Bool = false) {
@@ -384,6 +386,7 @@ public final class GatewayHealthModel {
         switch name {
         case "health":
             if let summary = GatewayHealthSummary(payload) {
+                self.healthEventRevision += 1
                 self.health = summary
                 self.lastHealthEventAt = Date()
                 self.healthFailure = nil
@@ -540,12 +543,15 @@ public final class GatewayHealthModel {
     /// Nil when the section is unavailable, the call failed, or a newer load started.
     private func call(_ section: Section, _ params: JSONValue, _ generation: Int) async -> JSONValue? {
         guard self.isAvailable(section) else { return nil }
+        let healthEventRevision = self.healthEventRevision
         do {
             let result = try await self.request(section.method, params)
-            guard generation == self.generation else { return nil }
+            guard generation == self.generation,
+                  section != .health || healthEventRevision == self.healthEventRevision else { return nil }
             return result
         } catch {
-            guard generation == self.generation else { return nil }
+            guard generation == self.generation,
+                  section != .health || healthEventRevision == self.healthEventRevision else { return nil }
             if Self.isUnavailableMethod(error) {
                 self.unavailable.insert(section)
             } else if section == .health, case let GatewayError.rpc(code, message, _) = error, code == "UNAVAILABLE" {
