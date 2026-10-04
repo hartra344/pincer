@@ -441,7 +441,7 @@ func runDemo() async {
           "demo health degraded by Telegram (\(health.issues.map(\.title)))")
     check(health.indicator == nil && !health.quietedIssueIds.isEmpty, "demo sidebar stays quiet about the Telegram issue at first")
     health.markIssuesViewed()
-    check(health.level == .degraded && health.indicator == .degraded(issues: 1), "demo indicator returns once Health is viewed")
+    check(health.level == .degraded && health.indicator == .degraded(issues: 3), "demo indicator returns once Health is viewed")
     check(health.presence.count == 3 && health.sortedPresence.first.map(health.isThisDevice) == true, "demo clients, this device first")
     check(health.heartbeat?.status == .okToken && (health.uptime() ?? 0) > 3 * 86_400, "demo heartbeat and uptime")
     check(health.canRestart, "demo can restart")
@@ -451,15 +451,20 @@ func runDemo() async {
             UserDefaults.standard.bool(forKey: "pincer.healthDismissalsSynced.\(gateway.id.uuidString)")
         }
         check(firstSync, "demo health dismissals synced with users.prefs")
+        let deliveries = health.activeIssues.filter { $0.kind == .delivery }
+        check(deliveries.count == 2, "demo shows failed ingress and pressure alongside Telegram")
+        for issue in deliveries { health.dismiss(issue) }
         health.dismiss(telegram)
-        check(health.level == .healthy && health.indicator == nil && health.dismissedIssues.map(\.id) == [telegram.id]
+        let expectedDismissals = Dictionary(uniqueKeysWithValues: (deliveries + [telegram]).map { ($0.id, "until:" + $0.fingerprint) })
+        check(health.level == .healthy && health.indicator == nil && Set(health.dismissedIssues.map(\.id)) == Set(expectedDismissals.keys)
               && gateway.healthDismissals[telegram.id] == "until:state=not-connected", "demo dismiss hides the Telegram issue")
         // The demo's users.prefs.set echoes users.prefs.changed and the store re-reads users.prefs.get,
         // replacing the local copy with the Gateway's.
         // Negative window: the echoed users.prefs must not replace the dismissal.
         try? await Task.sleep(for: .milliseconds(500))
-        check(gateway.healthDismissals == [telegram.id: "until:state=not-connected"] && health.level == .healthy,
+        check(gateway.healthDismissals == expectedDismissals && health.level == .healthy,
               "demo dismissal kept after re-reading users.prefs (\(gateway.healthDismissals))")
+        for issue in deliveries { health.restore(id: issue.id) }
         health.restore(id: telegram.id)
         check(health.level == .degraded && health.dismissedIssues.isEmpty && gateway.healthDismissals.isEmpty, "demo restore")
         health.dismiss(telegram)

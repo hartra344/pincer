@@ -680,7 +680,7 @@ func runLive(url: String, token: String) async {
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
     await runLiveSubagents(gateway: admin)
-    // Before Health: reconnects the mock's degraded Telegram so only the failed delivery is left.
+    // Before Health: reconnects degraded Telegram; the outbound and two ingress signals remain.
     await runLiveChannels(profile: profile, admin: admin)
     await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
@@ -693,7 +693,9 @@ func runLive(url: String, token: String) async {
     let health = admin.health
     await health.load()
     let deliveryId = "queue:outbound-prepared-v1"
-    check(health.hasLoaded && health.level == .degraded && health.activeIssues.map(\.id) == [deliveryId]
+    let ingressIds: Set<String> = ["queue:ingress-failed:telegram:default", "queue:ingress-pressure:telegram:default"]
+    let expectedIssueIds = ingressIds.union([deliveryId])
+    check(health.hasLoaded && health.level == .degraded && Set(health.activeIssues.map(\.id)) == expectedIssueIds
           && health.health?.channels.first?.id == "discord", "health loads, degraded by the mock's failed delivery (\(health.issues.map(\.title)))")
     // Dismissing on one device hides it on another device of the same user, through users.prefs.
     let secondProfile = GatewayProfile(name: "Mock health", url: url, authMode: .token)
@@ -709,14 +711,25 @@ func runLive(url: String, token: String) async {
                 && UserDefaults.standard.bool(forKey: "pincer.healthDismissalsSynced.\(second.id.uuidString)")
         }
         check(prefsSynced, "health dismissals pulled on both devices")
+        let ingress = health.activeIssues.filter { ingressIds.contains($0.id) }
+        check(ingress.count == 2 && ingress.allSatisfy { !$0.canAlwaysIgnore }, "both ingress delivery issues are individually dismissible")
         health.dismiss(delivery)
+        check(health.level == .degraded && Set(health.activeIssues.map(\.id)) == ingressIds,
+              "dismissing outbound alone keeps ingress health issues visible")
+        for issue in ingress { health.dismiss(issue) }
+        let expectedDismissals = Dictionary(uniqueKeysWithValues: (ingress + [delivery]).map { ($0.id, "until:" + $0.fingerprint) })
         check(health.level == .healthy && health.indicator == nil, "dismissed delivery doesn't count")
         let dismissedElsewhere = await waitFor("dismissal sync") { second.health.level == .healthy }
-        check(dismissedElsewhere && second.health.dismissedIssues.map(\.id) == [deliveryId]
-              && second.healthDismissals[deliveryId] == "until:count=1", "dismissal syncs to the other device")
+        check(dismissedElsewhere && Set(second.health.dismissedIssues.map(\.id)) == expectedIssueIds
+              && second.healthDismissals == expectedDismissals, "dismissal syncs to the other device")
+        for issue in ingress { second.health.restore(id: issue.id) }
         second.health.restore(id: deliveryId)
-        let restored = await waitFor("restore sync") { health.level == .degraded }
-        check(restored && admin.healthDismissals.isEmpty, "restore syncs back")
+        let restored = await waitFor("restore sync") {
+            health.level == .degraded && admin.healthDismissals.isEmpty
+                && Set(health.activeIssues.map(\.id)) == expectedIssueIds
+        }
+        check(restored && admin.healthDismissals.isEmpty && Set(health.activeIssues.map(\.id)) == expectedIssueIds,
+              "restoring all three per-account delivery issues syncs back")
     } else {
         check(false, "second device and the mock's failed delivery issue")
     }
