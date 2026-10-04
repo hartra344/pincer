@@ -558,15 +558,25 @@ struct SaveOutcomeLabel: View {
 /// The whole config file as text, saved with `config.apply`.
 struct RawConfigPage: View {
     @Environment(GatewayStore.self) private var gateway
+    private let injectedSettings: GatewaySettingsModel?
+    #if DEBUG
+    @Environment(\.rawConfigParserProbe) private var parserProbe
+    #endif
+    init(settings: GatewaySettingsModel? = nil) { self.injectedSettings = settings }
+    private var settings: GatewaySettingsModel { self.injectedSettings ?? self.gateway.settings }
     @State private var text = ""
     /// The file text last loaded, to tell edits apart from a newer file.
     @State private var baseline: String?
 
     var body: some View {
-        let settings = self.gateway.settings
+        let settings = self.settings
         let raw = settings.snapshot?.raw
         let edited = raw != nil && self.text != raw
+        #if DEBUG
+        let parseError = edited ? Self.parseError(self.text, probe: self.parserProbe) : nil
+        #else
         let parseError = edited ? Self.parseError(self.text) : nil
+        #endif
         Form {
             if raw == nil {
                 Section {
@@ -617,7 +627,7 @@ struct RawConfigPage: View {
 
     /// Loads the file text, unless the user is in the middle of editing it.
     private func sync() {
-        guard let raw = self.gateway.settings.snapshot?.raw else { return }
+        guard let raw = self.settings.snapshot?.raw else { return }
         if self.baseline == nil || self.text == self.baseline { self.text = raw }
         self.baseline = raw
     }
@@ -632,4 +642,32 @@ struct RawConfigPage: View {
             return "Not valid JSON5\(description.map { ": \($0)" } ?? ".")"
         }
     }
+    #if DEBUG
+    static func parseError(_ text: String, probe: RawConfigParserProbe?) -> String? {
+        probe?.record()
+        return Self.parseError(text)
+    }
+    #endif
 }
+
+#if DEBUG
+final class RawConfigParserProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var main = 0
+    private var background = 0
+    func record() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        guard self.main + self.background < 256 else { return }
+        if Thread.isMainThread { self.main += 1 } else { self.background += 1 }
+    }
+    var counts: (main: Int, background: Int) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return (self.main, self.background)
+    }
+}
+extension EnvironmentValues {
+    @Entry var rawConfigParserProbe: RawConfigParserProbe? = nil
+}
+#endif
