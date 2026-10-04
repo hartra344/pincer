@@ -121,6 +121,7 @@ enum Suites {
             Section(nil) { await checkSessionManager() },
             Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Pairing Inbox canceled admission") { await runPairingInboxCanceledAdmissionChecks() },
+            Section("Pairing Inbox admitted cancellation") { await runPairingInboxLoadCancellationChecks() },
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
             Section("Ingress health issues") { runIngressHealthChecks() },

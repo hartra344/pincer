@@ -307,6 +307,7 @@ public final class PairingInboxModel {
     /// Fetches every pending request (`channels.pairing.list` with `{}`; filtering is local).
     /// Rows with an approve or dismiss in flight are kept as they are.
     public func load() async {
+        guard !Task.isCancelled else { return }
         guard self.supported, self.canManage else {
             self.hasLoaded = true
             return
@@ -315,25 +316,31 @@ public final class PairingInboxModel {
         let generation = self.generation
         self.removedSinceList = []
         self.loadState = .running
+        defer {
+            if Task.isCancelled, generation == self.generation, self.loadState.isRunning {
+                self.loadState = .idle
+            }
+        }
         do {
             let result = try await self.request(Self.listMethod, [:])
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
         } catch let error where GatewayError.isUnknownMethod(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.unknownMethod = true
             self.clearList()
             self.loadState = .idle
         } catch let error where GatewayError.isMissingScope(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.scopeDenied = true
             self.loadState = .failed(Self.missingScopeMessage)
         } catch {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.loadState = .failed(Self.message(for: error))
         }
+        guard !Task.isCancelled, generation == self.generation else { return }
         self.hasLoaded = true
     }
 
