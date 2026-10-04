@@ -229,6 +229,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
         sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
         sections.append(Section("Share target ownership") { await runShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation") { await runEmbeddedImageBase64PreparationChecks() })
@@ -236,6 +237,8 @@ enum Suites {
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
+        sections.append(Section("Export file staging") { await runExportFileStagingChecks() })
+        sections.append(Section("Export file staging ownership") { await runExportFileStagingOwnershipChecks() })
         sections.append(Section("Chat text Export preparation") { await runChatTextExportPreparationChecks() })
         sections.append(Section("Chat text Export options") { await runChatTextExportWorkerChecks() })
         sections.append(Section("Tools Inspector search preparation") { await runToolsInspectorSearchPreparationChecks() })
@@ -389,11 +392,13 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Cache restore publication ownership (demo)") { await runDemoCacheRestorePublicationOwnershipChecks() })
         sections.append(Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() })
         sections.append(Section("Share target ownership (demo)") { await runDemoShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
+        sections.append(Section("Export file staging (demo)") { await runDemoExportFileStagingChecks() })
         sections.append(Section("Chat text Export preparation (demo)") { await runDemoChatTextExportPreparationChecks() })
         sections.append(Section("Tools Inspector search preparation (demo)") { await runDemoToolsInspectorSearchPreparationChecks() })
         sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })

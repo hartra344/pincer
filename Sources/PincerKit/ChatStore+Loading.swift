@@ -250,7 +250,7 @@ extension ChatStore {
     func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
-        let exportRevision = self.exportCacheRevision
+        let restoreRevision = self.cacheRestoreRevision
         let limit = self.windowLimit + Self.windowExtension
         let loaded: (items: [ChatItem], complete: Bool, outcome: TranscriptCache.LoadOutcome,
                      forwardedSenderRefreshPending: Bool)
@@ -264,11 +264,12 @@ extension ChatStore {
         let (windowed, moreInCache) = Self.window(loaded.items, limit: self.windowLimit)
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
-        self.cacheOutcome = outcome
         #if DEBUG
         if let gate = self.exportCacheCompletionGate { await gate() }
         #endif
-        let exportAuthorityCurrent = exportRevision == self.exportCacheRevision
+        guard restoreRevision == self.cacheRestoreRevision else { return }
+        self.cacheOutcome = outcome
+        let exportAuthorityCurrent = restoreRevision == self.cacheRestoreRevision
         let completeUsableCache: Bool
         switch outcome {
         case .loaded, .migrated: completeUsableCache = cached.complete
@@ -687,7 +688,7 @@ extension ChatStore {
         self.olderTask?.cancel()
         self.cacheChecked = true
         self.exportCacheComplete = false
-        self.exportCacheRevision &+= 1
+        self.cacheRestoreRevision &+= 1
         self.cacheUnreadable = false
         self.savedState = nil
         self.hasPagedOlder = false

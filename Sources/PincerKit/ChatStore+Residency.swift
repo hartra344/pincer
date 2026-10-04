@@ -41,7 +41,7 @@ extension ChatStore {
         self.isDehydrated = true
         self.cacheChecked = false
         self.exportCacheComplete = false
-        self.exportCacheRevision &+= 1
+        self.cacheRestoreRevision &+= 1
         self.stale = true
         self.hasPagedOlder = false
         self.olderOffset = nil

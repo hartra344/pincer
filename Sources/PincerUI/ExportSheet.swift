@@ -136,15 +136,8 @@ struct SharedFile: Identifiable {
     let id = UUID()
     let url: URL
 
-    static func write(name: String, data: Data) -> SharedFile? {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let url = folder.appendingPathComponent(name)
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
-        } catch {
-            return nil
-        }
+    @MainActor static func write(name: String, data: Data, staging: ExportFileStaging? = nil) async -> SharedFile? {
+        guard let url = await (staging ?? ExportFileStaging()).prepare(name: name, data: data) else { return nil }
         return SharedFile(url: url)
     }
 }
