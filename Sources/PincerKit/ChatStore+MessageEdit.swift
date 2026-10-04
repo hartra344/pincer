@@ -196,7 +196,18 @@ extension ChatStore {
         guard let gateway else { throw GatewayError.notConnected }
         var params: [String: JSONValue] = ["sessionKey": .string(self.sessionKey), "entryId": .string(entryId)]
         if let agentId { params["agentId"] = .string(agentId) }
-        let result = try await gateway.connection.request(SessionManager.rewindMethod, .object(params), timeout: 30)
+        let result: JSONValue
+        do {
+            result = try await gateway.connection.request(SessionManager.rewindMethod, .object(params), timeout: 30)
+        } catch {
+            #if DEBUG
+            await self.messageEditRewindCompletionProbe?(false)
+            #endif
+            throw error
+        }
+        #if DEBUG
+        await self.messageEditRewindCompletionProbe?(true)
+        #endif
         let attachments = (result["editorAttachments"]?.array ?? []).enumerated().compactMap { index, value -> OutgoingAttachment? in
             guard let mime = value["mimeType"]?.text, let base64 = value["data"]?.text,
                   let data = Data(base64Encoded: base64) else { return nil }
