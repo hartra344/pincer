@@ -1,0 +1,41 @@
+import Foundation
+@testable import PincerKit
+
+private func boundaryDiff() -> ToolFileEdit? {
+    let args = String(decoding: try! JSONSerialization.data(withJSONObject: ["input": "--- a/file.txt\n+++ b/file.txt\n@@ -\(Int.max),1 +\(Int.max),1 @@\n context"]), as: UTF8.self)
+    return ToolFileEdit.parse(toolName: "apply_patch", arguments: args)
+}
+
+@MainActor func runToolDiffLineNumberBoundaryChecks() async {
+    let result = await Task.detached { boundaryDiff() }.value
+    check(result == nil || result?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } == [" context"],
+          "actual local parser safely handles a representable header boundary or falls back to raw text")
+}
+
+@MainActor func runDemoToolDiffLineNumberBoundaryChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
+    gateway.start(); gateway.reconnectIfNeeded(); defer { gateway.stop() }
+    let key = "agent:coder:dashboard:retry-fix"
+    let ready = await waitFor("diff boundary Demo", timeout: 25) { gateway.state.isConnected && gateway.bootstrapped && gateway.sessions[key] != nil }
+    check(ready, "genuine Demo tool transcript connects")
+    guard ready else { return }
+    let chat = gateway.chat(for: key)
+    await chat.load()
+    let tools = chat.entries.flatMap { entry -> [ToolActivity] in
+        if case let .assistant(turn) = entry { return turn.tools }
+        return []
+    }
+    guard let tool = tools.first(where: { ToolFileEdit.handles(toolName: $0.name) }) else {
+        check(false, "actual Demo history contains a supported file edit tool"); return
+    }
+    let name = tool.name, args = tool.arguments, details = tool.details, isError = tool.isError
+    let actual = await Task.detached { ToolFileEdit.parse(toolName: name, arguments: args, details: details, isError: isError) }.value
+    check(actual != nil, "unchanged genuine Demo tool arguments retain their file-diff presentation")
+    // Explicitly LOCAL parser fixture, not an altered Gateway response or tool execution.
+    let local = await Task.detached { boundaryDiff() }.value
+    check(local == nil || local?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } == [" context"],
+          "local boundary fixture cannot terminate real Demo tool-card read processing")
+}
