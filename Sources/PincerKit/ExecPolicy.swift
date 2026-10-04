@@ -768,6 +768,7 @@ public final class ExecPolicyModel {
 
     /// Fetches the file. With a draft, nothing changes unless `discardingDraft`.
     public func load(discardingDraft: Bool = false) async {
+        guard !Task.isCancelled else { return }
         if self.hasChanges, !discardingDraft { return }
         if let methods = self.methods(), !methods.isEmpty, !methods.contains(ExecPolicy.getMethod) {
             self.markUnsupported()
@@ -777,9 +778,14 @@ public final class ExecPolicyModel {
         let generation = self.generation
         let draftBefore = self.draft
         self.loadState = .running
+        defer {
+            if generation == self.generation, Task.isCancelled, self.loadState.isRunning {
+                self.loadState = .idle
+            }
+        }
         do {
             let result = try await self.request(ExecPolicy.getMethod, [:])
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             // Edits made while the request was in flight win: keep them and the snapshot they're based on.
             if !discardingDraft, self.draft != draftBefore {
                 self.loadState = .idle
@@ -792,7 +798,7 @@ public final class ExecPolicyModel {
             self.loadState = .idle
             if case .failed(_, retrySave: false) = self.banner { self.banner = nil }
         } catch {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             switch ExecPolicyError.classify(error) {
             case .needsAdmin:
                 self.needsAdmin = true

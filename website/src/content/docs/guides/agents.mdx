@@ -109,6 +109,8 @@ The same happens if you're creating a file and someone else created it first.
 
 Reload Theirs discards the draft you had when you chose it. Typing entered while that reload is pending stays in the editor as an unsaved draft over the freshly loaded version.
 
+A Save accepted while an earlier reload is pending supersedes that read, so its late completion cannot replace the saved version or clear the Save's conflict or error.
+
 ## Current limits
 
 - Bindings are shown but can't be edited on the agent's page.

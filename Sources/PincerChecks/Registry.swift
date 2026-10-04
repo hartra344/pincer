@@ -96,8 +96,10 @@ enum Suites {
             Section(nil) { await checkGatewayLogsModel() },
             Section("Gateway Logs Clear ownership") { await runGatewayLogsClearOwnershipChecks() },
             Section(nil) { await checkExecPolicy() },
+            Section("Command policy load admission") { await runExecPolicyLoadAdmissionChecks() },
             Section(nil) { await checkAgentManagement() },
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
+            Section("Agent file write authority") { await runAgentFileWriteAuthorityChecks() },
             Section(nil) { checkSubagents() },
             Section(nil) { checkForwardedMessages() },
             Section("Bridged row authors") { checkBridgedHeaderAuthors() },
@@ -209,6 +211,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
@@ -308,6 +311,7 @@ enum Suites {
         Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
         Section("Demo agent and model settings") { await runDemoAgentModelsPageChecks() },
         Section("Agent file reload ownership (demo)") { await runDemoAgentFileReloadOwnershipChecks() },
+        Section("Agent file write authority (demo)") { await runDemoAgentFileWriteAuthorityChecks() },
         Section("Skills feedback ownership (demo)") { await runDemoSkillsFeedbackOwnershipChecks() },
         Section("Settings save (demo)") { await runSettingsSaveRebaseDemoChecks() },
         Section("Raw config editor ownership (demo)") { await runDemoRawConfigEditorChecks() },
@@ -369,6 +373,7 @@ enum Suites {
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
+        LiveSection("Command policy load admission (live)") { url, token in await runLiveExecPolicyLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
