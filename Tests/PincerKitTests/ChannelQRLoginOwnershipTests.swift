@@ -75,6 +75,7 @@ struct ChannelQRLoginOwnershipTests {
         controller.start(channel: "whatsapp", accountId: "default")
         try await self.waitFor { oldDelivery.entered }
         try #require(controller.state(channel: "whatsapp", accountId: "default") == .showing(qr: Data([1]), message: "Scan this QR in WhatsApp → Linked Devices."))
+        let oldTask = try #require(controller.activeTaskForChecks(channel: "whatsapp", accountId: "default"))
         switch replacement {
         case .cancel: controller.cancel(channel: "whatsapp", accountId: "default")
         case .reset: controller.reset()
@@ -84,9 +85,8 @@ struct ChannelQRLoginOwnershipTests {
             try #require(controller.state(channel: "whatsapp", accountId: "default") == .showing(qr: Data([2]), message: "Scan this QR in WhatsApp → Linked Devices."))
         }
         oldDelivery.release()
-        // This marker is set immediately before request returns; controller publication
-        // has no further suspension, so observing it observes the actual stale delivery.
-        try await self.waitFor { oldReturned }
+        await oldTask.value
+        #expect(oldReturned, "The real controller task consumed the completed transport response")
         let expected: ChannelQRLoginState = replacement == .restart
             ? .showing(qr: Data([2]), message: "Scan this QR in WhatsApp → Linked Devices.") : .idle
         #expect(controller.state(channel: "whatsapp", accountId: "default") == expected,

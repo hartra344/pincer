@@ -75,6 +75,13 @@ public final class ChannelQRLoginController {
         self.logins[Self.key(channel: channel, accountId: accountId)] ?? .idle
     }
 
+    #if DEBUG
+    /// Read-only access to the actual active attempt for deterministic completion checks.
+    package func activeTaskForChecks(channel: String, accountId: String?) -> Task<Void, Never>? {
+        self.tasks[Self.key(channel: channel, accountId: accountId)]
+    }
+    #endif
+
     /// Any login showing a QR or starting.
     public var hasRunning: Bool { self.logins.values.contains(where: \.isRunning) }
 
