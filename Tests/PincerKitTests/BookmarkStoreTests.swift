@@ -38,11 +38,12 @@ struct BookmarkStoreTests {
         #expect(store.bookmarks.isEmpty)
     }
 
-    @Test func persistsAcrossInstances() {
+    @Test func persistsAcrossInstances() async {
         defer { self.defaults.removePersistentDomain(forName: self.suite) }
         let first = BookmarkStore(gatewayId: self.gateway, defaults: self.defaults)
         first.add(self.bookmark("a", at: 5))
         first.add(self.bookmark("b", at: 6))
+        await first.waitForPersistenceEncoding()
         let second = BookmarkStore(gatewayId: self.gateway, defaults: self.defaults)
         #expect(second.bookmarks == first.bookmarks)
         #expect(second.isBookmarked(sessionKey: "main", messageId: "b"))

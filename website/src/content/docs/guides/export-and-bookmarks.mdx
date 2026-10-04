@@ -44,3 +44,5 @@ Once the gateway confirms a chat was deleted, Pincer removes its bookmarks from 
 :::note
 Bookmarks sync between your devices through your gateway, separately for each gateway (see [Synced preferences](../../reference/synced-preferences/)). Removing one removes it everywhere. Other devices show the first 60 characters of the message. There's room for about 100–150 bookmarks per gateway; once it's full, a new bookmark removes an older one (the oldest in its full sync shard, or the oldest overall at the 150-bookmark cap), and Pincer tells you when that happens. If the gateway has no durable identity for your connection, bookmarks stay on the current device.
 :::
+
+Bookmark stars update immediately. Pincer encodes the full local saved collection in the background, coalescing newer edits; clearing bookmarks prevents an older pending save from restoring them.

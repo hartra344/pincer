@@ -128,13 +128,14 @@ struct BookmarkSyncStoreTests {
         #expect(store.bookmarks.map(\.id) == [good.id])
     }
 
-    @Test func appliedBookmarksPersistLikeLocalOnes() {
+    @Test func appliedBookmarksPersistLikeLocalOnes() async {
         let gateway = UUID()
         let defaults = self.defaults
         defer { defaults.removePersistentDomain(forName: self.suite) }
         let store = BookmarkStore(gatewayId: gateway, defaults: defaults)
         let remote = bookmark("a", at: 9)
         store.apply(synced: [remote.id: remote.syncedValue], shard: Bookmark.shard(ofKey: remote.id))
+        await store.waitForPersistenceEncoding()
         #expect(BookmarkStore(gatewayId: gateway, defaults: defaults).bookmarks.map(\.id) == [remote.id])
     }
 
@@ -240,11 +241,13 @@ struct BookmarkSyncStoreTests {
         #expect(store.dropNotice == notice && store.droppedCount == dropped)
     }
 
-    @Test func persistsAcrossInstancesAsBefore() {
+    @Test func persistsAcrossInstancesAsBefore() async {
         let gateway = UUID()
         let defaults = self.defaults
         defer { defaults.removePersistentDomain(forName: self.suite) }
-        BookmarkStore(gatewayId: gateway, defaults: defaults).add(bookmark("a"))
+        let store = BookmarkStore(gatewayId: gateway, defaults: defaults)
+        store.add(bookmark("a"))
+        await store.waitForPersistenceEncoding()
         #expect(BookmarkStore(gatewayId: gateway, defaults: defaults).bookmarks.count == 1)
     }
 

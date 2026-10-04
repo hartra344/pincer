@@ -219,7 +219,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
-        sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks() })
+        sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
         sections.append(Section("Embedded image base64 preparation") { await runEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
