@@ -201,6 +201,7 @@ enum Suites {
             Section("Current shortcut tips") { runShortcutTipsChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
+            Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership" }) {
