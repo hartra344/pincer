@@ -220,6 +220,7 @@ enum Suites {
         ]
         #if DEBUG
         sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
+        sections.append(Section("Share target ownership") { await runShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation") { await runEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
@@ -370,6 +371,7 @@ enum Suites {
     ]
         #if DEBUG
         sections.append(Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() })
+        sections.append(Section("Share target ownership (demo)") { await runDemoShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
