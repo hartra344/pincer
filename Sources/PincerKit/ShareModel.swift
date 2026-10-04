@@ -67,8 +67,12 @@ public final class ShareModel {
 
     @ObservationIgnored private let identity: DeviceIdentity?
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private var connection: GatewayConnection?
+    @ObservationIgnored private var connection: ShareConnection?
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private let connectionFactory: @MainActor (GatewayProfile, DeviceIdentity) -> ShareConnection
+    #if DEBUG
+    package var actualPumpTask: Task<Void, Never>? { pumpTask }
+    #endif
     @ObservationIgnored private var attachmentPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var attachmentPreparationGeneration = 0
     @ObservationIgnored var attachmentPreparationProbe: (@Sendable () -> Void)?
@@ -81,11 +85,18 @@ public final class ShareModel {
     public static let lastGatewayKey = "pincer.share.lastGateway"
     public static func lastTargetKey(_ gatewayId: UUID) -> String { "pincer.share.lastTarget.\(gatewayId.uuidString)" }
 
-    public init(
+    public convenience init(
         profiles: [GatewayProfile] = GatewayProfileStore.load(),
         identity: DeviceIdentity? = DeviceIdentity.loadExisting(),
         defaults: UserDefaults = SharedContainer.defaults)
     {
+        self.init(profiles: profiles, identity: identity, defaults: defaults,
+                  connectionFactory: { ShareConnection(profile: $0, identity: $1) })
+    }
+
+    init(profiles: [GatewayProfile], identity: DeviceIdentity?, defaults: UserDefaults,
+         connectionFactory: @escaping @MainActor (GatewayProfile, DeviceIdentity) -> ShareConnection) {
+        self.connectionFactory = connectionFactory
         self.profiles = profiles
         self.identity = identity
         self.defaults = defaults
@@ -127,7 +138,7 @@ public final class ShareModel {
         self.agents = []
         self.chats = []
         self.target = nil
-        let connection = GatewayConnection(profile: profile, identity: identity)
+        let connection = self.connectionFactory(profile, identity)
         self.connection = connection
         let (stream, continuation) = AsyncStream<(ConnectionState, GatewayHello?)>.makeStream()
         self.pumpTask = Task { [weak self] in
