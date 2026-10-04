@@ -519,7 +519,8 @@ private struct SearchResults: View {
             .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
             .filter { $0.destination != .mcpServers || self.gateway.supportsMCPServers }
             .filter { $0.destination != .voice || self.gateway.voice.supportsStatus }
-        if results.isEmpty, pages.isEmpty {
+        if results.isEmpty, pages.isEmpty,
+           self.gateway.settings.ownsFieldSearch(token: self.queryID, source: source) {
             Text("No settings match “\(self.query)”.", bundle: .module).foregroundStyle(.secondary)
         }
         ForEach(pages) { page in

@@ -43,7 +43,7 @@ public final class GatewaySettingsModel {
     /// Ownership only for outstanding plugin credential inspections, never completed plugin IDs.
     @ObservationIgnored private var credentialLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private let scopes: () -> [String]
-    @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
+    @ObservationIgnored private let fieldSearchPreparation = SettingsFieldSearchPreparation()
     package struct FieldSearchSourceRevision: Hashable, Sendable {
         let schema: Int
         let snapshot: Int
@@ -63,6 +63,7 @@ public final class GatewaySettingsModel {
     }
     #if DEBUG
     @ObservationIgnored package var fieldSearchProbe: SettingsFieldSearchProbe?
+    @ObservationIgnored package var fieldSearchBeforeWork: (@Sendable () -> Void)?
     #endif
     @ObservationIgnored private var schemaGeneration = 0
     @ObservationIgnored private var editRevision = 0
@@ -231,25 +232,26 @@ public final class GatewaySettingsModel {
         return nil
     }
 
-    /// Every setting, for search. Rebuilt when the schema or the config changes.
+    /// The prepared index, if it fits the bounded cache and belongs to the current source.
     public var searchIndex: [ConfigField] {
-        let key = "\(self.schemaGeneration)|\(self.snapshot?.hash ?? "")"
-        if let cache = self.searchCache, cache.key == key { return cache.fields }
-        #if DEBUG
-        self.fieldSearchProbe?.record(.traversal)
-        #endif
-        let fields = (self.schema ?? .open).searchIndex(config: self.edits.base)
-        self.searchCache = (key, fields)
-        return fields
+        self.fieldSearchPreparation.cachedFields(for: self.fieldSearchSourceRevision)
     }
 
-    /// Admission is keyed by local identity, never by comparing or hashing query text on Main.
+    /// Main only captures COW inputs and local ownership; the worker does all text work.
     package func prepareFieldSearch(matching query: String, token: UUID) async {
         guard !Task.isCancelled else { return }
         let source = self.fieldSearchSourceRevision
         self.fieldSearchOwner = token
-        let fields = self.searchFields(matching: query)
-        guard !Task.isCancelled, self.fieldSearchOwner == token, self.fieldSearchSourceRevision == source else { return }
+        #if DEBUG
+        let ticket = self.fieldSearchPreparation.enqueue(.init(token: token, source: source,
+            schema: self.schema ?? .open, config: self.snapshot?.config ?? self.edits.base, query: query,
+            probe: self.fieldSearchProbe, beforeWork: self.fieldSearchBeforeWork))
+        #else
+        let ticket = self.fieldSearchPreparation.enqueue(.init(token: token, source: source,
+            schema: self.schema ?? .open, config: self.snapshot?.config ?? self.edits.base, query: query))
+        #endif
+        guard let fields = await self.fieldSearchPreparation.wait(ticket), !Task.isCancelled,
+              self.fieldSearchOwner == token, self.fieldSearchSourceRevision == source else { return }
         self.fieldSearchPublication = FieldSearchPublication(token: token, source: source, fields: fields)
     }
     package func fieldSearchResults(token: UUID, source: FieldSearchSourceRevision) -> [ConfigField] {
@@ -260,20 +262,9 @@ public final class GatewaySettingsModel {
         self.fieldSearchOwner == token && self.fieldSearchPublication?.token == token
             && self.fieldSearchPublication?.source == source && self.fieldSearchSourceRevision == source
     }
-    /// The unchanged eager semantics; worker preparation replaces this only after causal proof.
-    private func searchFields(matching query: String) -> [ConfigField] {
-        let terms = query.lowercased().split(separator: " ").map(String.init)
-        return Array(self.searchIndex.filter { field in
-            #if DEBUG
-            self.fieldSearchProbe?.record(.normalization)
-            #endif
-            let haystack = ([field.label, field.help ?? ""] + field.path).joined(separator: " ").lowercased()
-            return terms.allSatisfy { haystack.contains($0) }
-        }.prefix(60))
-    }
     #if DEBUG
-    /// Neutral drain seam; search remains synchronous until its causal repro is committed.
-    package func waitForFieldSearchPreparation() async {}
+    package var fieldSearchBudget: SettingsFieldSearchPreparation.BudgetSnapshot { self.fieldSearchPreparation.budgetSnapshot }
+    package func waitForFieldSearchPreparation() async { await self.fieldSearchPreparation.drain() }
     #endif
 
     // MARK: Editing

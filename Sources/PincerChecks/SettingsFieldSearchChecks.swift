@@ -12,7 +12,7 @@ import Foundation
     let found = model.fieldSearchResults(token: token, source: model.fieldSearchSourceRevision)
     check(!found.isEmpty && found.count <= 60, "actual field search publishes matching fields within the existing result limit")
     let counts = probe.snapshot()
-    check(counts.mainTraversals == 0 && counts.mainNormalizations == 0,
+    check(counts.mainTraversals == 0 && counts.mainNormalizations == 0 && counts.mainMatches == 0,
           "actual field index traversal and normalization run off Main")
     check(counts.mainTraversals + counts.offMainTraversals > 0
           && counts.mainNormalizations + counts.offMainNormalizations > 0,
@@ -31,6 +31,15 @@ import Foundation
     }, scopes: { [] })
     await model.load()
     await checkActualFieldSearch(model, query: "distinct example")
+    let source = model.fieldSearchSourceRevision
+    let token = UUID()
+    await model.prepareFieldSearch(matching: "EXAMPLE label", token: token)
+    check(model.fieldSearchResults(token: token, source: source).map(\.key) == ["example"],
+          "actual normalized cache preserves label/path multi-term matching")
+    check(model.fieldSearchBudget.cachedCount <= SettingsFieldSearchPreparation.cacheFieldLimit
+          && model.fieldSearchBudget.cachedBytes <= SettingsFieldSearchPreparation.cacheByteLimit,
+          "actual field index cache obeys its count and logical-byte budgets")
+    check(!model.ownsFieldSearch(token: UUID(), source: source), "stale query identity cannot navigate prepared fields")
 }
 
 @MainActor func runDemoSettingsFieldSearchChecks() async {
