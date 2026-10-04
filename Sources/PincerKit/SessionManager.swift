@@ -485,6 +485,8 @@ public final class SessionManagerModel {
     @ObservationIgnored private var previewsInFlight: Set<String> = []
     /// Bumped whenever a key's preview is dropped, so a reply already in flight is ignored.
     @ObservationIgnored private var previewGenerations: [String: Int] = [:]
+    /// Ownership only for currently outstanding rewind loads; completed keys are removed.
+    @ObservationIgnored private var rewindLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool,
@@ -657,14 +659,21 @@ public final class SessionManagerModel {
 
     /// Recent user messages `sessions.rewind` can cut back to (`chat.history`).
     public func loadRewindPoints(key: String) async {
-        guard self.supportsRewind else { return }
+        guard self.supportsRewind, !Task.isCancelled else { return }
+        let owner = UUID()
+        self.rewindLoadOwners[key] = owner
+        defer {
+            if self.rewindLoadOwners[key] == owner { self.rewindLoadOwners[key] = nil }
+        }
         do {
             let result = try await self.call(SessionManager.historyMethod, [
                 "sessionKey": .string(key), "limit": .number(Double(SessionManager.rewindHistoryLimit)),
             ])
+            guard self.rewindLoadOwners[key] == owner, !Task.isCancelled else { return }
             self.rewindPoints[key] = SessionRewindPoint.points(history: result)
             self.rewindErrors[key] = nil
         } catch {
+            guard self.rewindLoadOwners[key] == owner, !Task.isCancelled else { return }
             self.rewindErrors[key] = Self.message(error)
         }
     }
@@ -871,6 +880,7 @@ public final class SessionManagerModel {
         self.previewErrors = [:]
         self.branches = [:]
         self.branchErrors = [:]
+        self.rewindLoadOwners = [:]
         self.rewindPoints = [:]
         self.rewindErrors = [:]
         if self.hasLoaded { self.scheduleReload() }
@@ -913,7 +923,9 @@ public final class SessionManagerModel {
 
     private func forgetCaches(_ key: String) {
         self.forgetPreview(key)
+        self.rewindLoadOwners[key] = nil
         self.rewindPoints[key] = nil
+        self.rewindErrors[key] = nil
     }
 
     /// Views reload a preview (and rewind points) whenever the entry goes missing.
