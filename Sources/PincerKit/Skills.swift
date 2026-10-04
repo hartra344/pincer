@@ -557,6 +557,7 @@ public final class SkillsModel {
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
+    @ObservationIgnored private var feedbackContext = UUID()
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var searchGeneration = 0
     @ObservationIgnored private var inFlightQuery: String?
@@ -701,6 +702,7 @@ public final class SkillsModel {
     }
 
     public func clearMessages() {
+        self.feedbackContext = UUID()
         self.lastMessage = nil
         self.actionError = nil
         self.lastWarnings = []
@@ -773,19 +775,24 @@ public final class SkillsModel {
     {
         self.busy.insert(key)
         self.clearMessages()
+        let feedbackContext = self.feedbackContext
         defer { self.busy.remove(key) }
         do {
             let response = try await self.call(method, params)
             let text = message(response)
-            self.lastMessage = text
-            self.lastWarnings = Skills.trustWarnings(response: response)
+            if self.feedbackContext == feedbackContext {
+                self.lastMessage = text
+                self.lastWarnings = Skills.trustWarnings(response: response)
+            }
             await self.reload()
             return .done(text)
         } catch {
             let text = Self.message(error)
-            self.lastWarnings = Skills.trustWarnings(error: error)
+            if self.feedbackContext == feedbackContext {
+                self.lastWarnings = Skills.trustWarnings(error: error)
+            }
             if Skills.forceRequired(error) { return .forceRequired(text) }
-            self.actionError = text
+            if self.feedbackContext == feedbackContext { self.actionError = text }
             return .failed(text)
         }
     }

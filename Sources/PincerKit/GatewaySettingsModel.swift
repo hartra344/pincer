@@ -215,41 +215,41 @@ public final class GatewaySettingsModel {
         self.editRevision += 1
         self.edits.set(path, value)
         if self.writeSubmitted != nil { self.writeIntent.set(path, value) }
-        self.edits.texts.removeValue(forKey: ConfigPath.string(path))
-        self.edits.inputErrors.removeValue(forKey: ConfigPath.string(path))
+        self.edits.texts.removeValue(forKey: path)
+        self.edits.inputErrors.removeValue(forKey: path)
         self.clearIssue(at: path)
     }
 
     /// Text typed into a field: kept as typed, and applied once it parses.
     public func setText(_ text: String, for field: ConfigField) {
         self.editRevision += 1
-        self.edits.texts[field.id] = text
+        self.edits.texts[field.path] = text
         self.clearIssue(at: field.path)
         if field.kind == .secret, text.isEmpty {
             // An empty secret box keeps the saved secret.
             let value = self.savedValue(at: field.path)
             self.edits.set(field.path, value)
             if self.writeSubmitted != nil { self.writeIntent.set(field.path, value) }
-            self.edits.inputErrors.removeValue(forKey: field.id)
+            self.edits.inputErrors.removeValue(forKey: field.path)
             return
         }
         do {
             let value = try field.value(fromText: text)
             self.edits.set(field.path, value)
             if self.writeSubmitted != nil { self.writeIntent.set(field.path, value) }
-            self.edits.inputErrors.removeValue(forKey: field.id)
+            self.edits.inputErrors.removeValue(forKey: field.path)
         } catch {
-            self.edits.inputErrors[field.id] = error.localizedDescription
+            self.edits.inputErrors[field.path] = error.localizedDescription
         }
     }
 
     public func text(for field: ConfigField) -> String {
-        if let text = self.edits.texts[field.id] { return text }
+        if let text = self.edits.texts[field.path] { return text }
         if field.kind == .secret { return "" }
         return field.text(for: self.value(at: field.path))
     }
 
-    public func inputError(for field: ConfigField) -> String? { self.edits.inputErrors[field.id] }
+    public func inputError(for field: ConfigField) -> String? { self.edits.inputErrors[field.path] }
 
     public func revert(_ path: [String]) {
         self.editRevision += 1
