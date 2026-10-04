@@ -119,3 +119,33 @@ struct ChannelActionCompletionOwnershipTests {
         #expect(model.notice?.isError == false)
     }
 }
+
+extension ChannelActionCompletionOwnershipTests {
+    @Test func currentUnsupportedFailureRemainsVisible() async {
+        let key = ChannelAccountKey(channel: "telegram", accountId: "default")
+        let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { _, _ in
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "channel telegram does not support start", details: nil)
+        }
+        #expect(await model.start(key) == false)
+        #expect(model.operation(for: key)?.state.error != nil)
+        #expect(model.notice?.isError == true)
+        #expect(model.isUnsupported(.start, channel: "telegram"))
+    }
+
+    @Test func canceledActionDoesNotPublishComputedResponse() async throws {
+        let gate = ChannelActionDeliveryGate()
+        let key = ChannelAccountKey(channel: "telegram", accountId: "default")
+        let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { method, _ in
+            if method == "channels.stop" { await gate.hold() }
+            return ["channel": "telegram", "accountId": "default", "stopped": true]
+        }
+        let action = Task { await model.stop(key) }
+        defer { gate.release(); action.cancel() }
+        try await gate.waitForEntry()
+        action.cancel()
+        gate.release()
+        #expect(await action.value == false)
+        #expect(model.operation(for: key) == nil)
+        #expect(model.notice == nil)
+    }
+}
