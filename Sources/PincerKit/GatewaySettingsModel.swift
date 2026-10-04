@@ -53,6 +53,12 @@ public final class GatewaySettingsModel {
         self.rootWritableWithoutAdmin = rootWritableWithoutAdmin
     }
 
+    init(request: @escaping GatewayConfigClient.Request, scopes: @escaping () -> [String], rootWritableWithoutAdmin: String? = nil) {
+        self.client = GatewayConfigClient(request: request)
+        self.scopes = scopes
+        self.rootWritableWithoutAdmin = rootWritableWithoutAdmin
+    }
+
     /// The Gateway granted `operator.admin`, which every config and plugin write needs.
     public var canEdit: Bool { self.scopes().contains(GatewayConnection.adminScope) }
 
