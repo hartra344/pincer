@@ -1,7 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-func runRunDurationOverflowChecks() {
+@MainActor func runRunDurationOverflowChecks() {
     var timeline = RunTimeline()
     let received = Date(timeIntervalSince1970: 1)
     // LOCAL legal AgentEvent boundary only; no Gateway response or event is modified.
