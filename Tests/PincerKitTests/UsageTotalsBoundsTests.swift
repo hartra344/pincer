@@ -43,6 +43,32 @@ struct UsageTotalsBoundsTests {
         #expect(summed.missingCostByModel["provider/model"] == Int.max)
     }
 
+    @Test(arguments: [Double.nan, Double.infinity, -Double.infinity, -1.0, -1e30])
+    func invalidCountsDefaultToZero(_ value: Double) {
+        let totals = UsageTotals(.object(["input": .number(value), "totalTokens": .number(value),
+                                        "missingCostByModel": .object(["provider/model": .number(value)])]))
+        #expect(totals.input == 0 && totals.totalTokens == 0)
+        #expect(totals.missingCostByModel["provider/model"] == 0)
+    }
+
+    @Test func largestRepresentableDoubleBelowIntegerLimitConvertsExactly() {
+        let value = Double(Int.max).nextDown
+        let totals = UsageTotals(.object(["input": .number(value)]))
+        #expect(totals.input == Int(value))
+        #expect(totals.totalTokens == Int(value))
+    }
+
+    @Test func maximumBoundaryAndMissingModelCountsAreBounded() {
+        let totals = UsageTotals(.object(["input": .number(Double(Int.max)),
+            "missingCostEntries": .number(1e30), "missingCostByModel": .object(["provider/model": .number(1e30)])]))
+        #expect(totals.input == Int.max && totals.missingCostEntries == Int.max)
+        #expect(totals.missingCostByModel["provider/model"] == Int.max)
+        var negative = UsageTotals()
+        negative.input = Int.min
+        negative.cacheRead = Int.min
+        #expect((negative + .zero).input == 0 && negative.cacheTokens == 0)
+    }
+
     @Test func ordinaryRoundingFallbackAndExplicitTotalsRemainUnchanged() {
         let summed = UsageTotals(Fixtures.json(#"{"input":10.6,"output":2.4,"cacheRead":3,"cacheWrite":4}"#))
         #expect(summed.input == 11 && summed.output == 2)
