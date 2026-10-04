@@ -160,7 +160,7 @@ public enum BackgroundRefreshPlanner {
             .sorted { $0.activityMs > $1.activityMs }
         return (requests + replies.prefix(self.maxPerGateway).map { row in
             Notifier.replyContent(
-                id: "reply:\(row.key):\(Int(row.activityMs))",
+                id: ActivityNotificationIdentity.make(key: row.key, activityMs: row.activityMs),
                 title: Notifier.replyTitle(rowTitle: row.title, agent: snapshot.agent(row.agentId)),
                 body: Notifier.clip(row.preview ?? "New activity"),
                 target: Notifier.Target(gatewayId: gatewayId, sessionKey: row.key))
