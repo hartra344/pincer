@@ -4,7 +4,7 @@ import CryptoKit
 import ImageIO
 import Network
 import Observation
-import PincerKit
+@testable import PincerKit
 import PincerPush
 import SQLite3
 import Synchronization
