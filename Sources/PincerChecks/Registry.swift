@@ -172,6 +172,9 @@ enum Suites {
             Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
+            #if DEBUG
+            Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks() },
+            #endif
             Section("Command palette") { runCommandPaletteChecks() },
             Section("Composer drafts") { await checkDrafts() },
             Section("Message search") { checkMessageSearchLogic() },
@@ -254,6 +257,9 @@ enum Suites {
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
         Section("Bookmark sync (demo)") { await runDemoBookmarkSync() },
+        #if DEBUG
+        Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() },
+        #endif
         Section("Agent reply targets (demo)") { await runDemoReplyTargets() },
         Section("Reaction level (demo)") { await runDemoReactionLevel() },
         Section("Reactions on users.prefs (demo, Gateway reactions off)") { await runDemoPrefsReactions() },

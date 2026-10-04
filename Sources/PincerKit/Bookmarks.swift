@@ -100,6 +100,9 @@ public final class BookmarkStore {
     @ObservationIgnored var previewPreparationQueue = BookmarkPreviewPreparationQueue.shared
     @ObservationIgnored private var previewOperations: [String: UUID] = [:]
 #if DEBUG
+    @ObservationIgnored package var persistenceEncodingProbe: BookmarkPersistenceEncodingProbe?
+    /// Neutral seam: the current synchronous save is already complete when this returns.
+    package func waitForPersistenceEncoding() async {}
     /// Causal probe for the actual item-toggle preview preparation, never for removal.
     @ObservationIgnored var previewPreparationProbe: (@Sendable (String, Bool) -> Void)?
     func waitForPreviewPreparation() async { await self.previewPreparationQueue.waitUntilIdle() }
@@ -358,6 +361,9 @@ public final class BookmarkStore {
 
     private func save() {
         self.persistenceRevision += 1
+        #if DEBUG
+        self.persistenceEncodingProbe?.record()
+        #endif
         if let data = try? JSONEncoder().encode(self.bookmarks) { self.defaults.set(data, forKey: self.defaultsKey) }
     }
 }
