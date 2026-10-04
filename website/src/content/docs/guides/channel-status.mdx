@@ -87,6 +87,8 @@ The [demo](../../getting-started/try-the-demo/) has a connected Discord account,
 
 ## Current limits
 
+Gateway restart notices remain safe even when the reported delay is unusually large. Pincer keeps its existing one-to-ten-second wait before showing that it is reconnecting; a shutdown without a restart delay remains a terminal stop.
+
 - Channel Status has been tested against the demo and the [mock gateway](../../development/mock-gateway/) only.
 - The gateway has no channel-specific event, so the page updates on health changes, when it opens and when you refresh.
 - Some channels can't be started or logged out at runtime. Pincer only finds out when the gateway says so, then hides that action.

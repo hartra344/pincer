@@ -87,7 +87,52 @@ struct TranscriptPremeasureTests {
                 "warm-cache probes should reuse the memoized full-source digest")
     }
 
-    @Test func changedTailRejectsAResultForItsPriorRowRevision() async {
+    private enum OwnershipFixtureError: Error { case admissionRejected }
+
+    @MainActor private final class OwnershipCompletion {
+        private var terminalResult: Result<[PremeasuredRow], Error>?
+        private var continuation: CheckedContinuation<[PremeasuredRow], Error>?
+
+        func install(_ continuation: CheckedContinuation<[PremeasuredRow], Error>) {
+            if let result = self.terminalResult {
+                continuation.resume(with: result)
+                return
+            }
+            self.continuation = continuation
+        }
+        func finish(_ result: Result<[PremeasuredRow], Error>) {
+            guard self.terminalResult == nil else { return }
+            self.terminalResult = result
+            self.continuation?.resume(with: result)
+            self.continuation = nil
+        }
+    }
+
+    private func completedOwnershipResult(_ job: PremeasureJob, controller: TranscriptListController) async throws -> [PremeasuredRow] {
+        let completion = OwnershipCompletion()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                completion.install(continuation)
+                guard !Task.isCancelled else {
+                    controller.premeasure.cancelAll()
+                    completion.finish(.failure(CancellationError()))
+                    return
+                }
+                // This functional ownership check awaits the actual worker, rather than
+                // requiring a result from a deliberately bounded synchronous warm pass.
+                let admitted = controller.premeasure.admission.submit(job, env: controller.renderer.textEnvironment,
+                    epoch: controller.premeasure.epoch) { rows in completion.finish(.success(rows)) }
+                if !admitted { completion.finish(.failure(OwnershipFixtureError.admissionRejected)) }
+            }
+        } onCancel: {
+            Task { @MainActor in
+                controller.premeasure.cancelAll()
+                completion.finish(.failure(CancellationError()))
+            }
+        }
+    }
+
+    @Test(.timeLimit(.minutes(2))) func changedTailRejectsAResultForItsPriorRowRevision() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let seedRenderer = TranscriptLayoutCacheTests.renderer(scratch)
@@ -102,9 +147,9 @@ struct TranscriptPremeasureTests {
         #expect(controller.accept([oldRow], contextChanged: false) == .initial)
         let oldJob = try! #require(driver.split([0], all: controller.rows, width: 700,
                                                 renderer: controller.renderer).offload.first)
-        let oldResult = await TranscriptPremeasurer.shared.measureWithin(
-            5, jobs: [oldJob], env: controller.renderer.textEnvironment, epoch: driver.epoch)
+        let oldResult = try await self.completedOwnershipResult(oldJob, controller: controller)
         #expect(oldResult.count == 1)
+        #expect(oldResult.first?.discarded == false)
 
         #expect(controller.accept([newRow], contextChanged: false) == .tail(0))
         #expect(driver.adopt(oldResult, width: 700, epoch: driver.epoch.current).isEmpty,
@@ -113,10 +158,13 @@ struct TranscriptPremeasureTests {
                                        contentWidth: TranscriptMetrics.contentWidth(rowWidth: 700)))
         let newJob = try! #require(driver.split([0], all: controller.rows, width: 700,
                                                 renderer: controller.renderer).offload.first)
-        let newResult = TranscriptPremeasurer.shared.measureWithin(
-            5, jobs: [newJob], env: controller.renderer.textEnvironment, epoch: driver.epoch)
+        let newResult = try await self.completedOwnershipResult(newJob, controller: controller)
+        #expect(newResult.count == 1 && newResult.first?.discarded == false)
         #expect(newResult.first?.bodies.first?.key.source == newText)
         #expect(newJob.rowRevision != oldJob.rowRevision)
+        #expect(driver.adopt(newResult, width: 700, epoch: driver.epoch.current).count == 1)
+        #expect(TranscriptText.isWarm(TranscriptText.Key(source: newText, tone: .primary, dark: false),
+                                     contentWidth: TranscriptMetrics.contentWidth(rowWidth: 700)))
     }
 
     @Test func warmRowMemoRechecksAfterTextCacheEviction() async {

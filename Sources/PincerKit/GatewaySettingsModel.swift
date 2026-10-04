@@ -40,6 +40,8 @@ public final class GatewaySettingsModel {
     @ObservationIgnored var onRestartRequired: (@MainActor (String) -> Void)?
 
     @ObservationIgnored private let client: GatewayConfigClient
+    /// Ownership only for outstanding plugin credential inspections, never completed plugin IDs.
+    @ObservationIgnored private var credentialLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private let scopes: () -> [String]
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
     @ObservationIgnored private var schemaGeneration = 0
@@ -143,7 +145,16 @@ public final class GatewaySettingsModel {
     }
 
     public func loadCredentials(for plugin: PluginInfo) async {
-        if let credentials = await self.client.credentials(for: plugin.id) { self.credentials[plugin.id] = credentials }
+        guard !Task.isCancelled else { return }
+        let owner = UUID()
+        self.credentialLoadOwners[plugin.id] = owner
+        defer {
+            if self.credentialLoadOwners[plugin.id] == owner { self.credentialLoadOwners[plugin.id] = nil }
+        }
+        if let credentials = await self.client.credentials(for: plugin.id) {
+            guard !Task.isCancelled, self.credentialLoadOwners[plugin.id] == owner else { return }
+            self.credentials[plugin.id] = credentials
+        }
     }
 
     func handlePluginsChanged() {
