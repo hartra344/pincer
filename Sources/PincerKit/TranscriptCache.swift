@@ -312,14 +312,27 @@ public enum TranscriptCache {
 
     /// Digests of the transcripts on disk for a Gateway (the file names carry no session key).
     public static func cachedDigests(gatewayId: UUID, root: URL? = Self.root) -> [String] {
-        guard let directory = self.directory(gatewayId: gatewayId, root: root),
-              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
+        self.cachedDigests(gatewayId: gatewayId, root: root, beforeEnumeration: nil)
+    }
+
+    static func cachedDigests(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)?) -> [String] {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root) else { return [] }
+        beforeEnumeration?()
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
         else { return [] }
         return names.compactMap { name in
             guard name.hasSuffix(".json") else { return nil }
             let digest = String(name.dropLast(5))
             return self.isCacheDigest(digest) ? digest : nil
         }
+    }
+
+    /// Inventory shares the writer's executor; callers still decide current live ownership after awaiting it.
+    static func cachedDigestsAsync(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)? = nil,
+                                   didPrepare: (@Sendable () async -> Void)? = nil) async -> [String]
+    {
+        await Writer.shared.inventory(gatewayId: gatewayId, root: root,
+                                      beforeEnumeration: beforeEnumeration, didPrepare: didPrepare)
     }
 
     /// Removes sidecars left behind without their transcript manifest. The scan and deletion run
@@ -882,6 +895,15 @@ public enum TranscriptCache {
             try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
             try? FileManager.default.removeItem(at: url)
             try? FileManager.default.removeItem(at: TranscriptCache.segmentsDirectory(of: url))
+        }
+
+        func inventory(gatewayId: UUID, root: URL?, beforeEnumeration: (@Sendable () -> Void)?,
+                       didPrepare: (@Sendable () async -> Void)?) async -> [String]
+        {
+            let inventory = TranscriptCache.cachedDigests(gatewayId: gatewayId, root: root,
+                                                         beforeEnumeration: beforeEnumeration)
+            await didPrepare?()
+            return inventory
         }
 
         /// Sweeps only recognized transcript sidecars whose matching manifest is absent. Runs on

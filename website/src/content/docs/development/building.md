@@ -265,3 +265,6 @@ Cold transcript premeasurement prepares exact message sources on one shared back
 
 
 Debug reconnect checks wait for the current connection's actual bootstrap and preference/reconciliation tasks to finish before comparing RPC counts. The reconnect history-count check also requires successfully persisted launch caches; a completed prefetch alone does not prove a cache write succeeded. Release checks retain the legacy readiness fallback.
+
+
+Cache-reconciliation checks observe the actual directory inventory on the cache writer's background actor. They verify that an authoritative complete session list removes orphan manifests while current chats and retained outbox entries keep theirs, including owners created while inventory is in flight. Session-key hashing and live-owner bookkeeping remain separate main-actor work; these checks do not establish a physical interaction-latency improvement.
