@@ -5,13 +5,15 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--destination", required=True, help="Explicit xcodebuild iOS Simulator destination")
-parser.add_argument("--timeout", type=int, default=600, help="Per-process fence in seconds")
+parser.add_argument("--timeout", type=int, default=300, help="Per-process fence in seconds")
 args = parser.parse_args()
 if args.timeout <= 0:
     parser.error("timeout must be positive")
 def interrupted(_signal, _frame):
     raise KeyboardInterrupt("Interrupted; stopping only owned process group")
 signal.signal(signal.SIGTERM, interrupted)
+if "platform=iOS Simulator" not in args.destination:
+    parser.error("destination must select platform=iOS Simulator")
 repo = Path(__file__).resolve().parent.parent
 root = Path(tempfile.mkdtemp(prefix="pincer-quicklook-app-host-"))
 print("Owned harness and results:", root, flush=True)
@@ -41,10 +43,94 @@ source = (repo / "Tests/PincerUITests/QuickLookPresentationLifecycleHostedTests.
 needle = "@MainActor extension TranscriptUIKitHostedTests {"
 if source.count(needle) != 1:
     raise RuntimeError("Committed probe extension changed; review mapping before running")
-source = source.replace(needle, "@MainActor struct QuickLookHarnessTests {")
+source = source.replace(needle, "@MainActor @Suite struct QuickLookHarnessTests {")
 (root / "Tests/QuickLookHarnessTests.swift").write_text(source)
 (root / "Tests/Support.swift").write_text('import Foundation\n@MainActor func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {\n let deadline=ContinuousClock.now.advanced(by:timeout)\n repeat { if condition() { return true }; if Task.isCancelled { return false }; try? await Task.sleep(for: .milliseconds(10)) } while ContinuousClock.now < deadline\n return !Task.isCancelled && condition()\n}\n')
-spec = {'name': 'QuickLookHarness', 'options': {'bundleIdPrefix': 'chat.pincer.verification', 'deploymentTarget': {'iOS': '18.0'}}, 'packages': {'Pincer': {'path': '/Users/travisvu/.codex/worktrees/bookmark-preview/Pincer'}}, 'settings': {'base': {'SWIFT_VERSION': '6.0', 'GENERATE_INFOPLIST_FILE': 'YES', 'CODE_SIGNING_ALLOWED': 'NO', 'ENABLE_TESTABILITY': 'YES', 'TARGETED_DEVICE_FAMILY': '1,2'}}, 'targets': {'QuickLookHarnessApp': {'type': 'application', 'platform': 'iOS', 'sources': ['App'], 'settings': {'base': {'INFOPLIST_KEY_UIApplicationSceneManifest_Generation': 'YES', 'INFOPLIST_KEY_UILaunchScreen_Generation': 'YES'}}}, 'QuickLookHarnessTests': {'type': 'bundle.unit-test', 'platform': 'iOS', 'sources': ['Tests'], 'dependencies': [{'target': 'QuickLookHarnessApp'}, {'package': 'Pincer', 'product': 'PincerUI'}, {'package': 'Pincer', 'product': 'PincerKit'}], 'settings': {'base': {'TEST_HOST': '$(BUILT_PRODUCTS_DIR)/QuickLookHarnessApp.app/QuickLookHarnessApp', 'BUNDLE_LOADER': '$(TEST_HOST)'}}}}, 'schemes': {'QuickLookHarness': {'build': {'targets': {'QuickLookHarnessApp': 'all', 'QuickLookHarnessTests': 'test'}}, 'test': {'targets': ['QuickLookHarnessTests'], 'environmentVariables': {'PINCER_QUICKLOOK_APP_HOSTED': '1', 'PINCER_KEYCHAIN': 'memory', 'PINCER_DRAFTS': 'off', 'PINCER_DEV_NAMESPACE': 'quicklook-app-host'}}}}}
+spec = json.loads(r'''{
+  "name": "QuickLookHarness",
+  "options": {
+    "bundleIdPrefix": "__BUNDLE_PREFIX__",
+    "deploymentTarget": {
+      "iOS": "18.0"
+    }
+  },
+  "packages": {
+    "Pincer": {
+      "path": "__REPO__"
+    }
+  },
+  "settings": {
+    "base": {
+      "SWIFT_VERSION": "6.0",
+      "GENERATE_INFOPLIST_FILE": "YES",
+      "CODE_SIGNING_ALLOWED": "NO",
+      "ENABLE_TESTABILITY": "YES",
+      "TARGETED_DEVICE_FAMILY": "1,2"
+    }
+  },
+  "targets": {
+    "QuickLookHarnessApp": {
+      "type": "application",
+      "platform": "iOS",
+      "sources": [
+        "App"
+      ],
+      "settings": {
+        "base": {
+          "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
+          "INFOPLIST_KEY_UILaunchScreen_Generation": "YES"
+        }
+      }
+    },
+    "QuickLookHarnessTests": {
+      "type": "bundle.unit-test",
+      "platform": "iOS",
+      "sources": [
+        "Tests"
+      ],
+      "dependencies": [
+        {
+          "target": "QuickLookHarnessApp"
+        },
+        {
+          "package": "Pincer",
+          "product": "PincerUI"
+        },
+        {
+          "package": "Pincer",
+          "product": "PincerKit"
+        }
+      ],
+      "settings": {
+        "base": {
+          "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/QuickLookHarnessApp.app/QuickLookHarnessApp",
+          "BUNDLE_LOADER": "$(TEST_HOST)"
+        }
+      }
+    }
+  },
+  "schemes": {
+    "QuickLookHarness": {
+      "build": {
+        "targets": {
+          "QuickLookHarnessApp": "all",
+          "QuickLookHarnessTests": "test"
+        }
+      },
+      "test": {
+        "targets": [
+          "QuickLookHarnessTests"
+        ],
+        "environmentVariables": {
+          "PINCER_QUICKLOOK_APP_HOSTED": "1",
+          "PINCER_KEYCHAIN": "memory",
+          "PINCER_DRAFTS": "off",
+          "PINCER_DEV_NAMESPACE": "__NAMESPACE__"
+        }
+      }
+    }
+  }
+}''')
 spec["packages"]["Pincer"]["path"] = str(repo)
 spec["options"]["bundleIdPrefix"] = "chat.pincer.verification." + namespace
 spec["schemes"]["QuickLookHarness"]["test"]["environmentVariables"]["PINCER_DEV_NAMESPACE"] = namespace
