@@ -132,6 +132,12 @@ public enum SessionManager {
         return max(0, now.timeIntervalSince1970 - started / 1000)
     }
 
+    /// Shared actual row accessibility formatter; neutral extraction preserves its conversion policy.
+    package static func spokenDuration(_ seconds: TimeInterval) -> String {
+        let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes, .seconds], width: .wide)
+        return Duration.seconds(max(0, Int(seconds))).formatted(style)
+    }
+
     /// Localized short units: "4 sec", "2 min 5 sec", "1 hr 3 min".
     public static func formatDuration(_ seconds: TimeInterval) -> String {
         let total: Int
