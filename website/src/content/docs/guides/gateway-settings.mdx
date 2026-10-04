@@ -148,6 +148,8 @@ In **Channels**, **Devices & Nodes**, and **Pairing Requests**, errors and warni
 
 ## Pairing Requests
 
+Canceling a pending list refresh keeps the existing pairing requests and access status intact. A canceled refresh cannot replace a newer refresh.
+
 <DocScreenshot src={pairing} ios={pairingIOS} alt="Pairing Requests with fictional Telegram and Discord senders and Approve and Dismiss controls." caption="The demo includes fictional people and account identifiers. No real account is paired by these examples." />
 
 When a channel account uses `dmPolicy: "pairing"`, someone new who messages it has to be let in before they can talk to your agents. **Pairing Requests** lists who's waiting, newest first, and the sidebar badge shows how many.
