@@ -18,7 +18,8 @@ struct ReadAloudRateHostedTests {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         scratch.defaults.set(rate, forKey: ReadAloudSettings.rateKey)
-        #expect(scratch.defaults.double(forKey: ReadAloudSettings.rateKey) == rate)
+        #expect(rate.isNaN ? scratch.defaults.double(forKey: ReadAloudSettings.rateKey).isNaN
+                           : scratch.defaults.double(forKey: ReadAloudSettings.rateKey) == rate)
         let app = AppModel(defaults: scratch.defaults)
         let state = DeviceSpeechCatalog { locale in
             DeviceSpeechCatalogSnapshot(localeIdentifier: locale, voices: [], dictationSupport: nil)
@@ -56,6 +57,11 @@ struct ReadAloudRateHostedTests {
 
     @Test(.timeLimit(.minutes(1))) func oversizedFiniteStoredRateRendersActualSettingsWithoutTrap() async {
         await self.render(Double.greatestFiniteMagnitude)
+    }
+
+    @Test(.timeLimit(.minutes(1)), arguments: [Double.nan, .infinity, -.infinity, -Double.greatestFiniteMagnitude])
+    func invalidStoredRatesRenderActualSettings(_ rate: Double) async {
+        await self.render(rate)
     }
 
     @Test(.timeLimit(.minutes(1)), arguments: [0.3, 0.5, 0.7])
