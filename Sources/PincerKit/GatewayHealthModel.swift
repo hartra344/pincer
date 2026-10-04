@@ -137,6 +137,8 @@ public final class GatewayHealthModel {
     @ObservationIgnored private var restartTimer: Task<Void, Never>?
     @ObservationIgnored private var notBackTimer: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
+    // A heartbeat event supersedes only older heartbeat responses and errors.
+    @ObservationIgnored private var heartbeatEventRevision = 0
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, localDeviceId: String?,
          simulatedRestart: Bool = false, quietsInitialIssues: Bool = false) {
@@ -392,6 +394,7 @@ public final class GatewayHealthModel {
             }
         case "heartbeat":
             if let beat = GatewayHeartbeat(payload) {
+                self.heartbeatEventRevision += 1
                 self.heartbeat = beat
                 self.heartbeatLoaded = true
                 self.prune(.heartbeat)
@@ -540,12 +543,15 @@ public final class GatewayHealthModel {
     /// Nil when the section is unavailable, the call failed, or a newer load started.
     private func call(_ section: Section, _ params: JSONValue, _ generation: Int) async -> JSONValue? {
         guard self.isAvailable(section) else { return nil }
+        let heartbeatEventRevision = self.heartbeatEventRevision
         do {
             let result = try await self.request(section.method, params)
-            guard generation == self.generation else { return nil }
+            guard generation == self.generation,
+                  section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             return result
         } catch {
-            guard generation == self.generation else { return nil }
+            guard generation == self.generation,
+                  section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             if Self.isUnavailableMethod(error) {
                 self.unavailable.insert(section)
             } else if section == .health, case let GatewayError.rpc(code, message, _) = error, code == "UNAVAILABLE" {
