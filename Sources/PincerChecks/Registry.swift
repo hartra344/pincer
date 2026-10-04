@@ -94,6 +94,7 @@ enum Suites {
             Section("Approval history") { runApprovalHistoryChecks() },
             Section(nil) { await checkApprovalHistoryModel() },
             Section(nil) { await checkGatewayLogsModel() },
+            Section("Gateway Logs Clear ownership") { await runGatewayLogsClearOwnershipChecks() },
             Section(nil) { await checkExecPolicy() },
             Section(nil) { await checkAgentManagement() },
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
@@ -102,6 +103,7 @@ enum Suites {
             Section("Bridged row authors") { checkBridgedHeaderAuthors() },
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
+            Section("Channel action ownership") { await runChannelActionOwnershipChecks() },
             Section("Settings notice lifetime") { runSettingsNoticeChecks() },
             Section("Settings save reconciliation") { await runSettingsSaveRebaseChecks() },
             Section("Raw config editor ownership") { await runRawConfigEditorChecks() },
@@ -206,6 +208,9 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
+            sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Settings save reconciliation" }) {
             sections.insert(Section("Settings field search work") { await runSettingsFieldSearchChecks() }, at: index + 1)
         }
@@ -257,6 +262,7 @@ enum Suites {
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
         Section("Ingress health issues (demo)") { await runDemoIngressHealthChecks() },
+        Section("Gateway Logs Clear ownership (demo)") { await runDemoGatewayLogsClearOwnershipChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
         Section("Shutdown restart delay bounds (demo)") { await runDemoShutdownRestartDelayBoundsChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
@@ -279,6 +285,7 @@ enum Suites {
         Section("Deep links (demo)") { await runDemoDeepLinks() },
         Section("Channel status (demo)") { await runDemoChannels() },
         Section("Channel status staleness (demo)") { await runDemoChannelPollingChecks() },
+        Section("Channel action ownership (demo)") { await runDemoChannelActionOwnershipChecks() },
         Section("Tool diffs (demo)") { await runDemoToolDiffs() },
         Section("Tool cards (demo)") { await runDemoToolCards() },
         Section("Quoted row preview preparation (demo)") { await runDemoQuotePreviewChecks() },
@@ -334,6 +341,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
+            sections.insert(Section("Log page preparation (demo)") { await runDemoGatewayLogPagePreparationChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Settings save (demo)" }) {
             sections.insert(Section("Settings field search work (demo)") { await runDemoSettingsFieldSearchChecks() }, at: index + 1)
         }

@@ -99,3 +99,5 @@ Gateway restart notices remain safe even when the reported delay is unusually la
 For Telegram, WhatsApp and Signal, the **Channels** settings page has a **Reactions** section, "How freely the agent reacts", per channel and per account. See [The agent's reactions](../transcript/#the-agents-reactions) for the levels.
 
 Health also reports incoming messages that failed or are waiting under queue pressure, per channel account. These delivery issues can be dismissed until their counts grow; pressure keeps pending, claimed, and blocked counts separate. The Demo shows both signals on Telegram and clears them after its simulated recovery.
+
+An account action that finishes after the connection is lost cannot restore its old notice or replace a newer action. The Gateway may already have applied the action; reconnecting refreshes its actual status.
