@@ -242,6 +242,7 @@ enum Suites {
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
+        Section("Ingress health issues (demo)") { await runDemoIngressHealthChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
         Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
@@ -331,6 +332,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
         LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },
