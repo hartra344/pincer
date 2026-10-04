@@ -48,6 +48,8 @@ import Testing
             do {
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
                 try Data([1]).write(to: parent)
+            } catch { return false }
+            do {
                 _ = try FilePreviewFiles.write(Data([2]), name: "No.pdf", mimeType: nil, in: parent.appendingPathComponent("child", isDirectory: true))
                 return false
             } catch { return true }
