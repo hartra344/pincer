@@ -12,6 +12,8 @@ package final class RawConfigEditorDraft {
     package private(set) var isEdited = false
     package private(set) var savePending = false
     @ObservationIgnored private var baselineRevision: UInt64 = 0
+    // A clean revision is authority only for the baseline its worker compared against.
+    @ObservationIgnored private var cleanBaselineVersion: UInt64 = 0
     @ObservationIgnored private var baselineVersion: UInt64 = 0
     @ObservationIgnored private var admittedRevision: UInt64?
     @ObservationIgnored private var active: Task<Void, Never>?
@@ -37,13 +39,16 @@ package final class RawConfigEditorDraft {
         if !self.savePending {
             self.isEdited = false
             self.baselineRevision = self.revision
+            self.cleanBaselineVersion = self.baselineVersion
             self.validationPending = false
             self.pending = nil
         }
     }
     package func updateSnapshot(_ raw: String) {
         let mayInstall = (self.baseline == nil && self.revision == 0)
-            || (self.baseline != nil && self.revision == (self.admittedRevision ?? self.baselineRevision))
+            || (self.baseline != nil && (self.revision == self.admittedRevision
+                || (self.admittedRevision == nil && self.revision == self.baselineRevision
+                    && self.cleanBaselineVersion == self.baselineVersion)))
         self.baseline = raw
         self.baselineVersion &+= 1
         if mayInstall { self.install(raw) }
@@ -76,6 +81,7 @@ package final class RawConfigEditorDraft {
     private func install(_ raw: String) {
         self.text = raw
         self.baselineRevision = self.revision
+        self.cleanBaselineVersion = self.baselineVersion
         self.isEdited = false
         self.validationPending = false
         self.validationError = nil
@@ -94,7 +100,10 @@ package final class RawConfigEditorDraft {
             if self.revision == input.revision && self.baselineVersion == input.baselineVersion && self.validationPending {
                 self.validationError = result.0
                 self.isEdited = !result.1
-                if result.1 { self.baselineRevision = self.revision }
+                if result.1 {
+                    self.baselineRevision = self.revision
+                    self.cleanBaselineVersion = input.baselineVersion
+                }
                 self.validationPending = false
             }
             self.startValidation()

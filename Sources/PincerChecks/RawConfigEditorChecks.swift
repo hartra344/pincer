@@ -54,6 +54,26 @@ private final class RawValidationObservation: @unchecked Sendable {
 
 @MainActor
 func runRawConfigEditorChecks() async {
+    for snapshotBeforeFinish in [false, true] {
+        for useABA in [false, true] {
+            let reverted = RawConfigEditorDraft()
+            reverted.updateSnapshot("{value:1}")
+            reverted.edit("{value:2}")
+            await reverted.waitForValidation()
+            guard let admission = reverted.beginSave() else { check(false, "valid raw edit admits Save"); return }
+            if useABA { reverted.edit("{value:3}"); reverted.edit("{value:1}") }
+            else { reverted.revert() }
+            await reverted.waitForValidation()
+            check(!reverted.isEdited && !reverted.validationPending,
+                  "actual comparison completes clean against the pre-save baseline")
+            if snapshotBeforeFinish { reverted.updateSnapshot("{value:2}") }
+            reverted.finishSave(admission: admission, acknowledgedRaw: "{value:2}")
+            if !snapshotBeforeFinish { reverted.updateSnapshot("{value:2}") }
+            await reverted.waitForValidation()
+            check(reverted.text == "{value:1}" && reverted.baseline == "{value:2}" && reverted.isEdited,
+                  "validated Revert/ABA survives either acknowledgement order")
+        }
+    }
     let draft = RawConfigEditorDraft()
     let observation = RawValidationObservation()
     draft.validationObserver = { observation.record() }
@@ -246,6 +266,7 @@ func runDemoRawConfigEditorChecks() async {
         case "ABA": draft.edit(loaded + "\n// intermediate edit\n"); draft.edit(admittedText)
         default: break
         }
+        await draft.waitForValidation()
         let expected = draft.text
         gate.release()
         let saved = await pendingSave.value
@@ -254,8 +275,15 @@ func runDemoRawConfigEditorChecks() async {
         }
         check(settings.savedValue(at: path)?.bool == nextEnabled,
               "actual config.apply persists the submitted raw Sentry value for \(later)")
-        draft.updateSnapshot(acknowledged)
-        draft.finishSave(admission: admission, acknowledgedRaw: acknowledged)
+        if later == "revert" {
+            // Equality has settled against the old baseline. The real Save task completes
+            // before the deferred snapshot-hash onChange, a legal SwiftUI ordering.
+            draft.finishSave(admission: admission, acknowledgedRaw: acknowledged)
+            draft.updateSnapshot(acknowledged)
+        } else {
+            draft.updateSnapshot(acknowledged)
+            draft.finishSave(admission: admission, acknowledgedRaw: acknowledged)
+        }
         await draft.waitForValidation()
         check(draft.baseline == acknowledged,
               "actual \(later) raw save advances baseline to the real acknowledged file")
