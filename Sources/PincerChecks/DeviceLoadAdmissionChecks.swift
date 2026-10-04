@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 @MainActor private final class DeviceAdmissionGate {
     var entered = false
