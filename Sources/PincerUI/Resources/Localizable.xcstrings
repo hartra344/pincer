@@ -1,6 +1,36 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld pending, %lld claimed, %lld blocked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld pending, %2$lld claimed, %3$lld blocked"
+          }
+        }
+      }
+    },
+    "Incoming messages are waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming messages are waiting"
+          }
+        }
+      }
+    },
+    "Incoming messages failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming messages failed"
+          }
+        }
+      }
+    },
     "Chat header avatar": {
       "localizations": {
         "en": {

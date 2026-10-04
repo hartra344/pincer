@@ -23,6 +23,9 @@ public enum GatewayHealthRules {
         case .always: return issue.canAlwaysIgnore
         case let .untilChanged(fingerprint):
             if issue.kind == .delivery {
+                if let before = Self.pressureCounts(fingerprint), let current = Self.pressureCounts(issue.fingerprint) {
+                    return zip(current, before).allSatisfy { $0.0 <= $0.1 }
+                }
                 guard let dismissed = Self.count(fingerprint), let current = Self.count(issue.fingerprint) else {
                     return fingerprint == issue.fingerprint
                 }
@@ -30,6 +33,18 @@ public enum GatewayHealthRules {
             }
             return fingerprint == issue.fingerprint
         }
+    }
+
+    private static func pressureCounts(_ fingerprint: String) -> [Int]? {
+        let fields = fingerprint.split(separator: ";")
+        let keys = ["pending=", "claimed=", "blocked="]
+        guard fields.count == keys.count else { return nil }
+        var result: [Int] = []
+        for (field, key) in zip(fields, keys) {
+            guard field.hasPrefix(key), let value = Int(field.dropFirst(key.count)) else { return nil }
+            result.append(value)
+        }
+        return result
     }
 
     private static func count(_ fingerprint: String) -> Int? {
@@ -80,6 +95,19 @@ public enum GatewayHealthRules {
                 issues.append(.init(id: "queue:\(queue.queueName)", kind: .delivery,
                                     title: "\(queue.count) failed deliver\(queue.count == 1 ? "y" : "ies")",
                                     detail: "Queue: \(queue.queueName)", fingerprint: "count=\(queue.count)"))
+            }
+            for failure in health.ingressFailures {
+                issues.append(.init(id: "queue:ingress-failed:\(failure.channelId):\(failure.accountId)", kind: .delivery,
+                                    title: L("Incoming messages failed"),
+                                    detail: "\(failure.channelId) (\(failure.accountId)): \(failure.count)",
+                                    fingerprint: "count=\(failure.count)"))
+            }
+            for pressure in health.ingressPressure {
+                issues.append(.init(id: "queue:ingress-pressure:\(pressure.channelId):\(pressure.accountId)", kind: .delivery,
+                                    title: L("Incoming messages are waiting"),
+                                    detail: "\(pressure.channelId) (\(pressure.accountId)): "
+                                        + L("\(pressure.pendingCount) pending, \(pressure.claimedCount) claimed, \(pressure.blockedCount) blocked"),
+                                    fingerprint: "pending=\(pressure.pendingCount);claimed=\(pressure.claimedCount);blocked=\(pressure.blockedCount)"))
             }
             for engine in health.quarantinedEngines {
                 issues.append(.init(id: "engine:\(engine)", kind: .contextEngine, title: "Context engine \(engine) is quarantined",

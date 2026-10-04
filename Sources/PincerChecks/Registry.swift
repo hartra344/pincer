@@ -112,6 +112,7 @@ enum Suites {
             Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
+            Section("Ingress health issues") { runIngressHealthChecks() },
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
@@ -250,6 +251,7 @@ enum Suites {
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
+        Section("Ingress health issues (demo)") { await runDemoIngressHealthChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
         Section("Shutdown restart delay bounds (demo)") { await runDemoShutdownRestartDelayBoundsChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
@@ -345,6 +347,7 @@ enum Suites {
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
+        LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
         LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },

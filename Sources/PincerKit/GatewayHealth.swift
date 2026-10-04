@@ -173,6 +173,26 @@ public struct GatewayHealthSummary: Hashable, Sendable {
         public let count: Int
     }
 
+    public struct IngressFailure: Hashable, Sendable {
+        public let channelId: String
+        public let accountId: String
+        public let count: Int
+    }
+
+    public struct IngressPressure: Hashable, Sendable {
+        public let channelId: String
+        public let accountId: String
+        public let pendingCount: Int
+        public let claimedCount: Int
+        public let blockedCount: Int
+    }
+
+    // Counts are protocol Numbers. Bound each conversion without inventing a pressure total.
+    private static func count(_ value: JSONValue?) -> Int {
+        guard let number = value?.double, number.isFinite, number > 0 else { return 0 }
+        return Int(exactly: number.rounded(.towardZero)) ?? Int.max
+    }
+
     public let ok: Bool?
     public let checkedAt: Date?
     public let durationMs: Int?
@@ -183,6 +203,8 @@ public struct GatewayHealthSummary: Hashable, Sendable {
     public let pluginErrors: [PluginError]
     public let unavailablePlugins: [String]
     public let failedQueues: [FailedQueue]
+    public let ingressFailures: [IngressFailure]
+    public let ingressPressure: [IngressPressure]
     public let quarantinedEngines: [String]
     public let modelPricingState: String?
     public let sessionCount: Int?
@@ -217,6 +239,23 @@ public struct GatewayHealthSummary: Hashable, Sendable {
         self.failedQueues = (json["deliveryQueues"]?["failed"]?.array ?? []).compactMap { entry in
             guard let count = entry["count"]?.int, count > 0 else { return nil }
             return FailedQueue(queueName: entry["queueName"]?.text ?? "delivery", count: count)
+        }
+        self.ingressFailures = (json["deliveryQueues"]?["ingressFailed"]?.array ?? []).compactMap { entry in
+            guard let channel = entry["channelId"]?.text, !channel.isEmpty,
+                  let account = entry["accountId"]?.text, !account.isEmpty else { return nil }
+            let count = Self.count(entry["count"])
+            guard count > 0 else { return nil }
+            return IngressFailure(channelId: channel, accountId: account, count: count)
+        }
+        self.ingressPressure = (json["deliveryQueues"]?["ingressPressure"]?.array ?? []).compactMap { entry in
+            guard let channel = entry["channelId"]?.text, !channel.isEmpty,
+                  let account = entry["accountId"]?.text, !account.isEmpty else { return nil }
+            let pending = Self.count(entry["pendingCount"])
+            let claimed = Self.count(entry["claimedCount"])
+            let blocked = Self.count(entry["blockedCount"])
+            guard pending > 0 || claimed > 0 || blocked > 0 else { return nil }
+            return IngressPressure(channelId: channel, accountId: account,
+                                   pendingCount: pending, claimedCount: claimed, blockedCount: blocked)
         }
         self.quarantinedEngines = (json["contextEngines"]?["quarantined"]?.array ?? []).compactMap {
             $0["engineId"]?.text ?? $0.text
