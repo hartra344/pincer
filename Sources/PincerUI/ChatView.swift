@@ -862,6 +862,10 @@ struct ExportedFile: FileDocument {
         self.data = data
     }
 
+    init(logExport: GatewayLogExport) {
+        self.init(name: logExport.name, data: logExport.data)
+    }
+
     init(configuration: ReadConfiguration) throws {
         self.name = configuration.file.filename ?? "file"
         self.data = configuration.file.regularFileContents ?? Data()
