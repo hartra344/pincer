@@ -5,6 +5,7 @@ import SwiftUI
 import Testing
 import UIKit
 @testable import PincerUI
+@testable import PincerKit
 
 @MainActor @Observable private final class QuickLookFixtureState {
     var url: URL?
@@ -22,7 +23,7 @@ private struct ActualQuickLookFixture: View {
 @MainActor extension TranscriptUIKitHostedTests {
     @Test(.timeLimit(.minutes(2)))
     func actualQuickLookPresentationRetainsFileUntilOwnerRemoval() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("quicklook-lifecycle-\(UUID())", isDirectory: true)
+        let root = FilePreviewFiles.root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let file = root.appendingPathComponent("Preview.txt")
         try await Task.detached {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
