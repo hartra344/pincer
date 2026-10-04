@@ -368,6 +368,7 @@ extension GatewayVoiceModel {
         let outcome = try await self.writeConfig(patch, note: "Pincer: Gateway voice key")
         self.sessionKeys[provider] = key
         self.wroteKey.insert(provider)
+        self.voiceTestOwners[provider] = nil
         self.lastTestError[provider] = nil
         return outcome
     }
@@ -406,6 +407,7 @@ extension GatewayVoiceModel {
         }
         self.sessionKeys[provider] = nil
         self.wroteKey.remove(provider)
+        self.voiceTestOwners[provider] = nil
         self.lastTestError[provider] = nil
         await self.refresh()
         return outcome
@@ -420,6 +422,7 @@ extension GatewayVoiceModel {
         let keys = try self.requireKeyField(provider)
         guard let field = keys.model else { throw ConfigWriteError.other(L("That provider has no model setting.")) }
         let outcome = try await self.writeConfig(self.providerPatch(provider, [field: .string(id)]), note: "Pincer: Gateway voice model")
+        self.voiceTestOwners[provider] = nil
         self.lastTestError[provider] = nil
         return outcome
     }
@@ -431,6 +434,7 @@ extension GatewayVoiceModel {
         var fields: [String: JSONValue] = [(keys.voiceAlias ?? field): .string(id)]
         if keys.voiceAlias == nil || self.setups[provider]?.hasLegacyVoiceKey == true { fields[field] = .string(id) }
         let outcome = try await self.writeConfig(self.providerPatch(provider, fields), note: "Pincer: Gateway voice")
+        self.voiceTestOwners[provider] = nil
         self.lastTestError[provider] = nil
         return outcome
     }
@@ -502,9 +506,15 @@ extension GatewayVoiceModel {
 
     /// Speaks `sample` through the Gateway's configured chain and reports which provider answered.
     public func test(sample: String) async -> TTSTestResult {
+        if Task.isCancelled { return TTSTestResult(outcome: .failed(Self.message(CancellationError()))) }
         if let blocked = self.testBlocker { return TTSTestResult(outcome: .failed(blocked)) }
         if self.status == nil { await self.refresh() }
+        if Task.isCancelled { return TTSTestResult(outcome: .failed(Self.message(CancellationError()))) }
         let selected = self.status?.provider ?? ""
+        let owner = UUID()
+        self.voiceTestOwners[selected] = owner
+        defer { if self.voiceTestOwners[selected] == owner { self.voiceTestOwners[selected] = nil } }
+        func ownsFeedback() -> Bool { self.voiceTestOwners[selected] == owner && !Task.isCancelled }
         let selectedName = selected.isEmpty ? nil : self.displayName(for: selected)
         let setup = self.setups[selected]
         let model = self.modelName(setup?.model, provider: selected)
@@ -518,17 +528,17 @@ extension GatewayVoiceModel {
             let clip = try await self.speak(sample)
             let ms = elapsed()
             guard let used = clip.provider, !selected.isEmpty, used != selected else {
-                self.lastTestError[selected] = nil
+                if ownsFeedback() { self.lastTestError[selected] = nil }
                 return TTSTestResult(outcome: .success, provider: selectedName ?? clip.provider.map(self.displayName(for:)),
                                      model: model, voiceName: voiceName, durationMs: ms, clip: clip)
             }
             let reason = await self.fallbackReason(selected: selected, setup: setup)
-            self.lastTestError[selected] = reason.message(provider: self.displayName(for: selected))
+            if ownsFeedback() { self.lastTestError[selected] = reason.message(provider: self.displayName(for: selected)) }
             return TTSTestResult(outcome: .fellBack(to: self.displayName(for: used), reason: reason), provider: self.displayName(for: used),
                                  model: nil, voiceName: nil, durationMs: ms, clip: clip)
         } catch {
             let message = Self.message(error)
-            if !selected.isEmpty, !GatewayError.isMissingScope(error) { self.lastTestError[selected] = message }
+            if ownsFeedback(), !selected.isEmpty, !GatewayError.isMissingScope(error) { self.lastTestError[selected] = message }
             return TTSTestResult(outcome: .failed(message), provider: selectedName, model: model, voiceName: voiceName, durationMs: elapsed())
         }
     }

@@ -51,6 +51,7 @@ public final class GatewayVoiceModel {
     /// API keys pasted this session; memory only, never persisted or logged.
     @ObservationIgnored var sessionKeys: [String: String] = [:]
     @ObservationIgnored var voiceListRevision: UInt64 = 0
+    @ObservationIgnored var voiceTestOwners: [String: UUID] = [:]
     /// Providers whose key this session saved, so the secret's name is known even though config.get redacts it.
     public internal(set) var wroteKey: Set<String> = []
     @ObservationIgnored private var generation = 0
@@ -226,6 +227,7 @@ public final class GatewayVoiceModel {
         self.configuredProvider = nil
         self.secretNames = []
         self.providerSetThisSession = false
+        self.voiceTestOwners = [:]
         self.lastTestError = [:]
     }
 
