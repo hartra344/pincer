@@ -96,6 +96,7 @@ enum Suites {
             Section(nil) { await checkGatewayLogsModel() },
             Section("Gateway Logs Clear ownership") { await runGatewayLogsClearOwnershipChecks() },
             Section(nil) { await checkExecPolicy() },
+            Section("Device load admission") { await runDeviceLoadAdmissionChecks() },
             Section("Command policy load admission") { await runExecPolicyLoadAdmissionChecks() },
             Section(nil) { await checkAgentManagement() },
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
@@ -213,9 +214,11 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
+        sections.append(Section("Tools Inspector search preparation") { await runToolsInspectorSearchPreparationChecks() })
         sections.append(Section("UI readiness cancellation") { await runUITestReadinessCancellationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
@@ -356,6 +359,7 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
+        sections.append(Section("Tools Inspector search preparation (demo)") { await runDemoToolsInspectorSearchPreparationChecks() })
         sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Log page preparation (demo)") { await runDemoGatewayLogPagePreparationChecks() }, at: index + 1)
@@ -381,6 +385,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
         LiveSection("Command policy load admission (live)") { url, token in await runLiveExecPolicyLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },

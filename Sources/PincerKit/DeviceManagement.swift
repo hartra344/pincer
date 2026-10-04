@@ -478,6 +478,7 @@ public final class DeviceManagementModel {
 
     /// Fetches pending and paired devices (`device.pair.list` with `{}`).
     public func load() async {
+        guard !Task.isCancelled else { return }
         guard self.supported, self.canView else {
             self.hasLoaded = true
             return
@@ -487,24 +488,29 @@ public final class DeviceManagementModel {
         self.resolvedSinceList = []
         self.removedSinceList = []
         self.loadState = .running
+        defer {
+            if generation == self.generation, Task.isCancelled, self.loadState.isRunning {
+                self.loadState = .idle
+            }
+        }
         do {
             let result = try await self.request(Self.listMethod, [:])
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
         } catch let error where GatewayError.isUnknownMethod(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.rejectedMethods.insert(Self.listMethod)
             self.pending = []
             self.paired = []
             self.loadState = .idle
         } catch let error where GatewayError.isMissingScope(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.scopeDenied = true
             self.loadState = .failed(Self.needsAccessMessage)
         } catch {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.loadState = .failed(Self.message(for: error))
         }
         self.hasLoaded = true
