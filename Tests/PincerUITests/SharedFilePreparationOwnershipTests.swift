@@ -23,7 +23,7 @@ private actor SharedFileFirstWriteGate {
     let gate = SharedFileFirstWriteGate(), staging = ExportFileStaging(root: root), probe = ExportFileStagingProbe()
     staging.probe = probe; staging.afterWrite = { await gate.holdFirst($0) }
     let preparation = SharedFilePreparation(staging: staging)
-    var published: [SharedFile] = []
+    var published: [PincerUI.SharedFile] = []
     var actual: Task<Void, Never>?
     do {
         preparation.request(name: "Old.txt", data: Data([1])) { if let file = $0 { published.append(file) } }
