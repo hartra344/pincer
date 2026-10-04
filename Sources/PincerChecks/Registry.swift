@@ -100,6 +100,7 @@ enum Suites {
             Section("Device load admission") { await runDeviceLoadAdmissionChecks() },
             Section("Command policy load admission") { await runExecPolicyLoadAdmissionChecks() },
             Section("Command policy reload edit ownership") { await runExecPolicyReloadEditOwnershipChecks() },
+            Section("Command policy reload revision controls") { await runExecPolicyReloadRevisionChecks() },
             Section(nil) { await checkAgentManagement() },
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
             Section("Agent file write authority") { await runAgentFileWriteAuthorityChecks() },

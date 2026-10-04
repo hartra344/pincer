@@ -614,6 +614,7 @@ public final class ExecPolicyModel {
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var setRejectedAsUnknown = false
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var editRevision: UInt64 = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
@@ -747,6 +748,7 @@ public final class ExecPolicyModel {
 
     /// Drops the draft.
     public func revert() {
+        self.editRevision &+= 1
         self.draft = self.saved
         self.pendingLoosening = nil
         if case .rejected = self.banner { self.banner = nil }
@@ -754,6 +756,7 @@ public final class ExecPolicyModel {
 
     private func edit(_ change: (inout ExecApprovalsFile) -> Void) {
         guard self.snapshot != nil else { return }
+        self.editRevision &+= 1
         change(&self.draft)
         if self.banner == .conflict { self.banner = nil }
     }
@@ -776,7 +779,7 @@ public final class ExecPolicyModel {
         }
         self.generation += 1
         let generation = self.generation
-        let draftBefore = self.draft
+        let editRevision = self.editRevision
         self.loadState = .running
         defer {
             if generation == self.generation, Task.isCancelled, self.loadState.isRunning {
@@ -787,7 +790,7 @@ public final class ExecPolicyModel {
             let result = try await self.request(ExecPolicy.getMethod, [:])
             guard !Task.isCancelled, generation == self.generation else { return }
             // Edits made while the request was in flight win: keep them and the snapshot they're based on.
-            if !discardingDraft, self.draft != draftBefore {
+            if !discardingDraft, self.editRevision != editRevision {
                 self.loadState = .idle
                 self.hasLoaded = true
                 return
