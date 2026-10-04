@@ -2148,7 +2148,13 @@ final class TranscriptFileView: TranscriptBaseView {
         self.part = file
         let rowId = row.id
         self.header.configure(file)
-        if file.canExpand {
+        if HTMLPreview.isPreviewable(file: file.ref) {
+            self.header.onTap = { [weak self, weak actions] in
+                guard let actions else { return }
+                self?.previewHTML(file.ref, actions: actions)
+            }
+            self.header.accessibilityText = L("Preview \(file.ref.name)")
+        } else if file.canExpand {
             self.header.onTap = { [weak actions] in
                 if !file.isExpanded { actions?.loadFilePreview(file.ref) }
                 actions?.setExpanded(file.key, !file.isExpanded, row: rowId)
@@ -2197,6 +2203,25 @@ final class TranscriptFileView: TranscriptBaseView {
             let shown = await actions.quickLook(file)
             guard let self, self.saveToken == token else { return }
             self.saveButton.set(title: L("Save"), symbol: shown ? "arrow.down.circle" : "exclamationmark.triangle")
+            guard !shown else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self, self.saveToken == token else { return }
+                self.saveButton.set(title: L("Save"), symbol: "arrow.down.circle")
+            }
+        }
+    }
+
+    private func previewHTML(_ file: FileRef, actions: TranscriptRowActions) {
+        self.saveToken += 1
+        let token = self.saveToken
+        self.saveButton.set(title: L("Save"), symbol: "hourglass")
+        Task { @MainActor [weak self] in
+            let shown = await actions.previewHTML(file)
+            guard let self, self.saveToken == token else { return }
+            self.saveButton.set(title: L("Save"), symbol: shown ? "arrow.down.circle" : "exclamationmark.triangle")
+            #if os(macOS)
+            if !shown { self.saveButton.toolTip = L("Couldn’t load “\(file.name)”") }
+            #endif
             guard !shown else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                 guard let self, self.saveToken == token else { return }
