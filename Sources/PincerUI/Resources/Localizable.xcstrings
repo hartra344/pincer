@@ -1,6 +1,246 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld hr": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld hr"
+          }
+        }
+      }
+    },
+    "%lld hr %lld min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld hr %2$lld min"
+          }
+        }
+      }
+    },
+    "%lld min": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min"
+          }
+        }
+      }
+    },
+    "%lld min %lld sec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld min %2$lld sec"
+          }
+        }
+      }
+    },
+    "%lld sec": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld sec"
+          }
+        }
+      }
+    },
+    "%lld pending, %lld claimed, %lld blocked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld pending, %2$lld claimed, %3$lld blocked"
+          }
+        }
+      }
+    },
+    "Incoming messages are waiting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming messages are waiting"
+          }
+        }
+      }
+    },
+    "Incoming messages failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming messages failed"
+          }
+        }
+      }
+    },
+    "Chat header avatar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat header avatar"
+          }
+        }
+      }
+    },
+    "Small": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Small"
+          }
+        }
+      }
+    },
+    "Large": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Large"
+          }
+        }
+      }
+    },
+    "A settings save is already in progress.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A settings save is already in progress."
+          }
+        }
+      }
+    },
+    "Preparing attachments…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing attachments…"
+          }
+        }
+      }
+    },
+    "Too many attachments are being prepared. Try again shortly.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many attachments are being prepared. Try again shortly."
+          }
+        }
+      }
+    },
+    "Couldn’t load the selected photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load the selected photo."
+          }
+        }
+      }
+    },
+    "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage."
+          }
+        }
+      }
+    },
+    "Email": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
+          }
+        }
+      }
+    },
+    "Fields were filled on the Gateway. Review the page before submitting there.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fields were filled on the Gateway. Review the page before submitting there."
+          }
+        }
+      }
+    },
+    "Leave the page untouched": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave the page untouched"
+          }
+        }
+      }
+    },
+    "One-time code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time code"
+          }
+        }
+      }
+    },
+    "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them."
+          }
+        }
+      }
+    },
+    "Secure sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secure sign-in"
+          }
+        }
+      }
+    },
+    "Secure sign-in request from the agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secure sign-in request from the agent"
+          }
+        }
+      }
+    },
+    "Username": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username"
+          }
+        }
+      }
+    },
     "%@ %@ window": {
       "localizations": {
         "en": {
@@ -21,22 +261,22 @@
         }
       }
     },
-    "%@ (iPad keyboard).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (iPad keyboard)."
-          }
-        }
-      }
-    },
     "%@ + %lld more": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ + %2$lld more"
+          }
+        }
+      }
+    },
+    "%@ is larger than the Gateway allows (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@)."
           }
         }
       }
@@ -91,22 +331,22 @@
         }
       }
     },
-    "%@ character": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ character"
-          }
-        }
-      }
-    },
     "%@ character, %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ character, %2$@"
+          }
+        }
+      }
+    },
+    "%@ character": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ character"
           }
         }
       }
@@ -151,16 +391,6 @@
         }
       }
     },
-    "%@ exceeds the maximum image source size (%@).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ exceeds the maximum image source size (%2$@)."
-          }
-        }
-      }
-    },
     "%@ group": {
       "localizations": {
         "en": {
@@ -187,16 +417,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ is already used"
-          }
-        }
-      }
-    },
-    "%@ is larger than the Gateway allows (%@).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ is larger than the Gateway allows (%@)."
           }
         }
       }
@@ -357,16 +577,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ on %@"
-          }
-        }
-      }
-    },
-    "%@ plugin": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ plugin"
           }
         }
       }
@@ -721,6 +931,26 @@
         }
       }
     },
+    "%lld command suggestions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld command suggestions"
+          }
+        }
+      }
+    },
+    "%lld command-line tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld command-line tools"
+          }
+        }
+      }
+    },
     "%lld Gateway configuration settings": {
       "localizations": {
         "en": {
@@ -791,26 +1021,6 @@
         }
       }
     },
-    "%lld command suggestions": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld command suggestions"
-          }
-        }
-      }
-    },
-    "%lld command-line tools": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld command-line tools"
-          }
-        }
-      }
-    },
     "%lld dismissed issues": {
       "localizations": {
         "en": {
@@ -837,26 +1047,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld files deleted"
-          }
-        }
-      }
-    },
-    "%lld hr": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld hr"
-          }
-        }
-      }
-    },
-    "%lld hr %lld min": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld hr %2$lld min"
           }
         }
       }
@@ -913,26 +1103,6 @@
         }
       }
     },
-    "%lld min": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld min"
-          }
-        }
-      }
-    },
-    "%lld min %lld sec": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld min %2$lld sec"
-          }
-        }
-      }
-    },
     "%lld more…": {
       "localizations": {
         "en": {
@@ -973,16 +1143,6 @@
         }
       }
     },
-    "%lld pending, %lld claimed, %lld blocked": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$lld pending, %2$lld claimed, %3$lld blocked"
-          }
-        }
-      }
-    },
     "%lld percent used": {
       "localizations": {
         "en": {
@@ -1013,16 +1173,6 @@
         }
       }
     },
-    "%lld prompts": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld prompts"
-          }
-        }
-      }
-    },
     "%lld reconnect attempts": {
       "localizations": {
         "en": {
@@ -1039,16 +1189,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld removed"
-          }
-        }
-      }
-    },
-    "%lld resources": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld resources"
           }
         }
       }
@@ -1083,16 +1223,6 @@
         }
       }
     },
-    "%lld sec": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld sec"
-          }
-        }
-      }
-    },
     "%lld seconds": {
       "localizations": {
         "en": {
@@ -1109,16 +1239,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld tool calls"
-          }
-        }
-      }
-    },
-    "%lld tools": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld tools"
           }
         }
       }
@@ -1149,16 +1269,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "(empty file)"
-          }
-        }
-      }
-    },
-    "* matches any characters. Include is applied first, then exclude.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "* matches any characters. Include is applied first, then exclude."
           }
         }
       }
@@ -1263,16 +1373,6 @@
         }
       }
     },
-    "1 prompt": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 prompt"
-          }
-        }
-      }
-    },
     "1 reconnect attempt": {
       "localizations": {
         "en": {
@@ -1283,32 +1383,12 @@
         }
       }
     },
-    "1 resource": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 resource"
-          }
-        }
-      }
-    },
     "1 result": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "1 result"
-          }
-        }
-      }
-    },
-    "1 tool": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 tool"
           }
         }
       }
@@ -1363,6 +1443,56 @@
         }
       }
     },
+    "Argument suggestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Argument suggestion"
+          }
+        }
+      }
+    },
+    "Command suggestion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command suggestion"
+          }
+        }
+      }
+    },
+    "a command-line tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a command-line tool"
+          }
+        }
+      }
+    },
+    "a Gateway configuration setting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a Gateway configuration setting"
+          }
+        }
+      }
+    },
+    "a Gateway environment setting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a Gateway environment setting"
+          }
+        }
+      }
+    },
     "A one-line preview of the latest message in the chat list.": {
       "localizations": {
         "en": {
@@ -1379,16 +1509,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "A server named “%@” already exists."
-          }
-        }
-      }
-    },
-    "A settings save is already in progress.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A settings save is already in progress."
           }
         }
       }
@@ -1603,22 +1723,152 @@
         }
       }
     },
-    "Add Pattern": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add Pattern"
-          }
-        }
-      }
-    },
     "Add Plugin": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Add Plugin"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answer"
+          }
+        }
+      }
+    },
+    "Cached result": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cached result"
+          }
+        }
+      }
+    },
+    "Close search": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close search"
+          }
+        }
+      }
+    },
+    "Current default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current default"
+          }
+        }
+      }
+    },
+    "Hide Sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Sidebar"
+          }
+        }
+      }
+    },
+    "one supported command-line tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "one supported command-line tool"
+          }
+        }
+      }
+    },
+    "Provider %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider %@"
+          }
+        }
+      }
+    },
+    "Search in output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search in output"
+          }
+        }
+      }
+    },
+    "Show %lld skills that aren't set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %lld skills that aren't set up"
+          }
+        }
+      }
+    },
+    "Show 1 skill that isn't set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show 1 skill that isn't set up"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Sidebar"
+          }
+        }
+      }
+    },
+    "Sources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sources"
+          }
+        }
+      }
+    },
+    "Switching branches needs Full Management access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switching branches needs Full Management access."
+          }
+        }
+      }
+    },
+    "The agent sees your reactions on its next turn.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent sees your reactions on its next turn."
           }
         }
       }
@@ -1733,16 +1983,6 @@
         }
       }
     },
-    "Advanced · %lld set": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Advanced · %lld set"
-          }
-        }
-      }
-    },
     "Advanced…": {
       "localizations": {
         "en": {
@@ -1853,16 +2093,6 @@
         }
       }
     },
-    "Allow Location": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow Location"
-          }
-        }
-      }
-    },
     "Allow Once": {
       "localizations": {
         "en": {
@@ -1879,16 +2109,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allow Pincer to use %@?"
-          }
-        }
-      }
-    },
-    "Allow location access to share context": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Allow location access to share context"
           }
         }
       }
@@ -2029,16 +2249,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Another command uses this shortcut too."
-          }
-        }
-      }
-    },
-    "Answer": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Answer"
           }
         }
       }
@@ -2293,16 +2503,6 @@
         }
       }
     },
-    "Argument suggestion": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Argument suggestion"
-          }
-        }
-      }
-    },
     "Arguments": {
       "localizations": {
         "en": {
@@ -2423,16 +2623,6 @@
         }
       }
     },
-    "Auth profile": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auth profile"
-          }
-        }
-      }
-    },
     "Authentication": {
       "localizations": {
         "en": {
@@ -2453,22 +2643,22 @@
         }
       }
     },
-    "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
-          }
-        }
-      }
-    },
     "Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent."
+          }
+        }
+      }
+    },
+    "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
           }
         }
       }
@@ -2773,16 +2963,6 @@
         }
       }
     },
-    "Cached result": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cached result"
-          }
-        }
-      }
-    },
     "Cached transcripts": {
       "localizations": {
         "en": {
@@ -3023,62 +3203,12 @@
         }
       }
     },
-    "Chat colors": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat colors"
-          }
-        }
-      }
-    },
-    "Chat header avatar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat header avatar"
-          }
-        }
-      }
-    },
     "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send."
-          }
-        }
-      }
-    },
-    "Chat icons": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat icons"
-          }
-        }
-      }
-    },
-    "Chat order": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat order"
-          }
-        }
-      }
-    },
-    "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device."
           }
         }
       }
@@ -3283,16 +3413,6 @@
         }
       }
     },
-    "Choose shared or per-requester.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose shared or per-requester."
-          }
-        }
-      }
-    },
     "ClawHub hasn't scanned this skill's source.": {
       "localizations": {
         "en": {
@@ -3423,26 +3543,6 @@
         }
       }
     },
-    "Client certificate": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Client certificate"
-          }
-        }
-      }
-    },
-    "Client key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Client key"
-          }
-        }
-      }
-    },
     "Close": {
       "localizations": {
         "en": {
@@ -3469,16 +3569,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close Window"
-          }
-        }
-      }
-    },
-    "Close search": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Close search"
           }
         }
       }
@@ -3649,16 +3739,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Command policy saved"
-          }
-        }
-      }
-    },
-    "Command suggestion": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Command suggestion"
           }
         }
       }
@@ -4003,16 +4083,6 @@
         }
       }
     },
-    "Connected · %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connected · %@"
-          }
-        }
-      }
-    },
     "Connected · %lld tools": {
       "localizations": {
         "en": {
@@ -4069,16 +4139,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connection closed: %@"
-          }
-        }
-      }
-    },
-    "Connection timeout": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection timeout"
           }
         }
       }
@@ -4199,16 +4259,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Command"
-          }
-        }
-      }
-    },
-    "Copy Details": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy Details"
           }
         }
       }
@@ -4379,16 +4429,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Thinking"
-          }
-        }
-      }
-    },
-    "Copy Tool Name": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy Tool Name"
           }
         }
       }
@@ -4603,16 +4643,6 @@
         }
       }
     },
-    "Couldn't connect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't connect"
-          }
-        }
-      }
-    },
     "Couldn't load more.": {
       "localizations": {
         "en": {
@@ -4733,42 +4763,12 @@
         }
       }
     },
-    "Couldn’t load the selected photo.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t load the selected photo."
-          }
-        }
-      }
-    },
     "Couldn’t load this file.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t load this file."
-          }
-        }
-      }
-    },
-    "Couldn’t prepare the reply preview. Try replying again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t prepare the reply preview. Try replying again."
-          }
-        }
-      }
-    },
-    "Couldn’t queue %@; attachment preparation is full. Try again after current items finish.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn’t queue %@; attachment preparation is full. Try again after current items finish."
           }
         }
       }
@@ -4829,16 +4829,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Created %@"
-          }
-        }
-      }
-    },
-    "Current default": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Current default"
           }
         }
       }
@@ -4983,42 +4973,12 @@
         }
       }
     },
-    "Default (30 s)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Default (30 s)"
-          }
-        }
-      }
-    },
-    "Default (60 s)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Default (60 s)"
-          }
-        }
-      }
-    },
     "Default (created by Gateway)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Default (created by Gateway)"
-          }
-        }
-      }
-    },
-    "Default (shared)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Default (shared)"
           }
         }
       }
@@ -5269,16 +5229,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Device name"
-          }
-        }
-      }
-    },
-    "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage."
           }
         }
       }
@@ -5713,16 +5663,6 @@
         }
       }
     },
-    "Each person signs in": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Each person signs in"
-          }
-        }
-      }
-    },
     "Each run starts a fresh chat under Automations in the sidebar.": {
       "localizations": {
         "en": {
@@ -5903,16 +5843,6 @@
         }
       }
     },
-    "Email": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Email"
-          }
-        }
-      }
-    },
     "Emoji": {
       "localizations": {
         "en": {
@@ -5989,16 +5919,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter a name."
-          }
-        }
-      }
-    },
-    "Enter a whole number of milliseconds.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter a whole number of milliseconds."
           }
         }
       }
@@ -6383,16 +6303,6 @@
         }
       }
     },
-    "Fields were filled on the Gateway. Review the page before submitting there.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fields were filled on the Gateway. Review the page before submitting there."
-          }
-        }
-      }
-    },
     "File": {
       "localizations": {
         "en": {
@@ -6603,16 +6513,6 @@
         }
       }
     },
-    "Fix the errors above first.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fix the errors above first."
-          }
-        }
-      }
-    },
     "Folder": {
       "localizations": {
         "en": {
@@ -6719,16 +6619,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "From Any App"
-          }
-        }
-      }
-    },
-    "From Plugins": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "From Plugins"
           }
         }
       }
@@ -7043,16 +6933,6 @@
         }
       }
     },
-    "Getting device location…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Getting device location…"
-          }
-        }
-      }
-    },
     "Go": {
       "localizations": {
         "en": {
@@ -7133,26 +7013,6 @@
         }
       }
     },
-    "Group icons": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Group icons"
-          }
-        }
-      }
-    },
-    "Groups": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Groups"
-          }
-        }
-      }
-    },
     "HTML Preview": {
       "localizations": {
         "en": {
@@ -7209,16 +7069,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Health"
-          }
-        }
-      }
-    },
-    "Health dismissals": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Health dismissals"
           }
         }
       }
@@ -7283,16 +7133,6 @@
         }
       }
     },
-    "Hide API key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide API key"
-          }
-        }
-      }
-    },
     "Hide Others": {
       "localizations": {
         "en": {
@@ -7323,16 +7163,6 @@
         }
       }
     },
-    "Hide Sidebar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide Sidebar"
-          }
-        }
-      }
-    },
     "Hide Thinking Steps": {
       "localizations": {
         "en": {
@@ -7349,16 +7179,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide subagent runs"
-          }
-        }
-      }
-    },
-    "Hide tools": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide tools"
           }
         }
       }
@@ -7503,16 +7323,6 @@
         }
       }
     },
-    "Include Message Text": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Include Message Text"
-          }
-        }
-      }
-    },
     "Include Thinking": {
       "localizations": {
         "en": {
@@ -7549,26 +7359,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Include tool calls"
-          }
-        }
-      }
-    },
-    "Incoming messages are waiting": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Incoming messages are waiting"
-          }
-        }
-      }
-    },
-    "Incoming messages failed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Incoming messages failed"
           }
         }
       }
@@ -7953,12 +7743,102 @@
         }
       }
     },
-    "Large": {
+    "Toggle Sidebar": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Large"
+            "value": "Toggle Sidebar"
+          }
+        }
+      }
+    },
+    "Took %lld minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld minutes"
+          }
+        }
+      }
+    },
+    "Took %lld minutes %lld seconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %1$lld minutes %2$lld seconds"
+          }
+        }
+      }
+    },
+    "Took %lld minutes 1 second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld minutes 1 second"
+          }
+        }
+      }
+    },
+    "Took 1 minute": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute"
+          }
+        }
+      }
+    },
+    "Took 1 minute %lld seconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute %lld seconds"
+          }
+        }
+      }
+    },
+    "Took 1 minute 1 second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute 1 second"
+          }
+        }
+      }
+    },
+    "Wait for the reply to finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wait for the reply to finish."
+          }
+        }
+      }
+    },
+    "cached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cached"
+          }
+        }
+      }
+    },
+    "large": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "large"
           }
         }
       }
@@ -8099,16 +7979,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Leave empty to let the Gateway create a new workspace for this agent."
-          }
-        }
-      }
-    },
-    "Leave the page untouched": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leave the page untouched"
           }
         }
       }
@@ -8353,66 +8223,6 @@
         }
       }
     },
-    "Location access is denied": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location access is denied"
-          }
-        }
-      }
-    },
-    "Location access is restricted on this device": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location access is restricted on this device"
-          }
-        }
-      }
-    },
-    "Location context is ready to share": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location context is ready to share"
-          }
-        }
-      }
-    },
-    "Location context is ready to share · %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location context is ready to share · %@"
-          }
-        }
-      }
-    },
-    "Location is unavailable. Messages send without it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location is unavailable. Messages send without it."
-          }
-        }
-      }
-    },
-    "Location sharing is off": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Location sharing is off"
-          }
-        }
-      }
-    },
     "Lock Screen": {
       "localizations": {
         "en": {
@@ -8569,16 +8379,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manage Session…"
-          }
-        }
-      }
-    },
-    "Managed by plugins. Change them in each plugin's settings.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Managed by plugins. Change them in each plugin's settings."
           }
         }
       }
@@ -8933,16 +8733,6 @@
         }
       }
     },
-    "Move to Group (shown in By Group)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Move to Group (shown in By Group)"
-          }
-        }
-      }
-    },
     "Moved %@": {
       "localizations": {
         "en": {
@@ -9069,16 +8859,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Needs attention"
-          }
-        }
-      }
-    },
-    "Needs sign-in": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Needs sign-in"
           }
         }
       }
@@ -9683,16 +9463,6 @@
         }
       }
     },
-    "No servers configured on this Gateway.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No servers configured on this Gateway."
-          }
-        }
-      }
-    },
     "No settings match “%@”.": {
       "localizations": {
         "en": {
@@ -9903,6 +9673,36 @@
         }
       }
     },
+    "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on."
+          }
+        }
+      }
+    },
     "Not Set": {
       "localizations": {
         "en": {
@@ -10003,36 +9803,6 @@
         }
       }
     },
-    "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi."
-          }
-        }
-      }
-    },
-    "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot."
-          }
-        }
-      }
-    },
-    "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on."
-          }
-        }
-      }
-    },
     "Not set": {
       "localizations": {
         "en": {
@@ -10119,16 +9889,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Now: %@"
-          }
-        }
-      }
-    },
-    "OAuth options": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OAuth options"
           }
         }
       }
@@ -10243,16 +10003,6 @@
         }
       }
     },
-    "One-time code": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "One-time code"
-          }
-        }
-      }
-    },
     "Online for %@": {
       "localizations": {
         "en": {
@@ -10279,16 +10029,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only When Tagged"
-          }
-        }
-      }
-    },
-    "Only allow tools": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Only allow tools"
           }
         }
       }
@@ -10393,6 +10133,36 @@
         }
       }
     },
+    "Send now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send now"
+          }
+        }
+      }
+    },
+    "Show MCP Servers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show MCP Servers"
+          }
+        }
+      }
+    },
+    "Open MCP Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open MCP Server"
+          }
+        }
+      }
+    },
     "Open Chat in New Window": {
       "localizations": {
         "en": {
@@ -10453,32 +10223,12 @@
         }
       }
     },
-    "Open Location Settings": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Location Settings"
-          }
-        }
-      }
-    },
     "Open Login Items Settings…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Open Login Items Settings…"
-          }
-        }
-      }
-    },
-    "Open MCP Server": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open MCP Server"
           }
         }
       }
@@ -10499,16 +10249,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Pinned Chat %lld"
-          }
-        }
-      }
-    },
-    "Open Plugin": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open Plugin"
           }
         }
       }
@@ -10633,16 +10373,6 @@
         }
       }
     },
-    "Open the command palette to jump to any chat, agent, model, or setting.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open the command palette to jump to any chat, agent, model, or setting."
-          }
-        }
-      }
-    },
     "Open “%@” to see what this helper did": {
       "localizations": {
         "en": {
@@ -10659,16 +10389,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "OpenClaw is running on this Mac."
-          }
-        }
-      }
-    },
-    "Opens the %@ plugin": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opens the %@ plugin"
           }
         }
       }
@@ -11023,26 +10743,6 @@
         }
       }
     },
-    "Paths on the Gateway host.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Paths on the Gateway host."
-          }
-        }
-      }
-    },
-    "Pattern": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pattern"
-          }
-        }
-      }
-    },
     "Pause": {
       "localizations": {
         "en": {
@@ -11069,26 +10769,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pending Requests"
-          }
-        }
-      }
-    },
-    "Per person (each person signs in)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Per person (each person signs in)"
-          }
-        }
-      }
-    },
-    "Per-person sign-in can't use an auth profile.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Per-person sign-in can't use an auth profile."
           }
         }
       }
@@ -11203,16 +10883,6 @@
         }
       }
     },
-    "Pincer can't check this server's identity.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pincer can't check this server's identity."
-          }
-        }
-      }
-    },
     "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.": {
       "localizations": {
         "en": {
@@ -11239,16 +10909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pincer couldn’t open that link."
-          }
-        }
-      }
-    },
-    "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them."
           }
         }
       }
@@ -11423,42 +11083,12 @@
         }
       }
     },
-    "Preparing attachments…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preparing attachments…"
-          }
-        }
-      }
-    },
     "Preparing…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Preparing…"
-          }
-        }
-      }
-    },
-    "Press %@ to find in the current chat.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press %@ to find in the current chat."
-          }
-        }
-      }
-    },
-    "Press %@ to jump to any chat, agent, model, or setting.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Press %@ to jump to any chat, agent, model, or setting."
           }
         }
       }
@@ -11619,16 +11249,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Provider"
-          }
-        }
-      }
-    },
-    "Provider %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Provider %@"
           }
         }
       }
@@ -12363,16 +11983,6 @@
         }
       }
     },
-    "Remove pattern": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove pattern"
-          }
-        }
-      }
-    },
     "Remove the %@ key from the Gateway?": {
       "localizations": {
         "en": {
@@ -12583,16 +12193,6 @@
         }
       }
     },
-    "Replies fall back to the next provider or this device's voice.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Replies fall back to the next provider or this device's voice."
-          }
-        }
-      }
-    },
     "Reply": {
       "localizations": {
         "en": {
@@ -12639,16 +12239,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Request ID"
-          }
-        }
-      }
-    },
-    "Request timeout": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Request timeout"
           }
         }
       }
@@ -13533,32 +13123,12 @@
         }
       }
     },
-    "Save, then sign in from the server's page.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save, then sign in from the server's page."
-          }
-        }
-      }
-    },
     "Saved": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Saved"
-          }
-        }
-      }
-    },
-    "Saved chat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved chat"
           }
         }
       }
@@ -13629,16 +13199,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schedule"
-          }
-        }
-      }
-    },
-    "Scope": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Scope"
           }
         }
       }
@@ -13743,42 +13303,22 @@
         }
       }
     },
+    "Search output was truncated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search output was truncated"
+          }
+        }
+      }
+    },
     "Search Settings": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Search Settings"
-          }
-        }
-      }
-    },
-    "Search all messages from %@ or the sidebar search field.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search all messages from %@ or the sidebar search field."
-          }
-        }
-      }
-    },
-    "Search all messages from the command palette or the sidebar search field.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search all messages from the command palette or the sidebar search field."
-          }
-        }
-      }
-    },
-    "Search all messages from the sidebar search field.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search all messages from the sidebar search field."
           }
         }
       }
@@ -13799,16 +13339,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Search chats and agents…"
-          }
-        }
-      }
-    },
-    "Search in output": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search in output"
           }
         }
       }
@@ -13853,16 +13383,6 @@
         }
       }
     },
-    "Search output was truncated": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Search output was truncated"
-          }
-        }
-      }
-    },
     "Search symbols": {
       "localizations": {
         "en": {
@@ -13899,26 +13419,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Secrets show as %@; leave them as they are to keep them. Saving replaces the whole config, and the Gateway checks it first."
-          }
-        }
-      }
-    },
-    "Secure sign-in": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure sign-in"
-          }
-        }
-      }
-    },
-    "Secure sign-in request from the agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure sign-in request from the agent"
           }
         }
       }
@@ -14003,16 +13503,6 @@
         }
       }
     },
-    "Send now": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send now"
-          }
-        }
-      }
-    },
     "Send to %@": {
       "localizations": {
         "en": {
@@ -14089,16 +13579,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server changes are saved with Review & Save. Reconnect and sign-in happen right away."
-          }
-        }
-      }
-    },
-    "Server names": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Server names"
           }
         }
       }
@@ -14263,16 +13743,6 @@
         }
       }
     },
-    "Settings changed since the test.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Settings changed since the test."
-          }
-        }
-      }
-    },
     "Settings load once %@ is connected.": {
       "localizations": {
         "en": {
@@ -14299,36 +13769,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Severity"
-          }
-        }
-      }
-    },
-    "Share location context with the agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Share location context with the agent"
-          }
-        }
-      }
-    },
-    "Shared (one sign-in for everyone)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shared (one sign-in for everyone)"
-          }
-        }
-      }
-    },
-    "Shared by everyone": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shared by everyone"
           }
         }
       }
@@ -14383,42 +13823,12 @@
         }
       }
     },
-    "Show %lld skills that aren't set up": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show %lld skills that aren't set up"
-          }
-        }
-      }
-    },
     "Show %lld subagent runs": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show %lld subagent runs"
-          }
-        }
-      }
-    },
-    "Show 1 skill that isn't set up": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show 1 skill that isn't set up"
-          }
-        }
-      }
-    },
-    "Show API key": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show API key"
           }
         }
       }
@@ -14443,16 +13853,6 @@
         }
       }
     },
-    "Show Chats in Spotlight": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Chats in Spotlight"
-          }
-        }
-      }
-    },
     "Show Fonts": {
       "localizations": {
         "en": {
@@ -14463,32 +13863,52 @@
         }
       }
     },
-    "Show Less": {
+    "Yesterday": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show Less"
+            "value": "Yesterday"
           }
         }
       }
     },
-    "Show MCP Servers": {
+    "Yesterday %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show MCP Servers"
+            "value": "Yesterday %@"
           }
         }
       }
     },
-    "Show More": {
+    "Show Chats in Spotlight": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show More"
+            "value": "Show Chats in Spotlight"
+          }
+        }
+      }
+    },
+    "Include Message Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include Message Text"
+          }
+        }
+      }
+    },
+    "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device."
           }
         }
       }
@@ -14539,16 +13959,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Setting"
-          }
-        }
-      }
-    },
-    "Show Sidebar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Sidebar"
           }
         }
       }
@@ -14733,16 +14143,6 @@
         }
       }
     },
-    "Shown in right pane": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shown in right pane"
-          }
-        }
-      }
-    },
     "Shows context details and Compact Now": {
       "localizations": {
         "en": {
@@ -14859,16 +14259,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sign-In Expired"
-          }
-        }
-      }
-    },
-    "Sign-in": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign-in"
           }
         }
       }
@@ -15043,12 +14433,12 @@
         }
       }
     },
-    "Small": {
+    "Some bookmarks couldn't be saved to the gateway: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Small"
+            "value": "Some bookmarks couldn't be saved to the gateway: %@"
           }
         }
       }
@@ -15059,16 +14449,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Some Files Weren't Copied"
-          }
-        }
-      }
-    },
-    "Some bookmarks couldn't be saved to the gateway: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Some bookmarks couldn't be saved to the gateway: %@"
           }
         }
       }
@@ -15109,16 +14489,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Source"
-          }
-        }
-      }
-    },
-    "Sources": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sources"
           }
         }
       }
@@ -15603,36 +14973,6 @@
         }
       }
     },
-    "Switching branches needs Full Management access.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switching branches needs Full Management access."
-          }
-        }
-      }
-    },
-    "Synced preference": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Synced preference"
-          }
-        }
-      }
-    },
-    "Synced preferences": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Synced preferences"
-          }
-        }
-      }
-    },
     "System": {
       "localizations": {
         "en": {
@@ -15659,16 +14999,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "TLS certificate SHA-256"
-          }
-        }
-      }
-    },
-    "TLS settings": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "TLS settings"
           }
         }
       }
@@ -15743,16 +15073,6 @@
         }
       }
     },
-    "Test Connection": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Test Connection"
-          }
-        }
-      }
-    },
     "Test Device Voice": {
       "localizations": {
         "en": {
@@ -15789,16 +15109,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Testing…"
-          }
-        }
-      }
-    },
-    "Tests these settings from the Gateway without saving.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tests these settings from the Gateway without saving."
           }
         }
       }
@@ -15919,16 +15229,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway audio couldn't be played."
-          }
-        }
-      }
-    },
-    "The Gateway can't use %@ until you add a key again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The Gateway can't use %@ until you add a key again."
           }
         }
       }
@@ -16073,16 +15373,6 @@
         }
       }
     },
-    "The Gateway rejected these synced settings. They remain pending on this device.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The Gateway rejected these synced settings. They remain pending on this device."
-          }
-        }
-      }
-    },
     "The Gateway sent usage data Pincer couldn't read.": {
       "localizations": {
         "en": {
@@ -16193,16 +15483,6 @@
         }
       }
     },
-    "The agent sees your reactions on its next turn.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The agent sees your reactions on its next turn."
-          }
-        }
-      }
-    },
     "The changes made on the Gateway since you opened it will be replaced by yours.": {
       "localizations": {
         "en": {
@@ -16309,16 +15589,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The key is set, but the Gateway can't read it."
-          }
-        }
-      }
-    },
-    "The latest reaction is too large to sync.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The latest reaction is too large to sync."
           }
         }
       }
@@ -16639,16 +15909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't speak replies. Update it to use a Gateway voice."
-          }
-        }
-      }
-    },
-    "This Gateway does not support location context. Messages are still sent without location.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This Gateway does not support location context. Messages are still sent without location."
           }
         }
       }
@@ -17243,16 +16503,6 @@
         }
       }
     },
-    "To go back to %@, edit the Gateway's config or use /tts.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "To go back to %@, edit the Gateway's config or use /tts."
-          }
-        }
-      }
-    },
     "To make room, Pincer removed an older bookmark.": {
       "localizations": {
         "en": {
@@ -17263,22 +16513,22 @@
         }
       }
     },
+    "To go back to %@, edit the Gateway's config or use /tts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To go back to %@, edit the Gateway's config or use /tts."
+          }
+        }
+      }
+    },
     "To:": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "To:"
-          }
-        }
-      }
-    },
-    "Toggle Sidebar": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toggle Sidebar"
           }
         }
       }
@@ -17313,16 +16563,6 @@
         }
       }
     },
-    "Too many attachments are being prepared. Try again shortly.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Too many attachments are being prepared. Try again shortly."
-          }
-        }
-      }
-    },
     "Took %@": {
       "localizations": {
         "en": {
@@ -17349,66 +16589,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Took %lld milliseconds"
-          }
-        }
-      }
-    },
-    "Took %lld minutes": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took %lld minutes"
-          }
-        }
-      }
-    },
-    "Took %lld minutes %lld seconds": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took %1$lld minutes %2$lld seconds"
-          }
-        }
-      }
-    },
-    "Took %lld minutes 1 second": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took %lld minutes 1 second"
-          }
-        }
-      }
-    },
-    "Took 1 minute": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took 1 minute"
-          }
-        }
-      }
-    },
-    "Took 1 minute %lld seconds": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took 1 minute %lld seconds"
-          }
-        }
-      }
-    },
-    "Took 1 minute 1 second": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Took 1 minute 1 second"
           }
         }
       }
@@ -17693,16 +16873,6 @@
         }
       }
     },
-    "Unavailable": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unavailable"
-          }
-        }
-      }
-    },
     "Unavailable on this Gateway": {
       "localizations": {
         "en": {
@@ -17983,32 +17153,12 @@
         }
       }
     },
-    "Use Find in Chat to search the current chat.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use Find in Chat to search the current chat."
-          }
-        }
-      }
-    },
     "Use Gateway's": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Use Gateway's"
-          }
-        }
-      }
-    },
-    "Use Sign In on this page, then test again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use Sign In on this page, then test again."
           }
         }
       }
@@ -18073,16 +17223,6 @@
         }
       }
     },
-    "Username": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Username"
-          }
-        }
-      }
-    },
     "Using %@.": {
       "localizations": {
         "en": {
@@ -18139,16 +17279,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Variable"
-          }
-        }
-      }
-    },
-    "Verify TLS certificate": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verify TLS certificate"
           }
         }
       }
@@ -18223,32 +17353,12 @@
         }
       }
     },
-    "Wait for the reply to finish.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wait for the reply to finish."
-          }
-        }
-      }
-    },
     "Waiting for Sign-In…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for Sign-In…"
-          }
-        }
-      }
-    },
-    "Waiting for Wi‑Fi": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Waiting for Wi‑Fi"
           }
         }
       }
@@ -18279,6 +17389,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for approval…"
+          }
+        }
+      }
+    },
+    "Waiting for Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Wi‑Fi"
           }
         }
       }
@@ -18339,16 +17459,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "What's New"
-          }
-        }
-      }
-    },
-    "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent."
           }
         }
       }
@@ -18529,26 +17639,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yes, it's running"
-          }
-        }
-      }
-    },
-    "Yesterday": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yesterday"
-          }
-        }
-      }
-    },
-    "Yesterday %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yesterday %@"
           }
         }
       }
@@ -18803,36 +17893,6 @@
         }
       }
     },
-    "a Gateway configuration setting": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a Gateway configuration setting"
-          }
-        }
-      }
-    },
-    "a Gateway environment setting": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a Gateway environment setting"
-          }
-        }
-      }
-    },
-    "a command-line tool": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a command-line tool"
-          }
-        }
-      }
-    },
     "a message": {
       "localizations": {
         "en": {
@@ -18933,16 +17993,6 @@
         }
       }
     },
-    "cached": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "cached"
-          }
-        }
-      }
-    },
     "channel status": {
       "localizations": {
         "en": {
@@ -18989,16 +18039,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "command not found"
-          }
-        }
-      }
-    },
-    "create_*": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "create_*"
           }
         }
       }
@@ -19224,16 +18264,6 @@
         }
       }
     },
-    "large": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "large"
-          }
-        }
-      }
-    },
     "last active %@": {
       "localizations": {
         "en": {
@@ -19274,16 +18304,6 @@
         }
       }
     },
-    "ms": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ms"
-          }
-        }
-      }
-    },
     "nearly full": {
       "localizations": {
         "en": {
@@ -19320,26 +18340,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "npx"
-          }
-        }
-      }
-    },
-    "observed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "observed"
-          }
-        }
-      }
-    },
-    "one supported command-line tool": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "one supported command-line tool"
           }
         }
       }
@@ -19430,16 +18430,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "stop"
-          }
-        }
-      }
-    },
-    "testing MCP connections": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "testing MCP connections"
           }
         }
       }
@@ -19650,6 +18640,1016 @@
           "stringUnit": {
             "state": "translated",
             "value": "↩ Send · ⌘↩ Send & Open · esc Close"
+          }
+        }
+      }
+    },
+    "Only allow tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only allow tools"
+          }
+        }
+      }
+    },
+    "Hide tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide tools"
+          }
+        }
+      }
+    },
+    "* matches any characters. Include is applied first, then exclude.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* matches any characters. Include is applied first, then exclude."
+          }
+        }
+      }
+    },
+    "Pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pattern"
+          }
+        }
+      }
+    },
+    "Remove pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove pattern"
+          }
+        }
+      }
+    },
+    "Add Pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Pattern"
+          }
+        }
+      }
+    },
+    "Verify TLS certificate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify TLS certificate"
+          }
+        }
+      }
+    },
+    "Client certificate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client certificate"
+          }
+        }
+      }
+    },
+    "Client key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client key"
+          }
+        }
+      }
+    },
+    "Sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in"
+          }
+        }
+      }
+    },
+    "Default (shared)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (shared)"
+          }
+        }
+      }
+    },
+    "Shared by everyone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared by everyone"
+          }
+        }
+      }
+    },
+    "Each person signs in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each person signs in"
+          }
+        }
+      }
+    },
+    "Scope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scope"
+          }
+        }
+      }
+    },
+    "Auth profile": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auth profile"
+          }
+        }
+      }
+    },
+    "Test Connection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test Connection"
+          }
+        }
+      }
+    },
+    "Couldn't connect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't connect"
+          }
+        }
+      }
+    },
+    "%@ plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ plugin"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        }
+      }
+    },
+    "From Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Plugins"
+          }
+        }
+      }
+    },
+    "Connection timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection timeout"
+          }
+        }
+      }
+    },
+    "Request timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request timeout"
+          }
+        }
+      }
+    },
+    "ms": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ms"
+          }
+        }
+      }
+    },
+    "Default (30 s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (30 s)"
+          }
+        }
+      }
+    },
+    "Default (60 s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (60 s)"
+          }
+        }
+      }
+    },
+    "create_*": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create_*"
+          }
+        }
+      }
+    },
+    "Paths on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paths on the Gateway host."
+          }
+        }
+      }
+    },
+    "Pincer can't check this server's identity.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't check this server's identity."
+          }
+        }
+      }
+    },
+    "Fix the errors above first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix the errors above first."
+          }
+        }
+      }
+    },
+    "Tests these settings from the Gateway without saving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tests these settings from the Gateway without saving."
+          }
+        }
+      }
+    },
+    "Settings changed since the test.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings changed since the test."
+          }
+        }
+      }
+    },
+    "testing MCP connections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "testing MCP connections"
+          }
+        }
+      }
+    },
+    "OAuth options": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth options"
+          }
+        }
+      }
+    },
+    "TLS settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS settings"
+          }
+        }
+      }
+    },
+    "Choose shared or per-requester.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose shared or per-requester."
+          }
+        }
+      }
+    },
+    "Per-person sign-in can't use an auth profile.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per-person sign-in can't use an auth profile."
+          }
+        }
+      }
+    },
+    "Enter a whole number of milliseconds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a whole number of milliseconds."
+          }
+        }
+      }
+    },
+    "Needs sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs sign-in"
+          }
+        }
+      }
+    },
+    "Use Sign In on this page, then test again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Sign In on this page, then test again."
+          }
+        }
+      }
+    },
+    "Shared (one sign-in for everyone)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared (one sign-in for everyone)"
+          }
+        }
+      }
+    },
+    "Per person (each person signs in)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per person (each person signs in)"
+          }
+        }
+      }
+    },
+    "Save, then sign in from the server's page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save, then sign in from the server's page."
+          }
+        }
+      }
+    },
+    "Copy Details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Details"
+          }
+        }
+      }
+    },
+    "1 tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 tool"
+          }
+        }
+      }
+    },
+    "%lld tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tools"
+          }
+        }
+      }
+    },
+    "1 resource": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 resource"
+          }
+        }
+      }
+    },
+    "%lld resources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld resources"
+          }
+        }
+      }
+    },
+    "1 prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 prompt"
+          }
+        }
+      }
+    },
+    "%lld prompts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld prompts"
+          }
+        }
+      }
+    },
+    "Connected · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %@"
+          }
+        }
+      }
+    },
+    "Advanced · %lld set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced · %lld set"
+          }
+        }
+      }
+    },
+    "Opens the %@ plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the %@ plugin"
+          }
+        }
+      }
+    },
+    "Open Plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Plugin"
+          }
+        }
+      }
+    },
+    "No servers configured on this Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No servers configured on this Gateway."
+          }
+        }
+      }
+    },
+    "Managed by plugins. Change them in each plugin's settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Managed by plugins. Change them in each plugin's settings."
+          }
+        }
+      }
+    },
+    "Allow Location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Location"
+          }
+        }
+      }
+    },
+    "Location access is denied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location access is denied"
+          }
+        }
+      }
+    },
+    "Location access is restricted on this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location access is restricted on this device"
+          }
+        }
+      }
+    },
+    "Location is unavailable. Messages send without it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location is unavailable. Messages send without it."
+          }
+        }
+      }
+    },
+    "Location sharing is off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location sharing is off"
+          }
+        }
+      }
+    },
+    "Open Location Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Location Settings"
+          }
+        }
+      }
+    },
+    "observed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "observed"
+          }
+        }
+      }
+    },
+    "Show More": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show More"
+          }
+        }
+      }
+    },
+    "Show Less": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Less"
+          }
+        }
+      }
+    },
+    "Saved chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved chat"
+          }
+        }
+      }
+    },
+    "The latest reaction is too large to sync.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest reaction is too large to sync."
+          }
+        }
+      }
+    },
+    "Copy Tool Name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Tool Name"
+          }
+        }
+      }
+    },
+    "Chat colors": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat colors"
+          }
+        }
+      }
+    },
+    "Chat icons": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat icons"
+          }
+        }
+      }
+    },
+    "Chat order": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat order"
+          }
+        }
+      }
+    },
+    "Group icons": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group icons"
+          }
+        }
+      }
+    },
+    "Groups": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groups"
+          }
+        }
+      }
+    },
+    "Health dismissals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health dismissals"
+          }
+        }
+      }
+    },
+    "Server names": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server names"
+          }
+        }
+      }
+    },
+    "Synced preference": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced preference"
+          }
+        }
+      }
+    },
+    "Synced preferences": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced preferences"
+          }
+        }
+      }
+    },
+    "The Gateway rejected these synced settings. They remain pending on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway rejected these synced settings. They remain pending on this device."
+          }
+        }
+      }
+    },
+    "%@ (iPad keyboard).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (iPad keyboard)."
+          }
+        }
+      }
+    },
+    "Open the command palette to jump to any chat, agent, model, or setting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the command palette to jump to any chat, agent, model, or setting."
+          }
+        }
+      }
+    },
+    "Press %@ to find in the current chat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press %@ to find in the current chat."
+          }
+        }
+      }
+    },
+    "Press %@ to jump to any chat, agent, model, or setting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press %@ to jump to any chat, agent, model, or setting."
+          }
+        }
+      }
+    },
+    "Search all messages from %@ or the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from %@ or the sidebar search field."
+          }
+        }
+      }
+    },
+    "Search all messages from the command palette or the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from the command palette or the sidebar search field."
+          }
+        }
+      }
+    },
+    "Search all messages from the sidebar search field.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search all messages from the sidebar search field."
+          }
+        }
+      }
+    },
+    "Use Find in Chat to search the current chat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Find in Chat to search the current chat."
+          }
+        }
+      }
+    },
+    "The Gateway can't use %@ until you add a key again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway can't use %@ until you add a key again."
+          }
+        }
+      }
+    },
+    "Replies fall back to the next provider or this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replies fall back to the next provider or this device's voice."
+          }
+        }
+      }
+    },
+    "Shown in right pane": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown in right pane"
+          }
+        }
+      }
+    },
+    "Show API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show API key"
+          }
+        }
+      }
+    },
+    "Hide API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide API key"
+          }
+        }
+      }
+    },
+    "Move to Group (shown in By Group)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Group (shown in By Group)"
+          }
+        }
+      }
+    },
+    "Allow location access to share context": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow location access to share context"
+          }
+        }
+      }
+    },
+    "Getting device location…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getting device location…"
+          }
+        }
+      }
+    },
+    "Location context is ready to share": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location context is ready to share"
+          }
+        }
+      }
+    },
+    "Location context is ready to share · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location context is ready to share · %@"
+          }
+        }
+      }
+    },
+    "Share location context with the agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share location context with the agent"
+          }
+        }
+      }
+    },
+    "This Gateway does not support location context. Messages are still sent without location.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway does not support location context. Messages are still sent without location."
+          }
+        }
+      }
+    },
+    "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, Pincer shares a recent device location as context for the agent, separate from your message text. The Gateway may retain this context in chat history. Reported accuracy comes from the device and may be reduced by system privacy settings. Pincer requests a one-time fix only while the app is active and sends your message without location if no recent fix is available. Commands do not include location. Turning this off stops future captures; queued messages keep the context captured when they were sent."
+          }
+        }
+      }
+    },
+    "%@ exceeds the maximum image source size (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ exceeds the maximum image source size (%2$@)."
+          }
+        }
+      }
+    },
+    "Couldn’t queue %@; attachment preparation is full. Try again after current items finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t queue %@; attachment preparation is full. Try again after current items finish."
+          }
+        }
+      }
+    },
+    "Couldn’t prepare the reply preview. Try replying again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t prepare the reply preview. Try replying again."
           }
         }
       }
