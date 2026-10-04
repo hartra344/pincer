@@ -56,6 +56,7 @@ enum Suites {
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
+            Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Compact graduated header policy") { runCompactGraduatedHeaderChecks() },
             Section("Bounded cold rotor labels") { await runColdRotorLabelChecks() },
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
@@ -204,6 +205,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
         Section("Device pairing action scopes (demo)") { await runDemoDevicePairingActionScopeChecks() },
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },

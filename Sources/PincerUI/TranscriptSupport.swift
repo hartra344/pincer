@@ -9,7 +9,7 @@ import UIKit
 
 /// One row of the native transcript list (`TranscriptList`): a message, or the spinner shown while
 /// older history is still streaming in above.
-enum TranscriptRow: Equatable {
+enum TranscriptRow: Equatable, Sendable {
     case loadingOlder
     case entry(TranscriptEntry)
 
@@ -479,30 +479,14 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     /// What a background pass would build and measure for `row`; nil when the row has to be laid out on
     /// main: one streaming (its text changes every flush), highlighted by Find, or without text.
+    func premeasureIsHighlighted(_ id: String) -> Bool { self.highlight.rows.contains(id) }
+
     func premeasureBodies(for row: TranscriptRow) -> [PremeasureKey]? {
         #if DEBUG
         self.premeasureBodyBuildCount += 1
         #endif
         guard !self.highlight.rows.contains(row.id) else { return nil }
-        let sources: [(String, TranscriptText.Tone)]
-        switch row {
-        case let .entry(.user(item)):
-            sources = [(item.plainText, .primary)]
-            #if DEBUG
-            PremeasureAdmissionProbe.record(row.id, operation: .joinedSource, source: sources.first?.0)
-            #endif
-        case let .entry(.assistant(turn)):
-            guard !turn.isStreaming else { return nil }
-            sources = turn.text.map { ($0, turn.isError ? .error : .primary) }
-        default:
-            return nil
-        }
-        var keys: [PremeasureKey] = []
-        for (source, tone) in sources where !source.isEmpty {
-            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
-            if !keys.contains(key) { keys.append(key) }
-        }
-        return keys.isEmpty ? nil : keys
+        return PremeasureSource.bodies(for: row, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
     }
 
     func hasLayout(for row: TranscriptRow, width: CGFloat) -> Bool {

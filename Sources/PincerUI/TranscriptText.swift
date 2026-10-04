@@ -41,7 +41,7 @@ enum TranscriptText {
         /// compares the complete source, so digest collisions cannot alias different text.
         private let sourceDigest: Int
 
-        init(source: String, tone: Tone, dark: Bool) {
+        nonisolated init(source: String, tone: Tone, dark: Bool) {
             self.source = source
             self.tone = tone
             self.dark = Self.bakesAppearance(source) ? dark : false

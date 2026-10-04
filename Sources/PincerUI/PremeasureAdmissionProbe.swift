@@ -10,6 +10,8 @@ enum PremeasureAdmissionProbe {
         var mainSizes = 0
         var mainWarmLookups = 0
         var offMainMeasurements = 0
+        var offMainJoins = 0
+        var offMainSizes = 0
         var observedBytes = 0
         var records = 0
     }
@@ -30,8 +32,8 @@ enum PremeasureAdmissionProbe {
             value.records += 1
             let main = Thread.isMainThread
             switch operation {
-            case .joinedSource: if main { value.mainJoins += 1 }
-            case .sourceSize: if main { value.mainSizes += 1 }
+            case .joinedSource: if main { value.mainJoins += 1 } else { value.offMainJoins += 1 }
+            case .sourceSize: if main { value.mainSizes += 1 } else { value.offMainSizes += 1 }
             case .warmLookup: if main { value.mainWarmLookups += 1 }
             case .measured: if !main { value.offMainMeasurements += 1 }
             }

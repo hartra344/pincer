@@ -129,11 +129,11 @@ struct PremeasureKey: Hashable, Sendable {
     var tone: TranscriptText.Tone { self.textKey.tone }
 
     /// Rows with inline math never reach the worker, so their appearance never keys a premeasured body.
-    init(source: String, tone: TranscriptText.Tone, styleGeneration: Int) {
+    nonisolated init(source: String, tone: TranscriptText.Tone, styleGeneration: Int) {
         self.init(source: source, tone: tone, styleGeneration: styleGeneration, dark: false)
     }
 
-    init(source: String, tone: TranscriptText.Tone, styleGeneration: Int, dark: Bool) {
+    nonisolated init(source: String, tone: TranscriptText.Tone, styleGeneration: Int, dark: Bool) {
         self.textKey = TranscriptText.Key(source: source, tone: tone, dark: dark)
         self.styleGeneration = styleGeneration
     }
@@ -142,10 +142,17 @@ struct PremeasureKey: Hashable, Sendable {
 /// The message bodies of one row, to build and measure at one content width.
 struct PremeasureJob: Sendable {
     let rowId: String
-    let bodies: [PremeasureKey]
+    var bodies: [PremeasureKey]
+    var sourceRow: TranscriptRow? = nil
+    var sourceStyleGeneration: Int = 0
+    var sourceDark = false
+    var request: PremeasureRequest? = nil
     let contentWidth: CGFloat
     let epoch: Int
     var rowRevision: UInt64 = 0
+    #if DEBUG
+    var beforeSourcePreparation: (@Sendable (String) -> Void)? = nil
+    #endif
 }
 
 /// A measured segment: `index` is its place in the body's segments.
@@ -187,6 +194,9 @@ struct PremeasuredRow: @unchecked Sendable {
     var rejected: [PremeasureKey] = []
     /// Skipped because the epoch moved on before the worker got to it.
     var discarded = false
+    var sourceKeys: [PremeasureKey] = []
+    var sourceBytes = 0
+    var sourceIneligible = false
 }
 
 /// A cancellation token per list: bumping it tells the worker to drop everything queued for it.
@@ -224,8 +234,8 @@ final class TranscriptPremeasurer: @unchecked Sendable {
 
     /// Measures `jobs` on the worker while main waits at most `budget` seconds; returns the rows finished
     /// by then. The worker stops between jobs at the deadline, so nothing runs on after main gave up.
-    nonisolated func measureWithin(_ budget: TimeInterval, jobs: [PremeasureJob], env: TextBuildEnvironment,
-                                   epoch: TranscriptPremeasureEpoch) -> [PremeasuredRow]
+    nonisolated func measureWithinPrepared(_ budget: TimeInterval, jobs: [PremeasureJob], env: TextBuildEnvironment,
+                                   epoch: TranscriptPremeasureEpoch, finished: (@MainActor @Sendable () -> Void)? = nil) -> (rows: [PremeasuredRow], completed: Bool)
     {
         struct Box { var rows: [PremeasuredRow] = []; var expired = false }
         let box = Mutex(Box())
@@ -239,9 +249,16 @@ final class TranscriptPremeasurer: @unchecked Sendable {
                 box.withLock { if !$0.expired { $0.rows.append(row) } }
             }
             done.signal()
+            if let finished { DispatchQueue.main.async { MainActor.assumeIsolated { finished() } } }
         }
-        _ = done.wait(timeout: .now() + budget)
-        return box.withLock { $0.expired = true; return $0.rows }
+        let completed = done.wait(timeout: .now() + budget) == .success
+        return (box.withLock { $0.expired = true; return $0.rows }, completed)
+    }
+
+    @MainActor func measureWithin(_ budget: TimeInterval, jobs: [PremeasureJob], env: TextBuildEnvironment,
+                                  epoch: TranscriptPremeasureEpoch) -> [PremeasuredRow] {
+        let admission = jobs.first?.request?.driver?.admission ?? TranscriptPremeasureAdmission.shared
+        return admission.measureWithin(budget, jobs: jobs, env: env, epoch: epoch)
     }
 
     /// The same builder and measurer main uses, so the sizes are what main would compute.
@@ -254,6 +271,25 @@ final class TranscriptPremeasurer: @unchecked Sendable {
         #endif
         var row = PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth,
                                  rowRevision: job.rowRevision)
+        var job = job
+        #if DEBUG
+        job.beforeSourcePreparation?(job.rowId)
+        #endif
+        if let sourceRow = job.sourceRow {
+            guard let keys = PremeasureSource.bodies(for: sourceRow, styleGeneration: job.sourceStyleGeneration, dark: job.sourceDark) else {
+                row.sourceIneligible = true
+                return row
+            }
+            job.bodies = keys
+        }
+        row.sourceKeys = job.bodies
+        for key in job.bodies {
+            #if DEBUG
+            PremeasureAdmissionProbe.record(job.rowId, operation: .sourceSize, source: key.source)
+            #endif
+            let bytes = key.source.utf8.count
+            row.sourceBytes = bytes > Int.max - row.sourceBytes ? Int.max : row.sourceBytes + bytes
+        }
         let hooks = TranscriptText.BuildHooks.worker(env: env)
         var layouts = 0
         for key in job.bodies {
@@ -334,8 +370,7 @@ final class TranscriptPremeasureDriver {
         case uncomputed
         case ineligible
         case eligible([PremeasureKey])
-        /// The row exceeded the source budget. Keep a tiny marker and lay it out on main after the
-        /// first attempt, rather than retaining a multi-megabyte duplicate body.
+        /// Keep only metadata when exact worker sources exceed the retained memo budget.
         case oversized
         case rejected
     }
@@ -351,6 +386,41 @@ final class TranscriptPremeasureDriver {
         var cost: Int
     }
 
+    let admission: TranscriptPremeasureAdmission
+    init(admission: TranscriptPremeasureAdmission = .shared) { self.admission = admission }
+
+    private var admissionObservation: PremeasureCapacityObservation?
+    private var admissionCompletion: (@MainActor () -> Void)?
+    private var admissionEpoch = 0
+    private var admissionCallbackScheduled = false
+
+    func observeAdmissionCapacity(completion: @escaping @MainActor () -> Void) {
+        self.admissionCompletion = completion
+        self.admissionEpoch = self.epoch.current
+        guard self.admissionObservation == nil else { return }
+        self.admissionObservation = PremeasureCapacityObservation(service: self.admission) { [weak self] in
+            self?.admissionCapacityReleased()
+        }
+    }
+    func stopObservingAdmissionCapacity() {
+        self.admissionObservation = nil
+        self.admissionCompletion = nil
+    }
+    private func admissionCapacityReleased() {
+        self.admissionObservation = nil
+        guard self.admissionCompletion != nil, !self.admissionCallbackScheduled else { return }
+        self.admissionCallbackScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.admissionCallbackScheduled = false
+            let completion = self.admissionCompletion
+            self.admissionCompletion = nil
+            self.admissionObservation = nil
+            guard self.admissionEpoch == self.epoch.current else { return }
+            completion?()
+        }
+    }
+
     let epoch = TranscriptPremeasureEpoch()
     private(set) var inFlight: [String: UInt64] = [:]
     private var rowMemos = BoundedLRUCache<String, RowMemo>(countLimit: TranscriptPremeasureBudget.rowLimit,
@@ -359,6 +429,7 @@ final class TranscriptPremeasureDriver {
     var stats = PremeasureStats()
     /// The list's width now, so results made for an older one are dropped.
     var currentWidth: () -> CGFloat = { 0 }
+    var currentRow: (String) -> TranscriptRow? = { _ in nil }
     #if DEBUG
     /// Row ids sent to the worker (bounded), for tests.
     private(set) var offloadedIds: Set<String> = []
@@ -416,67 +487,33 @@ final class TranscriptPremeasureDriver {
             let row = all[index]
             guard self.inFlight[row.id] == nil else { continue }
             var memo = self.memo(for: row, renderer: renderer)
-            var transientKeys: [PremeasureKey]?
             switch memo.eligibility {
-            case .uncomputed:
-                let computed = self.computeEligibility(for: row, revision: memo.revision, renderer: renderer)
-                memo = computed.memo
-                transientKeys = computed.transientKeys
-                self.store(memo, for: row.id)
             case .ineligible, .rejected:
                 now.append(index)
                 continue
-            case .eligible, .oversized:
-                break
+            default: break
             }
-
             if memo.warmWidth != nil, memo.warmCacheRevision != TranscriptText.warmCacheRevision {
                 memo.warmWidth = nil
                 memo.warmCacheRevision = nil
                 self.store(memo, for: row.id)
             }
-            if memo.warmWidth == contentWidth {
+            if memo.warmWidth == contentWidth || renderer.hasLayout(for: row, width: width) {
                 self.stats.warmHits += 1
                 now.append(index)
                 continue
             }
-            if renderer.hasLayout(for: row, width: width) {
-                self.stats.warmHits += 1
+            if memo.mainFallback { now.append(index); continue }
+            guard !renderer.premeasureIsHighlighted(row.id), Self.supportsSource(row) else {
                 now.append(index)
                 continue
             }
-            let keys: [PremeasureKey]
-            if let transientKeys {
-                keys = transientKeys
-            } else if case let .eligible(cachedKeys) = memo.eligibility {
-                keys = cachedKeys
-            } else {
-                now.append(index)
-                continue
-            }
-            if keys.allSatisfy({
-                #if DEBUG
-                PremeasureAdmissionProbe.record(row.id, operation: .warmLookup, source: $0.source)
-                #endif
-                return TranscriptText.isWarm($0.textKey, contentWidth: contentWidth)
-            }) {
-                memo.warmWidth = contentWidth
-                memo.warmCacheRevision = TranscriptText.warmCacheRevision
-                self.store(memo, for: row.id)
-                self.stats.warmHits += 1
-                now.append(index)
-                continue
-            }
-            if memo.mainFallback {
-                now.append(index)
-                continue
-            }
-            guard self.inFlight.count + jobs.count < Self.maxInFlight else {
-                if overflow == .measureNow { now.append(index) }
-                continue
-            }
-            jobs.append(PremeasureJob(rowId: row.id, bodies: keys, contentWidth: contentWidth,
-                                      epoch: self.epoch.current, rowRevision: memo.revision))
+            guard self.inFlight.count + jobs.count < Self.maxInFlight else { continue }
+            self.store(memo, for: row.id)
+            let request = PremeasureRequest(driver: self, rowID: row.id, revision: memo.revision)
+            jobs.append(PremeasureJob(rowId: row.id, bodies: [], request: request,
+                                      contentWidth: contentWidth, epoch: self.epoch.current,
+                                      rowRevision: memo.revision))
         }
         return (now, jobs)
     }
@@ -492,29 +529,25 @@ final class TranscriptPremeasureDriver {
                        mainFallback: false, cost: 1)
     }
 
-    private func computeEligibility(for row: TranscriptRow, revision: UInt64,
-                                    renderer: TranscriptRenderer) -> (memo: RowMemo, transientKeys: [PremeasureKey]?) {
-        let keys = renderer.premeasureBodies(for: row)
-        #if DEBUG
-        for key in keys ?? [] { PremeasureAdmissionProbe.record(row.id, operation: .sourceSize, source: key.source) }
-        #endif
-        let sourceBytes = keys?.reduce(0) { $0 + $1.source.utf8.count } ?? 0
-        let sourceCost = max(sourceBytes, 1)
-        let styleGeneration = renderer.premeasureStyleGeneration
-        let dark = renderer.premeasureDark
-        guard let keys else {
-            return (RowMemo(revision: revision, styleGeneration: styleGeneration, dark: dark,
-                            eligibility: .ineligible, warmWidth: nil, warmCacheRevision: nil,
-                            mainFallback: false, cost: 1), nil)
+    private static func supportsSource(_ row: TranscriptRow) -> Bool {
+        switch row {
+        case .entry(.user): return true
+        case let .entry(.assistant(turn)): return !turn.isStreaming
+        default: return false
         }
-        guard sourceCost <= Self.memoSourceByteLimit else {
-            return (RowMemo(revision: revision, styleGeneration: styleGeneration, dark: dark,
-                            eligibility: .oversized, warmWidth: nil, warmCacheRevision: nil,
-                            mainFallback: false, cost: 1), keys)
-        }
-        return (RowMemo(revision: revision, styleGeneration: styleGeneration, dark: dark,
-                        eligibility: .eligible(keys), warmWidth: nil, warmCacheRevision: nil,
-                        mainFallback: false, cost: sourceCost), nil)
+    }
+
+    func capture(_ job: PremeasureJob, env: TextBuildEnvironment) -> PremeasureJob? {
+        guard job.epoch == self.epoch.current,
+              let memo = self.rowMemos.value(for: job.rowId), memo.revision == job.rowRevision,
+              let row = self.currentRow(job.rowId), Self.supportsSource(row) else { return nil }
+        var captured = job
+        captured.request = nil
+        captured.sourceStyleGeneration = env.styleGeneration
+        captured.sourceDark = env.dark
+        if case let .eligible(keys) = memo.eligibility { captured.bodies = keys }
+        else { captured.sourceRow = row }
+        return captured
     }
 
     private func store(_ memo: RowMemo, for id: String) {
@@ -536,9 +569,18 @@ final class TranscriptPremeasureDriver {
         let jobs = self.split(indexes, all: all, width: width, renderer: renderer, overflow: .measureNow).offload
         guard !jobs.isEmpty else { return 0 }
         let epoch = self.epoch.current
-        let rows = TranscriptPremeasurer.shared.measureWithin(budget, jobs: jobs, env: renderer.textEnvironment, epoch: self.epoch)
-        self.stats.offloaded += rows.count
-        return self.adopt(rows, width: width, epoch: epoch).count
+        let deadline = Date().addingTimeInterval(budget)
+        var warmed = 0
+        for job in jobs {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            let rows = self.admission.measureWithin(remaining, jobs: [job], env: renderer.textEnvironment, epoch: self.epoch)
+            guard !rows.isEmpty else { break }
+            self.stats.offloaded += rows.count
+            warmed += self.adopt(rows, width: width, epoch: epoch).count
+            // Adopt each result before acquiring the next source: no multi-row result backlog.
+        }
+        return warmed
     }
 
     /// Sends `jobs` to the worker; `completion` runs on main after their results are adopted.
@@ -546,20 +588,26 @@ final class TranscriptPremeasureDriver {
         guard !jobs.isEmpty else { return }
         let epoch = self.epoch.current
         for job in jobs { self.inFlight[job.rowId] = job.rowRevision }
-        self.stats.offloaded += jobs.count
         #if DEBUG
         if self.offloadedIds.count > 10_000 { self.offloadedIds.removeAll() }
         self.offloadedIds.formUnion(jobs.map(\.rowId))
         #endif
-        for start in stride(from: 0, to: jobs.count, by: Self.rowsPerJob) {
-            let chunk = Array(jobs[start..<min(start + Self.rowsPerJob, jobs.count)])
-            TranscriptPremeasurer.shared.submit(chunk, env: env, epoch: self.epoch) { [weak self] rows in
+        var denied = false
+        for job in jobs {
+            let accepted = self.admission.submit(job, env: env, epoch: self.epoch) { [weak self] rows in
                 guard let self else { return }
                 let now = self.currentWidth()
                 self.adopt(rows, width: now > 0 ? now : width, epoch: epoch)
                 completion()
             }
+            if accepted { self.stats.offloaded += 1 }
+            if !accepted {
+                self.inFlight[job.rowId] = nil
+                denied = true
+            }
         }
+        if denied { self.admission.retry(self, completion: completion) }
+        else { self.stopObservingAdmissionCapacity() }
     }
 
     /// Takes worker results into the text caches. `width` is the list's width now; results made for
@@ -586,9 +634,15 @@ final class TranscriptPremeasureDriver {
                 self.stats.discardedStale += 1
                 continue
             }
+            if var memo = priorMemo, !result.sourceKeys.isEmpty || result.sourceIneligible {
+                if result.sourceIneligible { memo.eligibility = .ineligible }
+                else if result.sourceBytes > Self.memoSourceByteLimit { memo.eligibility = .oversized; memo.cost = 1 }
+                else { memo.eligibility = .eligible(result.sourceKeys); memo.cost = max(1, result.sourceBytes) }
+                self.store(memo, for: result.rowId)
+            }
             var adopted = true
             for body in result.bodies where !TranscriptText.adopt(body) { adopted = false }
-            if var memo = priorMemo {
+            if var memo = self.rowMemos.value(for: result.rowId) {
                 if !result.rejected.isEmpty {
                     memo.eligibility = .rejected
                     memo.warmWidth = nil
@@ -621,6 +675,7 @@ final class TranscriptPremeasureDriver {
     /// Drops everything in flight: the width, style or rows it was made for are gone.
     func cancelAll() {
         self.epoch.bump()
+        self.admission.remove(self)
         self.inFlight.removeAll()
         self.rowMemos.removeAll()
     }

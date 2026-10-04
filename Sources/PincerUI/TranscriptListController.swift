@@ -122,6 +122,10 @@ final class TranscriptListController {
         self.context = context
         self.prefetchBudget = prefetchBudget
         self.renderer = TranscriptRenderer(context: context)
+        self.premeasure.currentRow = { [weak self] id in
+            guard let self, let index = self.index[id] else { return nil }
+            return self.rows[index]
+        }
         self.premeasure.currentWidth = { [weak self] in self?.host?.layoutWidth ?? 0 }
         self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
             self?.invalidate(ids, keepInPlace: keepInPlace)
