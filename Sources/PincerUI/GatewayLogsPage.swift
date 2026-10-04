@@ -100,8 +100,7 @@ struct GatewayLogsPage: View {
             Button(L("Export")) {
                 let entries = self.exportLines
                 let gatewayName = self.gateway.profile.name
-                Task {
-                    let prepared = await self.exportPreparation.prepare(entries, gatewayName: gatewayName)
+                self.exportPreparation.request(entries, gatewayName: gatewayName) { prepared in
                     self.exportDocument = ExportedFile(logExport: prepared)
                 }
             }
@@ -109,6 +108,7 @@ struct GatewayLogsPage: View {
         } message: {
             Text("Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
         }
+        .onDisappear { self.exportPreparation.cancel() }
         .fileExporter(
             isPresented: Binding(get: { self.exportDocument != nil }, set: { if !$0 { self.exportDocument = nil } }),
             document: self.exportDocument,

@@ -14,8 +14,17 @@ import Foundation
     check(output.name == "openclaw-fixture-gateway-19700101-000000.log", "actual prepared export filename is deterministic")
     let counts = probe.snapshot()
     check(counts.mainJoins == 0 && counts.mainEncodes == 0, "actual log Export join and UTF8 encoding run off Main")
-    check(counts.mainJoins + counts.workerJoins == 1 && counts.mainEncodes + counts.workerEncodes == 1,
+    check(counts.workerJoins == 1 && counts.workerEncodes == 1,
           "per-instance bounded probe observes both actual Export preparation boundaries")
+    var published: GatewayLogExport?
+    preparation.request(entries, gatewayName: gatewayName) { published = $0 }
+    await preparation.waitForIdle()
+    check(published?.data == expected, "actual bounded UI admission publishes the finished current export")
+    published = nil
+    preparation.request(entries, gatewayName: gatewayName) { published = $0 }
+    preparation.cancel() // Synchronous invalidation precedes the queued worker's publication.
+    await preparation.waitForIdle()
+    check(published == nil, "canceled UI export cannot publish its prepared document")
 }
 
 @MainActor func runGatewayLogExportPreparationChecks() async {
