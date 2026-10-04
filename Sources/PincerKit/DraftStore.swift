@@ -4,12 +4,21 @@ import PincerPush
 
 /// Unsent composer contents for one chat.
 public struct ComposerDraft: Hashable, Sendable {
+    public let ownerID = UUID()
     public var text: String
     public var attachments: [OutgoingAttachment]
 
     public init(text: String = "", attachments: [OutgoingAttachment] = []) {
         self.text = text
         self.attachments = attachments
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text && lhs.attachments == rhs.attachments
+    }
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.text)
+        hasher.combine(self.attachments)
     }
 
     public var isEmpty: Bool { self.text.isEmpty && self.attachments.isEmpty }

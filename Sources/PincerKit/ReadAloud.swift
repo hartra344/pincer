@@ -31,6 +31,13 @@ public enum ReadAloudSettings {
     public static let sourceAutomatic = "automatic"
     public static let sourceDevice = "device"
     public static let rateRange: ClosedRange<Float> = 0.3 ... 0.7
+    /// Clamp in Double before conversion: a finite stored value may overflow Float.
+    public static func normalizedDeviceRate(_ stored: Double?) -> Float {
+        guard let stored, stored.isFinite else { return AVSpeechUtteranceDefaultSpeechRate }
+        let clamped = min(max(stored, Double(rateRange.lowerBound)), Double(rateRange.upperBound))
+        return Float(clamped)
+    }
+
     /// Sent in `SpeechChunker` pieces, so this only guards against huge messages.
     public static let gatewayTextLimit = 20000
     public static let gatewayTimeout: Duration = .seconds(15)
@@ -166,8 +173,7 @@ public final class ReadAloudController {
 
     private var deviceRate: Float {
         let stored = self.defaults.object(forKey: ReadAloudSettings.rateKey) as? Double
-        let rate = stored.map(Float.init) ?? AVSpeechUtteranceDefaultSpeechRate
-        return min(max(rate, ReadAloudSettings.rateRange.lowerBound), ReadAloudSettings.rateRange.upperBound)
+        return ReadAloudSettings.normalizedDeviceRate(stored)
     }
 
     private func run(messageId: String, text: String, gateway: GatewayVoiceModel?, generation: Int) async {

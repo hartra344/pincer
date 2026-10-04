@@ -23,7 +23,7 @@ If the gateway doesn't offer `sessions.list`, **Sessions** isn't in Gateway Sett
 
 ## Browsing sessions
 
-Each row shows the session's title, its agent and channel, and when it was last active. If it has run, the row also shows the latest run's status (**Queued**, **Running**, **Done**, **Error**, **Stopped** or **Timed Out**) and how long it took; a running session's time counts up. Archived sessions have an **Archived** tag, and sessions interrupted by a gateway restart have an orange icon.
+Each row shows the session's title, its agent and channel, and when it was last active. If it has run, the row also shows the latest run's status (**Queued**, **Running**, **Done**, **Error**, **Stopped** or **Timed Out**) and how long it took; a running session's time counts up. Invalid numeric durations display as zero, and extremely large finite durations saturate safely instead of preventing the Sessions page from opening. Archived sessions have an **Archived** tag, and sessions interrupted by a gateway restart have an orange icon.
 
 - **Show:** **Active** (the default), **Archived** or **All**.
 - **Filter sessions:** match the title, key, label, agent or channel.

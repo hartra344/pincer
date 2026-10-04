@@ -39,7 +39,11 @@ struct Composer: View {
         #endif
         let suggestions = self.suggestions
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            if let attachmentError {
+            if self.chat.draftAttachmentPreparationCount > 0 {
+                Label(L("Preparing attachments…"), systemImage: "hourglass")
+                    .font(.caption)
+            }
+            if let attachmentError = self.chat.draftAttachmentPreparationError ?? self.attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.orange)
@@ -157,13 +161,30 @@ struct Composer: View {
         }
         .onChange(of: self.photoItems) { _, items in
             guard !items.isEmpty else { return }
-            Task {
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self) {
-                        self.addImage(data, name: "photo.jpg")
+            let chat = self.chat
+            let ownerID = chat.draft.ownerID
+            let ingest = self.attachmentIngest
+            let admitted = items.compactMap { item -> (PhotosPickerItem, UUID)? in
+                guard let token = chat.beginAttachmentPreparation(ownerID: ownerID) else {
+                    ingest.report(L("Too many attachments are being prepared. Try again shortly."))
+                    return nil
+                }
+                return (item, token)
+            }
+            self.photoItems = []
+            Task { [weak chat] in
+                for (item, token) in admitted {
+                    defer { chat?.finishAttachmentPreparation(token) }
+                    do {
+                        if let data = try await item.loadTransferable(type: Data.self) {
+                            ingest.addImage(data, name: "photo.jpg")
+                        } else {
+                            ingest.report(L("Couldn’t load the selected photo."))
+                        }
+                    } catch {
+                        ingest.report(error.localizedDescription)
                     }
                 }
-                self.photoItems = []
             }
         }
     }
@@ -230,7 +251,7 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
-        guard !self.chat.isSendingEdit else { return false }
+        guard self.chat.draftAttachmentPreparationCount == 0, !self.chat.isSendingEdit else { return false }
         guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
         // Offline, messages queue in the outbox (attachments too while they fit on disk); commands need the Gateway.
         return self.gateway.state.isConnected || (self.attachmentsFitOffline && !self.isTypingCommand)
@@ -345,11 +366,12 @@ struct Composer: View {
         let replyTo = self.isTypingCommand ? nil : self.chat.replyTarget
         self.chat.draft = ComposerDraft()
         self.attachmentError = nil
+        let replacementOwnerID = self.chat.draft.ownerID
         Task {
             guard case .failed = await self.chat.sendMessage(text, attachments: attachments, replyTo: replyTo,
                                                           includeLocation: true) else { return }
             // Keep what was typed so it can be retried, unless something new was started meanwhile.
-            if self.chat.draft.text.isEmpty, self.chat.draft.attachments.isEmpty { self.chat.draft = draft }
+            if self.chat.draft.ownerID == replacementOwnerID, self.chat.draftAttachmentPreparationCount == 0, self.chat.draft.text.isEmpty, self.chat.draft.attachments.isEmpty { self.chat.draft = draft }
         }
     }
 
@@ -434,11 +456,16 @@ struct Composer: View {
     // MARK: Attachments
 
     private var attachmentIngest: AttachmentIngest {
-        AttachmentIngest(
+        let ownerID = self.chat.draft.ownerID
+        return AttachmentIngest(
             limits: self.gateway.uploadLimits,
             limitsAreLastKnown: self.gateway.uploadLimitsAreLastKnown,
-            add: { self.attachments.append($0) },
-            report: { self.attachmentError = $0 })
+            reserve: { [weak chat = self.chat] in
+                guard let token = chat?.beginAttachmentPreparation(ownerID: ownerID) else { return nil }
+                return { [weak chat] in chat?.finishAttachmentPreparation(token) }
+            },
+            add: { [weak chat = self.chat] in chat?.appendPreparedAttachment($0, ownerID: ownerID) },
+            report: { [weak chat = self.chat] in chat?.reportAttachmentPreparationError($0, ownerID: ownerID) })
     }
 
     private func ingest(_ items: [PastedMedia]) {
