@@ -278,6 +278,8 @@ public final class ChatStore: Identifiable {
 
     isolated deinit { self.quotePreviewPreparation.remove(ownerID: self.quotePreviewOwnerID) }
 #if DEBUG
+    /// Neutral test gate after edit ownership is captured, immediately before the real RPC.
+    @ObservationIgnored var messageEditRewindAdmissionProbe: (@MainActor () async -> Void)?
     /// Neutral test gate after the real rewind request completes; never substitutes a response.
     @ObservationIgnored var messageEditRewindCompletionProbe: (@MainActor (Bool) async -> Void)?
     @ObservationIgnored package var replyPreparationDidReserve: (@MainActor (String) -> Void)?

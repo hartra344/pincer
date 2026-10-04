@@ -113,6 +113,7 @@ enum Suites {
             Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
+            Section("Ingress health issues") { runIngressHealthChecks() },
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
@@ -149,6 +150,7 @@ enum Suites {
             Section("Location transport") { runLocationTransportChecks() },
             Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
+            Section("Cron run timestamp IDs") { runCronRunTimestampIDChecks() },
             Section("Activity notification timestamps") { runActivityNotificationTimestampChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -201,8 +203,12 @@ enum Suites {
             Section("Current shortcut tips") { runShortcutTipsChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
+            Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Settings save reconciliation" }) {
+            sections.insert(Section("Settings field search work") { await runSettingsFieldSearchChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership" }) {
             sections.insert(Section("Message edit completion ownership") { await runMessageEditCompletionOwnershipChecks() }, at: index + 1)
         }
@@ -240,6 +246,7 @@ enum Suites {
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
+        Section("Cron run timestamp IDs (demo)") { await runDemoCronRunTimestampIDChecks() },
         Section("Activity notification timestamps (demo)") { await runDemoActivityNotificationTimestampChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
@@ -249,6 +256,7 @@ enum Suites {
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
+        Section("Ingress health issues (demo)") { await runDemoIngressHealthChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
         Section("Shutdown restart delay bounds (demo)") { await runDemoShutdownRestartDelayBoundsChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
@@ -326,6 +334,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Settings save (demo)" }) {
+            sections.insert(Section("Settings field search work (demo)") { await runDemoSettingsFieldSearchChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership (demo)" }) {
             sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks() }, at: index + 1)
         }
@@ -344,6 +355,8 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
+        LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
         LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },

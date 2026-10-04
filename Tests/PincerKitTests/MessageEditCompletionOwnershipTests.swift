@@ -55,7 +55,11 @@ struct MessageEditCompletionOwnershipTests {
         try await self.exercise(change: "current", fail: fail)
     }
 
-    private func exercise(change: String, fail: Bool) async throws {
+    @Test func currentEditAtRequestAdmissionStillCompletesNormally() async throws {
+        try await self.exercise(change: "current", fail: false, holdAdmission: true)
+    }
+
+    private func exercise(change: String, fail: Bool, holdAdmission: Bool = false) async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
@@ -84,23 +88,44 @@ struct MessageEditCompletionOwnershipTests {
                                                originalText: target.originalText, savedDraft: target.savedDraft)
         }
         let gate = EditRewindCompletionGate()
+        let admission = EditRewindCompletionGate()
+        if change == "ABA" || holdAdmission {
+            chat.messageEditRewindAdmissionProbe = { await admission.hold(true) }
+        }
         chat.messageEditRewindCompletionProbe = { await gate.hold($0) }
-        defer { gate.release(); chat.messageEditRewindCompletionProbe = nil }
+        defer {
+            admission.release(); gate.release()
+            chat.messageEditRewindAdmissionProbe = nil; chat.messageEditRewindCompletionProbe = nil
+        }
         let oldText = "old admitted edit must not be resent after departure"
         let operation = Task { await chat.sendEdit(oldText, attachments: []) }
-        defer { operation.cancel(); gate.release() }
+        defer { operation.cancel(); admission.release(); gate.release() }
+        if change == "ABA" || holdAdmission {
+            try await self.wait { admission.arrived != nil }
+            #expect(chat.isSendingEdit)
+            if change == "ABA" {
+                // Before the real rewind, the original committed row still exists. After
+                // its response, sessions.changed may already have correctly removed it.
+                chat.cancelEdit()
+                #expect(chat.draft.text == normalDraft.text)
+                chat.draft = ComposerDraft(text: "fresh normal draft")
+                #expect(chat.beginEdit(original.id))
+                chat.draft.text = "fresh intent after departure"
+            }
+            admission.release()
+        }
         try await self.wait { gate.arrived != nil }
         #expect(gate.arrived == !fail, "gate follows the actual request success/error")
         #expect(chat.isSendingEdit)
-        if change != "current" {
+        if change != "current" && change != "ABA" {
             chat.cancelEdit()
             #expect(chat.draft.text == normalDraft.text)
             chat.draft = ComposerDraft(text: "fresh normal draft")
             if change == "replacement" { #expect(chat.beginEdit(replacement.id)) }
-            if change == "ABA" { #expect(chat.beginEdit(original.id)) }
             chat.draft.text = "fresh intent after departure"
             chat.errorMessage = "current feedback"
         }
+        if change == "ABA" { chat.errorMessage = "current feedback" }
         let freshDraft = chat.draft
         let freshTarget = chat.editTarget
         gate.release()
