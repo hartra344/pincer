@@ -78,4 +78,23 @@ struct AutomationDeleteLoadOwnershipTests {
             else { #expect(model.job("job-a")?.name == "Daily briefing") }
         } onCancel: { actual.cancel(); Task { await server.gate.release() } }
     }
+    @Test
+    func healthyRefreshAfterAcceptedDeletePublishesCurrentJobs() async throws {
+        let server = Server()
+        let hello = GatewayHello(payload: ["auth": ["scopes": ["operator.admin"]],
+            "features": ["methods": ["cron.list", "cron.status", "cron.remove"]]])
+        let model = AutomationsModel(request: server.request, hello: { hello })
+        await model.load()
+        let selected = try #require(model.job("job-a"))
+        #expect(await model.remove(selected))
+        await server.gate.release()
+        var updated = server.jobs[0].object ?? [:]
+            updated["name"] = .string("Updated backup review")
+            server.jobs[0] = .object(updated)
+        await model.load()
+        #expect(model.job("job-a") == nil)
+        #expect(model.job("job-b")?.name == "Updated backup review")
+        #expect(model.loadState == .idle && model.hasLoaded)
+    }
+
 }

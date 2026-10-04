@@ -443,6 +443,7 @@ public final class AutomationsModel {
     typealias Request = @MainActor (String, JSONValue, TimeInterval) async throws -> JSONValue
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let hello: () -> GatewayHello?
+    @ObservationIgnored private var deletionRevision = UUID()
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     public static let pageSize = 200
@@ -478,9 +479,11 @@ public final class AutomationsModel {
             return
         }
         self.loadState = .running
+        let deletionRevision = self.deletionRevision
         async let status = try? self.request("cron.status", [:], 20)
         do {
-            self.jobs = try await self.fetchJobs()
+            let jobs = try await self.fetchJobs()
+            if deletionRevision == self.deletionRevision { self.jobs = jobs }
             self.supported = true
             self.loadState = .idle
         } catch let error where GatewayError.isUnknownMethod(error) {
@@ -611,6 +614,7 @@ public final class AutomationsModel {
     @discardableResult
     public func remove(_ job: CronJob) async -> Bool {
         await self.perform(job.id, "cron.remove", ["id": .string(job.id)]) { _ in
+            self.deletionRevision = UUID()
             self.jobs.removeAll { $0.id == job.id }
             self.runs[job.id] = nil
         }

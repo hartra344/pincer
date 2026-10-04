@@ -71,6 +71,12 @@ private actor AutomationListGate {
             check(model.job("job-b")?.name == "Backup review", "held list retains independent automation")
             check((model.job("job-a") == nil) == (outcome == 1), "held list cannot restore successful deletion; ordinary/failed-delete rows remain")
             check(model.loadState == .idle && model.hasLoaded, "actual held load reaches terminal completion")
+            var updated = fixture.jobs[0].object ?? [:]
+            updated["name"] = .string("Updated remaining automation")
+            fixture.jobs[0] = .object(updated)
+            await model.load()
+            check(model.jobs.contains { $0.name == "Updated remaining automation" }, "fresh healthy list publishes after held-load completion")
+            check((model.job("job-a") == nil) == (outcome == 1), "fresh load preserves actual successful/failed deletion outcome")
         } onCancel: { actual.cancel(); Task { await fixture.gate.release() } }
     }
 }
@@ -133,6 +139,8 @@ private actor AutomationListGate {
             await actual.value
             check(model.job(added.id) == nil, "released old real cron.list cannot resurrect completed deletion")
             check(otherIDs.isSubset(of: Set(model.jobs.map(\.id))), "independent real mock automations remain after deletion")
+            await model.load()
+            check(model.job(added.id) == nil && otherIDs.isSubset(of: Set(model.jobs.map(\.id))), "fresh healthy real list publishes after accepted deletion")
         } onCancel: { actual.cancel(); Task { await requests.gate.release() } }
     } catch { check(false, "actual fresh-mock automation fixture RPCs complete") }
 }
