@@ -22,11 +22,11 @@ import Foundation
     do {
         let response = try await gateway.connection.request("config.schema", [:])
         let schema = await Task.detached { ConfigSchema(response: response) }.value
-        guard schema.root.object != nil, let ordinary = schema.field(at: ["gateway", "port"]) else {
-            check(false, "actual Demo schema supplies the existing port field"); return
+        guard schema.root.object != nil, let ordinary = schema.field(at: ["agents", "defaults", "model", "primary"]) else {
+            check(false, "actual Demo schema supplies its existing primary-model field"); return
         }
-        check(ordinary.kind == .integer && ordinary.validate( .number(18789)) == nil,
-              "actual Demo port schema retains ordinary valid-number behavior")
+        check(ordinary.kind == .text && ordinary.validate(.string("anthropic/claude-opus-4-8")) == nil,
+              "actual Demo primary-model schema retains its real text-field validation behavior")
         // Explicitly LOCAL valid JSON Schema constraint, interpreted by the same parsed
         // schema field API; no Gateway response overlay or configuration write.
         guard let local = schema.field(at: ["localBound"], node: ["type": "number", "maximum": .number(-1e30)]) else {
