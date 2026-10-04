@@ -26,10 +26,10 @@ public struct ConfigEdits: Sendable, Equatable {
     public private(set) var base: JSONValue
     /// Values set by path; `.null` removes the key. No entry is an ancestor of another.
     public private(set) var edits: [[String]: JSONValue] = [:]
-    /// What was typed into text fields, by dotted path, even when it doesn't parse yet.
-    public var texts: [String: String] = [:]
-    /// Typed text that doesn't parse, by dotted path. Saving waits until these are fixed.
-    public var inputErrors: [String: String] = [:]
+    /// What was typed into text fields, by structural path, even when it doesn't parse yet.
+    public var texts: [[String]: String] = [:]
+    /// Typed text that doesn't parse, by structural path. Saving waits until these are fixed.
+    public var inputErrors: [[String]: String] = [:]
 
     public init(base: JSONValue = .object([:])) {
         self.base = base
@@ -89,9 +89,8 @@ public struct ConfigEdits: Sendable, Equatable {
     /// Puts back the loaded value at `path` and everything under it.
     public mutating func revert(_ path: [String]) {
         self.set(path, self.baseValue(at: path))
-        let prefix = ConfigPath.string(path)
-        for key in self.texts.keys where Self.key(key, isUnder: prefix) { self.texts.removeValue(forKey: key) }
-        for key in self.inputErrors.keys where Self.key(key, isUnder: prefix) { self.inputErrors.removeValue(forKey: key) }
+        for key in self.texts.keys where key.starts(with: path) { self.texts.removeValue(forKey: key) }
+        for key in self.inputErrors.keys where key.starts(with: path) { self.inputErrors.removeValue(forKey: key) }
     }
 
     public mutating func discardAll() {
