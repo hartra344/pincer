@@ -8,6 +8,10 @@ struct CommandPaletteView: View {
     /// iOS: Settings is a sheet owned by the presenter.
     var openAppSettings: () -> Void
     @Environment(AppModel.self) private var app
+    #if DEBUG
+    @Environment(\.paletteSearchProbe) private var searchProbe
+    @Environment(\.paletteRankedIDsObserver) private var rankedIDsObserver
+    #endif
     @Environment(\.dictationSceneID) private var dictationSceneID
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
@@ -383,11 +387,19 @@ struct CommandPaletteView: View {
             guard let gateway, let messages, messages.gatewayId == gateway.id else { return [] }
             return messages.items
         }
-        var ranked = Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
-        guard self.page == .root else { return ranked }
-        ranked += PaletteMatcher.rank(CommandPalette.bookmarkItems(gateways: self.app.gateways), query: self.query).prefix(10)
-        return CommandPalette.addingSearchMessages(to: ranked, query: self.query, gatewaySelected: self.gateway != nil,
-                                                   shortcut: ShortcutCommand.searchMessages.displayShortcut)
+        func ranked() -> [PaletteItem] {
+            PaletteSearchPreparation.results(items,
+                bookmarks: self.page == .root ? CommandPalette.bookmarkItems(gateways: self.app.gateways) : [],
+                query: self.query, page: self.page == .root ? .root : .models,
+                gatewaySelected: self.gateway != nil, shortcut: ShortcutCommand.searchMessages.displayShortcut)
+        }
+        #if DEBUG
+        let finished = PaletteSearchDiagnostics.$probe.withValue(self.searchProbe) { ranked() }
+        if let observer = self.rankedIDsObserver { observer(finished.prefix(91).map(\.id)) }
+        return finished
+        #else
+        return ranked()
+        #endif
     }
 
     private var commandItems: [PaletteItem] {
@@ -822,3 +834,10 @@ struct GoCommands: Commands {
         }
     }
 }
+
+#if DEBUG
+extension EnvironmentValues {
+    @Entry var paletteSearchProbe: PaletteSearchProbe?
+    @Entry var paletteRankedIDsObserver: (([String]) -> Void)?
+}
+#endif
