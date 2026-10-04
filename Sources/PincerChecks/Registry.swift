@@ -166,7 +166,7 @@ enum Suites {
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
-            Section("Tool diff line number boundary") { await runToolDiffLineNumberBoundaryChecks() },
+            Section("Tool diff line number boundary") { await runToolDiffLineNumberBoundaryChecks(); await runToolDiffCursorExhaustionChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },

@@ -28,4 +28,19 @@ struct ToolDiffLineNumberBoundaryTests {
         #expect(lines.map(\.lineNumber) == [20, 11, 21])
         #expect(edit.additions == 1 && edit.deletions == 1 && values.1 == nil)
     }
+    @Test(arguments: [" context", "+added", "-deleted"])
+    func exhaustedHunkCursorHasNoFollowingNumber(first: String) async throws {
+        let result = await Task.detached {
+            ToolFileEditTests.parse("apply_patch", ["input": "--- a/file.txt\n+++ b/file.txt\n@@ -\(Int.max),3 +\(Int.max),3 @@\n\(first)\n\(first)\n\(first)"])
+        }.value
+        let edit = try #require(result)
+        try #require(edit.files.count == 1)
+        try #require(edit.files[0].hunks.count == 1)
+        let lines = edit.files[0].hunks[0].lines
+        #expect(lines.map(\.unified) == [first, first, first])
+        #expect(lines.map(\.lineNumber) == [Int.max, nil, nil])
+        #expect(edit.additions == (first.hasPrefix("+") ? 3 : 0))
+        #expect(edit.deletions == (first.hasPrefix("-") ? 3 : 0))
+    }
+
 }

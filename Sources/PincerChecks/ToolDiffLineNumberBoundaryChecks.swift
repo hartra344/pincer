@@ -46,3 +46,20 @@ private func exactBoundary(_ edit: ToolFileEdit?) -> Bool {
     check(exactBoundary(local),
           "local boundary fixture cannot terminate real Demo tool-card read processing")
 }
+
+@MainActor func runToolDiffCursorExhaustionChecks() async {
+    let valid = await Task.detached {
+        [" context", "+added", "-deleted"].allSatisfy { line in
+            let input = "--- a/file.txt\n+++ b/file.txt\n@@ -\(Int.max),3 +\(Int.max),3 @@\n\(line)\n\(line)\n\(line)"
+            let args = String(decoding: try! JSONSerialization.data(withJSONObject: ["input": input]), as: UTF8.self)
+            guard let edit = ToolFileEdit.parse(toolName: "apply_patch", arguments: args),
+                  edit.files.count == 1, let file = edit.files.first,
+                  file.hunks.count == 1, let hunk = file.hunks.first else { return false }
+            return hunk.lines.map(\.unified) == [line, line, line]
+                && hunk.lines.map(\.lineNumber) == [Int.max, nil, nil]
+                && edit.additions == (line.hasPrefix("+") ? 3 : 0)
+                && edit.deletions == (line.hasPrefix("-") ? 3 : 0)
+        }
+    }.value
+    check(valid, "actual context, addition and deletion cursors become unavailable after their last representable line")
+}
