@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Synchronization
 
 public struct ToolsInspectorSearchResult: Sendable {
     public let groups: [InspectedToolGroup]
@@ -12,7 +13,13 @@ public struct ToolsInspectorSearchResult: Sendable {
 /// One active exact search plus one replaceable latest COW snapshot. No global cache.
 @MainActor @Observable
 public final class ToolsInspectorSearchPreparation {
+    private final class Cancellation: Sendable {
+        private let value = Mutex(false)
+        var isCanceled: Bool { value.withLock { $0 } }
+        func cancel() { value.withLock { $0 = true } }
+    }
     private struct Job: Sendable {
+        let cancellation: Cancellation
         let ticket: UUID
         let owner: UUID
         let sourceRevision: Int
@@ -49,19 +56,22 @@ public final class ToolsInspectorSearchPreparation {
     public func prepare(_ inspection: ToolsInspection, filter: ToolFilter, query: String,
                         server: String? = nil, owner: UUID, sourceRevision: Int) async -> ToolsInspectorSearchResult? {
         guard !Task.isCancelled else { return nil }
-        let ticket = UUID()
+        let ticket = UUID(), cancellation = Cancellation()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(returning: nil); return }
                 current = ticket; result = nil
-                let job = Job(ticket: ticket, owner: owner, sourceRevision: sourceRevision, inspection: inspection,
+                let job = Job(cancellation: cancellation, ticket: ticket, owner: owner, sourceRevision: sourceRevision, inspection: inspection,
                     filter: filter, query: query, server: server, completion: { continuation.resume(returning: $0) })
                 if active != nil {
                     let displaced = pending; pending = job
                     displaced?.completion(nil)
                 } else { start(job) }
             }
-        } onCancel: { Task { @MainActor [weak self] in self?.cancel(ticket) } }
+        } onCancel: {
+            cancellation.cancel()
+            Task { @MainActor [weak self] in self?.cancel(ticket) }
+        }
     }
     private func start(_ job: Job) {
         active = job.ticket
@@ -89,7 +99,7 @@ public final class ToolsInspectorSearchPreparation {
                 #endif
                 return output
             }.value
-            let accepted = current == job.ticket
+            let accepted = current == job.ticket && !job.cancellation.isCanceled
             active = nil
             #if DEBUG
             workerTask = nil
