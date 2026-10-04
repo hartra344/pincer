@@ -154,6 +154,7 @@ public final class ShareModel {
     }
 
     public func disconnect() {
+        self.generation += 1
         self.pumpTask?.cancel()
         self.pumpTask = nil
         self.hello = nil
@@ -187,7 +188,7 @@ public final class ShareModel {
             }
             self.prepareAttachments()
             await self.loadTargets()
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.phase = .ready
         }
     }
@@ -198,15 +199,20 @@ public final class ShareModel {
     }
 
     private func loadTargets() async {
-        guard let connection else { return }
+        guard !Task.isCancelled, let connection else { return }
+        let generation = self.generation
         async let agents = try? connection.request("agents.list", [:])
         async let sessions = try? connection.request(
             "sessions.list", ["limit": 200, "includeLastMessage": false, "archived": false], timeout: 30)
-        if let agents = await agents {
+        let agentResponse = await agents
+        guard !Task.isCancelled, self.connection === connection, generation == self.generation else { return }
+        if let agents = agentResponse {
             self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
             self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
         }
-        let rows = await sessions?["sessions"]?.array?.compactMap(SessionRow.init) ?? []
+        let sessionResponse = await sessions
+        guard !Task.isCancelled, self.connection === connection, generation == self.generation else { return }
+        let rows = sessionResponse?["sessions"]?.array?.compactMap(SessionRow.init) ?? []
         self.chats = Self.shareableChats(rows)
         let remembered = self.profileId.flatMap { self.defaults.string(forKey: Self.lastTargetKey($0)) }
             .flatMap(ShareTarget.init(storageValue:))
