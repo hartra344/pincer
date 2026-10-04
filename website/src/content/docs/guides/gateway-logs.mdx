@@ -87,3 +87,5 @@ This is the gateway's log. Pincer's own request log (`PINCER_REQUEST_LOG`) is di
 :::
 
 For a summary of channel status, connected clients and restarts, see [Gateway health & restart](../gateway-health/).
+
+Log pages are parsed and prepared for display and search in the background, including small pages. Clear empties the visible buffer immediately; a page already being prepared still advances the cursor without putting its older lines back.

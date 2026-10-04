@@ -188,6 +188,19 @@ public struct GatewayLogEntry: Identifiable, Hashable, Sendable {
         self.byteCount = marker.utf8.count
     }
 
+    /// Assign arrival identity without repeating prepared text work.
+    private init(id: Int, prepared: GatewayLogEntry) {
+        self.id = id
+        self.kind = prepared.kind
+        self.line = prepared.line
+        self.displayMessage = prepared.displayMessage
+        self.displayRaw = prepared.displayRaw
+        self.searchText = prepared.searchText
+        self.byteCount = prepared.byteCount
+    }
+
+    func identified(_ id: Int) -> GatewayLogEntry { Self(id: id, prepared: self) }
+
     public var isMarker: Bool { self.kind != .line }
     public var level: GatewayLogLevel? { self.line.level }
     public var subsystem: String? { self.line.subsystem }
@@ -413,8 +426,6 @@ public final class GatewayLogsModel {
     public nonisolated static let defaultByteCapacity = 8 * 1024 * 1024
     public nonisolated static let limit = 500
     public nonisolated static let maxBytes = 250_000
-    /// Responses with more lines than this are parsed off the main actor.
-    nonisolated static let backgroundParseThreshold = 500
 
     public nonisolated static var missingScopeMessage: String { L("Gateway Logs needs the operator.read scope. Approve it for this device on the Gateway host, then try again.") }
 
@@ -422,6 +433,7 @@ public final class GatewayLogsModel {
 
     #if DEBUG
     @ObservationIgnored package var pagePreparationProbe: GatewayLogPreparationProbe?
+    @ObservationIgnored package var didPreparePage: (@Sendable () async -> Void)?
     #endif
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
@@ -513,34 +525,41 @@ public final class GatewayLogsModel {
     func apply(_ page: GatewayLogPage, displayEpoch: UInt64? = nil) async {
         let admittedEpoch = displayEpoch ?? self.displayEpoch
         let firstRead = self.cursor == nil
-        var markers: [String] = []
-        if let previous = self.file, let file = page.file, previous != file {
-            markers.append("Now reading \(file)")
-        } else if page.reset {
-            if let skipped = page.skippedBytes, skipped > 0 {
-                markers.append("Skipped \(Int64(skipped).formatted(.byteCount(style: .file))) of log output (Pincer fell behind)")
-            } else {
-                markers.append("Log file was rotated or truncated. Reading from the start.")
-            }
-        } else if page.truncated, !firstRead {
-            markers.append("Some lines were skipped (too much output at once)")
-        }
-
-        let raw = Array(page.lines.suffix(self.capacity))
+        let previousFile = self.file
+        let capacity = self.capacity
         #if DEBUG
         let probe = self.pagePreparationProbe
-        let parse: @Sendable (String) -> GatewayLogLine = { text in
-            probe?.record(.parsing)
-            return GatewayLogLine.parse(text)
-        }
-        #else
-        let parse: @Sendable (String) -> GatewayLogLine = GatewayLogLine.parse
+        let didPrepare = self.didPreparePage
         #endif
-        let parsed: [GatewayLogLine] = if raw.count > Self.backgroundParseThreshold {
-            await Task.detached(priority: .userInitiated) { raw.map(parse) }.value
-        } else {
-            raw.map(parse)
-        }
+        let prepared = await Task.detached(priority: .userInitiated) {
+            var markers: [String] = []
+            if let previous = previousFile, let file = page.file, previous != file {
+                markers.append("Now reading \(file)")
+            } else if page.reset {
+                if let skipped = page.skippedBytes, skipped > 0 {
+                    markers.append("Skipped \(Int64(skipped).formatted(.byteCount(style: .file))) of log output (Pincer fell behind)")
+                } else {
+                    markers.append("Log file was rotated or truncated. Reading from the start.")
+                }
+            } else if page.truncated, !firstRead {
+                markers.append("Some lines were skipped (too much output at once)")
+            }
+            var entries = markers.map { GatewayLogEntry(id: 0, marker: $0) }
+            for raw in page.lines.suffix(capacity) {
+                #if DEBUG
+                probe?.record(.parsing)
+                #endif
+                let line = GatewayLogLine.parse(raw)
+                #if DEBUG
+                probe?.record(.rowPreparation)
+                #endif
+                entries.append(GatewayLogEntry(id: 0, line: line))
+            }
+            #if DEBUG
+            await didPrepare?()
+            #endif
+            return entries
+        }.value
 
         // Even a cleared page advances the transport cursor; its old lines must not replay.
         self.cursor = page.cursor
@@ -549,17 +568,9 @@ public final class GatewayLogsModel {
         guard self.displayEpoch == admittedEpoch else { return }
         if firstRead { self.showsRecentOnly = page.truncated }
 
-        var fresh = markers.map { marker in
+        let fresh = prepared.map { entry in
             defer { self.nextId += 1 }
-            return GatewayLogEntry(id: self.nextId, marker: marker)
-        }
-        fresh.reserveCapacity(fresh.count + parsed.count)
-        for line in parsed {
-            #if DEBUG
-            probe?.record(.rowPreparation)
-            #endif
-            fresh.append(GatewayLogEntry(id: self.nextId, line: line))
-            self.nextId += 1
+            return entry.identified(self.nextId)
         }
         self.append(fresh)
     }

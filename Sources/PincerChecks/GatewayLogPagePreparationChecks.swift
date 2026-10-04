@@ -29,6 +29,15 @@ import Foundation
         return ["file": "/fixture/gateway.log", "cursor": 5000, "size": 5000, "lines": .array(lines.map(JSONValue.string))]
     }
     await checkLogPageWork(model)
+    let bounded = GatewayLogsModel { _, _ in
+        ["cursor": 30, "lines": .array((0..<20).map { .string("line \($0)") })]
+    }
+    bounded.capacity = 4; bounded.byteCapacity = 15
+    await bounded.poll()
+    check(bounded.entries.map(\.message) == ["line 18", "line 19"] && bounded.bufferedBytes == 14,
+          "worker-prepared page retains exact newest lines under both buffer bounds")
+    check(bounded.entries.map(\.id) == [3, 4] && bounded.lineCount == 2,
+          "arrival IDs and metadata counts remain exact after prepared-row eviction")
 }
 
 @MainActor func runDemoGatewayLogPagePreparationChecks() async {
