@@ -32,11 +32,12 @@ struct ChatExportTests {
             let result = await writer.write(TranscriptCache.Snapshot(items: self.items(), complete: true), to: file)
             await writer.drain()
             try #require(result.modified != nil && !result.unchanged)
-            try #require(FileManager.default.isReadableFile(atPath: file.path))
+            let readable = await Task.detached { FileManager.default.isReadableFile(atPath: file.path) }.value
+            try #require(readable)
         } catch {
             await writer.drain()
             TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: root)
-            try? FileManager.default.removeItem(at: root)
+            await Task.detached { try? FileManager.default.removeItem(at: root) }.value
             scratch.remove()
             throw error
         }
