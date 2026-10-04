@@ -17,17 +17,20 @@ import Foundation
 
 @MainActor private func checkHealthCanceledAdmission(request: @escaping GatewayHealthModel.Request) async {
     let gate = HealthAdmissionGate()
-    var calls = 0
+    var calls: [String: Int] = [:]
+    var returned: [String: JSONValue] = [:]
     let model = GatewayHealthModel { method, params in
+        check(["health", "last-heartbeat", "system-presence"].contains(method) && params == [:], "health admission uses only exact empty-parameter read methods")
+        calls[method, default: 0] += 1
         try Task.checkCancellation()
-        calls += 1
         let value = try await request(method, params)
+        returned[method] = value
         if method == "health" { await gate.hold() }
         return value
     }
     let healthy = Task { await model.load() }
     defer { healthy.cancel(); gate.release() }
-    guard await waitFor("actual held health response", timeout: 15, { gate.entered }) else {
+    guard await waitFor("actual held health response", timeout: 15, { gate.entered && returned.count == 3 }) else {
         check(false, "health admission reaches actual held response")
         healthy.cancel(); gate.release(); await healthy.value; return
     }
@@ -36,7 +39,11 @@ import Foundation
     await canceled.value
     gate.release()
     await healthy.value
-    check(calls == 3, "pre-canceled refresh admits no additional health RPC")
+    check(calls == ["health": 1, "last-heartbeat": 1, "system-presence": 1], "pre-canceled refresh admits no additional health RPC")
+    check(model.health == returned["health"].flatMap(GatewayHealthSummary.init)
+          && model.heartbeat == returned["last-heartbeat"].flatMap(GatewayHeartbeat.init)
+          && model.presence == returned["system-presence"].map(GatewayPresenceEntry.list),
+          "all actual returned health, heartbeat and presence fields survive canceled admission")
     check(model.health != nil && model.heartbeatLoaded && model.hasLoaded, "healthy held load publishes after canceled refresh")
     check(model.loadState == .idle, "canceled refresh cannot publish an error or strand load readiness")
 }
