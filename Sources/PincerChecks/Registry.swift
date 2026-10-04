@@ -74,6 +74,7 @@ enum Suites {
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("Display name editing") { await runOwnerNameChecks() },
             Section("URL policy") { runURLPolicyChecks() },
+            Section("Rewind history ownership") { await runRewindHistoryOwnershipChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
             Section("Latest measurement worker") { await runLatestMeasurementChecks() },
@@ -213,6 +214,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
