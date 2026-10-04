@@ -209,6 +209,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
         }
@@ -342,6 +343,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Log page preparation (demo)") { await runDemoGatewayLogPagePreparationChecks() }, at: index + 1)
         }

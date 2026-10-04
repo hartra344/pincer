@@ -563,6 +563,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     #if DEBUG
     /// Test dependency at the actual background reconciliation boundary; nil in production.
+    @ObservationIgnored package var cacheInventoryProbe: CacheInventoryProbe?
+    @ObservationIgnored package var cacheInventoryDidPrepare: (@Sendable () async -> Void)?
     @ObservationIgnored package var beforeBootstrapReconciliation: (@MainActor @Sendable () async -> Void)?
     @ObservationIgnored private var observedBootstrapBackground: (epoch: Int, task: Task<Void, Never>)?
     @ObservationIgnored private var lastObservedBackground: (epoch: Int, task: Task<Void, Never>)?
