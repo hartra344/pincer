@@ -270,3 +270,11 @@ Debug reconnect checks wait for the current connection's actual bootstrap and pr
 Cache-reconciliation checks observe the actual directory inventory on the cache writer's background actor. They verify that an authoritative complete session list removes orphan manifests while current chats and retained outbox entries keep theirs, including owners created while inventory is in flight. Session-key hashing and live-owner bookkeeping remain separate main-actor work; these checks do not establish a physical interaction-latency improvement.
 
 UI readiness polling stops when its test task is canceled, including during the final readiness grace period. This keeps canceled tests from continuing to evaluate UI predicates; readiness deadlines and test time limits are unchanged.
+
+To verify the actual iOS Quick Look presentation lifecycle, use a selected simulator:
+
+```sh
+python3 scripts/quicklook-presentation-check.py --destination 'platform=iOS Simulator,id=YOUR-SIMULATOR-UUID'
+```
+
+This generates an inert, uniquely named temporary app host and runs exactly one enabled test, with no SVG tests. It requires real presentation, backing-file survival while open, and cleanup after programmatic dismissal. It does not prove a physical Done-button action or navigation away while a preview is open. The package test is disabled without the explicit app-host flag; a skipped package test is not presentation evidence. The script retains its temporary result bundle and rejects skipped or failed execution.
