@@ -74,7 +74,6 @@ enum Suites {
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("Display name editing") { await runOwnerNameChecks() },
             Section("URL policy") { runURLPolicyChecks() },
-            Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Rewind history ownership") { await runRewindHistoryOwnershipChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
@@ -106,11 +105,13 @@ enum Suites {
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section(nil) { await checkSessionManager() },
+            Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
+            Section("MCP refresh outcomes") { await runMCPRefreshOutcomeChecks() },
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
@@ -216,8 +217,9 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
-        Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
+        Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
+        Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },

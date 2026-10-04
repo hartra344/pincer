@@ -85,25 +85,40 @@ struct RawConfigEditorHostedTests {
     enum Later: String, CaseIterable, Sendable { case unchanged, changed, revert, aba }
     @Test(.timeLimit(.minutes(2)), arguments: Later.allCases)
     func actualSaveRetainsOnlyPostAdmissionEditorIntent(_ later: Later) async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+        @MainActor func phase(_ name: String, field: UITextView? = nil, window: UIWindow? = nil, saving: Bool? = nil) {
+            print("Raw Save case=\(later.rawValue) phase=\(name) elapsed=\(started.duration(to: clock.now)) saving=\(String(describing: saving)) windowBounds=\(String(describing: window?.bounds)) fieldBounds=\(String(describing: field?.bounds)) attached=\(field?.window != nil)")
+        }
+        phase("start")
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let server = Server()
         let model = GatewaySettingsModel(request: { try await server.request($0, $1, $2) },
                                         scopes: { [GatewayConnection.adminScope] })
+        phase("reload-before")
         await model.reloadConfig()
+        phase("reload-after")
         let baseline = server.raw
         let admitted = "{\"gateway\":{\"port\":18790}}"
         let newer = "{\"gateway\":{\"port\":18791}}"
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
         gateway.cacheRoot = nil
-        defer { gateway.stop(); server.release() }
+        defer { phase("gateway-cleanup-before", saving: model.isSaving); gateway.stop(); server.release(); phase("gateway-cleanup-after", saving: model.isSaving) }
         let host = UIHostingController(rootView: NavigationStack { RawConfigPage(settings: model) }.environment(gateway))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = host; window.makeKeyAndVisible()
-        defer { window.isHidden = true; window.rootViewController = nil }
+        defer { phase("window-cleanup-before", window: window); window.isHidden = true; window.rootViewController = nil; phase("window-cleanup-after", window: window) }
+        phase("host-baseline-before", window: window, saving: model.isSaving)
         try #require(await eventually { window.layoutIfNeeded(); return self.views(window).contains { ($0 as? UITextView)?.text == baseline } })
         let field = try #require(self.views(window).compactMap { $0 as? UITextView }.first)
-        edit(field, admitted)
+        phase("host-baseline-after", field: field, window: window, saving: model.isSaving)
+        phase("native-assignment-before", field: field, window: window)
+        field.text = admitted
+        phase("native-assignment-after", field: field, window: window)
+        field.delegate?.textViewDidChange?(field)
+        phase("native-delegate-after", field: field, window: window)
+        phase("save-readiness-before", field: field, window: window)
         let saveReady = await eventually(timeout: .seconds(15)) {
             window.layoutIfNeeded()
             return self.saveEnabled(window)
@@ -111,23 +126,41 @@ struct RawConfigEditorHostedTests {
         if !saveReady {
             print("Raw config Save readiness: public items=\(self.toolbarItems(window).map { String(describing: $0.title) + " target=" + String(describing: $0.target) + " action=" + String(describing: $0.action) }); AX=\(CenteredChatHeaderNativeFixtures.labels(window))")
         }
+        phase("save-readiness-after", field: field, window: window, saving: model.isSaving)
         try #require(saveReady, "Actual public native toolbar enables Save after current validation")
+        phase("save-activation-before", field: field, window: window, saving: model.isSaving)
         try #require(activate("Save", window: window), "Invoke the actual native toolbar Save action")
+        phase("save-activation-after", field: field, window: window, saving: model.isSaving)
+        phase("request-admission-before", field: field, window: window, saving: model.isSaving)
         try #require(await eventually { server.submitted == admitted && model.isSaving })
+        phase("request-admission-after", field: field, window: window, saving: model.isSaving)
+        phase("later-intent-before", field: field, window: window)
         switch later {
         case .unchanged: break
         case .changed: edit(field, newer)
         case .revert:
+            phase("revert-activation-before", field: field, window: window)
             try #require(activate("Revert", window: window), "Invoke actual toolbar Revert after Save admission")
+            phase("revert-activation-after", field: field, window: window)
             try #require(await eventually { field.text == baseline })
+            phase("revert-ready", field: field, window: window)
         case .aba: edit(field, newer); edit(field, baseline)
         }
+        phase("later-intent-after", field: field, window: window)
+        phase("response-release-before", field: field, window: window, saving: model.isSaving)
         server.release()
+        phase("response-release-after", field: field, window: window, saving: model.isSaving)
+        phase("ack-before", field: field, window: window, saving: model.isSaving)
         try #require(await eventually { !model.isSaving && model.snapshot?.raw == admitted })
+        phase("ack-after", field: field, window: window, saving: model.isSaving)
+        phase("fixed-settlement-before", field: field, window: window)
         for _ in 0..<4 { await Task.yield() }; window.layoutIfNeeded()
+        phase("final-field-assertion-before", field: field, window: window, saving: model.isSaving)
         #expect(field.text == (later == .unchanged ? admitted : later == .changed ? newer : baseline),
                 "Actual acknowledgement must not replace later editor typing or explicit Revert/ABA")
+        phase("final-field-assertion-after", field: field, window: window)
         #expect(server.submitted == admitted, "Only the captured raw file reaches config.apply")
+        phase("final-assertions-after", field: field, window: window)
     }
     @Test(.timeLimit(.minutes(2))) func actualEditedBodyDoesNotParseJSON5OnMain() async throws {
         let clock = ContinuousClock()
