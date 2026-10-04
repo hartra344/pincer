@@ -22,6 +22,15 @@ import PincerKit
     check(!canceledResult && calls == 1, "actual readiness loop stops after its first predicate cancels the task")
 
     calls = 0
+    let selfCancelingReady = Task { await uiTestEventually {
+        calls += 1; owner.task?.cancel(); return true
+    } }
+    owner.task = selfCancelingReady
+    let selfCancelingResult = await selfCancelingReady.value
+    owner.task = nil
+    check(!selfCancelingResult && calls == 1, "a ready predicate cannot bypass its own actual task cancellation")
+
+    calls = 0
     let ready = await uiTestEventually { calls += 1; return true }
     check(ready && calls == 1, "current ready predicate completes normally")
     calls = 0

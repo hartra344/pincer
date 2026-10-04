@@ -38,5 +38,32 @@ struct UITestReadinessCancellationTests {
         let progress = await uiTestEventually { calls += 1; return calls == 2 }
         #expect(progress && calls == 2)
     }
+    @Test func readyPredicateCannotEscapeItsOwnCancellation() async {
+        let owner = TaskOwner()
+        var calls = 0
+        let task = Task { await uiTestEventually {
+            calls += 1; owner.task?.cancel(); return true
+        } }
+        owner.task = task
+        defer { task.cancel(); owner.task = nil }
+        let result = await task.value
+        #expect(!result && calls == 1)
+    }
+
+    @Test func cancellationDuringFinalGraceDoesNotReadPredicateAgain() async {
+        let owner = TaskOwner()
+        var calls = 0
+        let task = Task { await uiTestEventually(timeout: .zero) {
+            calls += 1
+            // Enqueued on MainActor: runs only after the helper suspends for its final grace.
+            Task { owner.task?.cancel() }
+            return false
+        } }
+        owner.task = task
+        defer { task.cancel(); owner.task = nil }
+        let result = await task.value
+        #expect(!result && calls == 1)
+    }
+
 }
 #endif
