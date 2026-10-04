@@ -264,10 +264,10 @@ extension ChatStore {
         let (windowed, moreInCache) = Self.window(loaded.items, limit: self.windowLimit)
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
-        self.cacheOutcome = outcome
         #if DEBUG
         if let gate = self.exportCacheCompletionGate { await gate() }
         #endif
+        self.cacheOutcome = outcome
         let exportAuthorityCurrent = exportRevision == self.exportCacheRevision
         let completeUsableCache: Bool
         switch outcome {
