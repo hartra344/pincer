@@ -134,7 +134,15 @@ public enum SessionManager {
 
     /// "4s", "2m 5s", "1h 3m".
     public static func formatDuration(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded(.down)))
+        let total: Int
+        if !seconds.isFinite || seconds <= 0 {
+            total = 0
+        } else if seconds >= Double(Int.max) {
+            // Double(Int.max) rounds upward on 64-bit platforms; branch before conversion.
+            total = Int.max
+        } else {
+            total = Int(seconds.rounded(.down))
+        }
         let (hours, minutes, secs) = (total / 3600, (total % 3600) / 60, total % 60)
         if hours > 0 { return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h" }
         if minutes > 0 { return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m" }

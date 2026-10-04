@@ -37,6 +37,16 @@ func checkSessionManager() async {
     check(SessionRunState(row: row("s", ["status": "running"])) == .idle, "running status without an active run → idle")
     check(SessionManager.formatDuration(125) == "2m 5s" && SessionManager.formatDuration(3780) == "1h 3m" && SessionManager.formatDuration(4) == "4s",
           "duration text")
+    let huge = row("huge", ["status": "failed", "runtimeMs": .number(1e30)])
+    let saturated = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+    check(SessionManager.runDuration(huge, now: now).map(SessionManager.formatDuration) == saturated,
+          "actual oversized session runtime safely saturates before integer conversion")
+    check([Double.nan, Double.infinity, -Double.infinity, -Double.greatestFiniteMagnitude].allSatisfy {
+        SessionManager.formatDuration($0) == "0s"
+    }, "nonfinite and negative durations are safe")
+    check(SessionManager.formatDuration(Double(Int.max)) == saturated
+          && !SessionManager.formatDuration(Double(Int.max).nextDown).isEmpty,
+          "integer conversion boundary remains safe")
     check(SessionManager.bulkSummary(verb: "Archived", SessionBulkOutcome(succeeded: ["a", "b"], failed: [.init(key: "c", message: "x")]))
           == "Archived 2 sessions; 1 failed", "bulk summary")
     let titledFailure = SessionBulkOutcome.Failure(key: live.key, message: "refused")
@@ -137,6 +147,7 @@ func runDemoSessions(_ gateway: GatewayStore) async {
         let state = SessionRunState(row: running)
         check((state == .running || state == .done) && elapsed >= 300, "demo running session with duration (\(state), \(elapsed))")
         check(SessionRunState(row: failed) == .failed && SessionManager.runDuration(failed, now: Date()) == 94, "demo failed run 1m 34s")
+        checkDemoSessionDurationFormatting(running: running, failed: failed)
     } else {
         check(false, "demo seeds running and failed sessions")
     }
@@ -366,4 +377,33 @@ func runLiveSessions(profile: GatewayProfile, admin: GatewayStore) async {
     await admin.chat(for: refactor).abort()
     let stopped = await waitFor("seeded run stopped", timeout: 5) { admin.sessions[refactor]?.hasActiveRun == false }
     check(stopped, "chat.abort stops the seeded run")
+}
+
+@MainActor
+private func checkDemoSessionDurationFormatting(running: SessionRow, failed: SessionRow) {
+    let elapsed = SessionManager.runDuration(running, now: Date())
+    check(SessionManager.runDuration(failed, now: Date()).map(SessionManager.formatDuration) == "1m 34s"
+          && elapsed.map(SessionManager.formatDuration).map { !$0.isEmpty } == true,
+          "actual connected Demo run durations retain their visible formatting")
+}
+
+/// Focused duration coverage without the session manager's unrelated destructive bulk checks.
+@MainActor
+func runDemoSessionDurationFormattingChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    defer { gateway.stop() }
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    guard await waitFor("session duration Demo", timeout: 25, {
+        gateway.state.isConnected && !gateway.sessions.isEmpty
+    }) else { check(false, "actual session duration Demo connects"); return }
+    let manager = gateway.sessionManager
+    await manager.load(filter: .all)
+    guard let running = manager.row("agent:coder:dashboard:refactor"),
+          let failed = manager.row("agent:coder:dashboard:ci-fix") else {
+        check(false, "actual session duration Demo retains its seeded runs"); return
+    }
+    checkDemoSessionDurationFormatting(running: running, failed: failed)
 }
