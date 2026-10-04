@@ -1,6 +1,6 @@
 import Foundation
 
-func runChecksPendingProgressChecks() async {
+@MainActor func runChecksPendingProgressChecks() async {
     #if os(macOS)
     let script = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -8,7 +8,7 @@ func runChecksPendingProgressChecks() async {
     let result = await Task.detached {
         let process = Process(), output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", script.path]
+        process.arguments = ["python3", script.path, "--require-safe-identity"]
         process.standardOutput = output; process.standardError = output
         do {
             try process.run()
