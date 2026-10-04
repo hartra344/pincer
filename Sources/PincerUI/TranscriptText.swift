@@ -7,16 +7,9 @@ import UIKit
 #endif
 
 #if DEBUG
-/// Constant-size recorder for the actual key-building path in one diagnostic task scope.
-final class TranscriptSourceDigestRecorder: Sendable {
-    private let counter = Mutex<Int>(0)
-    var count: Int { self.counter.withLock { $0 } }
-    func record() { self.counter.withLock { $0 += 1 } }
-}
-
-enum TranscriptSourceDigestProbe {
-    @TaskLocal static var recorder: TranscriptSourceDigestRecorder?
-}
+// Keep UI diagnostics on the shared package probe; neither alias retains source text.
+typealias TranscriptSourceDigestRecorder = TaskScopeWorkRecorder
+typealias TranscriptSourceDigestProbe = TaskScopeWorkProbe
 #endif
 
 /// Turns message text into attributed strings for native text views, and measures them with the
