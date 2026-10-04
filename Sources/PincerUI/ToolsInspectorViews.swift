@@ -19,9 +19,21 @@ struct ToolsInspectorView: View {
     @State private var filter = ToolFilter.all
     @State private var search = ""
     @State private var clearedServer = false
+    @State private var searchOwner = UUID()
+    private struct SearchKey: Hashable { let owner: UUID; let source: Int }
+    private var searchBinding: Binding<String> {
+        Binding(get: { self.search }, set: { self.search = $0; self.searchOwner = UUID() })
+    }
+    private var filterBinding: Binding<ToolFilter> {
+        Binding(get: { self.filter }, set: { self.filter = $0; self.searchOwner = UUID() })
+    }
 
     var body: some View {
         let model = self.model
+        let owner = self.searchOwner
+        let source = model.searchSourceRevision
+        let completed = model.searchPreparation.owns(owner, sourceRevision: source)
+        let prepared = model.searchPreparation.result.flatMap { $0.sourceRevision == source ? $0 : nil }
         Form {
             Section {
                 Text(self.scopeTitle).font(.headline)
@@ -32,13 +44,13 @@ struct ToolsInspectorView: View {
                     HStack {
                         Label(L("Server: \(server)"), systemImage: "point.3.connected.trianglepath.dotted")
                             .font(.callout)
-                        Button(L("Show all tools"), systemImage: "xmark.circle.fill") { self.clearedServer = true }
+                        Button(L("Show all tools"), systemImage: "xmark.circle.fill") { self.clearedServer = true; self.searchOwner = UUID() }
                             .labelStyle(.iconOnly)
                             .buttonStyle(.borderless)
                     }
                 }
-                if let inspection = model.inspection {
-                    Text(inspection.summary).foregroundStyle(.secondary)
+                if let prepared {
+                    Text(prepared.summary).foregroundStyle(.secondary)
                 }
                 if let note = model.effectiveNote {
                     Label(note, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
@@ -49,19 +61,19 @@ struct ToolsInspectorView: View {
                         .foregroundStyle(notice.isWarning ? Color.orange : Color.secondary)
                 }
             }
-            if let inspection = model.inspection {
+            if model.inspection != nil {
                 Section {
-                    Picker(L("Show"), selection: self.$filter) {
+                    Picker(L("Show"), selection: self.filterBinding) {
                         ForEach(ToolFilter.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    TextField(L("Filter tools"), text: self.$search)
+                    TextField(L("Filter tools"), text: self.searchBinding)
                         .textFieldStyle(.roundedBorder)
                 }
-                let groups = self.serverGroups(inspection.filtered(self.filter, search: self.search))
-                if groups.isEmpty {
+                let groups = prepared?.groups ?? []
+                if completed && groups.isEmpty {
                     Section {
-                        Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
+                        Text(prepared?.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
                     }
                 }
                 ForEach(groups) { group in
@@ -95,16 +107,12 @@ struct ToolsInspectorView: View {
             }
         }
         .task { await model.loadIfNeeded() }
-    }
-}
-
-extension ToolsInspectorView {
-    private func serverGroups(_ groups: [InspectedToolGroup]) -> [InspectedToolGroup] {
-        guard let server = self.mcpServer, !self.clearedServer else { return groups }
-        return groups.compactMap { group in
-            let tools = group.tools.filter { $0.source == .mcp && $0.sourceDetail == server }
-            return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
+        .task(id: SearchKey(owner: owner, source: source)) {
+            _ = await model.prepareDisplaySearch(self.filter, matching: self.search,
+                server: self.clearedServer ? nil : self.mcpServer, owner: owner)
         }
+        .onChange(of: self.mcpServer) { self.searchOwner = UUID() }
+        .onDisappear { model.searchPreparation.invalidate() }
     }
 }
 
