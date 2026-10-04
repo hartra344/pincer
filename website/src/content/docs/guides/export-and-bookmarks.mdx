@@ -20,7 +20,9 @@ Two switches decide what goes in beyond the messages themselves. Both are off by
 
 Messages that haven't been sent yet are left out, and context compaction and new-session markers appear as dividers.
 
-The export covers the **whole history**, not only the part on screen. Pincer pages in the older messages first, which can take a moment in a long chat.
+If the initial history is unavailable, export fails instead of creating a header-only file. A complete cached transcript can still be exported offline, including a genuinely empty chat.
+
+The export covers the **whole history**, not only the part on screen. Pincer pages in the older messages first, which can take a moment in a long chat. Markdown and plain-text file preparation then runs in the background while the export sheet shows progress.
 
 On a Mac, Pincer opens a save panel. On iPhone and iPad it opens the share sheet, so you can save to Files, send it in Messages or hand it to another app.
 

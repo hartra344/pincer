@@ -20,13 +20,27 @@ struct ChatExportTests {
     }
 
     /// A chat restored from the cache with only its newest window in memory.
-    func windowedChat(root: URL, scratch: ScratchDefaults) async -> (ChatStore, GatewayStore) {
+    func windowedChat(root: URL, scratch: ScratchDefaults) async throws -> (ChatStore, GatewayStore) {
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
         gateway.cacheRoot = root
-        await TranscriptCache.save(TranscriptCache.Snapshot(items: self.items(), complete: true),
-                                   gatewayId: gateway.id, sessionKey: self.key, root: root)
-        await TranscriptCache.flush(gatewayId: gateway.id, root: root)
+        // Isolated fixture writer avoids platform file-protection support differences;
+        // the production shared writer and its protected defaults remain unchanged.
+        let writer = TranscriptCache.Writer(writeOptions: .atomic)
+        do {
+            let file = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: self.key, root: root))
+            let result = await writer.write(TranscriptCache.Snapshot(items: self.items(), complete: true), to: file)
+            await writer.drain()
+            try #require(result.modified != nil && !result.unchanged)
+            let readable = await Task.detached { FileManager.default.isReadableFile(atPath: file.path) }.value
+            try #require(readable)
+        } catch {
+            await writer.drain()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: root)
+            await Task.detached { try? FileManager.default.removeItem(at: root) }.value
+            scratch.remove()
+            throw error
+        }
         let chat = ChatStore(sessionKey: self.key, agentId: nil, gateway: gateway)
         chat.windowLimit = 40
         await chat.restoreFromCache()
@@ -38,7 +52,7 @@ struct ChatExportTests {
     func buildsTheWholeHistory(format: TranscriptExport.Format) async throws {
         let scratch = ScratchDefaults()
         let root = FileManager.default.temporaryDirectory.appending(path: "pincer-export-\(UUID().uuidString)")
-        let (chat, gateway) = await self.windowedChat(root: root, scratch: scratch)
+        let (chat, gateway) = try await self.windowedChat(root: root, scratch: scratch)
         defer {
             chat.stopCaching()
             TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: root)

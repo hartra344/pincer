@@ -40,6 +40,8 @@ extension ChatStore {
         self.hasLoaded = false
         self.isDehydrated = true
         self.cacheChecked = false
+        self.exportCacheComplete = false
+        self.exportCacheRevision &+= 1
         self.stale = true
         self.hasPagedOlder = false
         self.olderOffset = nil
