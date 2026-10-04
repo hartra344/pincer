@@ -30,11 +30,16 @@ private func exerciseActualDictationSend(cancelEdit: Bool, restartBeforeTask: Bo
     gateway.notifier = nil
     defer { gateway.stop() }
     func wait(_ phase: String, _ predicate: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(15)
-        while !predicate() {
-            try Task.checkCancellation()
-            try #require(ContinuousClock.now < deadline, "actual dictation composer did not settle: \(phase)")
-            try await Task.sleep(for: .milliseconds(10))
+        // Correctness readiness uses each enclosing two-minute test fence.
+        // Cancellation still unwinds the engine, window and Gateway cleanup below.
+        do {
+            while !predicate() {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        } catch {
+            print("Dictation ownership phase=\(phase) connected=\(gateway.state.isConnected) bootstrapped=\(gateway.bootstrapped)")
+            throw error
         }
     }
     gateway.start()
