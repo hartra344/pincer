@@ -25,7 +25,7 @@ import Foundation
             return result
         }
         await model.load()
-        guard let initial = model.snapshot, initial.exists, !initial.hash.isEmpty else {
+        guard let initial = model.snapshot, initial.exists, let hash = initial.hash, !hash.isEmpty else {
             check(false, "initial actual policy snapshot is loaded"); return
         }
         let localA: JSONValue = model.savedValue(.ask, agent: nil) == "always" ? "off" : "always"
