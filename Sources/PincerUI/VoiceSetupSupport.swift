@@ -7,7 +7,8 @@ import SwiftUI
 /// set up, and audio playback for voice previews and Test voice.
 @MainActor @Observable
 final class VoiceSetupController {
-    var busy = false
+    private let operations = VoiceSetupOperationTracker()
+    var busy: Bool { self.operations.busy }
     var notice: String?
     var error: String?
     /// The section that triggered `notice`/`error` (nil: shown at the page bottom).
@@ -17,24 +18,31 @@ final class VoiceSetupController {
     var keySavedProvider: String?
     /// The provider whose setup is showing (may differ from the Gateway's active provider).
     var selectedProvider: String?
+    #if DEBUG
+    /// Read-only access to the actual item used by the registered completion observer.
+    var currentPreviewItem: AVPlayerItem? { self.avPlayer?.currentItem }
+    #endif
     private(set) var playingId: String?
     @ObservationIgnored private var avPlayer: AVPlayer?
     @ObservationIgnored private var clipPlayer: AVAudioPlayer?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var playbackOwnership = VoicePlaybackOwnership()
 
     /// Runs `work`, reporting the outcome or error on the page. Returns whether it succeeded.
     @discardableResult
     func run(_ scope: String? = nil, _ work: @MainActor () async throws -> ConfigApplyOutcome?) async -> Bool {
+        let operation = self.operations.begin()
         self.error = nil
         self.notice = nil
         self.messageScope = scope
-        self.busy = true
-        defer { self.busy = false }
         do {
-            self.notice = try await work()?.message
+            let result = try await work()
+            if self.operations.finish(operation) { self.notice = result?.message }
             return true
         } catch {
-            self.error = (error as? LocalizedError)?.errorDescription ?? GatewayVoiceModel.message(error)
+            if self.operations.finish(operation) {
+                self.error = (error as? LocalizedError)?.errorDescription ?? GatewayVoiceModel.message(error)
+            }
             return false
         }
     }
@@ -48,8 +56,12 @@ final class VoiceSetupController {
         let player = AVPlayer(playerItem: item)
         self.avPlayer = player
         self.playingId = voice.id
+        let playback = self.playbackOwnership.begin()
         self.endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.stop() }
+            Task { @MainActor in
+                guard let self, self.playbackOwnership.owns(playback) else { return }
+                self.stop()
+            }
         }
         player.play()
     }
@@ -60,16 +72,20 @@ final class VoiceSetupController {
         guard let player = try? AVAudioPlayer(data: clip.data, fileTypeHint: clip.fileExtension) else { return }
         self.clipPlayer = player
         self.playingId = Self.testId
+        let playback = self.playbackOwnership.begin()
         player.play()
         Task { @MainActor [weak self] in
-            while let self, self.clipPlayer === player, player.isPlaying { try? await Task.sleep(for: .milliseconds(200)) }
-            if let self, self.clipPlayer === player { self.stop() }
+            while let self, self.playbackOwnership.owns(playback), self.clipPlayer === player, player.isPlaying {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            if let self, self.playbackOwnership.owns(playback), self.clipPlayer === player { self.stop() }
         }
     }
 
     static let testId = "test-voice"
 
     func stop() {
+        self.playbackOwnership.invalidate()
         self.avPlayer?.pause()
         self.avPlayer = nil
         self.clipPlayer?.stop()

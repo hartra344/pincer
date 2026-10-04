@@ -8,38 +8,63 @@ struct VoiceSetupSettingsSection: View {
     let setup: VoiceSetupController
     let provider: String
     let editable: Bool
-    @State private var draft = TTSVoiceSettings.elevenLabsDefault
+    @State private var draft = VoiceSettingsDraft()
     @State private var expanded = false
+
+    init(model: GatewayVoiceModel, setup: VoiceSetupController, provider: String, editable: Bool,
+         initialExpanded: Bool = false, draft: VoiceSettingsDraft? = nil) {
+        self.model = model
+        self.setup = setup
+        self.provider = provider
+        self.editable = editable
+        self._expanded = State(initialValue: initialExpanded)
+        self._draft = State(initialValue: draft ?? VoiceSettingsDraft())
+    }
 
     private var saved: TTSVoiceSettings { self.model.setups[self.provider]?.voiceSettings ?? .elevenLabsDefault }
 
     var body: some View {
         Section {
             DisclosureGroup(L("Voice Settings"), isExpanded: self.$expanded) {
-                self.slider(L("Speed"), value: self.$draft.speed, range: 0.5 ... 2, percent: false)
-                self.slider(L("Stability"), value: self.$draft.stability, range: 0 ... 1, percent: true)
-                self.slider(L("Similarity Boost"), value: self.$draft.similarityBoost, range: 0 ... 1, percent: true)
-                self.slider(L("Style"), value: self.$draft.style, range: 0 ... 1, percent: true)
-                Toggle(L("Speaker Boost"), isOn: self.$draft.useSpeakerBoost)
+                self.slider(L("Speed"), value: self.binding(\.speed), range: 0.5 ... 2, percent: false)
+                self.slider(L("Stability"), value: self.binding(\.stability), range: 0 ... 1, percent: true)
+                self.slider(L("Similarity Boost"), value: self.binding(\.similarityBoost), range: 0 ... 1, percent: true)
+                self.slider(L("Style"), value: self.binding(\.style), range: 0 ... 1, percent: true)
+                Toggle(L("Speaker Boost"), isOn: self.binding(\.useSpeakerBoost))
                     .disabled(!self.editable)
-                    .onChange(of: self.draft.useSpeakerBoost) { _, _ in self.commit() }
+                    .onChange(of: self.draft.value.useSpeakerBoost) { _, _ in self.commit() }
                 VoiceScopedMessage(setup: self.setup, scope: "settings")
                 if self.editable {
                     Button(L("Reset to Defaults")) {
-                        self.draft = .elevenLabsDefault
+                        self.draft.edit(.elevenLabsDefault)
                         self.commit()
                     }
-                    .disabled(self.saved == .elevenLabsDefault && self.draft == .elevenLabsDefault)
+                    .disabled(self.saved == .elevenLabsDefault && self.draft.value == .elevenLabsDefault)
                 }
             }
         }
-        .task(id: self.saved) { self.draft = self.saved }
+        .task(id: self.saved) { self.draft.updateSnapshot(self.saved) }
+    }
+
+    private func binding<Value>(_ keyPath: WritableKeyPath<TTSVoiceSettings, Value>) -> Binding<Value> {
+        Binding(get: { self.draft.value[keyPath: keyPath] }, set: { value in
+            var next = self.draft.value
+            next[keyPath: keyPath] = value
+            self.draft.edit(next)
+        })
     }
 
     private func commit() {
-        let value = self.draft
-        guard value != self.saved else { return }
-        Task { await self.setup.run("settings") { try await self.model.saveVoiceSettings(value, provider: self.provider) } }
+        guard let first = self.draft.commit() else { return }
+        Task {
+            var submission: VoiceSettingsDraft.Submission? = first
+            while let current = submission {
+                let succeeded = await self.setup.run("settings") {
+                    try await self.model.saveVoiceSettings(current.value, provider: self.provider)
+                }
+                submission = self.draft.complete(current, acknowledged: succeeded ? self.saved : nil)
+            }
+        }
     }
 
     private func display(_ value: Double, percent: Bool) -> String {
