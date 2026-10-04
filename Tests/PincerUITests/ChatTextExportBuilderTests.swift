@@ -10,7 +10,7 @@ struct ChatTextExportBuilderTests {
     func actualBuilderUsesOffMainTextPreparation(format: TranscriptExport.Format) async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let gateway = GatewayStore(profile: .demo(), identity: UIFixtures.identity(), defaults: scratch.defaults)
+        let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
         gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
         gateway.start(); gateway.reconnectIfNeeded(); defer { gateway.stop() }
         let deadline = ContinuousClock.now.advanced(by: .seconds(25))
