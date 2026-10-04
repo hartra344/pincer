@@ -13,7 +13,7 @@ func runTranscriptFindChangedInventoryChecks() {
     state.select(0)
     let removed = state.capture(matches: old, rowIndex: ["a": 0, "b": 1, "c": 2])
     state.select(1)
-    check(state.complete(removed, matches: [old[0], old[2]], rowIndex: ["a": 0, "c": 2]) == 0,
+    check(state.complete(removed, matches: [old[0], old[2]], rowIndex: ["a": 0, "c": 1]) == 1,
           "removed navigated match falls back near its actual old row")
     state.select(0)
     let aba = state.capture(matches: old, rowIndex: ["a": 0, "b": 1, "c": 2], preferred: old[2])

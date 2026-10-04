@@ -20,7 +20,7 @@ struct TranscriptFindChangedInventoryTests {
         let find = TranscriptFind()
         defer { find.dismiss() }
         let rows = [self.row("a"), self.row("b"), self.row("c")]
-        let first = TranscriptSearch.Match(entryId: "a", section: .message(0), occurrence: 0)
+        let first = TranscriptSearch.Match(entryId: rows[0].id, section: .message(0), occurrence: 0)
         find.update(entries: rows, reasoningOff: false)
         find.present(query: "needle", select: first)
         try await self.ready(find)
@@ -28,9 +28,9 @@ struct TranscriptFindChangedInventoryTests {
         find.update(entries: insert ? [self.row("inserted")] + rows : [rows[0], rows[2]], reasoningOff: false)
         try #require(find.isSearching)
         find.next()
-        try #require(find.currentMatch?.entryId == "b")
+        try #require(find.currentMatch?.entryId == rows[1].id)
         try await self.ready(find)
-        #expect(find.currentMatch?.entryId == (insert ? "b" : "a"))
-        #expect(find.current == (insert ? 2 : 0))
+        #expect(find.currentMatch?.entryId == (insert ? rows[1].id : rows[2].id))
+        #expect(find.current == (insert ? 2 : 1))
     }
 }

@@ -22,8 +22,9 @@ struct TranscriptFindSelectionRefreshTests {
         state.select(0)
         let capture = state.capture(matches: old, rowIndex: ["a": 0, "b": 1, "c": 2], preferred: old[2])
         state.select(1)
+        // Removing the entire middle entry makes the remaining row index dense.
         let remaining = [old[0], old[2]]
-        #expect(state.complete(capture, matches: remaining, rowIndex: ["a": 0, "c": 2]) == 0)
+        #expect(state.complete(capture, matches: remaining, rowIndex: ["a": 0, "c": 1]) == 1)
         state.select(0)
         let aba = state.capture(matches: old, rowIndex: ["a": 0, "b": 1, "c": 2], preferred: old[2])
         state.select(1)
