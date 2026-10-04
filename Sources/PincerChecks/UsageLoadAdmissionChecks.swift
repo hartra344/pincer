@@ -61,6 +61,30 @@ import Foundation
     let response: JSONValue = ["updatedAt": 1700000000000,
         "providers": [["provider": "openai", "displayName": "Current", "windows": [["label": "Week", "usedPercent": 42]]]]]
     await checkUsageStatusAdmission { _, _ in response }
+    for fails in [false, true] {
+        let gate = UsageStatusAdmissionGate()
+        var requests = 0
+        let model = UsageModel { _, _ in
+            requests += 1
+            if requests == 1 { return response }
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "Late canceled error", details: nil) }
+            return ["updatedAt": 1700000000001, "providers": []]
+        }
+        await model.loadStatus()
+        let canceled = Task { await model.loadStatus() }
+        defer { gate.release(); canceled.cancel() }
+        let entered = await waitFor("admitted usage cancellation") { gate.entered }
+        check(entered, "late cancellation control reaches actual request")
+        guard entered else {
+            gate.release(); canceled.cancel(); await canceled.value
+            return
+        }
+        canceled.cancel(); gate.release(); await canceled.value
+        check(model.status.value == UsageStatusSummary(response) && model.status.loadState == .idle
+              && model.status.hasLoaded && model.status.supported,
+              "canceled admitted usage read retains healthy data without late success or error")
+    }
 }
 
 /// Genuine Demo usage.status response forwarded without overlays or writes.

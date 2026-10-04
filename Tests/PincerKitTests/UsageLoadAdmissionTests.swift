@@ -103,4 +103,54 @@ struct UsageLoadAdmissionTests {
         gate.release(); await status.value
         #expect(model.status.value == UsageStatusSummary(expected) && model.status.loadState == .idle)
     }
+
+    @Test(arguments: [false, true])
+    func canceledAdmittedReadCannotPublishLateResult(fails: Bool) async throws {
+        let gate = UsageAdmissionGate()
+        var requests = 0
+        let expected = Self.response("Retained")
+        let model = UsageModel { _, _ in
+            requests += 1
+            if requests == 1 { return expected }
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "Late canceled error", details: nil) }
+            return Self.response("Canceled")
+        }
+        await model.loadStatus()
+        let canceled = Task { await model.loadStatus() }
+        defer { gate.release(); canceled.cancel() }
+        try await gate.waitForEntry()
+        canceled.cancel(); gate.release(); await canceled.value
+        #expect(model.status.value == UsageStatusSummary(expected))
+        #expect(model.status.hasLoaded && model.status.loadState == .idle && model.status.supported)
+    }
+
+    @Test func canceledOldCleanupCannotEraseNewerRunningOwner() async throws {
+        let oldGate = UsageAdmissionGate(), newGate = UsageAdmissionGate()
+        var requests = 0
+        let model = UsageModel { _, _ in
+            requests += 1
+            let number = requests
+            if number == 1 { await oldGate.hold() } else { await newGate.hold() }
+            return Self.response(number == 1 ? "Old" : "New")
+        }
+        let old = Task { await model.loadStatus() }
+        defer { oldGate.release(); newGate.release(); old.cancel() }
+        try await oldGate.waitForEntry()
+        let newer = Task { await model.loadStatus() }
+        defer { newer.cancel() }
+        try await newGate.waitForEntry()
+        old.cancel(); oldGate.release(); await old.value
+        #expect(model.status.loadState == .running && model.status.value == nil)
+        newGate.release(); await newer.value
+        #expect(model.status.value == UsageStatusSummary(Self.response("New")) && model.status.loadState == .idle)
+    }
+
+    @Test func advertisedUnsupportedCurrentReadRemainsUnavailable() async {
+        var requests = 0
+        let model = UsageModel(methods: { ["usage.cost"] }) { _, _ in requests += 1; return Self.response("Unexpected") }
+        await model.loadStatus()
+        #expect(requests == 0 && !model.status.supported && model.status.hasLoaded && model.status.loadState == .idle)
+    }
+
 }

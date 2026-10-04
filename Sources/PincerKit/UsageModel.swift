@@ -265,6 +265,7 @@ public final class UsageModel {
         _ method: String, _ params: JSONValue, token: String, edit: Edit<Value>,
         decode: (JSONValue) -> Value?, recover: ((Error) -> Value?)? = nil
     ) async {
+        guard !Task.isCancelled else { return }
         if let methods = self.methods(), !methods.isEmpty, !methods.contains(method) {
             edit { $0.markUnsupported() }
             return
@@ -272,9 +273,14 @@ public final class UsageModel {
         let generation = (self.generations[token] ?? 0) + 1
         self.generations[token] = generation
         edit { $0.loadState = .running }
+        defer {
+            if Task.isCancelled, self.generations[token] == generation {
+                edit { if $0.loadState.isRunning { $0.loadState = .idle } }
+            }
+        }
         do {
             let result = try await self.request(method, params)
-            guard self.generations[token] == generation else { return }
+            guard !Task.isCancelled, self.generations[token] == generation else { return }
             guard let value = decode(result) else {
                 edit { section in
                     section.loadState = .failed(Self.decodeFailure)
@@ -290,10 +296,10 @@ public final class UsageModel {
                 section.hasLoaded = true
             }
         } catch let error where GatewayError.isUnknownMethod(error) {
-            guard self.generations[token] == generation else { return }
+            guard !Task.isCancelled, self.generations[token] == generation else { return }
             edit { $0.markUnsupported() }
         } catch {
-            guard self.generations[token] == generation else { return }
+            guard !Task.isCancelled, self.generations[token] == generation else { return }
             let recovered = recover?(error)
             edit { section in
                 if let recovered {
