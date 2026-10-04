@@ -36,7 +36,7 @@ struct BootstrapBackgroundTerminalTests {
         let gate = Gate()
         gateway.beforeBootstrapReconciliation = { await gate.hold() }
         gateway.start(); gateway.reconnectIfNeeded()
-        defer { gateway.stop() }
+        defer { Task { await gate.release() }; gateway.stop() }
         try await withTaskCancellationHandler {
             await gate.wait()
             let actualTask = try #require(gateway.bootstrapBackgroundTask)

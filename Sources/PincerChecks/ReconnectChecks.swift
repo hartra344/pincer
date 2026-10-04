@@ -1,5 +1,5 @@
 import Foundation
-@testable import PincerKit
+import PincerKit
 
 // #202: reconnect / bootstrap behaviour against the mock (uses its mock.control RPC for counters,
 // delayed responses, mid-flight events and drops). Run alone with:
@@ -395,17 +395,33 @@ private func runChatSubscriptionChecks(url: String, token: String, control: Mock
 }
 
 #if DEBUG
+/// Focused fresh-mock proof, independent of the unrelated disk-cache RPC-count prerequisite.
+@MainActor
+func runLiveHeldBootstrapTerminalProof(url: String, token: String) async {
+    let profile = GatewayProfile(name: "Held bootstrap control", url: url, authMode: .token)
+    profile.secret = token
+    let control = MockControl(profile: profile)
+    let ready = await control.start()
+    check(ready, "held bootstrap proof control connection is ready")
+    guard ready else { await control.stop(); return }
+    await runHeldBootstrapTerminalProof(url: url, token: token, control: control)
+    await control.stop()
+}
+
 @MainActor
 private func runHeldBootstrapTerminalProof(url: String, token: String, control: MockControl) async {
     let gate = ReconnectTerminalGate()
     let profile = GatewayProfile(name: "Held bootstrap", url: url, authMode: .token)
     profile.secret = token
     let gateway = GatewayStore(profile: profile)
-    gateway.beforeBootstrapReconciliation = { await gate.hold() }
+    let entered = Scripted(false)
+    gateway.beforeBootstrapReconciliation = { entered.value = true; await gate.hold() }
     gateway.start()
-    defer { gateway.stop() }
+    defer { Task { await gate.release() }; gateway.stop() }
     await withTaskCancellationHandler {
-        await gate.waitForEntry()
+        let admitted = await waitFor("actual bootstrap reconciliation admission", timeout: 30) { entered.value }
+        check(admitted, "actual bootstrap reconciliation reaches its held dependency")
+        guard admitted else { await gate.release(); return }
         guard let actualTask = gateway.bootstrapBackgroundTask else {
             check(false, "capture actual current-epoch bootstrap background task")
             await gate.release(); return
