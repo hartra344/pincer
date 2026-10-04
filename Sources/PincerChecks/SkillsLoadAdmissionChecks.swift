@@ -27,7 +27,8 @@ import Foundation
     var held: JSONValue?
     let model = SkillsModel(request: { method, params in
         calls += 1
-        check(method == Skills.statusMethod && params == ["agentId": "main"], "status read preserves actual Main agent params")
+        check(method == Skills.statusMethod && (params == ["agentId": "main"] || params == ["agentId": "research"]),
+              "status read uses exact legal Main or Research agent params")
         try Task.checkCancellation()
         let response = try await request(method, params)
         if hold { held = response; await gate.hold() }
