@@ -349,6 +349,8 @@ extension GatewayVoiceModel {
         guard let field = keys.apiKey, let envVar = keys.envVar, !key.isEmpty else {
             throw ConfigWriteError.other(L("That provider doesn't take an API key."))
         }
+        self.voiceListRevision &+= 1
+        defer { self.voiceListRevision &+= 1 }
         var patch: JSONValue
         let ref: JSONValue
         if self.supports(Self.secretsSetMethod) {
@@ -385,6 +387,8 @@ extension GatewayVoiceModel {
     public func removeKey(provider: String) async throws -> ConfigApplyOutcome {
         let keys = try self.requireKeyField(provider)
         guard let field = keys.apiKey else { throw ConfigWriteError.other(L("That provider doesn't take an API key.")) }
+        self.voiceListRevision &+= 1
+        defer { self.voiceListRevision &+= 1 }
         var patch = self.providerPatch(provider, [field: .null])
         var secretName: String?
         if case let .secretRef(source, _, id) = self.setups[provider]?.keySource {
@@ -447,6 +451,9 @@ extension GatewayVoiceModel {
 
     /// The account's ElevenLabs voices. Uses `apiKey`, else the key pasted this session; never persisted.
     public func listElevenLabsVoices(apiKey: String?) async throws -> [ElevenLabsVoice] {
+        self.voiceListRevision &+= 1
+        let revision = self.voiceListRevision
+        try Task.checkCancellation()
         let key = apiKey.flatMap { $0.isEmpty ? nil : $0 } ?? self.sessionKeys["elevenlabs"]
         let voices: [ElevenLabsVoice]
         do {
@@ -456,11 +463,15 @@ extension GatewayVoiceModel {
                 guard let key else { throw TTSSetupError.needsKey }
                 voices = try await Self.fetchElevenLabsVoices(apiKey: key)
             }
-        } catch let error as TTSSetupError {
+        } catch {
+            guard revision == self.voiceListRevision else { throw CancellationError() }
+            try Task.checkCancellation()
+            if let error = error as? TTSSetupError { throw error }
+            if error is GatewayError { throw TTSSetupError.failed(Self.message(error)) }
             throw error
-        } catch let error where error is GatewayError {
-            throw TTSSetupError.failed(Self.message(error))
         }
+        guard revision == self.voiceListRevision else { throw CancellationError() }
+        try Task.checkCancellation()
         if let key { self.sessionKeys["elevenlabs"] = key }
         self.voices = voices
         return voices

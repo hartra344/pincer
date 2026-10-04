@@ -126,8 +126,15 @@ public struct TTSVoiceSettings: Sendable, Equatable {
 
     init(json: JSONValue) {
         let d = Self.elevenLabsDefault
-        self.init(stability: json["stability"]?.double ?? d.stability, similarityBoost: json["similarityBoost"]?.double ?? d.similarityBoost,
-                  style: json["style"]?.double ?? d.style, useSpeakerBoost: json["useSpeakerBoost"]?.bool ?? d.useSpeakerBoost,
-                  speed: json["speed"]?.double ?? d.speed)
+        // Match ElevenLabs runtime normalization: invalid fields use defaults, not clamping.
+        func value(_ key: String, range: ClosedRange<Double>, fallback: Double) -> Double {
+            guard let value = json[key]?.double, value.isFinite, range.contains(value) else { return fallback }
+            return value
+        }
+        self.init(stability: value("stability", range: 0...1, fallback: d.stability),
+                  similarityBoost: value("similarityBoost", range: 0...1, fallback: d.similarityBoost),
+                  style: value("style", range: 0...1, fallback: d.style),
+                  useSpeakerBoost: json["useSpeakerBoost"]?.bool ?? d.useSpeakerBoost,
+                  speed: value("speed", range: 0.5...2, fallback: d.speed))
     }
 }

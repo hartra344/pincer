@@ -25,24 +25,36 @@ public struct UsageTotals: Hashable, Sendable {
 
     public init(_ json: JSONValue?) {
         guard let json, json.object != nil else { return }
-        func int(_ key: String) -> Int { json[key]?.double.map { Int($0.rounded()) } ?? 0 }
+        func int(_ key: String) -> Int { Self.count(json[key]?.double) }
         func double(_ key: String) -> Double { json[key]?.double ?? 0 }
         self.input = int("input")
         self.output = int("output")
         self.cacheRead = int("cacheRead")
         self.cacheWrite = int("cacheWrite")
-        let sum = self.input + self.output + self.cacheRead + self.cacheWrite
-        self.totalTokens = json["totalTokens"]?.double.map { Int($0.rounded()) } ?? json["tokens"]?.double.map { Int($0.rounded()) } ?? sum
+        let sum = Self.add(Self.add(self.input, self.output), Self.add(self.cacheRead, self.cacheWrite))
+        self.totalTokens = json["totalTokens"]?.double.map { Self.count($0) } ?? json["tokens"]?.double.map { Self.count($0) } ?? sum
         self.totalCost = json["totalCost"]?.double ?? json["cost"]?.double ?? 0
         self.inputCost = double("inputCost")
         self.outputCost = double("outputCost")
         self.cacheReadCost = double("cacheReadCost")
         self.cacheWriteCost = double("cacheWriteCost")
         self.missingCostEntries = int("missingCostEntries")
-        self.missingCostByModel = json["missingCostByModel"]?.object?.compactMapValues { $0.int } ?? [:]
+        self.missingCostByModel = json["missingCostByModel"]?.object?.compactMapValues { $0.double.map { Self.count($0) } } ?? [:]
     }
 
-    public var cacheTokens: Int { self.cacheRead + self.cacheWrite }
+    private static func count(_ value: Double?) -> Int {
+        guard let value, value.isFinite, value > 0 else { return 0 }
+        let rounded = value.rounded()
+        guard rounded < Double(Int.max) else { return Int.max }
+        return Int(rounded)
+    }
+
+    private static func add(_ lhs: Int, _ rhs: Int) -> Int {
+        let (sum, overflow) = max(0, lhs).addingReportingOverflow(max(0, rhs))
+        return overflow ? Int.max : sum
+    }
+
+    public var cacheTokens: Int { Self.add(self.cacheRead, self.cacheWrite) }
     public var isEmpty: Bool { self.totalTokens == 0 && self.totalCost == 0 && self.missingCostEntries == 0 }
     /// Some priced tokens were split by type (`inputCost`…).
     public var hasCostBreakdown: Bool { self.inputCost + self.outputCost + self.cacheReadCost + self.cacheWriteCost > 0 }
@@ -54,18 +66,18 @@ public struct UsageTotals: Hashable, Sendable {
 
     public static func + (lhs: UsageTotals, rhs: UsageTotals) -> UsageTotals {
         var sum = lhs
-        sum.input += rhs.input
-        sum.output += rhs.output
-        sum.cacheRead += rhs.cacheRead
-        sum.cacheWrite += rhs.cacheWrite
-        sum.totalTokens += rhs.totalTokens
+        sum.input = Self.add(lhs.input, rhs.input)
+        sum.output = Self.add(lhs.output, rhs.output)
+        sum.cacheRead = Self.add(lhs.cacheRead, rhs.cacheRead)
+        sum.cacheWrite = Self.add(lhs.cacheWrite, rhs.cacheWrite)
+        sum.totalTokens = Self.add(lhs.totalTokens, rhs.totalTokens)
         sum.totalCost += rhs.totalCost
         sum.inputCost += rhs.inputCost
         sum.outputCost += rhs.outputCost
         sum.cacheReadCost += rhs.cacheReadCost
         sum.cacheWriteCost += rhs.cacheWriteCost
-        sum.missingCostEntries += rhs.missingCostEntries
-        sum.missingCostByModel.merge(rhs.missingCostByModel, uniquingKeysWith: +)
+        sum.missingCostEntries = Self.add(lhs.missingCostEntries, rhs.missingCostEntries)
+        sum.missingCostByModel.merge(rhs.missingCostByModel, uniquingKeysWith: Self.add)
         return sum
     }
 }

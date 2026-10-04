@@ -50,6 +50,7 @@ public final class GatewayVoiceModel {
     @ObservationIgnored let gatewayName: @MainActor () -> String
     /// API keys pasted this session; memory only, never persisted or logged.
     @ObservationIgnored var sessionKeys: [String: String] = [:]
+    @ObservationIgnored var voiceListRevision: UInt64 = 0
     /// Providers whose key this session saved, so the secret's name is known even though config.get redacts it.
     public internal(set) var wroteKey: Set<String> = []
     @ObservationIgnored private var generation = 0
@@ -211,6 +212,7 @@ public final class GatewayVoiceModel {
     }
 
     public func handleReconnect() {
+        self.voiceListRevision &+= 1
         self.generation += 1
         self.statusAttempted = false
         self.status = nil
