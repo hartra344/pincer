@@ -372,7 +372,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var cacheOutcome: TranscriptCache.LoadOutcome?
     /// The restored cache proves complete coverage, including an empty transcript.
     @ObservationIgnored var exportCacheComplete = false
-    @ObservationIgnored var exportCacheRevision: UInt64 = 0
+    /// Ownership of all restored-cache publication; reset and dehydration invalidate pending reads.
+    @ObservationIgnored var cacheRestoreRevision: UInt64 = 0
     #if DEBUG
     @ObservationIgnored package var exportCacheCompletionGate: (@Sendable () async -> Void)?
     #endif
