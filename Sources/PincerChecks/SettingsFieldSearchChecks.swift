@@ -44,7 +44,7 @@ import Foundation
     guard connected else { return }
     let model = GatewaySettingsModel(request: { method, params, timeout in
         try await gateway.connection.request(method, params, timeout: timeout)
-    }, scopes: { gateway.connection.scopes })
+    }, scopes: { gateway.hello?.scopes ?? [] })
     await model.load()
     check(model.hasLoaded && model.schema != nil, "actual Demo loads config and schema before searching")
     await checkActualFieldSearch(model, query: "sentry")
