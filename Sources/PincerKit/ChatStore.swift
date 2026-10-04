@@ -370,6 +370,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var cachingStopped = false
     /// What restoring from the transcript cache found; nil until it's been tried.
     @ObservationIgnored var cacheOutcome: TranscriptCache.LoadOutcome?
+    /// The restored cache proves complete coverage, including an empty transcript.
+    @ObservationIgnored var exportCacheComplete = false
     @ObservationIgnored var saveTask: Task<Void, Never>?
     /// Injectable deadline source/waiter keeps transcript-save scheduling deterministic in tests.
     @ObservationIgnored var saveNow: @MainActor () -> Date = { Date() }

@@ -264,6 +264,10 @@ extension ChatStore {
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
         self.cacheOutcome = outcome
+        switch outcome {
+        case .loaded, .migrated: self.exportCacheComplete = cached.complete
+        default: self.exportCacheComplete = false
+        }
         if case .unavailable = outcome {
             // Retried on the next load; until then a save would replace the cached history.
             self.cacheChecked = false
@@ -671,6 +675,7 @@ extension ChatStore {
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cacheChecked = true
+        self.exportCacheComplete = false
         self.cacheUnreadable = false
         self.savedState = nil
         self.hasPagedOlder = false

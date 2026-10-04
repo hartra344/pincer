@@ -117,7 +117,7 @@ enum Suites {
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
-            Section("Chat export initial history") { await runChatExportInitialHistoryChecks() },
+            Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },
             Section("Skills load admission") { await runSkillsLoadAdmissionChecks() },
             Section(nil) { await checkSessionManager() },
             Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
