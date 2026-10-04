@@ -753,15 +753,15 @@ extension ToolFileEdit {
             case .addition:
                 section.additions += 1
                 number = section.operation == .add ? section.additions : section.newLine
-                section.newLine = section.newLine.map { $0 + 1 }
+                section.newLine = section.newLine.flatMap(Self.nextHunkLine)
             case .deletion:
                 section.deletions += 1
                 number = section.operation == .delete ? section.deletions : section.oldLine
-                section.oldLine = section.oldLine.map { $0 + 1 }
+                section.oldLine = section.oldLine.flatMap(Self.nextHunkLine)
             case .context:
                 number = section.newLine
-                section.oldLine = section.oldLine.map { $0 + 1 }
-                section.newLine = section.newLine.map { $0 + 1 }
+                section.oldLine = section.oldLine.flatMap(Self.nextHunkLine)
+                section.newLine = section.newLine.flatMap(Self.nextHunkLine)
             }
             if stored < Limits.maxRenderedLines {
                 section.lines.append(DiffLine(kind, line.isEmpty ? "" : String(line.dropFirst()), lineNumber: number))
@@ -779,6 +779,11 @@ extension ToolFileEdit {
         return ToolFileEdit(kind: .patch, files: files, additionsBound: clipped ? .atLeast : .exact,
                             deletionsBound: clipped || headerOnlyDelete ? .atLeast : .exact, isTruncated: clipped, omittedLines: clipped ? nil : omitted,
                             copyText: clipped ? raw : nil)
+    }
+
+    private static func nextHunkLine(_ line: Int) -> Int? {
+        let next = line.addingReportingOverflow(1)
+        return next.overflow ? nil : next.partialValue
     }
 
     private static func envelopeHeader(_ line: String) -> (FileDiff.Operation, String)? {
