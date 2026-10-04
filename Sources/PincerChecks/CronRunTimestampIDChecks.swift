@@ -52,7 +52,9 @@ import Foundation
     guard await waitFor("cron timestamp Demo", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
         check(false, "cron timestamp Demo connects"); return
     }
-    check(!gateway.automations.supported, "genuine Demo retains its existing unsupported cron capability")
+    await gateway.automations.load()
+    check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
+          "genuine Demo evaluates its existing unsupported cron capability")
     // Demo has no cron.runs handler. Numeric decoder behavior is the explicit offline fixture.
     runCronRunTimestampIDChecks()
 }
