@@ -96,6 +96,7 @@ enum Suites {
             Section(nil) { await checkGatewayLogsModel() },
             Section("Gateway Logs Clear ownership") { await runGatewayLogsClearOwnershipChecks() },
             Section(nil) { await checkExecPolicy() },
+            Section("Device load admission") { await runDeviceLoadAdmissionChecks() },
             Section(nil) { await checkAgentManagement() },
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
             Section(nil) { checkSubagents() },
@@ -367,6 +368,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },

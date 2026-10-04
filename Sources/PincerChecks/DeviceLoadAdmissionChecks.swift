@@ -1,0 +1,91 @@
+import Foundation
+import PincerKit
+
+@MainActor private final class DeviceAdmissionGate {
+    var entered = false
+    private var released = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    func hold() async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                entered = true
+                if released || Task.isCancelled { continuation.resume() }
+                else { self.continuation = continuation }
+            }
+        } onCancel: { Task { @MainActor in self.release() } }
+    }
+    func release() {
+        released = true
+        continuation?.resume(); continuation = nil
+    }
+}
+
+/// The held request has already obtained its response. Only local delivery is deferred.
+@MainActor private func checkDeviceLoadAdmission(response: JSONValue,
+                                                request: @escaping DeviceManagementModel.Request) async {
+    let gate = DeviceAdmissionGate()
+    var requests = 0
+    let model = DeviceManagementModel { method, params in
+        requests += 1
+        try Task.checkCancellation()
+        let result = try await request(method, params)
+        await gate.hold()
+        return result
+    }
+    let current = Task { await model.load() }
+    defer { gate.release(); current.cancel() }
+    let entered = await waitFor("computed command device list response") { gate.entered }
+    check(entered, "actual command device list response is held before local publication")
+    guard entered else { return }
+    let canceled = Task { await model.load() }
+    canceled.cancel()
+    await canceled.value
+    check(requests == 1, "pre-canceled device list load sends no additional request")
+    gate.release()
+    await current.value
+    check(model.pending == (response["pending"]?.array ?? []).compactMap(PendingDeviceRequest.init)
+          && model.paired == (response["paired"]?.array ?? []).compactMap(PairedDevice.init),
+          "healthy device read retains exact pending and paired rows")
+    check(model.hasLoaded && model.loadState == .idle, "healthy device read finishes idle")
+}
+
+@MainActor func runDeviceLoadAdmissionChecks() async {
+    let response: JSONValue = ["pending": [["requestId": "request-a", "deviceId": "pending-device", "publicKey": "pk", "roles": ["operator"], "scopes": ["operator.read"], "ts": 1700000000000]],
+        "paired": [["deviceId": "paired-device", "publicKey": "pk", "roles": ["operator"], "scopes": ["operator.read"], "tokens": []]]]
+    await checkDeviceLoadAdmission(response: response) { method, params in
+        check(method == DeviceManagementModel.listMethod && params == [:], "device list load uses existing get method and empty params")
+        return response
+    }
+
+}
+
+/// Read-only fresh mock coverage: actual authenticated device.pair.list response, no overlays.
+@MainActor func runLiveDeviceLoadAdmissionChecks(url: String, token: String) async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let profile = GatewayProfile(name: "Device admission check", url: url, authMode: .token, access: .admin)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile, defaults: defaults)
+    gateway.cacheRoot = nil
+    gateway.outboxRoot = nil
+    gateway.notifier = nil
+    gateway.start()
+    defer { gateway.stop() }
+    let connected = await waitFor("device list admission mock connection") { gateway.state.isConnected && gateway.hello != nil }
+    check(connected, "actual mock device list connection is ready")
+    guard connected else { return }
+    let authorized = gateway.hello?.scopes.contains(GatewayConnection.adminScope) == true
+        && gateway.hello?.methods.contains(DeviceManagementModel.listMethod) == true
+    check(authorized, "mock advertises device list reads and grants actual admin scope")
+    guard authorized else { return }
+    do {
+        let response = try await gateway.connection.request(DeviceManagementModel.listMethod, [:])
+        check(response["pending"]?.array != nil && response["paired"]?.array != nil,
+              "actual mock provides pending and paired device arrays")
+        await checkDeviceLoadAdmission(response: response) { method, params in
+            try await gateway.connection.request(method, params)
+        }
+    } catch {
+        check(false, "actual mock device list read failed")
+    }
+}
