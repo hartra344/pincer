@@ -49,7 +49,7 @@ Revoking the device Pincer is using (**Revoke This Device…**) disconnects Pinc
 
 ## Access
 
-Managing devices needs **Access → Full Management** on the [Connection](../gateway-settings/) page, and the gateway's approval for it. The gateway's device methods need `operator.pairing`, which Pincer doesn't ask for on its own; `operator.admin` covers it. Without Full Management, the gateway only shows Pincer its own device, and the page says **Managing devices needs Full Management** with a button to open Connection. Gateways that don't support device pairing say so.
+Approve, Reject and Revoke are available when the connection already has `operator.pairing` or **Full Management**, and the Gateway advertises the corresponding method. Pincer does not request any additional scopes for these actions. The Gateway remains responsible for device ownership, roles and approved token scopes; it can reject an action even when the button is available. On a pairing-only connection, a rejection stays on that device or request, so you can retry or use another permitted action. Connections authenticated with a non-admin device token may only see their own device. Rename and node management still require Full Management in Pincer. Gateways that do not support device pairing say so.
 
 ## The first device
 

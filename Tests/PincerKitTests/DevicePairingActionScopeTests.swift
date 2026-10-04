@@ -185,4 +185,86 @@ struct DevicePairingActionScopeTests {
         #expect(model.pending.isEmpty && model.paired.isEmpty)
         #expect(model.canView && !model.canManage)
     }
+
+    @Test(arguments: [DeviceManagementModel.rejectMethod, DeviceManagementModel.removeMethod])
+    func gatewayDeniedActionPreservesTargetAndAllowsSameSessionRetry(_ method: String) async throws {
+        let spy = self.spy()
+        let message = method == DeviceManagementModel.rejectMethod
+            ? "device pairing rejection denied" : "device pairing removal denied"
+        spy.failures[method] = DeviceFixtures.rpc("INVALID_REQUEST", message)
+        let model = self.model(spy)
+        await model.load()
+        let request = try #require(model.pending.first)
+        let device = try #require(model.paired.first)
+        let denied = try await self.act(method, model: model)
+        #expect(!denied && spy.params(method).count == 1)
+        #expect(model.pending == [request] && model.paired == [device])
+        let operation = method == DeviceManagementModel.rejectMethod
+            ? model.operation(for: request) : model.operation(for: device)
+        #expect(operation == .failed(message))
+        #expect(model.canApproveDevice && model.canRejectDevice && model.canRemoveDevice)
+        #expect(!model.canManage && !model.canRename && !model.canRemoveNodes)
+        // The Gateway may permit a subsequent operation without a connection transition.
+        spy.failures.removeValue(forKey: method)
+        let retried = try await self.act(method, model: model)
+        #expect(retried && spy.params(method).count == 2)
+        let independent: Bool
+        if method == DeviceManagementModel.rejectMethod {
+            independent = await model.remove(device)
+        } else {
+            independent = await model.reject(request)
+        }
+        #expect(independent, "An opaque Gateway denial must not poison independent pairing operations")
+    }
+
+    @Test(arguments: [false, true])
+    func gatewayScopeDenialIsAuthoritativeEvenWhenPendingScopesDoNotExplainIt(_ hiddenExistingGrant: Bool) async throws {
+        let requestedScopes = hiddenExistingGrant ? ["operator.read"] : ["operator.read", "operator.write"]
+        let spy = ScriptedDevices(list: DeviceFixtures.list(
+            pending: [DeviceFixtures.pending("r1", deviceId: DeviceFixtures.otherId, scopes: requestedScopes)],
+            paired: [DeviceFixtures.paired(DeviceFixtures.otherId, scopes: ["operator.read"])]))
+        spy.failures[DeviceManagementModel.approveMethod] = DeviceFixtures.rpc(
+            "INVALID_REQUEST", "missing scope: operator.write")
+        let model = self.model(spy, scopes: ["operator.read", DeviceManagementModel.pairingScope])
+        await model.load()
+        let request = try #require(model.pending.first)
+        #expect(request.scopes.contains("operator.write") != hiddenExistingGrant)
+        #expect(model.canApproveDevice,
+                "Pending rows cannot predict the Gateway's historical grants or caller authorization")
+        let approved = await model.approve(request)
+        #expect(!approved)
+        #expect(spy.params(DeviceManagementModel.approveMethod) == [["requestId": "r1"]])
+        #expect(model.pending == [request])
+        #expect(model.operation(for: request) == .failed("missing scope: operator.write"),
+                "Preserve the Gateway's scope error on the actual request")
+        #expect(model.canApproveDevice && model.canRejectDevice && model.canRemoveDevice)
+        #expect(model.canView && !model.canManage && !model.needsAccess)
+        let rejected = await model.reject(request)
+        #expect(rejected && spy.params(DeviceManagementModel.rejectMethod) == [["requestId": "r1"]])
+    }
+
+    @Test func unsupportedDeviceActionsHaveAccurateRecoveryGuidance() async {
+        let model = self.model(self.spy(), scopes: [GatewayConnection.adminScope],
+                               methods: [DeviceManagementModel.listMethod])
+        #expect(model.canManage)
+        #expect(!model.canApproveDevice && !model.canRejectDevice && !model.canRemoveDevice)
+        #expect(model.deviceReadOnlyReason == DeviceManagementModel.unsupportedMessage,
+                "Administrative scope cannot make an unsupported method available")
+    }
+
+    @Test func adminWithPairingScopeCannotBypassLegacyDeniedManagement() async throws {
+        let spy = self.spy()
+        spy.failures[DeviceManagementModel.approveMethod] = DeviceFixtures.rpc(
+            "INVALID_REQUEST", "device pairing approval denied")
+        let model = self.model(spy, scopes: [GatewayConnection.adminScope, DeviceManagementModel.pairingScope])
+        await model.load()
+        let request = try #require(model.pending.first)
+        let denied = await model.approve(request)
+        #expect(!denied && !model.canManage)
+        #expect(!model.canApproveDevice && !model.canRejectDevice && !model.canRemoveDevice)
+        #expect(model.deviceReadOnlyReason == DeviceManagementModel.readOnlyMessage)
+        let rejected = await model.reject(request)
+        #expect(!rejected && spy.params(DeviceManagementModel.rejectMethod).isEmpty)
+    }
+
 }

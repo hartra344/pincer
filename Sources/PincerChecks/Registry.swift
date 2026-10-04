@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Bounded cold rotor labels") { await runColdRotorLabelChecks() },
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
@@ -201,6 +202,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Device pairing action scopes (demo)") { await runDemoDevicePairingActionScopeChecks() },
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
         Section("Centered chat identity (demo)") { await runDemoCenteredChatHeaderChecks() },
