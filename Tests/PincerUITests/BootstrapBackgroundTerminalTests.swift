@@ -52,5 +52,41 @@ struct BootstrapBackgroundTerminalTests {
             Task { await gate.release() }
         }
     }
+
+    @Test
+    func completedPriorEpochDoesNotMarkNewDemoBootstrapTerminal() async throws {
+        let suite = "bootstrap-new-epoch-\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+        gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
+        let first = Gate(), second = Gate()
+        gateway.beforeBootstrapReconciliation = { await first.hold() }
+        gateway.start()
+        defer { Task { await first.release(); await second.release() }; gateway.stop() }
+        try await withTaskCancellationHandler {
+            await first.wait()
+            let firstTask = try #require(gateway.bootstrapBackgroundTask)
+            let firstMain = try #require(gateway.bootstrapMainTask)
+            let priorEpoch = gateway.bootstrapProbeEpoch
+            await first.release()
+            await firstTask.value; await firstMain.value
+            #expect(gateway.bootstrapProbeIsTerminal)
+            #expect(gateway.bootstrapLastBackgroundTask != nil)
+            gateway.beforeBootstrapReconciliation = { await second.hold() }
+            await gateway.connection.stop()
+            await gateway.connection.start()
+            await second.wait()
+            let secondTask = try #require(gateway.bootstrapBackgroundTask)
+            let secondMain = try #require(gateway.bootstrapMainTask)
+            #expect(gateway.bootstrapProbeEpoch > priorEpoch)
+            #expect(!gateway.bootstrapProbeIsTerminal)
+            #expect(!gateway.sessions.isEmpty)
+            await second.release()
+            await secondTask.value; await secondMain.value
+            #expect(gateway.bootstrapProbeIsTerminal)
+        } onCancel: { Task { await first.release(); await second.release() } }
+    }
+
 }
 #endif

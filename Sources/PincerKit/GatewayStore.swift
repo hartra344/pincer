@@ -537,6 +537,9 @@ public final class GatewayStore: Identifiable {
         self.images.retryUnavailable()
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
+        #if DEBUG
+        self.lastObservedBackground = nil
+        #endif
         self.expectedPrefEchoes = [:]
         self.messageSubscriptionIdUnsupported = false
         self.replyToUnsupported = false
@@ -562,6 +565,21 @@ public final class GatewayStore: Identifiable {
     /// Test dependency at the actual background reconciliation boundary; nil in production.
     @ObservationIgnored package var beforeBootstrapReconciliation: (@MainActor @Sendable () async -> Void)?
     @ObservationIgnored private var observedBootstrapBackground: (epoch: Int, task: Task<Void, Never>)?
+    @ObservationIgnored private var lastObservedBackground: (epoch: Int, task: Task<Void, Never>)?
+    @ObservationIgnored private var observedBootstrapFinishedEpoch: Int?
+    @ObservationIgnored private var observedBackgroundFinishedEpoch: Int?
+    package var bootstrapProbeEpoch: Int { self.connectionEpoch }
+    package var bootstrapProbeIsTerminal: Bool {
+        self.state.isConnected && self.observedBootstrapFinishedEpoch == self.connectionEpoch
+            && self.observedBackgroundFinishedEpoch == self.connectionEpoch
+    }
+    package var bootstrapMainTask: Task<Void, Never>? { self.bootstrapTask }
+    /// At most one current-epoch terminal handle, so checks can await real Task.value even after cleanup.
+    package var bootstrapLastBackgroundTask: Task<Void, Never>? {
+        guard self.lastObservedBackground?.epoch == self.connectionEpoch else { return nil }
+        return self.lastObservedBackground?.task
+    }
+
     package var bootstrapBackgroundTask: Task<Void, Never>? {
         guard self.observedBootstrapBackground?.epoch == self.connectionEpoch else { return nil }
         return self.observedBootstrapBackground?.task
@@ -588,6 +606,11 @@ public final class GatewayStore: Identifiable {
     }
 
     private func bootstrap(epoch: Int) async {
+        #if DEBUG
+        defer {
+            if self.isCurrent(epoch) { self.observedBootstrapFinishedEpoch = epoch }
+        }
+        #endif
         self.bootstrapped = false
         self.setSessionListReady(false)
         self.listReconcile = ListReconcile()
@@ -636,12 +659,14 @@ public final class GatewayStore: Identifiable {
         let background = Task {
             defer {
                 if self.observedBootstrapBackground?.epoch == epoch { self.observedBootstrapBackground = nil }
+                if self.isCurrent(epoch) { self.observedBackgroundFinishedEpoch = epoch }
             }
             await self.pullBootstrapPrefs(epoch: epoch)
             await beforeReconciliation?()
             await self.reconcileOrphanedTranscripts(epoch: epoch)
         }
         self.observedBootstrapBackground = (epoch, background)
+        self.lastObservedBackground = (epoch, background)
         #else
         Task {
             await self.pullBootstrapPrefs(epoch: epoch)
