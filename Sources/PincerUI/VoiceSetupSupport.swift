@@ -17,6 +17,10 @@ final class VoiceSetupController {
     var keySavedProvider: String?
     /// The provider whose setup is showing (may differ from the Gateway's active provider).
     var selectedProvider: String?
+    #if DEBUG
+    /// Read-only access to the actual item used by the registered completion observer.
+    var currentPreviewItem: AVPlayerItem? { self.avPlayer?.currentItem }
+    #endif
     private(set) var playingId: String?
     @ObservationIgnored private var avPlayer: AVPlayer?
     @ObservationIgnored private var clipPlayer: AVAudioPlayer?
