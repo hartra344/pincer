@@ -28,6 +28,7 @@ struct GatewayLogsPage: View {
     @State private var confirmExport = false
     @State private var exportLines: [GatewayLogEntry] = []
     @State private var exportDocument: ExportedFile?
+    @State private var exportPreparation = GatewayLogExportPreparation()
     @FocusState private var searchFocused: Bool
     @FocusState private var listFocused: Bool
 
@@ -97,9 +98,12 @@ struct GatewayLogsPage: View {
         .confirmationDialog("Export \(self.exportLines.count.formatted()) line\(self.exportLines.count == 1 ? "" : "s")?",
                             isPresented: self.$confirmExport, titleVisibility: .visible) {
             Button(L("Export")) {
-                let data = Data(GatewayLogs.rawText(self.exportLines).utf8)
-                self.exportDocument = ExportedFile(name: GatewayLogs.exportFilename(gatewayName: self.gateway.profile.name),
-                                                   data: data)
+                let entries = self.exportLines
+                let gatewayName = self.gateway.profile.name
+                Task {
+                    let prepared = await self.exportPreparation.prepare(entries, gatewayName: gatewayName)
+                    self.exportDocument = ExportedFile(logExport: prepared)
+                }
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
