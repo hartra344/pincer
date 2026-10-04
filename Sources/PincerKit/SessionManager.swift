@@ -135,24 +135,23 @@ public enum SessionManager {
     /// Shared actual row accessibility formatter; neutral extraction preserves its conversion policy.
     package static func spokenDuration(_ seconds: TimeInterval) -> String {
         let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes, .seconds], width: .wide)
-        return Duration.seconds(max(0, Int(seconds))).formatted(style)
+        return Duration.seconds(Self.boundedDurationSeconds(seconds)).formatted(style)
     }
 
     /// Localized short units: "4 sec", "2 min 5 sec", "1 hr 3 min".
     public static func formatDuration(_ seconds: TimeInterval) -> String {
-        let total: Int
-        if !seconds.isFinite || seconds <= 0 {
-            total = 0
-        } else if seconds >= Double(Int.max) {
-            // Double(Int.max) rounds upward on 64-bit platforms; branch before conversion.
-            total = Int.max
-        } else {
-            total = Int(seconds.rounded(.down))
-        }
+        let total = Self.boundedDurationSeconds(seconds)
         let (hours, minutes, secs) = (total / 3600, (total % 3600) / 60, total % 60)
         if hours > 0 { return minutes > 0 ? L("\(String(hours)) hr \(String(minutes)) min") : L("\(String(hours)) hr") }
         if minutes > 0 { return secs > 0 ? L("\(String(minutes)) min \(String(secs)) sec") : L("\(String(minutes)) min") }
         return L("\(String(secs)) sec")
+    }
+
+    private static func boundedDurationSeconds(_ seconds: TimeInterval) -> Int {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        // Double(Int.max) rounds upward on 64-bit platforms; branch before conversion.
+        guard seconds < Double(Int.max) else { return Int.max }
+        return Int(seconds.rounded(.down))
     }
 
     /// "Archived 3 sessions", "Deleted 1 session; 2 failed".

@@ -119,7 +119,7 @@ enum Suites {
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
             Section("Skills load admission") { await runSkillsLoadAdmissionChecks() },
             Section(nil) { await checkSessionManager() },
-            Section("Session spoken duration") { runSessionSpokenDurationChecks() },
+            Section("Session spoken duration") { runSessionSpokenDurationChecks(); runSessionSpokenDurationSafetyChecks() },
             Section("Session detail ownership") { await runSessionDetailOwnershipChecks() },
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
