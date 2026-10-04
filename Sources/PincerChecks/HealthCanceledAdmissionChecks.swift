@@ -49,6 +49,16 @@ import Foundation
 }
 
 @MainActor func runHealthCanceledAdmissionChecks() async {
+    var freshnessCalls = 0
+    let freshness = GatewayHealthModel { method, _ in
+        freshnessCalls += 1
+        return method == "health" ? ["ok": true, "ts": 1700000000000, "channels": [:]] : .null
+    }
+    let now = Date(timeIntervalSince1970: 1700000000)
+    let canceled = Task { await freshness.refresh(now: now) }
+    canceled.cancel(); await canceled.value
+    await freshness.refreshIfStale(now: now)
+    check(freshnessCalls == 2 && freshness.health != nil, "canceled refresh does not consume the actual staleness window")
     await checkHealthCanceledAdmission { method, _ in
         if method == "health" { return ["ok": true, "ts": 1700000000000, "channels": [:]] }
         if method == "last-heartbeat" { return ["ts": 1700000000000, "status": "ok"] }

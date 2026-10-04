@@ -473,7 +473,7 @@ public final class GatewayHealthModel {
 
     /// `health`, `last-heartbeat` and `system-presence`, each on its own.
     public func load() async {
-        guard self.connection == .connected else { return }
+        guard !Task.isCancelled, self.connection == .connected else { return }
         self.generation += 1
         let generation = self.generation
         self.loadState = .running
@@ -482,6 +482,10 @@ public final class GatewayHealthModel {
         async let presence: Void = self.loadPresence(generation)
         _ = await (health, heartbeat, presence)
         guard generation == self.generation else { return }
+        if Task.isCancelled {
+            if self.loadState.isRunning { self.loadState = .idle }
+            return
+        }
         if self.loadState.isRunning { self.loadState = .idle }
         self.quietInitialIssuesIfNeeded()
         self.hasLoaded = true
@@ -511,7 +515,7 @@ public final class GatewayHealthModel {
 
     /// `now` is injectable so tests don't depend on how long the refresh itself takes.
     public func refresh(now: Date = Date()) async {
-        guard self.connection == .connected else { return }
+        guard !Task.isCancelled, self.connection == .connected else { return }
         self.lastRefreshAt = now
         self.generation += 1
         let generation = self.generation
@@ -550,12 +554,12 @@ public final class GatewayHealthModel {
         let heartbeatEventRevision = self.heartbeatEventRevision
         do {
             let result = try await self.request(section.method, params)
-            guard generation == self.generation,
+            guard !Task.isCancelled, generation == self.generation,
                   section != .health || healthEventRevision == self.healthEventRevision,
                   section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             return result
         } catch {
-            guard generation == self.generation,
+            guard !Task.isCancelled, generation == self.generation,
                   section != .health || healthEventRevision == self.healthEventRevision,
                   section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             if Self.isUnavailableMethod(error) {

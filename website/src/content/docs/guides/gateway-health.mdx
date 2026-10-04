@@ -106,3 +106,5 @@ When a setting you saved needs a restart, Gateway Settings says "Saved. Restart 
 - If a dismissed issue clears up and happens again while no device running Pincer is connected, it stays dismissed, unless it also changed (for example, more failed deliveries).
 - Pincer can't retry or clear failed deliveries yet, since the gateway has no method for it.
 - If the gateway shuts down without saying it will come back (for example `openclaw gateway stop`), Pincer treats it as a stop, not a restart, and shows its usual reconnecting status.
+
+Canceled refreshes do not replace a pending Health report or postpone the next staleness refresh.
