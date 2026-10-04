@@ -15,6 +15,8 @@ struct CompactChatHeaderLayoutTests {
     @Test func reduceTransparencyUsesOpaqueBackdropWithoutFade() {
         #expect(CompactChatHeaderLayout.backdrop(reduceTransparency: false) == .graduatedMaterial)
         #expect(CompactChatHeaderLayout.backdrop(reduceTransparency: true) == .opaque)
+        #expect(CompactChatHeaderLayout.fadeMidpointOpacity == 0.45)
+        #expect(CompactChatHeaderLayout.fadeHeight == 32)
         #expect(CompactChatHeaderLayout.fadeHeight > 0 && CompactChatHeaderLayout.fadeHeight < CompactChatHeaderLayout.minimumReservation)
     }
 }

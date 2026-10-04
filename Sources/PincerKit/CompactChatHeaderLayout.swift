@@ -3,7 +3,8 @@ package enum CompactChatHeaderLayout {
     package static let avatarSize: Double = 48
     package static let minimumReservation: Double = 44
     package static let navigationOverlap: Double = 44
-    package static let fadeHeight: Double = 16
+    package static let fadeHeight: Double = 32
+    package static let fadeMidpointOpacity: Double = 0.45
     package enum Backdrop: Sendable { case graduatedMaterial, opaque }
     package static func backdrop(reduceTransparency: Bool) -> Backdrop {
         reduceTransparency ? .opaque : .graduatedMaterial
