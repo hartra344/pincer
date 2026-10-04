@@ -163,7 +163,7 @@ enum Suites {
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
-            Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks() },
+            Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },

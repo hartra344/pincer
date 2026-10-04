@@ -46,3 +46,10 @@ import Foundation
     }.value
     check(result, "real downloaded PDF retains exact bytes in task-owned Quick Look path with explicit LOCAL long-extension filename input")
 }
+
+@MainActor func runFilePreviewExtensionPolicyChecks() async {
+    let value = await Task.detached {
+        FilePreviewFiles.fileName("attachment." + String(repeating: "x", count: 130), mimeType: nil)
+    }.value
+    check(value == "a." + String(repeating: "x", count: 118), "oversized Quick Look extension retains one visible stem and bounded suffix")
+}
