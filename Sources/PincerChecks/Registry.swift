@@ -240,6 +240,7 @@ enum Suites {
         Section("Bounded cold rotor labels (demo)") { await runDemoColdRotorLabelChecks() },
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
+        Section("Shutdown restart delay bounds (demo)") { await runDemoShutdownRestartDelayBoundsChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
         Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
         Section("Centered chat identity (demo)") { await runDemoCenteredChatHeaderChecks() },

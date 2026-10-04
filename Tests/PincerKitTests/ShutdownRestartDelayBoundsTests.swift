@@ -4,6 +4,14 @@ import Testing
 
 @Suite("Shutdown restart delay bounds")
 struct ShutdownRestartDelayBoundsTests {
+    @Test func representableBoundaryAndPositiveOverflowStaySafe() {
+        let near = Double(Int.max).nextDown
+        #expect(GatewayHealthModel.restartExpectedMs(shutdown: ["restartExpectedMs": .number(near)]) == Int(exactly: near))
+        for value in [Double(Int.max), Double.greatestFiniteMagnitude] {
+            #expect(GatewayHealthModel.restartExpectedMs(shutdown: ["restartExpectedMs": .number(value)]) == Int.max)
+        }
+    }
+
     @Test func ordinaryAndTerminalDelaysKeepExistingMeaning() {
         #expect(GatewayHealthModel.restartExpectedMs(shutdown: ["restartExpectedMs": 0]) == 0)
         #expect(GatewayHealthModel.restartExpectedMs(shutdown: ["restartExpectedMs": 1500]) == 1500)
