@@ -30,6 +30,18 @@ public enum FilePreviewFiles {
         return url
     }
 
+    /// Dismisses the file shown by one preview. Neutral extraction retains the existing root-wide cleanup.
+    #if DEBUG
+    package static func dismiss(_ url: URL, in root: URL = Self.root, probe: QuickLookCleanupProbe? = nil) {
+        probe?.record()
+        self.clear(in: root)
+    }
+    #else
+    package static func dismiss(_ url: URL, in root: URL = Self.root) {
+        self.clear(in: root)
+    }
+    #endif
+
     /// Removes every preview file.
     public static func clear(in root: URL = Self.root) {
         try? FileManager.default.removeItem(at: root)
@@ -60,3 +72,20 @@ public enum FilePreviewFiles {
         return base
     }
 }
+
+#if DEBUG
+/// Per-call scalar diagnostics only; no URLs or file contents retained.
+package final class QuickLookCleanupProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var main = 0, worker = 0
+    package init() {}
+    fileprivate func record() {
+        lock.lock(); defer { lock.unlock() }
+        guard main + worker < 16 else { return }
+        if Thread.isMainThread { main += 1 } else { worker += 1 }
+    }
+    package var counts: (main: Int, worker: Int) {
+        lock.lock(); defer { lock.unlock() }; return (main, worker)
+    }
+}
+#endif
