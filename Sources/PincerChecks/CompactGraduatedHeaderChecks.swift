@@ -3,6 +3,19 @@ import Foundation
 
 @MainActor
 func runCompactGraduatedHeaderChecks() {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    check(ChatHeaderAvatarSize.load(from: defaults) == .small && defaults.object(forKey: ChatHeaderAvatarSize.defaultsKey) == nil,
+          "header size defaults to Small without writing a preference")
+    defaults.set("future", forKey: ChatHeaderAvatarSize.defaultsKey)
+    check(ChatHeaderAvatarSize.load(from: defaults) == .small && defaults.string(forKey: ChatHeaderAvatarSize.defaultsKey) == "future",
+          "unknown device-local size safely reads Small without replacing stored data")
+    for size in ChatHeaderAvatarSize.allCases {
+        defaults.set(size.rawValue, forKey: ChatHeaderAvatarSize.defaultsKey)
+        check(ChatHeaderAvatarSize.load(from: defaults) == size &&
+              CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22, size: size) == size.minimumReservation,
+              "actual persisted header size selects its production avatar and reservation policy")
+    }
     let standard = CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22)
     let accessible = CompactChatHeaderLayout.reservation(measuredTitleHeight: 76, scaledTitleAllowance: 48)
     check(standard == 44 && CompactChatHeaderLayout.avatarSize == 48,
@@ -35,6 +48,11 @@ func runDemoCompactGraduatedHeaderChecks() async {
         await chat.load()
         guard let row = gateway.sessions[key] else { check(false, "actual compact header session remains available"); return }
         titles.append(row.title)
+        for size in ChatHeaderAvatarSize.allCases {
+            defaults.set(size.rawValue, forKey: ChatHeaderAvatarSize.defaultsKey)
+            check(ChatHeaderAvatarSize.load(from: gateway.defaults) == size && chat.sessionKey == key && gateway.sessions[key]?.title == row.title,
+                  "actual connected Demo retains chat identity and title across device-local avatar size changes")
+        }
         check(!row.title.isEmpty && gateway.agent(row.agentId).id == "main" && chat.hasLoaded,
               "actual seeded compact header preserves selected chat title and animated-agent identity")
     }

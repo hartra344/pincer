@@ -40,7 +40,7 @@ A healthy gateway shows nothing there. In the [demo](../../getting-started/try-t
 - **Channels:** each channel with its status (Connected, Degraded, Stopped…) and its last error. Status labels match [Channel Status](../channel-status/); Control-click or touch and hold a channel and choose **Show in Channel Status** to manage it.
 - **Connected Clients:** the apps and nodes connected to the gateway right now, with their platform, role and last activity. **This device** is marked.
 
-The page updates live from the gateway's health and heartbeat events. A newer health event takes precedence over an older in-flight refresh, including an older refresh error. While it's open, it asks the gateway again only if no health event has arrived for 30 seconds. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
+The page updates live from the gateway's health and heartbeat events. Newer health and heartbeat events take precedence over older in-flight refreshes and errors for their respective sections. While it's open, it asks the gateway again only if no health event has arrived for 30 seconds. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
 
 If your gateway doesn't offer part of this, that section says **Unavailable on this Gateway** and the rest still works.
 
