@@ -48,7 +48,7 @@ struct ChatExportInitialHistoryTests {
         await writer.drain()
         try #require(stats.modified != nil || stats.unchanged)
         let result = await chat.exportItems()
-        #expect(chat.items == [item])
+        try #require(chat.items == [item])
         if complete { #expect(result == [item]) }
         else { #expect(result == nil) }
     }

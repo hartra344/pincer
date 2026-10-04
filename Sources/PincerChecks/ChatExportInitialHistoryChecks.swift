@@ -30,6 +30,9 @@ import Foundation
     let current = gateway.chat(for: key)
     defer { current.stopCaching() }
     await current.load()
+    let complete = await current.loadFullHistory()
+    check(complete && !current.hasOlderItems, "genuine seeded history has complete export coverage")
+    guard complete && !current.hasOlderItems else { return }
     let expected = current.items.filter { !$0.isPending }
     check(current.hasLoaded && !expected.isEmpty, "genuine seeded history loads nonempty")
     guard current.hasLoaded && !expected.isEmpty else { return }
