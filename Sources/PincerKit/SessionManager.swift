@@ -132,7 +132,7 @@ public enum SessionManager {
         return max(0, now.timeIntervalSince1970 - started / 1000)
     }
 
-    /// Shared actual row accessibility formatter; neutral extraction preserves its conversion policy.
+    /// Shared actual row accessibility formatter, using the same numeric bounds as visual labels.
     package static func spokenDuration(_ seconds: TimeInterval) -> String {
         let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes, .seconds], width: .wide)
         return Duration.seconds(Self.boundedDurationSeconds(seconds)).formatted(style)
