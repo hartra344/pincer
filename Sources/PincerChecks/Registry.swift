@@ -161,7 +161,7 @@ enum Suites {
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
-            Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks() },
+            Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },
             Section("Device speech catalog") { await runDeviceSpeechCatalogChecks() },
             Section("Dictation target routing") { runDictationTargetChecks() },
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
