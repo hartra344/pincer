@@ -28,6 +28,15 @@ export async function run(ctx) {
   assert.equal(healthNow.deliveryQueues.failed[0].count, 1);
   assert.ok(healthNow.deliveryQueues.failed[0].oldestFailedAt > 0);
   assert.deepEqual(helloSnap.health.deliveryQueues.failed, healthNow.deliveryQueues.failed);
+  assert.equal(healthNow.deliveryQueues.ingressFailed[0].count, 2);
+  assert.equal(healthNow.deliveryQueues.ingressFailed[0].channelId, 'telegram');
+  assert.equal(healthNow.deliveryQueues.ingressFailed[0].accountId, 'default');
+  assert.deepEqual(helloSnap.health.deliveryQueues.ingressFailed, healthNow.deliveryQueues.ingressFailed);
+  assert.deepEqual(helloSnap.health.deliveryQueues.ingressPressure, healthNow.deliveryQueues.ingressPressure);
+  assert.equal(healthNow.deliveryQueues.ingressPressure[0].pendingCount, 3);
+  assert.equal(healthNow.deliveryQueues.ingressPressure[0].claimedCount, 1);
+  assert.equal(healthNow.deliveryQueues.ingressPressure[0].blockedCount, 1);
+  assert.ok(healthNow.deliveryQueues.ingressPressure[0].oldestReceivedAt > 0);
   assert.equal((await watcher.send('last-heartbeat')).status, 'ok-token');
   assert.ok((await watcher.send('system-presence')).some((p) => p.mode === 'node'));
   assert.ok((await watcher.send('status')).uptimeMs > 0);

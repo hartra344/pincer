@@ -238,12 +238,19 @@ func checkMenuBarDemoDismissals(_ app: AppModel, _ gateway: GatewayStore, defaul
         defaults.bool(forKey: "pincer.healthDismissalsSynced.\(gateway.id.uuidString)")
     }
     check(synced, "menu bar demo: health dismissals synced with users.prefs")
+    let ingress = health.activeIssues.filter { $0.id.hasPrefix("queue:ingress-") }
+    check(ingress.count == 2 && ingress.allSatisfy { $0.kind == .delivery && !$0.canAlwaysIgnore },
+          "menu bar demo: both ingress issues are visible and account-scoped")
     health.dismiss(telegram)
+    check(MenuBarInbox(app: app).gateways.first?.text == "Degraded" && health.activeIssues.count == 2,
+          "dismissing only Telegram leaves both ingress issues visible in the menu")
+    for issue in ingress { health.dismiss(issue) }
+    let expectedDismissals = Dictionary(uniqueKeysWithValues: (ingress + [telegram]).map { ($0.id, "until:" + $0.fingerprint) })
     // The users.prefs.set round trip: the demo echoes users.prefs.changed and the store re-reads it.
     // Negative window: the echo must leave the stored dismissals unchanged.
     try? await Task.sleep(for: .milliseconds(500))
     let dismissed = gateway.healthDismissals
-    check(dismissed == [telegram.id: "until:state=not-connected"] && health.dismissals == dismissed,
+    check(dismissed == expectedDismissals && health.dismissals == dismissed,
           "menu bar demo: the Telegram dismissal is stored (\(dismissed))")
     let stored = defaults.dictionary(forKey: "pincer.healthDismissals.\(gateway.id.uuidString)") as? [String: String]
 
@@ -264,10 +271,12 @@ func checkMenuBarDemoDismissals(_ app: AppModel, _ gateway: GatewayStore, defaul
     try? await Task.sleep(for: .milliseconds(300))
     check(gateway.healthDismissals == dismissed, "the repeated dismissal leaves users.prefs as it was (\(gateway.healthDismissals))")
 
+    for issue in ingress { health.restore(id: issue.id) }
     health.restore(id: telegram.id)
     // Round trip through users.prefs: restore echoes users.prefs.changed; the state below is read after it.
     try? await Task.sleep(for: .milliseconds(300))
     let inbox = MenuBarInbox(app: app)
-    check(gateway.healthDismissals.isEmpty && inbox.gateways.first?.text == "Degraded",
+    check(gateway.healthDismissals.isEmpty && inbox.gateways.first?.text == "Degraded"
+          && Set(health.activeIssues.map(\.id)) == Set(expectedDismissals.keys),
           "restoring it brings Degraded back to the menu (\(inbox.gateways.map(\.title)))")
 }

@@ -38,7 +38,8 @@ import Foundation
     guard let assistant = source.items.last(where: { $0.role == .assistant && $0.isCommittedEntry }) else {
         check(false, "actual Garden assistant is available"); return
     }
-    for cancel in [true, false] {
+    for mode in ["cancel", "current", "ABA"] {
+        let cancel = mode == "cancel"
         guard let key = await source.branch(from: assistant.id) else { check(false, "actual Demo fork succeeds"); return }
         let chat = gateway.chat(for: key)
         await chat.load()
@@ -51,6 +52,21 @@ import Foundation
         var released = false
         var continuation: CheckedContinuation<Void, Never>?
         func release() { released = true; let held = continuation; continuation = nil; held?.resume() }
+        var admitted = false
+        var admissionReleased = false
+        var admissionContinuation: CheckedContinuation<Void, Never>?
+        func releaseAdmission() {
+            admissionReleased = true
+            let held = admissionContinuation; admissionContinuation = nil; held?.resume()
+        }
+        if mode == "ABA" {
+            chat.messageEditRewindAdmissionProbe = {
+                admitted = true
+                await withCheckedContinuation { held in
+                    if admissionReleased || Task.isCancelled { held.resume() } else { admissionContinuation = held }
+                }
+            }
+        }
         chat.messageEditRewindCompletionProbe = { success in
             check(success, "actual Demo rewind has already succeeded")
             arrived = true
@@ -58,18 +74,35 @@ import Foundation
                 if released || Task.isCancelled { held.resume() } else { continuation = held }
             }
         }
-        defer { release(); chat.messageEditRewindCompletionProbe = nil }
+        defer {
+            releaseAdmission(); release()
+            chat.messageEditRewindAdmissionProbe = nil; chat.messageEditRewindCompletionProbe = nil
+        }
         let task = Task { await chat.sendEdit("owned Demo resend", attachments: []) }
-        defer { task.cancel(); release() }
+        defer { task.cancel(); releaseAdmission(); release() }
+        if mode == "ABA" {
+            let admissionReady = await waitFor("actual edit ownership admission", timeout: 20) { admitted }
+            check(admissionReady, "real edit captures ownership before its rewind request")
+            guard admissionReady else { return }
+            chat.cancelEdit()
+            check(chat.beginEdit(user.id), "same committed message can be reselected before real rewind")
+            chat.draft.text = "fresh same-message draft"
+            releaseAdmission()
+        }
         let ready = await waitFor("actual rewind completion gate", timeout: 20) { arrived }
         check(ready, "real rewind completion reaches gate")
         guard ready else { return }
         if cancel { chat.cancelEdit(); chat.draft.text = "fresh normal draft" }
+        if mode == "ABA" { chat.errorMessage = "current same-message feedback" }
         release()
         let outcome = await task.value
         check(!chat.isSendingEdit, "actual edit task completes and releases busy state")
         if cancel {
             check(chat.editTarget == nil && chat.draft.text == "fresh normal draft", "old completion preserves canceled replacement draft")
+        } else if mode == "ABA" {
+            check(chat.editTarget?.messageId == user.id && chat.draft.text == "fresh same-message draft"
+                  && chat.errorMessage == "current same-message feedback",
+                  "actual old rewind completion preserves same-message reselection and feedback")
         } else {
             if case .sent = outcome { check(true, "current edit sends") } else { check(false, "current edit sends") }
             check(chat.editTarget == nil && chat.draft.text == "normal draft", "current edit restores normal draft")
@@ -77,7 +110,7 @@ import Foundation
         do {
             let response = try await gateway.connection.request("chat.history", ["sessionKey": .string(key)])
             guard let messages = response["messages"]?.array else { check(false, "actual history response has messages"); return }
-            check(messages.filter { $0["role"]?.text == "user" }.count == (cancel ? 1 : 2),
+            check(messages.filter { $0["role"]?.text == "user" }.count == (mode == "current" ? 2 : 1),
                   "actual backend retains applied rewind, and only the current edit resends")
         } catch { check(false, "actual history read succeeds") }
     }
