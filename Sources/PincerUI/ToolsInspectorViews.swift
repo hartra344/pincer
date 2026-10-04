@@ -33,7 +33,7 @@ struct ToolsInspectorView: View {
         let owner = self.searchOwner
         let source = model.searchSourceRevision
         let completed = model.searchPreparation.owns(owner, sourceRevision: source)
-        let prepared = completed ? model.searchPreparation.result : nil
+        let prepared = model.searchPreparation.result.flatMap { $0.sourceRevision == source ? $0 : nil }
         Form {
             Section {
                 Text(self.scopeTitle).font(.headline)

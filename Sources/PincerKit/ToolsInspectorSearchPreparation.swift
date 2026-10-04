@@ -51,7 +51,11 @@ public final class ToolsInspectorSearchPreparation {
         displaced?.completion(nil)
     }
     private func cancel(_ owner: UUID) {
-        if current == owner { invalidate() }
+        guard current == owner else { return }
+        current = nil
+        let displaced = pending; pending = nil
+        displaced?.completion(nil)
+        // Superseded query cancellation keeps the last finished same-source display.
     }
     public func prepare(_ inspection: ToolsInspection, filter: ToolFilter, query: String,
                         server: String? = nil, owner: UUID, sourceRevision: Int) async -> ToolsInspectorSearchResult? {
@@ -60,7 +64,8 @@ public final class ToolsInspectorSearchPreparation {
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 guard !Task.isCancelled else { continuation.resume(returning: nil); return }
-                current = ticket; result = nil
+                current = ticket
+                if result?.sourceRevision != sourceRevision { result = nil }
                 let job = Job(cancellation: cancellation, ticket: ticket, owner: owner, sourceRevision: sourceRevision, inspection: inspection,
                     filter: filter, query: query, server: server, completion: { continuation.resume(returning: $0) })
                 if active != nil {

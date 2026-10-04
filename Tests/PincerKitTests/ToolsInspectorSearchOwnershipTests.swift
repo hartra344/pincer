@@ -89,5 +89,30 @@ struct ToolsInspectorSearchOwnershipTests {
         } onCancel: { task.cancel(); Task { await gate.release() } }
     }
 
+    @Test func finishedDisplaySurvivesPendingSameSourceAndClearsOnInvalidation() async {
+        let inspection = await Task.detached {
+            ToolsInspection.build(catalog: ToolCatalog(["groups": [["id": "g", "label": "Group", "tools": [
+                ["id": "one", "label": "One", "description": "first"],
+                ["id": "two", "label": "Two", "description": "second"]]]]]), effective: nil)
+        }.value
+        let preparation = ToolsInspectorSearchPreparation()
+        _ = await preparation.prepare(inspection, filter: .all, query: "first", owner: UUID(), sourceRevision: 1)
+        let gate = Gate(), owner = UUID()
+        preparation.didPrepare = { await gate.holdFirst() }
+        let task = Task { await preparation.prepare(inspection, filter: .all, query: "second", owner: owner, sourceRevision: 1) }
+        defer { task.cancel(); preparation.invalidate(); Task { await gate.release() } }
+        await withTaskCancellationHandler {
+            await gate.wait()
+            #expect(preparation.result?.groups.flatMap(\.tools).map(\.id) == ["one"])
+            #expect(!preparation.owns(owner, sourceRevision: 1))
+            await gate.release()
+            let finished = await task.value
+            #expect(finished?.groups.flatMap(\.tools).map(\.id) == ["two"])
+            #expect(preparation.owns(owner, sourceRevision: 1))
+            preparation.invalidate()
+            #expect(preparation.result == nil)
+        } onCancel: { task.cancel(); Task { await gate.release() } }
+    }
+
 }
 #endif
