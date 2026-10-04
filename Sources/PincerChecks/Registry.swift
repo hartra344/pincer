@@ -172,9 +172,6 @@ enum Suites {
             Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
-            #if DEBUG
-            Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks() },
-            #endif
             Section("Command palette") { runCommandPaletteChecks() },
             Section("Composer drafts") { await checkDrafts() },
             Section("Message search") { checkMessageSearchLogic() },
@@ -222,6 +219,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks() })
         sections.append(Section("Embedded image base64 preparation") { await runEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
@@ -257,9 +255,6 @@ enum Suites {
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
         Section("Bookmark sync (demo)") { await runDemoBookmarkSync() },
-        #if DEBUG
-        Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() },
-        #endif
         Section("Agent reply targets (demo)") { await runDemoReplyTargets() },
         Section("Reaction level (demo)") { await runDemoReactionLevel() },
         Section("Reactions on users.prefs (demo, Gateway reactions off)") { await runDemoPrefsReactions() },
@@ -374,6 +369,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() })
         sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
