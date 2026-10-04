@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 @MainActor private final class UsageStatusAdmissionGate {
     var entered = false
@@ -38,9 +38,14 @@ import PincerKit
     defer { gate.release(); current.cancel() }
     let entered = await waitFor("computed usage status response") { gate.entered }
     check(entered, "actual usage status response reaches held local delivery")
-    guard entered else { return }
+    guard entered else {
+        gate.release(); current.cancel(); await current.value
+        return
+    }
     guard let held, let expected = UsageStatusSummary(held) else {
-        check(false, "held actual usage status response decodes"); return
+        check(false, "held actual usage status response decodes")
+        gate.release(); current.cancel(); await current.value
+        return
     }
     check(!expected.providers.isEmpty, "held report contains actual provider rows")
     let canceled = Task { await model.loadStatus() }
