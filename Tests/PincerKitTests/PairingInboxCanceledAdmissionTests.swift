@@ -27,8 +27,13 @@ struct PairingInboxCanceledAdmissionTests {
         try #require(!expectedRequests.isEmpty && !expectedAccounts.isEmpty)
         let healthy = Task { await model.load() }
         defer { healthy.cancel(); gate.release() }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
-        while !gate.entered { try Task.checkCancellation(); try #require(ContinuousClock.now < deadline); await Task.yield() }
+        do {
+            let deadline = ContinuousClock.now.advanced(by: .seconds(15))
+            while !gate.entered { try Task.checkCancellation(); try #require(ContinuousClock.now < deadline); await Task.yield() }
+        } catch {
+            healthy.cancel(); gate.release(); await healthy.value
+            throw error
+        }
         let canceled = Task { await model.load() }; canceled.cancel(); await canceled.value
         gate.release(); await healthy.value
         #expect(gate.attempts == 1)

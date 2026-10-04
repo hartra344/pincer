@@ -12,6 +12,19 @@ import Foundation
     }
     func release() { open = true; held?.resume(); held = nil }
 }
+private func hasRequiredPairingFields(_ response: JSONValue) -> Bool {
+    guard let requests = response["requests"]?.array, let accounts = response["accounts"]?.array,
+          !requests.isEmpty, !accounts.isEmpty else { return false }
+    let accountKeys = ["channel", "channelLabel", "accountId"]
+    let requestKeys = accountKeys + ["requestId", "senderId", "senderLabel", "createdAt", "lastSeenAt", "expiresAt"]
+    return accounts.allSatisfy { row in
+        accountKeys.allSatisfy { !(row[$0]?.string ?? "").isEmpty } && row["notifySupported"]?.bool != nil
+    } && requests.allSatisfy { row in
+        requestKeys.allSatisfy { !(row[$0]?.string ?? "").isEmpty } && row["notifySupported"]?.bool != nil
+    } && response["commandOwnerConfigured"]?.bool != nil
+      && (response["limits"]?["pendingPerAccount"]?.int ?? -1) >= 0
+      && (response["limits"]?["ttlMs"]?.double ?? -1) >= 0
+}
 @MainActor private func checkPairingCanceledAdmission(_ request: @escaping PairingInboxModel.Request) async {
     let gate = PairingAdmissionGate()
     var attempts = 0, response: JSONValue = .null
@@ -20,6 +33,10 @@ import Foundation
         check(method == PairingInboxModel.listMethod && params == [:], "pairing inbox uses exact read-only list request")
         try Task.checkCancellation()
         let result = try await request(method, params)
+        guard hasRequiredPairingFields(result) else {
+            check(false, "actual pairing response supplies every required request/account field")
+            throw GatewayError.rpc(code: "INVALID_RESPONSE", message: "Incomplete pairing fixture response", details: nil)
+        }
         response = result; await gate.hold(); return result
     }
     let task = Task { await model.load() }
