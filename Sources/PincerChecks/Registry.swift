@@ -229,6 +229,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks() })
         sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
         sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
         sections.append(Section("Share target ownership") { await runShareTargetOwnershipChecks() })
@@ -392,6 +393,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Find worker admission (demo)") { await runDemoTranscriptFindWorkerChecks() })
         sections.append(Section("Cache restore publication ownership (demo)") { await runDemoCacheRestorePublicationOwnershipChecks() })
         sections.append(Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() })
         sections.append(Section("Share target ownership (demo)") { await runDemoShareTargetOwnershipChecks() })

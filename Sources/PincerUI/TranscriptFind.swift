@@ -43,6 +43,14 @@ final class TranscriptFind {
     @ObservationIgnored private var reasoningOff = false
     @ObservationIgnored private var rowIndex: [String: Int] = [:]
     @ObservationIgnored private var search: Task<Void, Never>?
+    @ObservationIgnored private let preparation: TranscriptFindPreparation
+
+    init(preparation: TranscriptFindPreparation? = nil) {
+        self.preparation = preparation ?? TranscriptFindPreparation()
+    }
+    #if DEBUG
+    var activeSearchForChecks: Task<Void, Never>? { self.search }
+    #endif
     /// A search that should scroll to its match was replaced before finishing; the next one does it.
     @ObservationIgnored private var pendingReveal = false
     /// The match to select once it's found (a message search result being opened). Kept
@@ -154,13 +162,13 @@ final class TranscriptFind {
         let previous = self.currentMatch
         let previousRow = previous.flatMap { self.rowIndex[$0.entryId] }
         let preferred = self.preferredMatch
+        let preparation = self.preparation
         self.search = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             guard !Task.isCancelled else { return }
-            let (matches, rowIndex) = await Task.detached(priority: .userInitiated) {
-                (TranscriptSearch.matches(query, in: entries, options: options),
-                 Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
-            }.value
+            let result = await preparation.prepare(query: query, entries: entries, options: options)
+            let matches = result.matches
+            let rowIndex = result.rowIndex
             guard !Task.isCancelled, let self else { return }
             let selected = TranscriptSearch.reselect(previous, in: matches, rowIndex: rowIndex, near: previousRow,
                                                      preferred: preferred)
