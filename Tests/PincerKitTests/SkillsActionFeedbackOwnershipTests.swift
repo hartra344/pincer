@@ -80,4 +80,53 @@ struct SkillsActionFeedbackOwnershipTests {
             #expect(model.lastWarnings.isEmpty, "Warnings also belong to the admitted agent context")
         }
     }
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+    func olderActionCannotReplaceNewerActionsFeedback(_ latestFails: Bool) async throws {
+        let server = Server()
+        let model = SkillsModel(request: { method, params in
+            if method == Skills.installMethod, params["slug"] == "latest" {
+                if latestFails {
+                    throw GatewayError.rpc(code: "UNAVAILABLE", message: "Latest failed", details: ["warning": "Latest warning"])
+                }
+                return ["ok": true, "version": "2.0.0", "warning": "Latest warning"]
+            }
+            return try await server.request(method, params)
+        })
+        await model.load(agentId: "main")
+        let old = try #require(ClawHubSearchResult(["slug": "old", "displayName": "Old"]))
+        let latest = try #require(ClawHubSearchResult(["slug": "latest", "displayName": "Latest"]))
+        let action = Task { await model.installFromClawHub(old) }
+        defer { action.cancel(); server.release() }
+        while !server.admitted { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(10)) }
+        let latestOutcome = await model.installFromClawHub(latest)
+        #expect(latestOutcome == (latestFails ? .failed("Latest failed") : .done("Installed Latest 2.0.0")))
+        let message = model.lastMessage
+        let error = model.actionError
+        #expect(model.lastWarnings == ["Latest warning"])
+        server.release()
+        #expect(await action.value == .done("Installed Old 1.2.3"))
+        #expect(model.lastMessage == message && model.actionError == error && model.lastWarnings == ["Latest warning"])
+        #expect(model.busy.isEmpty && model.report?.agentId == "main")
+    }
+
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+    func explicitClearInvalidatesFeedbackButSameAgentReloadDoesNot(_ clear: Bool) async throws {
+        let server = Server()
+        let model = SkillsModel(request: { try await server.request($0, $1) })
+        await model.load(agentId: "main")
+        let result = try #require(ClawHubSearchResult(["slug": "example", "displayName": "Example"]))
+        let action = Task { await model.installFromClawHub(result) }
+        defer { action.cancel(); server.release() }
+        while !server.admitted { try Task.checkCancellation(); try await Task.sleep(for: .milliseconds(10)) }
+        if clear { model.clearMessages() } else { await model.reload() }
+        server.release()
+        #expect(await action.value == .done("Installed Example 1.2.3"))
+        if clear {
+            #expect(model.lastMessage == nil && model.actionError == nil && model.lastWarnings.isEmpty)
+        } else {
+            #expect(model.lastMessage == "Installed Example 1.2.3" && model.lastWarnings == ["Review publisher"])
+        }
+        #expect(model.busy.isEmpty && model.report?.agentId == "main")
+    }
+
 }
