@@ -2,20 +2,18 @@ import Foundation
 @testable import PincerKit
 
 private actor AutomationListGate {
-    private var open = false, entered = false
-    private var entry: CheckedContinuation<Void, Never>?
+    private var open = false
     private var held: CheckedContinuation<Void, Never>?
     func hold() async {
-        self.entered = true; self.entry?.resume(); self.entry = nil
         if !self.open { await withCheckedContinuation { self.held = $0 } }
     }
-    func wait() async { if !self.entered, !self.open { await withCheckedContinuation { self.entry = $0 } } }
-    func release() { self.open = true; self.entry?.resume(); self.entry = nil; self.held?.resume(); self.held = nil }
+    func release() { self.open = true; self.held?.resume(); self.held = nil }
 }
 
 @MainActor private final class AutomationDeleteFixture {
     let gate = AutomationListGate()
     var lists = 0, removes = 0
+    var didHold = false
     var failDelete = false
     var jobs: [JSONValue] = [
         ["id": "job-a", "name": "Daily briefing", "enabled": true, "createdAtMs": 1700000000000, "updatedAtMs": 1700000000000, "state": [:], "schedule": ["kind": "every", "everyMs": 60000],
@@ -30,7 +28,7 @@ private actor AutomationListGate {
             check(params["limit"]?.int == 200 && params["offset"]?.int == 0 && timeout == 30, "actual automation list keeps existing params/timeout")
             lists += 1
             let snapshot: JSONValue = ["jobs": .array(jobs), "hasMore": false, "nextOffset": .null]
-            if lists == 2 { await gate.hold() }
+            if lists == 2 { didHold = true; await gate.hold() }
             return snapshot
         case "cron.remove":
             removes += 1
@@ -55,7 +53,14 @@ private actor AutomationListGate {
         let actual = Task { await model.load() }
         defer { actual.cancel(); Task { await fixture.gate.release() } }
         await withTaskCancellationHandler {
-            await fixture.gate.wait()
+            let held = await waitFor("actual fixture cron.list snapshot is held", timeout: 30) { fixture.didHold }
+            check(held, "actual fixture list reaches the held response boundary")
+            guard held, !Task.isCancelled else {
+                actual.cancel()
+                await fixture.gate.release()
+                await actual.value
+                return
+            }
             if outcome != 0 {
                 let removed = await model.remove(selected)
                 check(removed == (outcome == 1), "actual remove returns its accepted/failed outcome")
