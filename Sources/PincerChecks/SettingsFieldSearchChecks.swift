@@ -6,9 +6,10 @@ import Foundation
     let probe = SettingsFieldSearchProbe()
     model.fieldSearchProbe = probe
     defer { model.fieldSearchProbe = nil }
-    _ = model.searchFields(matching: query)
+    let token = UUID()
+    await model.prepareFieldSearch(matching: query, token: token)
     await model.waitForFieldSearchPreparation()
-    let found = model.searchFields(matching: query)
+    let found = model.fieldSearchResults(token: token, source: model.fieldSearchSourceRevision)
     check(!found.isEmpty && found.count <= 60, "actual field search publishes matching fields within the existing result limit")
     let counts = probe.snapshot()
     check(counts.mainTraversals == 0 && counts.mainNormalizations == 0,

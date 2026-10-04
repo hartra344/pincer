@@ -386,6 +386,14 @@ private struct GatewaySettingsRoot: View {
 
 private struct SettingsSidebar: View {
     @Binding var search: String
+    @State private var searchID = UUID()
+    private struct SearchIdentity: Hashable {
+        let query: UUID
+        let source: GatewaySettingsModel.FieldSearchSourceRevision
+    }
+    private var searchBinding: Binding<String> {
+        Binding(get: { self.search }, set: { self.searchID = UUID(); self.search = $0 })
+    }
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
     /// Ticks so the pairing badge drops requests as they expire, even while that page is closed.
@@ -449,14 +457,18 @@ private struct SettingsSidebar: View {
                     }
                 }
             } else {
-                SearchResults(query: self.search)
+                SearchResults(query: self.search, queryID: self.searchID)
             }
         }
         .navigationTitle(L("Gateway Settings"))
+        .task(id: SearchIdentity(query: self.searchID, source: settings.fieldSearchSourceRevision)) {
+            guard !self.search.isEmpty else { return }
+            await settings.prepareFieldSearch(matching: self.search, token: self.searchID)
+        }
         #if os(macOS)
-        .searchable(text: self.$search, placement: .sidebar, prompt: L("Search"))
+        .searchable(text: self.searchBinding, placement: .sidebar, prompt: L("Search"))
         #else
-        .searchable(text: self.$search, prompt: L("Search Settings"))
+        .searchable(text: self.searchBinding, prompt: L("Search Settings"))
         #endif
         .disabled(!settings.hasLoaded && !self.search.isEmpty && SettingsCatalog.destinations(matching: self.search).isEmpty)
         .task {
@@ -495,10 +507,12 @@ private struct SettingsSidebar: View {
 
 private struct SearchResults: View {
     let query: String
+    let queryID: UUID
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
 
     var body: some View {
+        let source = self.gateway.settings.fieldSearchSourceRevision
         let results = self.results
         let pages = SettingsCatalog.destinations(matching: self.query)
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
@@ -519,6 +533,7 @@ private struct SearchResults: View {
         }
         ForEach(results) { field in
             Button {
+                guard self.gateway.settings.ownsFieldSearch(token: self.queryID, source: source) else { return }
                 self.navigator.go(to: field.path)
             } label: {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -536,7 +551,7 @@ private struct SearchResults: View {
     }
 
     private var results: [ConfigField] {
-        self.gateway.settings.searchFields(matching: self.query)
+        self.gateway.settings.fieldSearchResults(token: self.queryID, source: self.gateway.settings.fieldSearchSourceRevision)
     }
 
     static func breadcrumb(_ path: [String]) -> String {

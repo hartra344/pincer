@@ -30,9 +30,10 @@ struct SettingsFieldSearchTests {
         let model = await model(large: true)
         let probe = SettingsFieldSearchProbe()
         model.fieldSearchProbe = probe
-        _ = model.searchFields(matching: "needle")
+        let token = UUID()
+        await model.prepareFieldSearch(matching: "needle", token: token)
         await model.waitForFieldSearchPreparation()
-        let found = model.searchFields(matching: "needle")
+        let found = model.fieldSearchResults(token: token, source: model.fieldSearchSourceRevision)
         #expect(found.map(\.key) == ["field00"], "Full remote help must remain searchable without truncation")
         let counts = probe.snapshot()
         #expect(counts.mainTraversals == 0 && counts.mainNormalizations == 0,
@@ -44,9 +45,10 @@ struct SettingsFieldSearchTests {
     @Test func matchingOrderAndLimitPreserveExistingSemantics() async {
         let model = await model()
         func search(_ query: String) async -> [ConfigField] {
-            _ = model.searchFields(matching: query)
+            let token = UUID()
+            await model.prepareFieldSearch(matching: query, token: token)
             await model.waitForFieldSearchPreparation()
-            return model.searchFields(matching: query)
+            return model.fieldSearchResults(token: token, source: model.fieldSearchSourceRevision)
         }
         #expect(await search("SHARED label").map(\.key) == (0..<60).map { String(format: "field%02d", $0) })
         #expect(await search("help field69").map(\.key) == ["field69"])

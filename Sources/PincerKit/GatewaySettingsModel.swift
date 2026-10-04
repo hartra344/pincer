@@ -44,6 +44,23 @@ public final class GatewaySettingsModel {
     @ObservationIgnored private var credentialLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private let scopes: () -> [String]
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
+    package struct FieldSearchSourceRevision: Hashable, Sendable {
+        let schema: Int
+        let snapshot: Int
+    }
+    private struct FieldSearchPublication {
+        let token: UUID
+        let source: FieldSearchSourceRevision
+        let fields: [ConfigField]
+    }
+    private var fieldSearchPublication: FieldSearchPublication?
+    @ObservationIgnored private var fieldSearchOwner: UUID?
+    package var fieldSearchSourceRevision: FieldSearchSourceRevision {
+        // Observe source replacement without comparing or hashing either payload.
+        _ = self.schema
+        _ = self.snapshot
+        return FieldSearchSourceRevision(schema: self.schemaGeneration, snapshot: self.snapshotRevision)
+    }
     #if DEBUG
     @ObservationIgnored package var fieldSearchProbe: SettingsFieldSearchProbe?
     #endif
@@ -226,8 +243,25 @@ public final class GatewaySettingsModel {
         return fields
     }
 
-    /// The same eager field matching used by the settings search view.
-    package func searchFields(matching query: String) -> [ConfigField] {
+    /// Admission is keyed by local identity, never by comparing or hashing query text on Main.
+    package func prepareFieldSearch(matching query: String, token: UUID) async {
+        guard !Task.isCancelled else { return }
+        let source = self.fieldSearchSourceRevision
+        self.fieldSearchOwner = token
+        let fields = self.searchFields(matching: query)
+        guard !Task.isCancelled, self.fieldSearchOwner == token, self.fieldSearchSourceRevision == source else { return }
+        self.fieldSearchPublication = FieldSearchPublication(token: token, source: source, fields: fields)
+    }
+    package func fieldSearchResults(token: UUID, source: FieldSearchSourceRevision) -> [ConfigField] {
+        guard self.ownsFieldSearch(token: token, source: source) else { return [] }
+        return self.fieldSearchPublication?.fields ?? []
+    }
+    package func ownsFieldSearch(token: UUID, source: FieldSearchSourceRevision) -> Bool {
+        self.fieldSearchOwner == token && self.fieldSearchPublication?.token == token
+            && self.fieldSearchPublication?.source == source && self.fieldSearchSourceRevision == source
+    }
+    /// The unchanged eager semantics; worker preparation replaces this only after causal proof.
+    private func searchFields(matching query: String) -> [ConfigField] {
         let terms = query.lowercased().split(separator: " ").map(String.init)
         return Array(self.searchIndex.filter { field in
             #if DEBUG
