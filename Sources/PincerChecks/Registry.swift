@@ -205,6 +205,9 @@ enum Suites {
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
+            sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Settings save reconciliation" }) {
             sections.insert(Section("Settings field search work") { await runSettingsFieldSearchChecks() }, at: index + 1)
         }
@@ -333,6 +336,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
+            sections.insert(Section("Log page preparation (demo)") { await runDemoGatewayLogPagePreparationChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Settings save (demo)" }) {
             sections.insert(Section("Settings field search work (demo)") { await runDemoSettingsFieldSearchChecks() }, at: index + 1)
         }

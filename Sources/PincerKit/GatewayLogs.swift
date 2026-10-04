@@ -420,6 +420,9 @@ public final class GatewayLogsModel {
 
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
+    #if DEBUG
+    @ObservationIgnored package var pagePreparationProbe: GatewayLogPreparationProbe?
+    #endif
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private var nextId = 1
@@ -524,10 +527,19 @@ public final class GatewayLogsModel {
         }
 
         let raw = Array(page.lines.suffix(self.capacity))
+        #if DEBUG
+        let probe = self.pagePreparationProbe
+        let parse: @Sendable (String) -> GatewayLogLine = { text in
+            probe?.record(.parsing)
+            return GatewayLogLine.parse(text)
+        }
+        #else
+        let parse: @Sendable (String) -> GatewayLogLine = GatewayLogLine.parse
+        #endif
         let parsed: [GatewayLogLine] = if raw.count > Self.backgroundParseThreshold {
-            await Task.detached(priority: .userInitiated) { raw.map(GatewayLogLine.parse) }.value
+            await Task.detached(priority: .userInitiated) { raw.map(parse) }.value
         } else {
-            raw.map(GatewayLogLine.parse)
+            raw.map(parse)
         }
 
         // Even a cleared page advances the transport cursor; its old lines must not replay.
@@ -543,6 +555,9 @@ public final class GatewayLogsModel {
         }
         fresh.reserveCapacity(fresh.count + parsed.count)
         for line in parsed {
+            #if DEBUG
+            probe?.record(.rowPreparation)
+            #endif
             fresh.append(GatewayLogEntry(id: self.nextId, line: line))
             self.nextId += 1
         }
