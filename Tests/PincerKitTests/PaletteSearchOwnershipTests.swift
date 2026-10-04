@@ -93,5 +93,27 @@ private actor PaletteCompletedGate {
         let current = await PaletteSearchPreparation.prepare(values, query: "First", page: .models, gatewaySelected: false)
         #expect(current.map(\.id) == ["one"])
     }
+    @Test func rankingEnvironmentDoesNotRetireMessageSearch() {
+        let owner = UUID(), gateway = UUID()
+        let retained = PaletteSearchPreparation.ownerAfterEnvironmentChange(owner, page: .messages)
+        #expect(retained == owner)
+        #expect(PaletteSearchPreparation.messagesAreCurrent(owner: owner, currentOwner: retained, gateway: gateway, currentGateway: gateway))
+        #expect(!PaletteSearchPreparation.messagesAreCurrent(owner: owner, currentOwner: UUID(), gateway: gateway, currentGateway: gateway))
+        #expect(!PaletteSearchPreparation.messagesAreCurrent(owner: owner, currentOwner: owner, gateway: gateway, currentGateway: UUID()))
+        #expect(PaletteSearchPreparation.ownerAfterEnvironmentChange(owner, page: .root) != owner)
+    }
+    @Test func finishedRankingRejectsChangedEnvironmentBeforeRefresh() async {
+        let coordinator = PaletteSearchCoordinator(), owner = UUID()
+        coordinator.appear()
+        let original = PaletteEnvironmentKey(thinking: "original")
+        let accepted = await coordinator.prepare(items(), bookmarks: [], query: "First", page: .models,
+            gatewaySelected: false, shortcut: nil, owner: owner, revision: coordinator.source.current, environment: original)
+        #expect(accepted && coordinator.result?.items.map(\.id) == ["one"])
+        #expect(coordinator.owns(owner, environment: original))
+        #expect(!coordinator.owns(owner, environment: PaletteEnvironmentKey(thinking: "changed")))
+        #expect(!coordinator.owns(owner, environment: PaletteEnvironmentKey(thinking: "original", dictationScene: UUID())))
+        coordinator.disappear()
+    }
+
 }
 #endif

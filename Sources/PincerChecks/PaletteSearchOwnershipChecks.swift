@@ -31,6 +31,17 @@ import Foundation
         gatewaySelected: false, shortcut: nil, owner: latestOwner, revision: coordinator.source.current)
     check(current && coordinator.owns(latestOwner) && coordinator.result?.items.map(\.id) == expected,
           "new current worker publishes exact source IDs after old worker exits")
+    check(!coordinator.owns(latestOwner, environment: PaletteEnvironmentKey(thinking: "changed")),
+          "changed live environment rejects old action before queued refresh")
+    let messageOwner = UUID(), messageGateway = UUID()
+    let retainedOwner = PaletteSearchPreparation.ownerAfterEnvironmentChange(messageOwner, page: .messages)
+    check(retainedOwner == messageOwner && PaletteSearchPreparation.messagesAreCurrent(owner: messageOwner,
+          currentOwner: retainedOwner, gateway: messageGateway, currentGateway: messageGateway),
+          "rank-only environment changes retain actionable current message results")
+    check(!PaletteSearchPreparation.messagesAreCurrent(owner: messageOwner, currentOwner: UUID(),
+          gateway: messageGateway, currentGateway: messageGateway)
+          && !PaletteSearchPreparation.messagesAreCurrent(owner: messageOwner, currentOwner: messageOwner,
+          gateway: messageGateway, currentGateway: UUID()), "query and gateway ownership still retire message results")
     coordinator.disappear()
     check(coordinator.result == nil && !coordinator.owns(latestOwner), "presentation teardown clears finished display and action ownership")
 }

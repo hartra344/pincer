@@ -4,7 +4,14 @@ import Synchronization
 
 /// The palette's existing complete fuzzy ranking and display partition policy.
 package enum PaletteSearchPreparation {
-    package enum Page: Sendable { case root, models, messages }
+    package enum Page: Sendable, Equatable { case root, models, messages }
+    /// Ranking-only environment changes do not restart or retire a message search.
+    package static func ownerAfterEnvironmentChange(_ current: UUID, page: Page) -> UUID {
+        page == .messages ? current : UUID()
+    }
+    package static func messagesAreCurrent(owner: UUID?, currentOwner: UUID, gateway: UUID?, currentGateway: UUID?) -> Bool {
+        owner == currentOwner && gateway != nil && gateway == currentGateway
+    }
     package static func results(_ items: [PaletteItem], bookmarks: [PaletteItem] = [], query: String,
                                 page: Page, gatewaySelected: Bool, shortcut: String? = "⇧⌘F") -> [PaletteItem] {
         if case .messages = page { return items }
@@ -69,6 +76,21 @@ package final class PaletteSourceRevision: Sendable {
     package func owns(_ expected: UInt64) -> Bool { value.withLock { $0 == expected } }
 }
 
+
+/// Cheap presentation inputs not owned by model Observation tracking.
+package struct PaletteEnvironmentKey: Equatable, Sendable {
+    package let thinking: String
+    package let dictationScene: UUID?
+    package let readAloudIdentity: ObjectIdentifier?
+    package let readAloudEnabled: Bool?
+    package let sidebarTitle: String?
+    package init(thinking: String = "", dictationScene: UUID? = nil, readAloudIdentity: ObjectIdentifier? = nil,
+                 readAloudEnabled: Bool? = nil, sidebarTitle: String? = nil) {
+        self.thinking = thinking; self.dictationScene = dictationScene; self.readAloudIdentity = readAloudIdentity
+        self.readAloudEnabled = readAloudEnabled; self.sidebarTitle = sidebarTitle
+    }
+}
+
 /// Per presentation: one finished display, one active worker lease, and one latest COW input.
 @MainActor @Observable package final class PaletteSearchCoordinator {
     private final class Cancellation: Sendable {
@@ -79,6 +101,7 @@ package final class PaletteSourceRevision: Sendable {
     private struct Job: Sendable {
         let ticket: UUID, owner: UUID
         let revision: UInt64
+        let environment: PaletteEnvironmentKey
         let items: [PaletteItem], bookmarks: [PaletteItem]
         let query: String, page: PaletteSearchPreparation.Page
         let gatewaySelected: Bool, shortcut: String?
@@ -92,6 +115,7 @@ package final class PaletteSourceRevision: Sendable {
         package let items: [PaletteItem]
         package let owner: UUID
         package let revision: UInt64
+        package let environment: PaletteEnvironmentKey
     }
     package private(set) var result: Finished?
     package private(set) var refreshRevision: UInt64 = 0
@@ -118,9 +142,9 @@ package final class PaletteSourceRevision: Sendable {
         guard isPresenting, source.owns(revision) else { return }
         refreshRevision &+= 1
     }
-    package func owns(_ owner: UUID) -> Bool {
+    package func owns(_ owner: UUID, environment: PaletteEnvironmentKey? = nil) -> Bool {
         guard isPresenting, let result else { return false }
-        return result.owner == owner && source.owns(result.revision)
+        return result.owner == owner && source.owns(result.revision) && (environment == nil || environment == result.environment)
     }
     private func cancel(_ ticket: UUID) {
         if pending?.ticket == ticket { let old = pending; pending = nil; old?.completion(false) }
@@ -128,7 +152,7 @@ package final class PaletteSourceRevision: Sendable {
     }
     package func prepare(_ items: [PaletteItem], bookmarks: [PaletteItem], query: String,
                          page: PaletteSearchPreparation.Page, gatewaySelected: Bool, shortcut: String?,
-                         owner: UUID, revision: UInt64) async -> Bool {
+                         owner: UUID, revision: UInt64, environment: PaletteEnvironmentKey = .init()) async -> Bool {
         guard !Task.isCancelled, isPresenting, source.owns(revision) else { return false }
         let ticket = UUID(), cancellation = Cancellation()
         #if DEBUG
@@ -139,11 +163,11 @@ package final class PaletteSourceRevision: Sendable {
                 guard !Task.isCancelled, source.owns(revision), isPresenting else { continuation.resume(returning: false); return }
                 current = ticket
                 #if DEBUG
-                let job = Job(ticket: ticket, owner: owner, revision: revision, items: items, bookmarks: bookmarks,
+                let job = Job(ticket: ticket, owner: owner, revision: revision, environment: environment, items: items, bookmarks: bookmarks,
                     query: query, page: page, gatewaySelected: gatewaySelected, shortcut: shortcut,
                     cancellation: cancellation, completion: { continuation.resume(returning: $0) }, probe: probe)
                 #else
-                let job = Job(ticket: ticket, owner: owner, revision: revision, items: items, bookmarks: bookmarks,
+                let job = Job(ticket: ticket, owner: owner, revision: revision, environment: environment, items: items, bookmarks: bookmarks,
                     query: query, page: page, gatewaySelected: gatewaySelected, shortcut: shortcut,
                     cancellation: cancellation, completion: { continuation.resume(returning: $0) })
                 #endif
@@ -179,7 +203,7 @@ package final class PaletteSourceRevision: Sendable {
             #if DEBUG
             actualWorkerTask = nil
             #endif
-            if accepted { result = Finished(items: output, owner: job.owner, revision: job.revision) }
+            if accepted { result = Finished(items: output, owner: job.owner, revision: job.revision, environment: job.environment) }
             let next = pending; pending = nil
             if let next { start(next) }
             job.completion(accepted)

@@ -109,7 +109,7 @@ struct CommandPaletteView: View {
             Divider()
             if self.page == .messages {
                 self.messagesPage(results)
-            } else if results.isEmpty && self.ranking.owns(self.rankingOwner) {
+            } else if results.isEmpty && self.ranking.owns(self.rankingOwner, environment: self.rankingEnvironment) {
                 Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? L("Loading models…") : L("No matches"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
@@ -142,10 +142,8 @@ struct CommandPaletteView: View {
         #endif
         .onDisappear { self.ranking.disappear() }
         .onChange(of: self.query) { self.selection = nil }
-        .onChange(of: self.thinkingDisplay) { self.invalidateRanking() }
-        .onChange(of: self.dictationSceneID) { self.invalidateRanking() }
-        .onChange(of: self.readAloud?.isEnabled) { self.invalidateRanking() }
-        .onChange(of: self.readAloud.map(ObjectIdentifier.init)) { self.invalidateRanking() }
+        .onChange(of: self.rankingEnvironment) { self.invalidateRanking(environmentOnly: true) }
+        .onChange(of: self.app.selectedGatewayId) { self.invalidateRanking() }
         .onChange(of: self.isPresented) { if !self.isPresented { self.ranking.disappear() } }
         .task(id: RankingTaskKey(owner: self.rankingOwner, source: self.ranking.refreshRevision)) { await self.prepareRanking(owner: self.rankingOwner) }
         .task(id: self.page) {
@@ -393,16 +391,30 @@ struct CommandPaletteView: View {
         })
     }
 
-    private func invalidateRanking() {
+    private var preparationPage: PaletteSearchPreparation.Page {
+        switch self.page { case .root: .root; case .models: .models; case .messages: .messages }
+    }
+    private var rankingEnvironment: PaletteEnvironmentKey {
+        PaletteEnvironmentKey(thinking: self.thinkingDisplay.rawValue, dictationScene: self.dictationSceneID,
+            readAloudIdentity: self.readAloud.map(ObjectIdentifier.init), readAloudEnabled: self.readAloud?.isEnabled,
+            sidebarTitle: self.sidebarItemTitle)
+    }
+    private func invalidateRanking(environmentOnly: Bool = false) {
+        let next = environmentOnly
+            ? PaletteSearchPreparation.ownerAfterEnvironmentChange(self.rankingOwner, page: self.preparationPage) : UUID()
+        guard next != self.rankingOwner else { return }
         self.ranking.invalidate()
-        self.rankingOwner = UUID()
+        self.rankingOwner = next
         self.selection = nil
     }
 
     private var actionsAreCurrent: Bool {
         guard self.isPresented else { return false }
-        if self.page == .messages { return self.messages?.owner == self.rankingOwner && self.messages?.gatewayId == self.gateway?.id }
-        return self.ranking.owns(self.rankingOwner)
+        if self.page == .messages {
+            return PaletteSearchPreparation.messagesAreCurrent(owner: self.messages?.owner, currentOwner: self.rankingOwner,
+                gateway: self.messages?.gatewayId, currentGateway: self.gateway?.id)
+        }
+        return self.ranking.owns(self.rankingOwner, environment: self.rankingEnvironment)
     }
 
     private var results: [PaletteItem] {
@@ -419,6 +431,7 @@ struct CommandPaletteView: View {
         let page: PaletteSearchPreparation.Page
         let gatewaySelected: Bool
         let shortcut: String?
+        let environment: PaletteEnvironmentKey
     }
     /// Snapshot construction retains its existing proportional Main cost. Ranking never runs here.
     private func rankingSnapshot() -> RankingSnapshot {
@@ -437,11 +450,12 @@ struct CommandPaletteView: View {
         return RankingSnapshot(items: items,
             bookmarks: self.page == .root ? CommandPalette.bookmarkItems(gateways: self.app.gateways) : [],
             page: self.page == .root ? .root : .models, gatewaySelected: self.gateway != nil,
-            shortcut: ShortcutCommand.searchMessages.displayShortcut)
+            shortcut: ShortcutCommand.searchMessages.displayShortcut, environment: self.rankingEnvironment)
     }
     private func prepareRanking(owner: UUID) async {
+        guard self.isPresented, !Task.isCancelled else { return }
         self.ranking.appear()
-        guard self.page != .messages, !Task.isCancelled else { return }
+        guard self.page != .messages else { return }
         let coordinator = self.ranking, source = coordinator.source
         let revision = source.current
         let snapshot = withObservationTracking {
@@ -457,14 +471,14 @@ struct CommandPaletteView: View {
         let accepted = await PaletteSearchDiagnostics.$probe.withValue(self.searchProbe) {
             await coordinator.prepare(snapshot.items, bookmarks: snapshot.bookmarks, query: self.query,
                 page: snapshot.page, gatewaySelected: snapshot.gatewaySelected, shortcut: snapshot.shortcut,
-                owner: owner, revision: revision)
+                owner: owner, revision: revision, environment: snapshot.environment)
         }
-        if accepted, coordinator.owns(owner), owner == self.rankingOwner,
+        if accepted, coordinator.owns(owner, environment: self.rankingEnvironment), owner == self.rankingOwner,
            let observer = self.rankedIDsObserver { observer(coordinator.result?.items.prefix(91).map(\.id) ?? []) }
         #else
         _ = await coordinator.prepare(snapshot.items, bookmarks: snapshot.bookmarks, query: self.query,
             page: snapshot.page, gatewaySelected: snapshot.gatewaySelected, shortcut: snapshot.shortcut,
-            owner: owner, revision: revision)
+            owner: owner, revision: revision, environment: snapshot.environment)
         #endif
     }
 
