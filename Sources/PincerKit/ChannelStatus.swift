@@ -502,6 +502,7 @@ public final class ChannelsModel {
     }
 
     private func fetch(probe: Bool) async {
+        guard !Task.isCancelled else { return }
         guard self.supported else {
             self.hasLoaded = true
             return
@@ -510,12 +511,17 @@ public final class ChannelsModel {
         let generation = self.generation
         self.loadState = .running
         if probe { self.isProbing = true }
-        defer { if generation == self.generation { self.isProbing = false } }
+        defer {
+            if generation == self.generation {
+                self.isProbing = false
+                if Task.isCancelled, self.loadState.isRunning { self.loadState = .idle }
+            }
+        }
         var params: [String: JSONValue] = ["probe": .bool(probe)]
         if probe { params["timeoutMs"] = .number(Double(Self.probeTimeoutMs)) }
         do {
             let result = try await self.request(Self.statusMethod, .object(params))
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             if let snapshot = ChannelsStatusSnapshot(result) {
                 self.snapshot = snapshot
                 self.loadState = .idle
@@ -524,12 +530,12 @@ public final class ChannelsModel {
                 self.loadState = .failed("The Gateway sent an unexpected channel status.")
             }
         } catch let error where GatewayError.isUnknownMethod(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.unknownMethod = true
             self.snapshot = nil
             self.loadState = .idle
         } catch {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.loadState = .failed(ChannelRules.errorText(error))
         }
         self.hasLoaded = true
