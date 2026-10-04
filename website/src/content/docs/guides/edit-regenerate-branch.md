@@ -16,6 +16,8 @@ On any message, **Branch from Here** opens a new chat forked at that point. The 
 
 On one of your messages, **Edit & Resend** puts its text in the composer with an **Editing message** chip. Nothing changes until you press Send. Cancel (the chip's button, or Esc) restores your previous draft.
 
+If you cancel before a queued Send begins, that Send is discarded rather than sending the old edited text as a new message. Selecting the message again starts a fresh edit.
+
 When you send, the chat rewinds to before that message and your edited text is sent as a new message. The earlier path isn't lost: it stays as a branch you can see in the [Session Manager](../sessions/).
 
 If you cancel or select another message while the rewind is pending, its late completion keeps your new draft and does not resend the old edit. A rewind already applied by the Gateway is not undone by Cancel.
