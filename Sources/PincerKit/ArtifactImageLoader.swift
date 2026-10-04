@@ -50,6 +50,7 @@ public final class ArtifactImageLoader {
     public private(set) var images: [String: CGImage] = [:]
     #if DEBUG
     @ObservationIgnored package var base64Probe: EmbeddedImageBase64Probe?
+    package var activeImageFetchCount: Int { self.inFlight.count }
     #endif
     private var failureRecords: [String: FailureRecord] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
