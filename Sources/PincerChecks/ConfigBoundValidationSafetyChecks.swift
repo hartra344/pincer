@@ -36,3 +36,11 @@ import Foundation
               "genuine Demo schema field API safely validates the explicit LOCAL finite bound")
     } catch { check(false, "actual Demo config.schema read failed: \(error)") }
 }
+
+@MainActor func runConfigBoundFormattingBoundaryChecks() {
+    let bound = Double(Int64.max).nextDown
+    let schema = ConfigSchema(schema: ["type": "object", "properties": ["limit": ["type": "number", "minimum": .number(bound)]]])
+    guard let field = schema.field(at: ["limit"]) else { check(false, "integer-boundary schema field parses"); return }
+    check(field.validate(.number(0)) == "Must be at least \(Int64(bound))." && field.validate(.number(bound)) == nil,
+          "largest representable in-range integer bound stays exact and inclusive")
+}

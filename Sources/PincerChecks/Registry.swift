@@ -109,7 +109,7 @@ enum Suites {
             Section("Channel action ownership") { await runChannelActionOwnershipChecks() },
             Section("Settings notice lifetime") { runSettingsNoticeChecks() },
             Section("Settings save reconciliation") { await runSettingsSaveRebaseChecks() },
-            Section("Numeric config bound validation") { await runConfigBoundValidationSafetyChecks() },
+            Section("Numeric config bound validation") { await runConfigBoundValidationSafetyChecks(); runConfigBoundFormattingBoundaryChecks() },
             Section("Raw config editor ownership") { await runRawConfigEditorChecks() },
             Section("Plugin credential ownership") { await runPluginCredentialOwnershipChecks() },
             Section(nil) { await checkDeviceManagement() },
