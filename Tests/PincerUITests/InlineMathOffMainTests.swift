@@ -180,21 +180,21 @@ struct InlineMathOffMainTests {
         }
         let width: CGFloat = 612
         let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
-        let driver = TranscriptPremeasureDriver()
+        let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
+        driver.currentRow = { id in rows.first { $0.id == id } }
         let cold = rows.compactMap { renderer.premeasureBodies(for: $0) }
         #expect(cold.count == rows.count)
         #expect(cold.allSatisfy { keys in !keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
-        // A bounded prewarm may finish only part of the window when other suites own the worker.
-        // Exercise that path without assuming the shared queue finishes before a wall-clock deadline.
+        // A zero-budget pass is optional; actual asynchronous adoption must warm the whole window.
+        // Isolate admission from other suites while retaining the real serialized measurement worker.
         let warmed = driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer, budget: 0)
         #expect((0...rows.count).contains(warmed))
         let remaining = driver.split(Array(rows.indices), all: rows, width: width, renderer: renderer).offload
         if !remaining.isEmpty {
-            await withCheckedContinuation { continuation in
-                // Twelve rows fit in a single worker chunk; completion means adoption has finished.
-                #expect(remaining.count <= TranscriptPremeasureDriver.rowsPerJob)
-                driver.submit(remaining, width: width, env: renderer.textEnvironment) { continuation.resume() }
-            }
+            driver.submit(remaining, width: width, env: renderer.textEnvironment) {}
+            #expect(await eventually(timeout: .seconds(15)) {
+                driver.inFlightCount == 0 && driver.stats.adopted == rows.count
+            }, "every actual row must finish adoption before checking the warmed window")
         }
         #expect(cold.allSatisfy { keys in keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
         // A second pass finds everything warm and sends nothing.

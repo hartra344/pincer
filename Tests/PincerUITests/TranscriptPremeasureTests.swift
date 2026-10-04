@@ -91,7 +91,8 @@ struct TranscriptPremeasureTests {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let seedRenderer = TranscriptLayoutCacheTests.renderer(scratch)
-        let controller = TranscriptListController(context: seedRenderer.context, prefetchBudget: 0.004)
+        let controller = TranscriptListController(context: seedRenderer.context, prefetchBudget: 0.004,
+                                                  premeasureAdmission: TranscriptPremeasureAdmission())
         let driver = controller.premeasure
         let oldText = "Old body " + UUID().uuidString
         let newText = "New body " + UUID().uuidString
@@ -124,7 +125,7 @@ struct TranscriptPremeasureTests {
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
         let source = "Evict me from the text cache " + UUID().uuidString
         let rows = [Self.userRow(id: "cache-eviction-\(UUID().uuidString)", text: source)]
-        let driver = TranscriptPremeasureDriver()
+        let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
         driver.currentRow = { id in rows.first { $0.id == id } }
         let job = try! #require(driver.split([0], all: rows, width: 700, renderer: renderer).offload.first)
         let measured = await TranscriptPremeasurer.shared.measureWithin(

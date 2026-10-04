@@ -68,7 +68,7 @@ protocol TranscriptListHost: AnyObject {
 final class TranscriptListController {
     let renderer: TranscriptRenderer
     /// Rows prepared on the worker, and text measured there (#302/#431).
-    let premeasure = TranscriptPremeasureDriver()
+    let premeasure: TranscriptPremeasureDriver
     weak var host: TranscriptListHost?
 
     private(set) var context: TranscriptContext
@@ -118,10 +118,12 @@ final class TranscriptListController {
     /// Rows at least this wide are laid out; narrower means the view isn't sized yet.
     static let minimumWidth: CGFloat = 40
 
-    init(context: TranscriptContext, prefetchBudget: TimeInterval) {
+    init(context: TranscriptContext, prefetchBudget: TimeInterval,
+         premeasureAdmission: TranscriptPremeasureAdmission = .shared) {
         self.context = context
         self.prefetchBudget = prefetchBudget
         self.renderer = TranscriptRenderer(context: context)
+        self.premeasure = TranscriptPremeasureDriver(admission: premeasureAdmission)
         self.premeasure.currentRow = { [weak self] id in
             guard let self, let index = self.index[id] else { return nil }
             return self.rows[index]
