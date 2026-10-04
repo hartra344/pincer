@@ -170,6 +170,8 @@ Press **⌘K** and type part of a chat name. Matching is fuzzy: in the demo, **j
 
 Choose **Organize → Automations…** (or **Manage Automations…** on the Automations section's header) to open the gateway's cron jobs: a window on macOS and a sheet on iOS. Each job shows its schedule, last and next run, and status; a failing job shows its error. Select one to see its task, delivery destination, and run history (`cron.runs`), where every run links to its chat.
 
+Automation run history preserves the Gateway’s explicit run IDs. When one is absent, Pincer derives a stable identity from the job and timestamp, including timestamps too large for a native integer.
+
 **Run Now**, **Pause**/**Resume**, **Edit**, **New** and **Delete** (`cron.run`, `cron.update`, `cron.add`, `cron.remove`) require **Access → Full Management**. If a job was edited elsewhere in the meantime, Pincer refuses your change instead of overwriting it. The list updates live from the gateway's `cron` events. On gateways without `cron.*`, Pincer says automations aren't available.
 
 <DocScreenshot src={automations} alt="Morning briefing automation details with its schedule, task, delivery to home-lab, and Run Now, Pause, and Edit controls." caption="Local mock gateway. The sidebar shows successful, failing, and paused sample jobs; these are synthetic records." />

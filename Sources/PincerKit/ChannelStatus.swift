@@ -366,6 +366,8 @@ public final class ChannelsModel {
     @ObservationIgnored var fallbackChannels: @MainActor () -> [GatewayChannelHealth] = { [] }
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var lifecycle = UUID()
+    @ObservationIgnored private var actionOwners: [ChannelAccountKey: UUID] = [:]
     private var unknownMethod = false
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool,
@@ -538,15 +540,21 @@ public final class ChannelsModel {
     public func healthDidChange() {
         guard self.isShowing, self.hasLoaded, self.supported, !self.loadState.isRunning, !self.isProbing else { return }
         if let loadedAt, self.now().timeIntervalSince(loadedAt) < Self.healthRefreshSpacing { return }
-        Task { await self.load() }
+        let lifecycle = self.lifecycle
+        Task {
+            guard lifecycle == self.lifecycle else { return }
+            await self.load()
+        }
     }
 
     nonisolated static let healthRefreshSpacing: TimeInterval = 5
 
     /// The connection dropped: keep the last-known list (shown dimmed), stop anything in flight.
     public func disconnected() {
-        guard self.loadState != .idle || self.isProbing || !self.operations.isEmpty || !self.qr.logins.isEmpty else { return }
+        self.lifecycle = UUID()
+        guard self.loadState != .idle || self.isProbing || !self.operations.isEmpty || !self.actionOwners.isEmpty || !self.qr.logins.isEmpty else { return }
         self.generation += 1
+        self.actionOwners.removeAll()
         self.loadState = .idle
         self.isProbing = false
         self.operations = [:]
@@ -555,9 +563,11 @@ public final class ChannelsModel {
 
     /// Forgets everything.
     public func reset() {
-        guard self.hasLoaded || self.snapshot != nil || !self.operations.isEmpty || !self.qr.logins.isEmpty
+        self.lifecycle = UUID()
+        guard self.hasLoaded || self.snapshot != nil || !self.operations.isEmpty || !self.actionOwners.isEmpty || !self.qr.logins.isEmpty
             || self.loadState != .idle else { return }
         self.generation += 1
+        self.actionOwners.removeAll()
         self.snapshot = nil
         self.loadState = .idle
         self.isProbing = false
@@ -580,11 +590,26 @@ public final class ChannelsModel {
     /// (the error is in `operation(for:)` and the notice) or wasn't allowed.
     @discardableResult
     public func perform(_ action: Action, on key: ChannelAccountKey) async -> Bool {
+        guard !Task.isCancelled else { return false }
         guard self.canManage else {
             self.fail(action, key, SetupWizardModel.fullManagementMessage)
             return false
         }
         guard self.operations[key]?.state.isRunning != true else { return false }
+        let owner = UUID()
+        let lifecycle = self.lifecycle
+        self.actionOwners[key] = owner
+        defer {
+            if self.actionOwners[key] == owner {
+                self.actionOwners[key] = nil
+                if Task.isCancelled, self.operations[key]?.state.isRunning == true {
+                    self.operations[key] = nil
+                }
+            }
+        }
+        func ownsAction() -> Bool {
+            !Task.isCancelled && self.lifecycle == lifecycle && self.actionOwners[key] == owner
+        }
         let label = self.label(for: key)
         self.operations[key] = Operation(action: action, state: .running)
         let params: JSONValue = ["channel": .string(key.channel), "accountId": .string(key.accountId)]
@@ -603,17 +628,22 @@ public final class ChannelsModel {
                 }
             case .reconnect:
                 _ = try await self.request(Self.stopMethod, params)
+                guard ownsAction() else { return false }
                 problem = ChannelRules.startProblem(try await self.request(Self.startMethod, params), channelLabel: label)
             }
+            guard ownsAction() else { return false }
             if let problem {
                 self.fail(action, key, problem)
             } else {
                 self.operations[key] = nil
                 self.notice = Notice(text: Self.doneText(action, label: label), isError: false)
             }
-            await self.didChange()
+            await self.load()
+            guard ownsAction() else { return false }
+            await self.onChanged?()
             return problem == nil
         } catch {
+            guard ownsAction() else { return false }
             self.fail(action, key, ChannelRules.message(for: error, action: action, channelLabel: label))
             if let unsupported = ChannelRules.unsupportedAction(in: error) {
                 self.unsupported.insert("\(key.channel):\(unsupported.rawValue)")

@@ -43,7 +43,28 @@ public final class GatewaySettingsModel {
     /// Ownership only for outstanding plugin credential inspections, never completed plugin IDs.
     @ObservationIgnored private var credentialLoadOwners: [String: UUID] = [:]
     @ObservationIgnored private let scopes: () -> [String]
-    @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
+    @ObservationIgnored private let fieldSearchPreparation = SettingsFieldSearchPreparation()
+    package struct FieldSearchSourceRevision: Hashable, Sendable {
+        let schema: Int
+        let snapshot: Int
+    }
+    private struct FieldSearchPublication {
+        let token: UUID
+        let source: FieldSearchSourceRevision
+        let fields: [ConfigField]
+    }
+    private var fieldSearchPublication: FieldSearchPublication?
+    @ObservationIgnored private var fieldSearchOwner: UUID?
+    package var fieldSearchSourceRevision: FieldSearchSourceRevision {
+        // Observe source replacement without comparing or hashing either payload.
+        _ = self.schema
+        _ = self.snapshot
+        return FieldSearchSourceRevision(schema: self.schemaGeneration, snapshot: self.snapshotRevision)
+    }
+    #if DEBUG
+    @ObservationIgnored package var fieldSearchProbe: SettingsFieldSearchProbe?
+    @ObservationIgnored package var fieldSearchBeforeWork: (@Sendable () -> Void)?
+    #endif
     @ObservationIgnored private var schemaGeneration = 0
     @ObservationIgnored private var editRevision = 0
     @ObservationIgnored private var snapshotRevision = 0
@@ -211,14 +232,40 @@ public final class GatewaySettingsModel {
         return nil
     }
 
-    /// Every setting, for search. Rebuilt when the schema or the config changes.
+    /// The prepared index, if it fits the bounded cache and belongs to the current source.
     public var searchIndex: [ConfigField] {
-        let key = "\(self.schemaGeneration)|\(self.snapshot?.hash ?? "")"
-        if let cache = self.searchCache, cache.key == key { return cache.fields }
-        let fields = (self.schema ?? .open).searchIndex(config: self.edits.base)
-        self.searchCache = (key, fields)
-        return fields
+        self.fieldSearchPreparation.cachedFields(for: self.fieldSearchSourceRevision)
     }
+
+    /// Main only captures COW inputs and local ownership; the worker does all text work.
+    package func prepareFieldSearch(matching query: String, token: UUID) async {
+        guard !Task.isCancelled else { return }
+        let source = self.fieldSearchSourceRevision
+        self.fieldSearchOwner = token
+        #if DEBUG
+        let ticket = self.fieldSearchPreparation.enqueue(.init(token: token, source: source,
+            schema: self.schema ?? .open, config: self.snapshot?.config ?? self.edits.base, query: query,
+            probe: self.fieldSearchProbe, beforeWork: self.fieldSearchBeforeWork))
+        #else
+        let ticket = self.fieldSearchPreparation.enqueue(.init(token: token, source: source,
+            schema: self.schema ?? .open, config: self.snapshot?.config ?? self.edits.base, query: query))
+        #endif
+        guard let fields = await self.fieldSearchPreparation.wait(ticket), !Task.isCancelled,
+              self.fieldSearchOwner == token, self.fieldSearchSourceRevision == source else { return }
+        self.fieldSearchPublication = FieldSearchPublication(token: token, source: source, fields: fields)
+    }
+    package func fieldSearchResults(token: UUID, source: FieldSearchSourceRevision) -> [ConfigField] {
+        guard self.ownsFieldSearch(token: token, source: source) else { return [] }
+        return self.fieldSearchPublication?.fields ?? []
+    }
+    package func ownsFieldSearch(token: UUID, source: FieldSearchSourceRevision) -> Bool {
+        self.fieldSearchOwner == token && self.fieldSearchPublication?.token == token
+            && self.fieldSearchPublication?.source == source && self.fieldSearchSourceRevision == source
+    }
+    #if DEBUG
+    package var fieldSearchBudget: SettingsFieldSearchPreparation.BudgetSnapshot { self.fieldSearchPreparation.budgetSnapshot }
+    package func waitForFieldSearchPreparation() async { await self.fieldSearchPreparation.drain() }
+    #endif
 
     // MARK: Editing
 

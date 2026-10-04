@@ -127,6 +127,8 @@ While a reply streams, text-growth updates are coalesced to the configured frame
 
 ## Self-checks
 
+While `scripts/run-checks.sh` waits for its parallel lanes, it prints a bounded progress snapshot about every 30 seconds. The snapshot names the pending lane, process, log filename, and last recognized unfinished unit-test identifier; it never prints raw log tails or test arguments. Started and finished counts cover only the bounded portion observed, with `skipped=1` when earlier output could not be retained. Final logs and exit status are unchanged. The progress reader stops before the solo performance lanes, which keep the CPU to themselves.
+
 The live core paging check uses a separate uncached, headless chat store, so the newest-page and older-page assertions remain independent of background prefetch and already-open transcripts.
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
@@ -260,3 +262,6 @@ Xcode builds validate `PINCER_DEV_SUFFIX` before compiling each app or extension
 With the suffix, `chat.pincer.mac` becomes `chat.pincer.mac.dev-feature-x`, the Keychain service `chat.pincer.gateway.dev-feature-x`, and storage folders `Pincer-feature-x`. Use the same name for both variables. On iOS the suffixed App Group and bundle ids need provisioning, so set the suffix there only when you want an isolated install. The push relay rejects the suffixed iOS topic (`chat.pincer.ios.dev-x`) unless you add it to its `APNS_TOPICS`, and it needs the aps capability provisioned. Both builds register the same `pincer://` URL scheme and Handoff type, so links and Handoff may open the other build. `PINCER_CACHE_DIR`, `PINCER_DRAFTS_DIR` and `PINCER_OUTBOX_DIR` still override folders explicitly.
 
 Cold transcript premeasurement prepares exact message sources on one shared background worker. Up to 64 waiting descriptors retain weak list owners and short native row IDs, with no queued message bodies. One active COW row snapshot and its exact joined text can cost the size of that message; editing can fork shared buffers. This transient memory is not covered by the 4 MiB retained source-memo budget. Finished text and geometry use the existing caches and revision checks. Width prewarm takes the same single lease before each wait, adopts one result before acquiring the next, and yields to queued work when busy. Denied lists each keep one weak, removable capacity observation and at most one queued retry callback. Their metadata fanout scales with the number of currently denied lists; it is not a globally fixed-size observer pool. Metadata warm shortcuts remain; a cold body already warmed by another row may be measured once again in the background. Existing visible layout and unsupported-content paths are unchanged.
+
+
+Debug reconnect checks wait for the current connection's actual bootstrap and preference/reconciliation tasks to finish before comparing RPC counts. The reconnect history-count check also requires successfully persisted launch caches; a completed prefetch alone does not prove a cache write succeeded. Release checks retain the legacy readiness fallback.
