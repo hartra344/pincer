@@ -104,4 +104,25 @@ struct MCPRefreshOutcomeTests {
         #expect(model.loadState == .failed(GatewayError.message(for: GatewayError.closed("status round 1 failed"))))
         #expect(model.statuses.isEmpty && requests.entered == 1 && requests.maximumActive == 1)
     }
+    @Test(.timeLimit(.minutes(2))) func successfulFirstRoundCannotMaskLatestFailure() async throws {
+        let requests = Requests(failures: [2], session: true)
+        let model = model(requests)
+        let first = Task { await model.load() }
+        defer { requests.releaseAll(); first.cancel() }
+        try #require(await eventually { requests.entered == 1 })
+        var queued = false
+        let second = Task { queued = true; await model.load() }
+        defer { second.cancel() }
+        try #require(await eventually { queued })
+        requests.release(1)
+        try #require(await eventually { requests.entered == 2 })
+        #expect(model.loadState.isRunning)
+        #expect(model.statuses["round-1"]?.state == .connected)
+        requests.release(2)
+        await first.value; await second.value
+        #expect(model.loadState == .failed(GatewayError.message(for: GatewayError.closed("status round 2 failed"))))
+        #expect(model.statuses["round-1"]?.tools == ["lookup"])
+        #expect(requests.entered == 2 && requests.maximumActive == 1)
+    }
+
 }
