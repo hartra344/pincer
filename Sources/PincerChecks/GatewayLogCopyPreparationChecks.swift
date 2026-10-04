@@ -11,8 +11,12 @@ import Foundation
     helper.probe = probe
     let formatted = await helper.prepare(entries, style: .formatted)
     let raw = await helper.prepare(entries, style: .raw)
+    let published: String = await withCheckedContinuation { continuation in
+        helper.request(entries, style: .formatted) { continuation.resume(returning: $0) }
+    }
+    check(published == expected.0, "current Copy request publishes exact text without touching the clipboard")
     check(formatted == expected.0 && raw == expected.1, "actual Copy button preparation retains exact formatted/raw text and newlines")
-    check(probe.snapshot().main == 0 && probe.snapshot().worker == 2, "actual Copy preparation stays off Main")
+    check(probe.snapshot().main == 0 && probe.snapshot().worker == 3, "actual Copy preparation stays off Main")
 }
 
 @MainActor func runGatewayLogCopyPreparationChecks() async {

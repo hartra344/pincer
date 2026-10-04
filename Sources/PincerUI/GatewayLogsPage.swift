@@ -72,6 +72,7 @@ struct GatewayLogsPage: View {
             }
         }
         .navigationTitle(L("Gateway Logs"))
+        .onDisappear { self.copyPreparation.invalidate() }
         .onChange(of: filterKey, initial: true) { self.refresh() }
         #if os(macOS)
         .focusedSceneValue(\.gatewayLogsSearch, model.supported ? self.$searchRequest : nil)
@@ -256,11 +257,7 @@ struct GatewayLogsPage: View {
     }
 
     private func copy(_ entries: [GatewayLogEntry], style: GatewayLogCopyPreparation.Style) {
-        let preparation = self.copyPreparation
-        Task {
-            let text = await preparation.prepare(entries, style: style)
-            Clipboard.copy(text)
-        }
+        self.copyPreparation.request(entries, style: style) { Clipboard.copy($0) }
     }
 
     /// The row's lines for Copy: the selection when the row is in it, else the row.
