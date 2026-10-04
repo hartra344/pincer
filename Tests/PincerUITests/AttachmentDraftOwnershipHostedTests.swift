@@ -68,22 +68,24 @@ private struct AttachmentDraftOwnershipFixture {
         }
 
         func wait(_ phase: String, _ predicate: () -> Bool) async throws {
-            let deadline = ContinuousClock.now + .seconds(15)
-            while !predicate() {
-                try Task.checkCancellation()
-                if ContinuousClock.now >= deadline {
-                    print("Attachment ownership phase=\(phase) connected=\(self.gateway.state.isConnected) bootstrapped=\(self.gateway.bootstrapped) sessionPresent=\(self.gateway.sessions[self.chat.sessionKey] != nil) owner=\(self.chat.draft.ownerID) pending=\(self.chat.draftAttachmentPreparationCount) attachments=\(self.chat.draft.attachments.count) preparationErrorPresent=\(self.chat.draftAttachmentPreparationError != nil) draftBytes=\(self.chat.draft.text.isContiguousUTF8 ? self.chat.draft.text.utf8.withContiguousStorageIfAvailable { $0.count } ?? -1 : -1) items=\(self.chat.items.count) outboxForChat=\(self.gateway.outbox.entries.count { $0.sessionKey == self.chat.sessionKey }) hostAttached=\(self.controller.view.window != nil) hostBounds=\(self.controller.view.bounds)")
-                    func fields(_ view: UIView) -> [ComposerUITextView] {
-                        (view as? ComposerUITextView).map { [$0] } ?? view.subviews.flatMap(fields)
-                    }
-                    for field in fields(self.controller.view).prefix(2) {
-                        print("Attachment native field attached=\(field.window != nil) bounds=\(field.bounds) canSubmit=\(field.canSubmit) firstResponder=\(field.isFirstResponder) textLength=\(field.textStorage.length)")
-                    }
+            // Correctness readiness uses the enclosing two-minute test fence. Competing suites
+            // may own Main or the shared worker; cancellation still unwinds provider/host cleanup.
+            do {
+                while !predicate() {
+                    try Task.checkCancellation()
+                    self.controller.view.setNeedsLayout()
+                    self.controller.view.layoutIfNeeded()
+                    try await Task.sleep(for: .milliseconds(10))
                 }
-                try #require(ContinuousClock.now < deadline, "Actual composer/provider phase did not settle: \(phase)")
-                self.controller.view.setNeedsLayout()
-                self.controller.view.layoutIfNeeded()
-                try await Task.sleep(for: .milliseconds(10))
+            } catch {
+                print("Attachment ownership phase=\(phase) connected=\(self.gateway.state.isConnected) bootstrapped=\(self.gateway.bootstrapped) sessionPresent=\(self.gateway.sessions[self.chat.sessionKey] != nil) owner=\(self.chat.draft.ownerID) pending=\(self.chat.draftAttachmentPreparationCount) attachments=\(self.chat.draft.attachments.count) preparationErrorPresent=\(self.chat.draftAttachmentPreparationError != nil) draftBytes=\(self.chat.draft.text.isContiguousUTF8 ? self.chat.draft.text.utf8.withContiguousStorageIfAvailable { $0.count } ?? -1 : -1) items=\(self.chat.items.count) outboxForChat=\(self.gateway.outbox.entries.count { $0.sessionKey == self.chat.sessionKey }) hostAttached=\(self.controller.view.window != nil) hostBounds=\(self.controller.view.bounds)")
+                func fields(_ view: UIView) -> [ComposerUITextView] {
+                    (view as? ComposerUITextView).map { [$0] } ?? view.subviews.flatMap(fields)
+                }
+                for field in fields(self.controller.view).prefix(2) {
+                    print("Attachment native field attached=\(field.window != nil) bounds=\(field.bounds) canSubmit=\(field.canSubmit) firstResponder=\(field.isFirstResponder) textLength=\(field.textStorage.length)")
+                }
+                throw error
             }
         }
 
