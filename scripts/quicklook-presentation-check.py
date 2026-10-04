@@ -49,14 +49,14 @@ source = source.replace(needle, "@MainActor @Suite struct QuickLookHarnessTests 
 spec = json.loads(r'''{
   "name": "QuickLookHarness",
   "options": {
-    "bundleIdPrefix": "__BUNDLE_PREFIX__",
+    "bundleIdPrefix": "",
     "deploymentTarget": {
       "iOS": "18.0"
     }
   },
   "packages": {
     "Pincer": {
-      "path": "__REPO__"
+      "path": ""
     }
   },
   "settings": {
@@ -125,7 +125,7 @@ spec = json.loads(r'''{
           "PINCER_QUICKLOOK_APP_HOSTED": "1",
           "PINCER_KEYCHAIN": "memory",
           "PINCER_DRAFTS": "off",
-          "PINCER_DEV_NAMESPACE": "__NAMESPACE__"
+          "PINCER_DEV_NAMESPACE": ""
         }
       }
     }
