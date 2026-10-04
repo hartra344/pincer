@@ -105,4 +105,108 @@ struct RewindHistoryOwnershipTests {
         #expect(model.rewindPoints[Self.key]?.map(\.entryId) == ["u2", "u1"])
         #expect(model.rewindErrors[Self.key] == nil && server.historyCalls == 1)
     }
+    @MainActor private final class ReadRounds {
+        var entered = 0
+        var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+        var released: Set<Int> = []
+        var failures: Set<Int> = []
+        func release(_ index: Int) { released.insert(index); waiters.removeValue(forKey: index)?.resume() }
+        func releaseAll() { release(1); release(2) }
+        func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
+            if method == SessionManager.previewMethod { return ["previews": []] }
+            #expect(method == SessionManager.historyMethod)
+            entered += 1
+            let index = entered
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    if released.contains(index) || Task.isCancelled { continuation.resume() }
+                    else { waiters[index] = continuation }
+                }
+            } onCancel: { Task { @MainActor in self.release(index) } }
+            try Task.checkCancellation()
+            if failures.contains(index) { throw GatewayError.closed("history round \(index) failed") }
+            return index == 1 ? RewindHistoryOwnershipTests.oldHistory : RewindHistoryOwnershipTests.freshHistory
+        }
+    }
+    private func readModel(_ rounds: ReadRounds) -> SessionManagerModel {
+        SessionManagerModel(request: { try await rounds.request($0, $1) })
+    }
+
+    @Test(.timeLimit(.minutes(2))) func independentPreviewRefreshDoesNotInvalidatePointsRead() async throws {
+        let rounds = ReadRounds()
+        let model = readModel(rounds)
+        let task = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { rounds.releaseAll(); task.cancel() }
+        try #require(await eventually { rounds.entered == 1 })
+        await model.reloadPreview(key: Self.key)
+        rounds.release(1); await task.value
+        #expect(model.rewindPoints[Self.key]?.map(\.entryId) == ["u2", "u1"])
+        #expect(model.rewindErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true], [false, true])
+    func newerSameKeyReadOwnsSuccessOrFailure(_ latestFails: Bool, _ oldFails: Bool) async throws {
+        let rounds = ReadRounds()
+        if latestFails { rounds.failures.insert(2) }
+        if oldFails { rounds.failures.insert(1) }
+        let model = readModel(rounds)
+        let old = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { rounds.releaseAll(); old.cancel() }
+        try #require(await eventually { rounds.entered == 1 })
+        let latest = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { latest.cancel() }
+        try #require(await eventually { rounds.entered == 2 })
+        rounds.release(2); await latest.value
+        let points = model.rewindPoints[Self.key]
+        let error = model.rewindErrors[Self.key]
+        if latestFails { #expect(error != nil && points == nil) }
+        else { #expect(points?.map(\.entryId) == ["u1"] && error == nil) }
+        rounds.release(1); await old.value
+        #expect(model.rewindPoints[Self.key] == points && model.rewindErrors[Self.key] == error)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func reconnectInvalidatesPendingPointsRead() async throws {
+        let rounds = ReadRounds()
+        let model = readModel(rounds)
+        let old = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { rounds.releaseAll(); old.cancel() }
+        try #require(await eventually { rounds.entered == 1 })
+        model.handleReconnect()
+        rounds.release(1); await old.value
+        #expect(model.rewindPoints[Self.key] == nil && model.rewindErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func canceledOldCompletionDoesNotReleaseNewReadOwnership() async throws {
+        let rounds = ReadRounds()
+        let model = readModel(rounds)
+        let old = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { rounds.releaseAll(); old.cancel() }
+        try #require(await eventually { rounds.entered == 1 })
+        let latest = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { latest.cancel() }
+        try #require(await eventually { rounds.entered == 2 })
+        old.cancel(); await old.value
+        rounds.release(2); await latest.value
+        #expect(model.rewindPoints[Self.key]?.map(\.entryId) == ["u1"])
+        #expect(model.rewindErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func canceledCallerCannotDisplaceCurrentHistoryRead() async throws {
+        let rounds = ReadRounds()
+        let model = readModel(rounds)
+        let current = Task { await model.loadRewindPoints(key: Self.key) }
+        defer { rounds.releaseAll(); current.cancel() }
+        try #require(await eventually { rounds.entered == 1 })
+        // Both tasks inherit MainActor. Cancel before this task suspends, so the
+        // new caller is already canceled before its load body can be admitted.
+        let canceled = Task { await model.loadRewindPoints(key: Self.key) }
+        canceled.cancel()
+        await canceled.value
+        #expect(rounds.entered == 1, "A pre-canceled caller must not send a new history request")
+        rounds.release(1)
+        await current.value
+        #expect(model.rewindPoints[Self.key]?.map(\.entryId) == ["u2", "u1"])
+        #expect(model.rewindErrors[Self.key] == nil)
+    }
+
 }
