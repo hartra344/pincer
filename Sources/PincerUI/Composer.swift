@@ -388,9 +388,12 @@ struct Composer: View {
         let attachments = self.attachments
         if self.chat.editTarget != nil, !self.isTypingCommand {
             self.attachmentError = nil
-            let task = Task {
+            let ownerID = self.chat.draft.ownerID
+            let editingMessageID = self.chat.editTarget?.messageId
+            let task = Task { [weak chat = self.chat] in
+                guard let chat, chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else { return }
                 // The store restores the pre-edit draft on success; on failure the edit stays in progress.
-                _ = await self.chat.sendEdit(text, attachments: attachments)
+                _ = await chat.sendEdit(text, attachments: attachments)
             }
             #if DEBUG
             self.editTaskObserver?(self.chat.sessionKey, task)
