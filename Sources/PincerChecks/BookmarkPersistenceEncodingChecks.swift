@@ -31,6 +31,7 @@ private func bookmarkPersistenceFixture() async throws -> (entries: [Bookmark], 
         let store = BookmarkStore(gatewayId: id, defaults: defaults)
         check(store.bookmarks == fixture.entries, "actual bookmark store loads the full ordinary local collection")
         guard store.bookmarks == fixture.entries else { return }
+        store.previewPreparationQueue = BookmarkPreviewPreparationQueue() // Own the existing preview worker/drain in this fixture.
         let probe = BookmarkPersistenceEncodingProbe()
         store.persistenceEncodingProbe = probe
         let messageId = item?.transcriptId ?? item?.id ?? "new-local-bookmark"
