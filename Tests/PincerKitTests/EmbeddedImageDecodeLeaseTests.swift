@@ -21,14 +21,19 @@ struct EmbeddedImageDecodeLeaseTests {
         }.value
         let loader = ArtifactImageLoader(), probe = EmbeddedImageBase64Probe(), gate = Gate()
         loader.base64Probe = probe; loader.didDecodeInline = { await gate.hold() }
-        let tasks = (0..<8).map { _ in Task { await loader.data(for: fixture.1, sessionKey: "fixture") } }
+        var tasks = (0..<4).map { _ in Task { await loader.data(for: fixture.1, sessionKey: "fixture") } }
         defer { for task in tasks { task.cancel() }; Task { await gate.release() } }
         try await withTaskCancellationHandler {
             let deadline = ContinuousClock.now + .seconds(15)
-            while (await gate.entered != 4 || loader.pendingInlineDecodeCount != 4) && ContinuousClock.now < deadline && !Task.isCancelled {
+            while await gate.entered != 4 && ContinuousClock.now < deadline && !Task.isCancelled {
                 try await Task.sleep(for: .milliseconds(5))
             }
-            try #require(await gate.entered == 4 && loader.activeInlineDecodeCount == 4 && loader.pendingInlineDecodeCount == 4)
+            try #require(await gate.entered == 4 && loader.activeInlineDecodeCount == 4)
+            tasks += (0..<4).map { _ in Task { await loader.data(for: fixture.1, sessionKey: "fixture") } }
+            while loader.pendingInlineDecodeCount != 4 && ContinuousClock.now < deadline && !Task.isCancelled {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            try #require(loader.pendingInlineDecodeCount == 4)
             tasks[0].cancel()
             tasks[7].cancel()
             #expect(await tasks[7].value == nil)
