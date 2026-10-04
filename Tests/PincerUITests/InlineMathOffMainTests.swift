@@ -191,11 +191,11 @@ struct InlineMathOffMainTests {
 
     @Test(.timeLimit(.minutes(2))) func prewarmWarmsTheWindowAtTheFinalWidth() async {
         let clock = ContinuousClock()
-        let started = clock.now
+        let fixtureStarted = clock.now
         var phase = "cache-lease"
         let acquiredCacheLease = await TranscriptSharedCacheLease.shared.acquire()
         if !acquiredCacheLease {
-            print("Inline prewarm phase=\(phase) elapsed=\(started.duration(to: clock.now)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount)")
+            print("Inline prewarm phase=\(phase) elapsed=\(fixtureStarted.duration(to: clock.now)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount)")
         }
         #expect(acquiredCacheLease, "the actual cache fixture must acquire its cancellable isolation lease")
         guard acquiredCacheLease else { return }
@@ -234,7 +234,7 @@ struct InlineMathOffMainTests {
             phase = "submit"
             driver.submit(remaining, width: width, env: renderer.textEnvironment) {
                 callbacks += 1
-                let elapsed = started.duration(to: clock.now)
+                let elapsed = fixtureStarted.duration(to: clock.now)
                 if firstCallback == nil { firstCallback = elapsed }
                 lastCallback = elapsed
                 phase = "callback"
@@ -245,7 +245,7 @@ struct InlineMathOffMainTests {
             phase = "await-batch"
             let finished = await completed.wait()
             if !finished || driver.stats.adopted != rows.count {
-                print("Inline prewarm phase=\(phase) elapsed=\(started.duration(to: clock.now)) finished=\(finished) submitted=\(remaining.count) callbacks=\(callbacks) firstCallback=\(String(describing: firstCallback)) lastCallback=\(String(describing: lastCallback)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount) inFlight=\(driver.inFlightCount) offloaded=\(driver.stats.offloaded) adopted=\(driver.stats.adopted) discarded=\(driver.stats.discardedStale) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
+                print("Inline prewarm phase=\(phase) elapsed=\(fixtureStarted.duration(to: clock.now)) finished=\(finished) submitted=\(remaining.count) callbacks=\(callbacks) firstCallback=\(String(describing: firstCallback)) lastCallback=\(String(describing: lastCallback)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount) inFlight=\(driver.inFlightCount) offloaded=\(driver.stats.offloaded) adopted=\(driver.stats.adopted) discarded=\(driver.stats.discardedStale) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
             }
             #expect(finished, "the real batch completion event must arrive before test cancellation")
             #expect(driver.inFlightCount == 0 && driver.stats.adopted == rows.count,
