@@ -141,7 +141,7 @@ enum Suites {
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Usage load admission") { await runUsageLoadAdmissionChecks() },
-            Section("Find refresh selection") { await runTranscriptFindSelectionChecks() },
+            Section("Find refresh selection") { await runTranscriptFindSelectionChecks(); runTranscriptFindChangedInventoryChecks() },
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Quoted row preview preparation") { await runQuotePreviewChecks() },
             Section("Agent avatar signals") { runAvatarSignalChecks() },
