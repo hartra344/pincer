@@ -65,6 +65,7 @@ struct TranscriptPremeasureTests {
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > 0)
     }
 
+    #if DEBUG
     @Test func repeatedSplitReusesPremeasureEligibilityForAnUnchangedRow() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -76,16 +77,21 @@ struct TranscriptPremeasureTests {
         let driver = TranscriptPremeasureDriver()
         driver.currentRow = { id in rows.first { $0.id == id } }
 
-        let first = driver.split([0], all: rows, width: 700, renderer: renderer)
-        let digestsAfterFirst = TranscriptText.sourceDigestBuildCount
-        let second = driver.split([0], all: rows, width: 700, renderer: renderer)
+        let recorder = TranscriptSourceDigestRecorder()
+        TranscriptSourceDigestProbe.$recorder.withValue(recorder) {
+            let first = driver.split([0], all: rows, width: 700, renderer: renderer)
+            let digestsAfterFirst = recorder.count
+            let second = driver.split([0], all: rows, width: 700, renderer: renderer)
 
-        #expect(first.offload.count == 1 && second.offload.count == 1)
-        #expect(renderer.premeasureBodyBuildCount == 0,
-                "scroll planning must not prepare source before the worker acquires it")
-        #expect(TranscriptText.sourceDigestBuildCount == digestsAfterFirst,
-                "warm-cache probes should reuse the memoized full-source digest")
+            #expect(first.offload.count == 1 && second.offload.count == 1)
+            #expect(renderer.premeasureBodyBuildCount == 0,
+                    "scroll planning must not prepare source before the worker acquires it")
+            #expect(recorder.count == digestsAfterFirst,
+                    "warm-cache probes should reuse the memoized full-source digest in their own split scope")
+        }
     }
+
+    #endif
 
     private enum OwnershipFixtureError: Error { case admissionRejected }
 

@@ -6,6 +6,12 @@ import AppKit
 import UIKit
 #endif
 
+#if DEBUG
+// Keep UI diagnostics on the shared package probe; neither alias retains source text.
+typealias TranscriptSourceDigestRecorder = TaskScopeWorkRecorder
+typealias TranscriptSourceDigestProbe = TaskScopeWorkProbe
+#endif
+
 /// Turns message text into attributed strings for native text views, and measures them with the
 /// same TextKit 1 setup the views use, so a row's computed height is exactly what gets drawn.
 @MainActor
@@ -120,6 +126,7 @@ enum TranscriptText {
     nonisolated static var sourceDigestBuildCount: Int { self.sourceDigestBuildCounter.withLock { $0 } }
     nonisolated private static func noteSourceDigestBuild() {
         self.sourceDigestBuildCounter.withLock { $0 += 1 }
+        TranscriptSourceDigestProbe.recorder?.record()
     }
 #endif
 

@@ -155,6 +155,7 @@ enum Suites {
             Section("Location transport") { runLocationTransportChecks() },
             Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
+            Section("Automation delete versus held load") { await runAutomationDeleteLoadChecks() },
             Section("Cron run timestamp IDs") { runCronRunTimestampIDChecks() },
             Section("Activity notification timestamps") { runActivityNotificationTimestampChecks() },
             Section("Web Push") { await runWebPushChecks() },
@@ -212,8 +213,10 @@ enum Suites {
         ]
         #if DEBUG
         sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
+        sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
+        sections.append(Section("UI readiness cancellation") { await runUITestReadinessCancellationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
@@ -377,6 +380,7 @@ enum Suites {
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
         LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
+        LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
         LiveSection("Command policy load admission (live)") { url, token in await runLiveExecPolicyLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
