@@ -194,6 +194,11 @@ enum Suites {
             Section("First-run wizard") { await runFirstRunChecks() },
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
+        #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
+            sections.insert(Section("Channel QR ownership") { await runChannelQRLoginOwnershipChecks() }, at: index + 1)
+        }
+        #endif
         return sections
     }
 
@@ -218,7 +223,8 @@ enum Suites {
     ]
 
     /// The built-in demo, second half.
-    static let demoExtras: [Section] = [
+    static var demoExtras: [Section] {
+        var sections: [Section] = [
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
@@ -300,6 +306,13 @@ enum Suites {
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
+        #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
+            sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
+        }
+        #endif
+        return sections
+    }
 
     /// Against a (mock) Gateway, first half.
     static let liveCore: [LiveSection] = [

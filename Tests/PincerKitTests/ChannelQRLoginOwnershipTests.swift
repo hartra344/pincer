@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Testing
 @testable import PincerKit
@@ -124,4 +125,94 @@ struct ChannelQRLoginOwnershipTests {
         #expect(callbacks == (result == .expired ? 0 : 1))
         #expect(waits == (result == .stillWaiting ? 2 : 1))
     }
+    enum LateDelivery: String, CaseIterable { case startQR, startError, waitError, waitLinked }
+    @Test(.timeLimit(.minutes(2)), arguments: LateDelivery.allCases)
+    func cancellationAlsoGuardsStartErrorsAndLinkedCallbacks(_ deliveryKind: LateDelivery) async throws {
+        let delivery = Delivery()
+        var returned = false
+        var callbacks = 0
+        let controller = ChannelQRLoginController(request: { method, _ in
+            if method == "web.login.start" && (deliveryKind == .waitError || deliveryKind == .waitLinked) {
+                return ["qrDataUrl": .string(Self.oldQR)]
+            }
+            await delivery.wait()
+            returned = true
+            if deliveryKind == .startError || deliveryKind == .waitError {
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: "Login failed", details: nil)
+            }
+            return deliveryKind == .startQR ? ["qrDataUrl": .string(Self.oldQR)]
+                : ["connected": true, "message": "WhatsApp is linked."]
+        })
+        controller.onLinked = { _ in callbacks += 1 }
+        defer { controller.reset(); delivery.release() }
+        controller.start(channel: "whatsapp", accountId: "default")
+        try await self.waitFor { delivery.entered }
+        let activeTask = try #require(controller.activeTaskForChecks(channel: "whatsapp", accountId: "default"))
+        controller.cancel(channel: "whatsapp", accountId: "default")
+        delivery.release()
+        await activeTask.value
+        #expect(returned)
+        #expect(controller.state(channel: "whatsapp", accountId: "default") == .idle && callbacks == 0)
+    }
+
+    @Test(.timeLimit(.minutes(2)))
+    func cancelAllRetainsFinishedAccountsAndSuppressesRunningResponses() async throws {
+        let delivery = Delivery()
+        var returned = false
+        var callbacks = 0
+        let controller = ChannelQRLoginController(request: { _, params in
+            if params["accountId"] == "finished" { return ["connected": true, "message": "Linked"] }
+            await delivery.wait()
+            returned = true
+            throw GatewayError.rpc(code: "UNAVAILABLE", message: "Old failure", details: nil)
+        })
+        controller.onLinked = { _ in callbacks += 1 }
+        defer { controller.reset(); delivery.release() }
+        controller.start(channel: "whatsapp", accountId: "finished")
+        try await self.waitFor { callbacks == 1 }
+        controller.start(channel: "whatsapp", accountId: "running")
+        try await self.waitFor { delivery.entered }
+        let activeTask = try #require(controller.activeTaskForChecks(channel: "whatsapp", accountId: "running"))
+        controller.cancelAll()
+        delivery.release()
+        await activeTask.value
+        #expect(returned)
+        #expect(controller.state(channel: "whatsapp", accountId: "finished") == .connected("Linked"))
+        #expect(controller.state(channel: "whatsapp", accountId: "running") == .idle && callbacks == 1)
+    }
+
+    @Test(.timeLimit(.minutes(2)))
+    func oldLinkedCallbackCompletionCannotRemoveReplacementTask() async throws {
+        let callback = Delivery()
+        let replacementWait = Delivery()
+        var starts = 0
+        var callbackReturned = false
+        let controller = ChannelQRLoginController(request: { method, _ in
+            if method == "web.login.start" {
+                starts += 1
+                return starts == 1 ? ["connected": true, "message": "Linked"] : ["qrDataUrl": .string(Self.newQR)]
+            }
+            await replacementWait.wait()
+            return ["connected": false, "message": .string(Self.expired)]
+        })
+        controller.onLinked = { _ in await callback.wait(); callbackReturned = true }
+        defer { controller.reset(); callback.release(); replacementWait.release() }
+        controller.start(channel: "whatsapp", accountId: "default")
+        try await self.waitFor { callback.entered }
+        let oldTask = try #require(controller.activeTaskForChecks(channel: "whatsapp", accountId: "default"))
+        controller.start(channel: "whatsapp", accountId: "default", force: true)
+        try await self.waitFor { replacementWait.entered }
+        let newTask = try #require(controller.activeTaskForChecks(channel: "whatsapp", accountId: "default"))
+        callback.release()
+        await oldTask.value
+        #expect(callbackReturned)
+        controller.cancel(channel: "whatsapp", accountId: "default")
+        try await self.waitFor { replacementWait.cancellationObserved }
+        replacementWait.release()
+        await newTask.value
+        #expect(controller.state(channel: "whatsapp", accountId: "default") == .idle && starts == 2)
+    }
+
 }
+
+#endif
