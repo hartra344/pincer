@@ -79,4 +79,114 @@ struct VoiceListRequestOwnershipTests {
         #expect(model.voices == voices && model.sessionKeys["elevenlabs"] == "fixture-current-key",
                 "A failed current request does not clear the previously loaded catalog or key")
     }
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+    func reconnectOrCurrentCancellationRejectsHeldPublication(_ reconnect: Bool) async throws {
+        let lists = Lists()
+        let model = GatewayVoiceModel(request: { _, _ in [:] })
+        model.voiceLister = { await lists.load($0) }
+        let task = Task { () -> Bool in
+            do { _ = try await model.listElevenLabsVoices(apiKey: "held-key"); return false }
+            catch is CancellationError { return true }
+            catch { Issue.record("Unexpected obsolete publication error"); return false }
+        }
+        defer { task.cancel(); lists.releaseAll() }
+        try await lists.waitFor("held-key")
+        if reconnect { model.handleReconnect() } else { task.cancel() }
+        lists.release("held-key", [ElevenLabsVoice(id: "obsolete", name: "Obsolete")])
+        #expect(await task.value, "Obsolete or canceled actual requests must not return a usable catalog")
+        #expect(model.voices.isEmpty && model.sessionKeys["elevenlabs"] == nil)
+    }
+    @Test(.timeLimit(.minutes(2)))
+    func latestFailurePreservesPreviouslyPublishedCatalogWithoutRevivingOlderRequest() async throws {
+        let model = GatewayVoiceModel(request: { _, _ in [:] })
+        let seed = [ElevenLabsVoice(id: "seed", name: "Previously loaded")]
+        model.voiceLister = { _ in seed }
+        _ = try await model.listElevenLabsVoices(apiKey: "seed-key")
+        let lists = Lists()
+        model.voiceLister = { key in
+            if key == "latest-invalid" { throw TTSSetupError.invalidKey }
+            return await lists.load(key)
+        }
+        let old = Task { () -> Bool in
+            do { _ = try await model.listElevenLabsVoices(apiKey: "older-key"); return false }
+            catch is CancellationError { return true }
+            catch { Issue.record("Unexpected older request error"); return false }
+        }
+        defer { old.cancel(); lists.releaseAll() }
+        try await lists.waitFor("older-key")
+        do { _ = try await model.listElevenLabsVoices(apiKey: "latest-invalid"); Issue.record("Latest invalid key must fail") }
+        catch TTSSetupError.invalidKey {} catch { Issue.record("Latest failure must preserve its actual error") }
+        lists.release("older-key", [ElevenLabsVoice(id: "older", name: "Older")])
+        #expect(await old.value)
+        #expect(model.voices == seed && model.sessionKeys["elevenlabs"] == "seed-key")
+    }
+
+    enum KeyMutation: String, CaseIterable, Sendable { case saveSuccess, savePersistedFailure, removeDeleteFailure }
+    @Test(.timeLimit(.minutes(2)), arguments: KeyMutation.allCases)
+    func acceptedKeyMutationInvalidatesEarlierAndMidMutationCatalogs(_ mode: KeyMutation) async throws {
+        var config: JSONValue = ["tts": ["providers": ["elevenlabs": ["apiKey": ["source": "store", "provider": "default", "id": "ELEVENLABS_API_KEY"]]]]]
+        var entered = false
+        var release: CheckedContinuation<Void, Never>?
+        let methods: Set<String> = ["config.get", "config.patch", "secrets.store.delete"]
+        let model = GatewayVoiceModel(methods: { methods }, request: { method, params in
+            switch method {
+            case "config.get": return ["resolved": config, "hash": "key-before", "valid": true]
+            case "config.patch":
+                entered = true
+                await withCheckedContinuation { release = $0 }
+                let patch = try JSONValue.decode(Data(try #require(params["raw"]?.text).utf8))
+                config = config.applyingMergePatch(patch)
+                if mode == .savePersistedFailure {
+                    throw GatewayError.rpc(code: "UNAVAILABLE", message: "Saved, restart failed",
+                        details: ["persistedConfig": ["config": config, "hash": "key-persisted"]])
+                }
+                return ["ok": true]
+            case "secrets.store.delete": throw GatewayError.rpc(code: "UNAVAILABLE", message: "Secret deletion unavailable", details: nil)
+            default: Issue.record("Unexpected key mutation method"); return [:]
+            }
+        })
+        await model.refresh()
+        let seed = [ElevenLabsVoice(id: "seed-key-mutation", name: "Previously loaded")]
+        model.voiceLister = { _ in seed }
+        _ = try await model.listElevenLabsVoices(apiKey: "seed-key")
+        let lists = Lists()
+        model.voiceLister = { await lists.load($0) }
+        func request(_ key: String) -> Task<Bool, Never> {
+            Task {
+                do { _ = try await model.listElevenLabsVoices(apiKey: key); return false }
+                catch is CancellationError { return true }
+                catch { Issue.record("Unexpected obsolete catalog error"); return false }
+            }
+        }
+        let old = request("before-mutation")
+        defer { old.cancel(); lists.releaseAll() }
+        try await lists.waitFor("before-mutation")
+        let mutation = Task { () -> Bool in
+            do {
+                if mode == .removeDeleteFailure { _ = try await model.removeKey(provider: "elevenlabs") }
+                else { _ = try await model.saveKey("new-key", provider: "elevenlabs") }
+                return true
+            } catch { return false }
+        }
+        defer { mutation.cancel(); release?.resume(); release = nil }
+        let deadline = ContinuousClock.now + .seconds(15)
+        while !entered { try #require(ContinuousClock.now < deadline); await Task.yield() }
+        lists.release("before-mutation", [ElevenLabsVoice(id: "old", name: "Old")])
+        let oldRejected = await old.value
+        #expect(oldRejected && model.voices == seed && model.sessionKeys["elevenlabs"] == "seed-key",
+                "Mutation admission rejects an older catalog before any newer list starts")
+        let during = request("during-mutation")
+        defer { during.cancel(); lists.releaseAll() }
+        try await lists.waitFor("during-mutation")
+        let waiter = release; release = nil; waiter?.resume()
+        let succeeded = await mutation.value
+        #expect(succeeded == (mode == .saveSuccess))
+        lists.release("during-mutation", [ElevenLabsVoice(id: "mid", name: "Mid")])
+        let midRejected = await during.value
+        #expect(midRejected)
+        #expect(model.voices == seed)
+        #expect(model.sessionKeys["elevenlabs"] == (mode == .saveSuccess ? "new-key" : "seed-key"),
+                "Obsolete catalog must not replace mutation-owned session key state, including failure")
+    }
+
 }
