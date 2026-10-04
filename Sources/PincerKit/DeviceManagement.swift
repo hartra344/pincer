@@ -420,10 +420,28 @@ public final class DeviceManagementModel {
         self.allowsWritesWithoutAdmin || self.hasAdmin || self.scopes().contains(Self.pairingScope)
     }
 
-    /// Answering requests and removing other devices needs Full Management (`operator.admin`).
+    /// Administrative operations such as rename and node management require Full Management.
+    /// Device pairing actions have their own method-aware capabilities below.
     public var canManage: Bool {
         guard !self.manageDenied else { return false }
         return self.allowsWritesWithoutAdmin || self.hasAdmin
+    }
+
+    private func canPairDevice(using method: String) -> Bool {
+        guard self.supports(method) else { return false }
+        if self.hasAdmin || self.allowsWritesWithoutAdmin { return self.canManage }
+        return self.scopes().contains(Self.pairingScope)
+    }
+    public var canApproveDevice: Bool { self.canPairDevice(using: Self.approveMethod) }
+    public var canRejectDevice: Bool { self.canPairDevice(using: Self.rejectMethod) }
+    public var canRemoveDevice: Bool { self.canPairDevice(using: Self.removeMethod) }
+    public var deviceReadOnlyReason: String? {
+        if self.canApproveDevice || self.canRejectDevice || self.canRemoveDevice { return nil }
+        if (self.hasAdmin || self.allowsWritesWithoutAdmin) && !self.canManage { return Self.readOnlyMessage }
+        if !self.supports(Self.approveMethod) && !self.supports(Self.rejectMethod) && !self.supports(Self.removeMethod) {
+            return Self.unsupportedMessage
+        }
+        return L("Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.")
     }
 
     /// The page should explain how to get access instead of listing.
@@ -640,7 +658,8 @@ public final class DeviceManagementModel {
     @discardableResult
     public func approve(_ request: PendingDeviceRequest) async -> Bool {
         let key = Self.key(request)
-        guard self.canManage, self.operations[key]?.isRunning != true else { return false }
+        guard self.canApproveDevice, self.operations[key]?.isRunning != true else { return false }
+        let legacyAdminHandling = self.canManage
         self.operations[key] = .running
         do {
             let result = try await self.request(Self.approveMethod, ["requestId": .string(request.requestId)])
@@ -653,7 +672,7 @@ public final class DeviceManagementModel {
             }
             return true
         } catch {
-            return await self.requestFailed(request, error: error)
+            return await self.requestFailed(request, error: error, legacyAdminHandling: legacyAdminHandling)
         }
     }
 
@@ -661,14 +680,15 @@ public final class DeviceManagementModel {
     @discardableResult
     public func reject(_ request: PendingDeviceRequest) async -> Bool {
         let key = Self.key(request)
-        guard self.canManage, self.operations[key]?.isRunning != true else { return false }
+        guard self.canRejectDevice, self.operations[key]?.isRunning != true else { return false }
+        let legacyAdminHandling = self.canManage
         self.operations[key] = .running
         do {
             _ = try await self.request(Self.rejectMethod, ["requestId": .string(request.requestId)])
             self.dropRequest(request)
             return true
         } catch {
-            return await self.requestFailed(request, error: error)
+            return await self.requestFailed(request, error: error, legacyAdminHandling: legacyAdminHandling)
         }
     }
 
@@ -677,7 +697,8 @@ public final class DeviceManagementModel {
     @discardableResult
     public func remove(_ device: PairedDevice) async -> Bool {
         let key = Self.key(device)
-        guard self.canManage, self.operations[key]?.isRunning != true else { return false }
+        guard self.canRemoveDevice, self.operations[key]?.isRunning != true else { return false }
+        let legacyAdminHandling = self.canManage
         self.operations[key] = .running
         do {
             _ = try await self.request(Self.removeMethod, ["deviceId": .string(device.deviceId)])
@@ -690,7 +711,7 @@ public final class DeviceManagementModel {
                 await self.load()
                 return true
             }
-            return self.deviceFailed(key, error: error)
+            return self.deviceActionFailed(key, error: error, legacyAdminHandling: legacyAdminHandling)
         }
     }
 
@@ -788,14 +809,23 @@ public final class DeviceManagementModel {
         self.removedSinceList.insert(device.deviceId)
     }
 
-    private func requestFailed(_ request: PendingDeviceRequest, error: Error) async -> Bool {
+    private func requestFailed(_ request: PendingDeviceRequest, error: Error, legacyAdminHandling: Bool) async -> Bool {
         if Self.isUnknown(error, "unknown requestid") {
             self.dropRequest(request)
             self.notice = Notice(text: Self.staleRequestMessage, severity: .warning)
             await self.load()
             return true
         }
-        return self.deviceFailed(Self.key(request), error: error)
+        return self.deviceActionFailed(Self.key(request), error: error, legacyAdminHandling: legacyAdminHandling)
+    }
+
+    private func deviceActionFailed(_ key: String, error: Error, legacyAdminHandling: Bool) -> Bool {
+        if legacyAdminHandling { return self.deviceFailed(key, error: error) }
+        let message: String
+        if case let GatewayError.rpc(_, raw, _) = error { message = raw }
+        else { message = Self.message(for: error) }
+        self.operations[key] = .failed(message)
+        return false
     }
 
     private func deviceFailed(_ key: String, error: Error) -> Bool {

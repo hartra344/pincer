@@ -31,6 +31,16 @@
         }
       }
     },
+    "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage."
+          }
+        }
+      }
+    },
     "Email": {
       "localizations": {
         "en": {

@@ -5,7 +5,7 @@ import UIKit
 #endif
 
 /// Gateway Settings → Devices: devices waiting to pair and devices paired with the Gateway
-/// (`device.pair.*`). Listing every device and changing them needs Full Management.
+/// (`device.pair.*`). The Gateway authorizes device pairing actions; rename remains administrative.
 /// `device.pair.requested` / `resolved` / `changed` events keep it current.
 struct DevicesPage: View {
     @Environment(GatewayStore.self) private var gateway
@@ -74,8 +74,12 @@ struct DevicesPage: View {
 
     private func list(_ model: DeviceManagementModel) -> some View {
         List {
-            if model.readOnlyReason != nil {
-                DeviceAccessNeeded(message: DeviceManagementModel.readOnlyMessage)
+            if let reason = model.deviceReadOnlyReason {
+                if reason == DeviceManagementModel.readOnlyMessage {
+                    DeviceAccessNeeded(message: reason)
+                } else {
+                    Section { Text(reason).font(.caption).foregroundStyle(.secondary) }
+                }
             }
             if let error = model.loadState.error, model.hasLoaded {
                 Section {
@@ -185,11 +189,13 @@ private struct PendingDeviceRow: View {
 
     @ViewBuilder private func buttons(busy: Bool) -> some View {
         if busy { ProgressView().controlSize(.small) }
-        if self.model.canManage {
+        if self.model.canRejectDevice {
             Button(L("Reject"), role: .destructive) { Task { await self.model.reject(self.request) } }
                 .buttonStyle(.bordered)
                 .disabled(busy)
                 .accessibilityLabel(L("Reject \(self.request.title)"))
+        }
+        if self.model.canApproveDevice {
             Button(L("Approve")) { Task { await self.model.approve(self.request) } }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
@@ -249,8 +255,8 @@ private struct PairedDeviceRow: View {
 
     @ViewBuilder private func actions(isSelf: Bool) -> some View {
         Button(L("Copy Device ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.device.deviceId) }
-        if self.model.canManage {
-            if self.model.canRename { Button(L("Rename…"), systemImage: "pencil", action: self.rename) }
+        if self.model.canRename { Button(L("Rename…"), systemImage: "pencil", action: self.rename) }
+        if self.model.canRemoveDevice {
             Divider()
             Button(isSelf ? L("Revoke This Device…") : L("Revoke…"), systemImage: "xmark.shield", role: .destructive, action: self.revoke)
         }
