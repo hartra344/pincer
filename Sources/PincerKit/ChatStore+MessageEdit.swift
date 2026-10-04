@@ -223,6 +223,9 @@ extension ChatStore {
         guard let gateway else { throw GatewayError.notConnected }
         var params: [String: JSONValue] = ["sessionKey": .string(self.sessionKey), "entryId": .string(entryId)]
         if let agentId { params["agentId"] = .string(agentId) }
+        #if DEBUG
+        await self.messageEditRewindAdmissionProbe?()
+        #endif
         let result: JSONValue
         do {
             result = try await gateway.connection.request(SessionManager.rewindMethod, .object(params), timeout: 30)
