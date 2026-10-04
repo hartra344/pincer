@@ -48,6 +48,8 @@ To act on several sessions at once, select them: on macOS with <kbd>⌘</kbd>-cl
 - When an archive or delete action fails, Pincer shows the session title when it's known, or its session key otherwise, alongside the gateway's reason.
 - **Delete…** always asks first, for example **Delete 3 sessions?** or, for one, **Delete “Garden planner”?**: *This permanently deletes the transcript on the gateway and can't be undone.* If any of them have [unsent messages](../offline-outbox/), it adds how many, for example *The 1 unsent message in this chat will be discarded too.* or *3 unsent messages in these chats will be discarded too.*, and deleting discards them along with their attachments. Pincer also drops those sessions' [locally cached transcripts](../local-cache/) and removes them from message search, and if one was open, Pincer switches to another chat.
 
+After deletion succeeds, an older detail request cannot bring the deleted session’s metadata back.
+
 Changing the filter clears the selection.
 
 :::caution[Some actions need Full Management]

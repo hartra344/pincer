@@ -99,4 +99,102 @@ struct SessionDetailOwnershipTests {
         #expect(model.details[Self.key]?.raw == Self.row && model.detailErrors[Self.key] == nil)
         #expect(server.describeCalls == 1 && server.deleteCalls == 0)
     }
+    @MainActor private final class Reads {
+        var entered = 0
+        var released: Set<Int> = []
+        var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
+        var failures: Set<Int> = []
+        func release(_ index: Int) { released.insert(index); waiters.removeValue(forKey: index)?.resume() }
+        func releaseAll() { release(1); release(2) }
+        func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
+            if method == SessionManager.previewMethod { return ["previews": []] }
+            #expect(method == SessionManager.describeMethod)
+            entered += 1
+            let index = entered
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    if released.contains(index) || Task.isCancelled { continuation.resume() }
+                    else { waiters[index] = continuation }
+                }
+            } onCancel: { Task { @MainActor in self.release(index) } }
+            try Task.checkCancellation()
+            if failures.contains(index) { throw GatewayError.closed("describe round \(index) failed") }
+            return ["session": index == 1 ? SessionDetailOwnershipTests.row
+                : ["key": .string(SessionDetailOwnershipTests.key), "title": "Fresh detail"]]
+        }
+    }
+    private func readModel(_ reads: Reads) -> SessionManagerModel {
+        SessionManagerModel(request: { try await reads.request($0, $1) })
+    }
+
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true], [false, true])
+    func latestReadOwnsItsSuccessOrFailure(_ latestFails: Bool, _ oldFails: Bool) async throws {
+        let reads = Reads()
+        if latestFails { reads.failures.insert(2) }
+        if oldFails { reads.failures.insert(1) }
+        let model = readModel(reads)
+        let old = Task { await model.loadDetails(key: Self.key) }
+        defer { reads.releaseAll(); old.cancel() }
+        try #require(await eventually { reads.entered == 1 })
+        let latest = Task { await model.loadDetails(key: Self.key) }
+        defer { latest.cancel() }
+        try #require(await eventually { reads.entered == 2 })
+        reads.release(2); await latest.value
+        let detail = model.details[Self.key]
+        let error = model.detailErrors[Self.key]
+        if latestFails { #expect(error != nil && detail == nil) }
+        else { #expect(detail?.raw["title"] == "Fresh detail" && error == nil) }
+        reads.release(1); await old.value
+        #expect(model.details[Self.key] == detail && model.detailErrors[Self.key] == error)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func previewRefreshDoesNotInvalidateDetails() async throws {
+        let reads = Reads()
+        let model = readModel(reads)
+        let task = Task { await model.loadDetails(key: Self.key) }
+        defer { reads.releaseAll(); task.cancel() }
+        try #require(await eventually { reads.entered == 1 })
+        await model.reloadPreview(key: Self.key)
+        reads.release(1); await task.value
+        #expect(model.details[Self.key]?.raw == Self.row && model.detailErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func reconnectInvalidatesOldDetailRead() async throws {
+        let reads = Reads()
+        let model = readModel(reads)
+        let task = Task { await model.loadDetails(key: Self.key) }
+        defer { reads.releaseAll(); task.cancel() }
+        try #require(await eventually { reads.entered == 1 })
+        model.handleReconnect()
+        reads.release(1); await task.value
+        #expect(model.details[Self.key] == nil && model.detailErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func canceledCallerCannotDisplaceCurrentDetailRead() async throws {
+        let reads = Reads()
+        let model = readModel(reads)
+        let current = Task { await model.loadDetails(key: Self.key) }
+        defer { reads.releaseAll(); current.cancel() }
+        try #require(await eventually { reads.entered == 1 })
+        let canceled = Task { await model.loadDetails(key: Self.key) }
+        canceled.cancel(); await canceled.value
+        #expect(reads.entered == 1)
+        reads.release(1); await current.value
+        #expect(model.details[Self.key]?.raw == Self.row && model.detailErrors[Self.key] == nil)
+    }
+
+    @Test(.timeLimit(.minutes(2))) func canceledOlderCompletionCannotClearNewOwner() async throws {
+        let reads = Reads()
+        let model = readModel(reads)
+        let old = Task { await model.loadDetails(key: Self.key) }
+        defer { reads.releaseAll(); old.cancel() }
+        try #require(await eventually { reads.entered == 1 })
+        let latest = Task { await model.loadDetails(key: Self.key) }
+        defer { latest.cancel() }
+        try #require(await eventually { reads.entered == 2 })
+        old.cancel(); await old.value
+        reads.release(2); await latest.value
+        #expect(model.details[Self.key]?.raw["title"] == "Fresh detail" && model.detailErrors[Self.key] == nil)
+    }
+
 }

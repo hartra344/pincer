@@ -483,6 +483,8 @@ public final class SessionManagerModel {
     @ObservationIgnored private let onSessionsChanged: @MainActor () async -> Void
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var previewsInFlight: Set<String> = []
+    /// Only active detail requests retain ownership; terminal and invalidated entries are removed.
+    @ObservationIgnored private var detailLoadOwners: [String: UUID] = [:]
     /// Bumped whenever a key's preview is dropped, so a reply already in flight is ignored.
     @ObservationIgnored private var previewGenerations: [String: Int] = [:]
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
@@ -626,11 +628,17 @@ public final class SessionManagerModel {
 
     /// `sessions.describe` for one key.
     public func loadDetails(key: String) async {
-        guard self.supportsDescribe else { return }
+        guard !Task.isCancelled, self.supportsDescribe else { return }
+        let owner = UUID()
+        self.detailLoadOwners[key] = owner
+        defer {
+            if self.detailLoadOwners[key] == owner { self.detailLoadOwners[key] = nil }
+        }
         var params: [String: JSONValue] = ["key": .string(key), "includeDerivedTitles": true, "includeLastMessage": true]
         if let agentId = self.row(key)?.raw["agentId"]?.text { params["agentId"] = .string(agentId) }
         do {
             let result = try await self.call(SessionManager.describeMethod, .object(params))
+            guard !Task.isCancelled, self.detailLoadOwners[key] == owner else { return }
             if let row = result["session"].flatMap(SessionRow.init) {
                 self.details[key] = row
                 self.detailErrors[key] = nil
@@ -639,6 +647,7 @@ public final class SessionManagerModel {
                 self.detailErrors[key] = "This session is gone."
             }
         } catch {
+            guard !Task.isCancelled, self.detailLoadOwners[key] == owner else { return }
             self.detailErrors[key] = Self.message(error)
         }
     }
@@ -863,6 +872,7 @@ public final class SessionManagerModel {
     }
 
     func handleReconnect() {
+        self.detailLoadOwners = [:]
         self.deniedAdmin = false
         self.rejectedMethods = []
         for key in Set(self.previews.keys).union(self.previewsInFlight) { self.previewGenerations[key, default: 0] += 1 }
@@ -905,6 +915,7 @@ public final class SessionManagerModel {
     }
 
     private func forget(_ key: String) {
+        self.detailLoadOwners[key] = nil
         self.rows.removeAll { $0.key == key }
         self.details[key] = nil
         self.detailErrors[key] = nil
