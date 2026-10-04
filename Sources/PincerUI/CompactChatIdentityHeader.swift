@@ -8,17 +8,19 @@ struct CompactChatIdentityHeader: View {
     let gateway: GatewayStore
     let key: String
     let row: SessionRow?
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     #if DEBUG
     @Environment(\.compactChatHeaderGeometryProbe) private var geometryProbe
     #endif
-    static let avatarSize: CGFloat = 64
-    static let reservedHeight: CGFloat = 60
-    static let navigationOverlap: CGFloat = 44
+    static let avatarSize: CGFloat = CGFloat(CompactChatHeaderLayout.avatarSize)
+    static let reservedHeight: CGFloat = CGFloat(CompactChatHeaderLayout.minimumReservation)
+    static let navigationOverlap: CGFloat = CGFloat(CompactChatHeaderLayout.navigationOverlap)
     @ScaledMetric(relativeTo: .headline) private var titleLineAllowance: CGFloat = 22
     @State private var measuredTitleHeight: CGFloat = 0
 
     private var reservedHeight: CGFloat {
-        max(Self.reservedHeight, Self.avatarSize + 4 + max(self.measuredTitleHeight, self.titleLineAllowance + 12) - Self.navigationOverlap)
+        CGFloat(CompactChatHeaderLayout.reservation(measuredTitleHeight: Double(self.measuredTitleHeight),
+                                                   scaledTitleAllowance: Double(self.titleLineAllowance)))
     }
 
     private var agent: AgentSummary {
@@ -28,9 +30,24 @@ struct CompactChatIdentityHeader: View {
     var body: some View {
         Color.clear
             .frame(height: self.reservedHeight)
-            // The native style fills the actual reserved region and extends through the
-            // navigation/status safe area without changing the header's measured height.
-            .background(.regularMaterial, ignoresSafeAreaEdges: .top)
+            .background {
+                switch CompactChatHeaderLayout.backdrop(reduceTransparency: self.reduceTransparency) {
+                case .opaque:
+                    Color(uiColor: .systemBackground)
+                        .ignoresSafeArea(.container, edges: .top)
+                case .graduatedMaterial:
+                    Rectangle().fill(.regularMaterial)
+                        .ignoresSafeArea(.container, edges: .top)
+                        .mask {
+                            VStack(spacing: 0) {
+                                Color.black
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: CGFloat(CompactChatHeaderLayout.fadeHeight))
+                            }
+                            .ignoresSafeArea(.container, edges: .top)
+                        }
+                }
+            }
             .overlay(alignment: .top) {
                 VStack(spacing: 4) {
                     ChatAgentAvatar(chat: self.gateway.chat(for: self.key), agent: self.agent,
