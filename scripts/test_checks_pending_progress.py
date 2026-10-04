@@ -26,6 +26,7 @@ if name == "swift":
         print(root / "bin"); sys.exit(0)
     if "--parallel" in sys.argv:
         (root / "unit-admitted").touch()
+        print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
         with open(root / "unit-gate", "r") as gate: gate.read()
     print("fixture unit complete"); sys.exit(0)
@@ -56,7 +57,7 @@ def wait_until(predicate, timeout=5):
         time.sleep(0.01)
 
 
-def execute(require_progress, fail_lane):
+def execute(require_progress, fail_lane, require_identity=False):
     source = Path(__file__).resolve().with_name("run-checks.sh")
     with tempfile.TemporaryDirectory(prefix="pincer-checks-progress-") as temporary:
         root = Path(temporary)
@@ -104,6 +105,7 @@ def execute(require_progress, fail_lane):
             progress_lines = [line for line in bytes(before_release).splitlines() if b"[checks progress]" in line]
             result = {
                 "pendingVisible": bool(progress_lines) and any(b"unit-tests" in line and b"pending" in line for line in progress_lines),
+                "safeUnitIdentityVisible": any(b"heldUnitFixture()" in line for line in progress_lines),
                 "pendingOutputBounded": len(before_release) <= 8192 and all(len(line) <= 512 for line in progress_lines),
                 "pendingContainsNoLogPayload": b"PRIVATE_FIXTURE_LOG_CONTENT" not in before_release,
                 "allLanesCompleted": "Lane               Result" in text and "perf-tests" in text and "perf-smoke" in text,
@@ -112,6 +114,7 @@ def execute(require_progress, fail_lane):
             }
             assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned"]
             if require_progress: assertions.append("pendingVisible")
+            if require_identity: assertions.append("safeUnitIdentityVisible")
             print(json.dumps(result, sort_keys=True))
             failed = [key for key in assertions if not result[key]]
             if failed:
@@ -141,8 +144,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--completed-control", action="store_true")
     parser.add_argument("--failed-lane-control", action="store_true")
+    parser.add_argument("--require-safe-identity", action="store_true")
     args = parser.parse_args()
-    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control)
+    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity)
 
 
 if __name__ == "__main__":
