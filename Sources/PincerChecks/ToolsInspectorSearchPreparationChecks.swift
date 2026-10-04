@@ -31,7 +31,8 @@ import Foundation
     }
     await model.load()
     await checkActualToolsSearch(model, query: "TAILNEEDLE", expectedID: "fixture_tool")
-    check(await model.prepareSearchFields(.all, matching: "no such tool").isEmpty, "actual unmatched query produces no tools")
+    let unmatched = await model.prepareSearchFields(.all, matching: "no such tool")
+    check(unmatched.isEmpty, "actual unmatched query produces no tools")
 }
 
 @MainActor func runDemoToolsInspectorSearchPreparationChecks() async {
