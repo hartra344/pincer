@@ -54,6 +54,10 @@ struct PairingInboxLoadCancellationTests {
     @Test func olderCanceledErrorCannotIdleNewerRunningLoad() async throws {
         let oldGate = ResponseGate(), newGate = ResponseGate()
         var attempts = 0
+        let latestResponse = PairingFixtures.list([PairingFixtures.request("latest")], owner: false)
+        let expectedRequests = PairingInboxModel.sorted(latestResponse["requests"]!.array!.compactMap(PairingRequest.init))
+        let expectedAccounts = latestResponse["accounts"]!.array!.compactMap(PairingAccount.init)
+        try #require(expectedRequests.count == 1 && expectedAccounts.count == 2)
         let model = PairingInboxModel { method, params in
             #expect(method == PairingInboxModel.listMethod && params == [:])
             attempts += 1
@@ -62,7 +66,7 @@ struct PairingInboxLoadCancellationTests {
                 throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "Obsolete response", details: nil)
             }
             await newGate.hold()
-            return PairingFixtures.list([PairingFixtures.request("latest")], owner: false)
+            return latestResponse
         }
         let old = Task { await model.load() }
         var newer: Task<Void, Never>?
@@ -74,7 +78,8 @@ struct PairingInboxLoadCancellationTests {
             oldGate.release(); await old.value
             #expect(model.loadState == .running && !model.hasLoaded && model.supported)
             newGate.release(); await latest.value
-            #expect(attempts == 2 && model.requests.map(\.id) == ["latest"])
+            #expect(attempts == 2 && model.requests == expectedRequests && model.accounts == expectedAccounts)
+            #expect(!model.commandOwnerConfigured && model.limits?.pendingPerAccount == 3 && model.limits?.ttl == 3600)
             #expect(model.loadState == .idle && model.hasLoaded && model.supported && !model.needsAccess)
         } catch {
             old.cancel(); newer?.cancel(); oldGate.release(); newGate.release()
