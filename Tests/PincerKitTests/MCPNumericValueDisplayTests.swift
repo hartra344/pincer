@@ -20,4 +20,20 @@ struct MCPNumericValueDisplayTests {
         #expect(value == String(1e30))
         #expect(server.raw["env"]?["OVERSIZED"]?.double == 1e30)
     }
+    @Test func headerBoundariesAndMixedScalarValuesKeepTheirSource() throws {
+        for number in [Double(Int.max).nextDown, Double(Int.max), Double(Int.min), 1e30, -1e30,
+                       Double.nan, Double.infinity, -Double.infinity] {
+            let raw: JSONValue = ["url": "https://fixture.invalid/mcp", "headers": ["VALUE": .number(number)]]
+            let server = try #require(MCPServer(name: "headers", json: raw))
+            let expected = Int(exactly: number).map { String($0) } ?? String(number)
+            #expect(server.headers.first?.value == expected)
+            #expect(server.raw["headers"]?["VALUE"]?.double?.isNaN == number.isNaN)
+        }
+        let raw: JSONValue = ["url": "https://fixture.invalid/mcp", "headers": ["INTEGER": -42, "BOOL": false, "SECRET": "__OPENCLAW_REDACTED__"]]
+        let server = try #require(MCPServer(name: "headers", json: raw))
+        #expect(server.headers.first { $0.key == "INTEGER" }?.value == "-42")
+        #expect(server.headers.first { $0.key == "BOOL" }?.value == "false")
+        #expect(server.headers.first { $0.key == "SECRET" }?.isRedacted == true)
+        #expect(server.raw == raw)
+    }
 }
