@@ -375,7 +375,7 @@ public final class BookmarkStore {
         let input = PersistenceInput(revision: self.persistenceRevision, bookmarks: self.bookmarks)
         self.pendingPersistence = input
         guard self.persistenceEncodingTask == nil else { return }
-        // Retain this store until the latest accepted write is durable. The worker only captures
+        // Retain this store until the latest accepted write is encoded and applied to local defaults. The worker only captures
         // its COW source array; there is one active source and one latest pending source per store.
         self.persistenceEncodingTask = Task { [self] in
             while let captured = self.pendingPersistence {

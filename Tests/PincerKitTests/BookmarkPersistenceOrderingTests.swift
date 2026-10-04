@@ -45,7 +45,9 @@ struct BookmarkPersistenceOrderingTests {
         store.persistenceEncodingGate = { await gate.holdFirst() }
         store.add(entry("a"))
         do { try await gate.waitForEntry() } catch { await gate.release(); await store.waitForPersistenceEncoding(); throw error }
-        let actual = try #require(store.actualPersistenceTask)
+        let actual: Task<Void, Never>
+        do { actual = try #require(store.actualPersistenceTask) }
+        catch { await gate.release(); await store.waitForPersistenceEncoding(); throw error }
         store.add(entry("b")); store.add(entry("c")); store.remove(sessionKey: "main", messageId: "a")
         #expect(store.bookmarks.map(\.messageId) == ["c", "b"])
         #expect(store.persistenceActiveCount == 1 && store.persistencePendingCount == 1)
@@ -69,7 +71,9 @@ struct BookmarkPersistenceOrderingTests {
         store.persistenceEncodingGate = { await gate.holdFirst() }
         store.add(entry("old"))
         do { try await gate.waitForEntry() } catch { await gate.release(); await store.waitForPersistenceEncoding(); throw error }
-        let actual = try #require(store.actualPersistenceTask)
+        let actual: Task<Void, Never>
+        do { actual = try #require(store.actualPersistenceTask) }
+        catch { await gate.release(); await store.waitForPersistenceEncoding(); throw error }
         store.add(entry("pending")); store.removeAll()
         #expect(store.bookmarks.isEmpty && store.persistencePendingCount == 0)
         #expect(scratch.defaults.data(forKey: store.defaultsKey) == nil)
@@ -95,7 +99,13 @@ struct BookmarkPersistenceOrderingTests {
         item.transcriptId = "committed"
         #expect(store.toggle(item, sessionKey: "main"))
         do { try await gate.waitForEntry() } catch { await previewGate.release(); await gate.release(); await store.waitForPreviewPreparation(); await store.waitForPersistenceEncoding(); throw error }
-        let actual = try #require(store.actualPersistenceTask)
+        let actual: Task<Void, Never>
+        do { actual = try #require(store.actualPersistenceTask) }
+        catch {
+            await previewGate.release(); await gate.release()
+            await store.waitForPreviewPreparation(); await store.waitForPersistenceEncoding()
+            throw error
+        }
         await previewGate.release()
         await withTaskCancellationHandler {
             await store.waitForPreviewPreparation()
@@ -114,7 +124,13 @@ struct BookmarkPersistenceOrderingTests {
         store?.persistenceEncodingGate = { await gate.holdFirst() }
         store?.add(expected)
         do { try await gate.waitForEntry() } catch { await gate.release(); await store?.waitForPersistenceEncoding(); throw error }
-        let actual = try #require(store?.actualPersistenceTask)
+        let actual: Task<Void, Never>
+        do {
+            // Keep the owned store available to drain if capture itself fails.
+            let cleanupStore = try #require(store)
+            do { actual = try #require(cleanupStore.actualPersistenceTask) }
+            catch { await gate.release(); await cleanupStore.waitForPersistenceEncoding(); throw error }
+        } catch { await gate.release(); await store?.waitForPersistenceEncoding(); throw error }
         store = nil
         await gate.release(); await actual.value
         let data = try #require(scratch.defaults.data(forKey: key))
