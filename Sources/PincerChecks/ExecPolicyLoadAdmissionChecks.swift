@@ -55,6 +55,24 @@ import Foundation
         check(method == ExecPolicy.getMethod && params == [:], "policy load uses existing get method and empty params")
         return response
     }
+    for fails in [false, true] {
+        let gate = PolicyAdmissionGate()
+        let model = ExecPolicyModel { _, _ in
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "late local error", details: nil) }
+            return response
+        }
+        let load = Task { await model.load() }
+        defer { gate.release(); load.cancel() }
+        let entered = await waitFor("admitted policy cancellation") { gate.entered }
+        check(entered, "policy cancellation control reaches actual request")
+        guard entered else { return }
+        load.cancel()
+        gate.release()
+        await load.value
+        check(model.snapshot == nil && !model.hasLoaded && model.loadState == .idle,
+              "canceled admitted policy read cannot publish late success or failure")
+    }
 }
 
 /// Read-only fresh mock coverage: actual authenticated exec.approvals.get response, no overlays.

@@ -111,3 +111,26 @@ struct ExecPolicyLoadAdmissionTests {
         #expect(model.loadState == .idle)
     }
 }
+
+extension ExecPolicyLoadAdmissionTests {
+    @Test(arguments: [false, true])
+    func cancellationAfterAdmissionCannotPublishLateResult(fails: Bool) async throws {
+        let gate = PolicyLoadGate()
+        let model = ExecPolicyModel { _, _ in
+            await gate.hold()
+            if fails {
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: "late local error", details: nil)
+            }
+            return Self.snapshot("canceled-read")
+        }
+        let load = Task { await model.load() }
+        defer { gate.release(); load.cancel() }
+        try await gate.waitForEntry()
+        #expect(model.loadState == .running)
+        load.cancel()
+        gate.release()
+        await load.value
+        #expect(model.snapshot == nil && !model.hasLoaded)
+        #expect(model.loadState == .idle && model.banner == nil)
+    }
+}
