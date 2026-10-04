@@ -33,7 +33,7 @@ struct CacheRestorePublicationOwnershipTests {
         }
     }
     private func item(_ id: String) -> ChatItem {
-        var item = ChatItem(id: id, role: .assistant, blocks: [.text("Reply \(id)")]); item.transcriptId = id; return item
+        var item = ChatItem(id: id, role: .assistant, blocks: [.text("Reply \(id)")], timestamp: Date(timeIntervalSince1970: 1_700_000_000)); item.transcriptId = id; return item
     }
     @Test(arguments: [false, true])
     func completedOldCacheCannotPublishAfterActualHistoryReset(currentOverlap: Bool) async throws {
