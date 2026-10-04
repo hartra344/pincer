@@ -434,6 +434,7 @@ public final class ApprovalHistoryModel {
 
     /// Loads the first page for the current filter, replacing what's shown.
     public func load() async {
+        guard !Task.isCancelled else { return }
         if let methods = self.methods(), !methods.isEmpty, !methods.contains("approval.history") {
             self.markUnsupported()
             return
@@ -442,9 +443,14 @@ public final class ApprovalHistoryModel {
         let generation = self.generation
         self.loadState = .running
         self.loadMoreState = .idle
+        defer {
+            if Task.isCancelled, generation == self.generation, self.loadState.isRunning {
+                self.loadState = .idle
+            }
+        }
         do {
             let page = try await self.fetch(cursor: nil)
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.items = Self.deduplicated(page.items)
             self.usedCursors = []
             self.nextCursor = page.nextCursor
@@ -452,12 +458,13 @@ public final class ApprovalHistoryModel {
             self.loadState = .idle
             self.loadMoreState = .idle
         } catch let error where GatewayError.isUnknownMethod(error) {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.markUnsupported()
         } catch {
-            guard generation == self.generation else { return }
+            guard !Task.isCancelled, generation == self.generation else { return }
             self.loadState = .failed(Self.message(for: error))
         }
+        guard !Task.isCancelled, generation == self.generation else { return }
         self.hasLoaded = true
     }
 
