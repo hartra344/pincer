@@ -130,40 +130,76 @@ struct RawConfigEditorHostedTests {
         #expect(server.submitted == admitted, "Only the captured raw file reaches config.apply")
     }
     @Test(.timeLimit(.minutes(2))) func actualEditedBodyDoesNotParseJSON5OnMain() async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+        @MainActor func phase(_ name: String, field: UITextView? = nil, probe: RawConfigParserProbe? = nil) {
+            let counts = probe?.counts
+            print("Raw JSON5 phase=\(name) elapsed=\(started.duration(to: clock.now)) fieldAttached=\(field?.window != nil) mainParses=\(counts?.main ?? -1) backgroundParses=\(counts?.background ?? -1)")
+        }
+        phase("fixture-before")
         let large = await Task.detached { "{\"opening\":\"meaningful\",\"body\":\"" + String(repeating: "x", count: 2 * 1024 * 1024) + "\"}" }.value
+        phase("fixture-after")
         #expect(RawConfigPage.parseError("{ /* JSON5 */ value: 1, }") == nil)
         #expect(RawConfigPage.parseError("{broken") != nil)
         let scratch = ScratchDefaults(); defer { scratch.remove() }
         let server = Server()
         let model = GatewaySettingsModel(request: { try await server.request($0, $1, $2) }, scopes: { [GatewayConnection.adminScope] })
+        phase("reload-before")
         await model.reloadConfig()
+        phase("reload-after")
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
-        gateway.cacheRoot = nil; defer { gateway.stop() }
+        gateway.cacheRoot = nil; defer { phase("gateway-cleanup-before"); gateway.stop(); phase("gateway-cleanup-after") }
         let probe = RawConfigParserProbe()
         let host = UIHostingController(rootView: NavigationStack { RawConfigPage(settings: model) }
             .environment(gateway).environment(\.rawConfigParserProbe, probe))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = host; window.makeKeyAndVisible()
-        defer { window.isHidden = true; window.rootViewController = nil }
+        defer { phase("window-cleanup-before", probe: probe); window.isHidden = true; window.rootViewController = nil; phase("window-cleanup-after", probe: probe) }
+        phase("host-ready-before", probe: probe)
         try #require(await eventually { window.layoutIfNeeded(); return self.views(window).contains { $0 is UITextView } })
+        phase("host-ready-after", probe: probe)
         let field = try #require(self.views(window).compactMap { $0 as? UITextView }.first)
-        edit(field, large)
+        phase("text-assignment-before", field: field, probe: probe)
+        field.text = large
+        phase("text-assignment-after", field: field, probe: probe)
+        field.delegate?.textViewDidChange?(field)
+        phase("delegate-after", field: field, probe: probe)
+        phase("probe-entry-before", field: field, probe: probe)
         try #require(await eventually { probe.counts.main + probe.counts.background > 0 }, "Actual editor body must reach real validation")
+        phase("probe-entry-after", field: field, probe: probe)
+        #expect(field.bounds.height > 0 && field.bounds.height <= window.bounds.height,
+                "Actual raw editor must keep a large configuration inside a bounded viewport")
+        #expect(field.isScrollEnabled && field.contentSize.height > field.bounds.height,
+                "The real native editor must scroll its oversized content within that viewport")
+        let originalOffset = field.contentOffset
+        field.setContentOffset(CGPoint(x: originalOffset.x, y: originalOffset.y + 100), animated: false)
+        #expect(field.contentOffset.y > originalOffset.y, "Native editor content must actually scroll")
+        field.setContentOffset(originalOffset, animated: false)
         #expect(probe.counts.main == 0, "Actual JSON5 validation must run off Main")
+        phase("exact-field-comparison-before", field: field, probe: probe)
         #expect(field.text == large)
+        phase("exact-field-comparison-after", field: field, probe: probe)
+        phase("save-layout-ready-before", field: field, probe: probe)
         try #require(await eventually(timeout: .seconds(15)) { window.layoutIfNeeded(); return self.saveEnabled(window) },
                      "The completed current valid source enables the actual Save item")
+        phase("save-layout-ready-after", field: field, probe: probe)
         let before = probe.counts.background
+        phase("rapid-edits-before", field: field, probe: probe)
         edit(field, "{invalid")
         edit(field, "{ valid: 1 }")
         edit(field, "{latest-invalid")
+        phase("rapid-edits-after", field: field, probe: probe)
+        phase("latest-readiness-before", field: field, probe: probe)
         try #require(await eventually(timeout: .seconds(15)) {
             window.layoutIfNeeded()
             return probe.counts.background > before && !self.saveEnabled(window)
         }, "Latest invalid text must disable Save despite an intervening valid edit")
+        phase("latest-readiness-after", field: field, probe: probe)
+        phase("final-assertions-before", field: field, probe: probe)
         #expect(field.text == "{latest-invalid" && server.submitted == nil)
         #expect(!activate("Save", window: window), "The native fixture must refuse disabled Save actions")
         #expect(probe.counts.main == 0)
+        phase("final-assertions-after", field: field, probe: probe)
     }
 }
 extension TranscriptUIKitHostedTests {
