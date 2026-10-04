@@ -113,4 +113,24 @@ struct SkillsLoadAdmissionTests {
         canceled.cancel(); gate.release(); await canceled.value
         #expect(model.report == expected && model.loadError == nil && !model.isLoading)
     }
+
+    @Test func canceledOlderLoadCannotIdleNewerOwner() async throws {
+        let oldGate = SkillsLoadGate(), newGate = SkillsLoadGate()
+        let model = SkillsModel(request: { _, params in
+            let agent = params["agentId"]?.text ?? "main"
+            if agent == "main" { await oldGate.hold() } else { await newGate.hold() }
+            return Self.report(agent)
+        })
+        let old = Task { await model.load(agentId: "main") }
+        defer { oldGate.release(); newGate.release(); old.cancel() }
+        try await oldGate.waitForEntry()
+        let newer = Task { await model.load(agentId: "research") }
+        defer { newer.cancel() }
+        try await newGate.waitForEntry()
+        old.cancel(); oldGate.release(); await old.value
+        #expect(model.isLoading && model.agentId == "research" && model.report == nil && model.loadError == nil)
+        newGate.release(); await newer.value
+        #expect(model.report == SkillStatusReport(Self.report("research")) && !model.isLoading && model.loadError == nil)
+    }
+
 }

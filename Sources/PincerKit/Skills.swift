@@ -632,6 +632,7 @@ public final class SkillsModel {
 
     /// Loads `skills.status` for `agentId` (nil: the Gateway default).
     public func load(agentId: String?) async {
+        guard !Task.isCancelled else { return }
         self.loadGeneration += 1
         let generation = self.loadGeneration
         if agentId != self.agentId {
@@ -644,10 +645,10 @@ public final class SkillsModel {
         defer { if generation == self.loadGeneration { self.isLoading = false } }
         do {
             let result = try await self.call(Skills.statusMethod, agentId.map { ["agentId": .string($0)] } ?? [:])
-            guard generation == self.loadGeneration else { return }
+            guard !Task.isCancelled, generation == self.loadGeneration else { return }
             self.report = SkillStatusReport(result)
         } catch {
-            guard generation == self.loadGeneration else { return }
+            guard !Task.isCancelled, generation == self.loadGeneration else { return }
             self.loadError = Self.message(error)
         }
     }

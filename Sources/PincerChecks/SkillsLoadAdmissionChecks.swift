@@ -59,6 +59,27 @@ import Foundation
     await checkSkillsStatusAdmission { _, _ in
         ["agentId": "main", "workspaceDir": "/fixture/main", "managedSkillsDir": "/fixture/skills", "skills": []]
     }
+    for fails in [false, true] {
+        let gate = SkillsStatusAdmissionGate()
+        let expected: JSONValue = ["agentId": "main", "workspaceDir": "/fixture/main", "skills": []]
+        var calls = 0
+        let model = SkillsModel(request: { _, _ in
+            calls += 1
+            if calls == 1 { return expected }
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "Late canceled error", details: nil) }
+            return ["agentId": "main", "workspaceDir": "/late", "skills": []]
+        })
+        await model.load(agentId: "main")
+        let canceled = Task { await model.load(agentId: "main") }
+        defer { gate.release(); canceled.cancel() }
+        let entered = await waitFor("admitted Skills cancellation") { gate.entered }
+        check(entered, "actual Skills cancellation control reaches the request")
+        guard entered else { gate.release(); canceled.cancel(); await canceled.value; return }
+        canceled.cancel(); gate.release(); await canceled.value
+        check(model.report == SkillStatusReport(expected) && model.loadError == nil && !model.isLoading,
+              "canceled admitted Skills load cannot publish late success or failure")
+    }
 }
 
 @MainActor func runDemoSkillsLoadAdmissionChecks() async {
