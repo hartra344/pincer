@@ -6,10 +6,17 @@ private func boundaryDiff() -> ToolFileEdit? {
     return ToolFileEdit.parse(toolName: "apply_patch", arguments: args)
 }
 
+private func exactBoundary(_ edit: ToolFileEdit?) -> Bool {
+    guard let edit, edit.files.count == 1, let file = edit.files.first,
+          file.path == "file.txt", file.hunks.count == 1, let hunk = file.hunks.first else { return false }
+    return hunk.lines.map(\.unified) == [" context"] && hunk.lines.map(\.lineNumber) == [Int.max]
+        && edit.additions == 0 && edit.deletions == 0
+}
+
 @MainActor func runToolDiffLineNumberBoundaryChecks() async {
     let result = await Task.detached { boundaryDiff() }.value
-    check(result == nil || result?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } == [" context"],
-          "actual local parser safely handles a representable header boundary or falls back to raw text")
+    check(exactBoundary(result),
+          "actual local parser preserves the complete representable boundary file, hunk, context and line number")
 }
 
 @MainActor func runDemoToolDiffLineNumberBoundaryChecks() async {
@@ -36,6 +43,6 @@ private func boundaryDiff() -> ToolFileEdit? {
     check(actual != nil, "unchanged genuine Demo tool arguments retain their file-diff presentation")
     // Explicitly LOCAL parser fixture, not an altered Gateway response or tool execution.
     let local = await Task.detached { boundaryDiff() }.value
-    check(local == nil || local?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } == [" context"],
+    check(exactBoundary(local),
           "local boundary fixture cannot terminate real Demo tool-card read processing")
 }

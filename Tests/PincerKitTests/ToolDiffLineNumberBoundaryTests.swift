@@ -4,12 +4,16 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2)))
 struct ToolDiffLineNumberBoundaryTests {
-    @Test func representableHeaderBoundaryDoesNotTrap() async {
+    @Test func representableHeaderBoundaryDoesNotTrap() async throws {
         let result = await Task.detached {
             ToolFileEditTests.parse("apply_patch", ["input": "--- a/file.txt\n+++ b/file.txt\n@@ -\(Int.max),1 +\(Int.max),1 @@\n context"])
         }.value
-        #expect(result == nil || result?.files.flatMap { $0.hunks.flatMap { $0.lines.map(\.unified) } } == [" context"],
-                "unrepresentable following line may fall back, but parsing must not terminate the client")
+        let edit = try #require(result)
+        #expect(edit.files.count == 1 && edit.files[0].path == "file.txt")
+        #expect(edit.files[0].hunks.count == 1)
+        #expect(edit.files[0].hunks[0].lines.map(\.unified) == [" context"])
+        #expect(edit.files[0].hunks[0].lines.map(\.lineNumber) == [Int.max])
+        #expect(edit.additions == 0 && edit.deletions == 0)
     }
     @Test func ordinaryHunkAndRawFallbackRemainExact() async throws {
         let values = await Task.detached {
