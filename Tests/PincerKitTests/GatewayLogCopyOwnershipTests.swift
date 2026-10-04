@@ -22,6 +22,7 @@ struct GatewayLogCopyOwnershipTests {
         defer { helper.invalidate(); Task { await gate.release() } }
         try await withTaskCancellationHandler {
             await gate.wait()
+            let activeWorker = try #require(helper.workerTask)
             helper.request([entries[1]], style: .raw) { published.append($0) }
             let middleID = helper.requestID
             let latest = Task { await helper.prepare([entries[2]], style: .raw) }
@@ -29,6 +30,7 @@ struct GatewayLogCopyOwnershipTests {
             if disappear { helper.invalidate() }
             await gate.release()
             let text = await latest.value
+            await activeWorker.value
             #expect(text == (disappear ? "" : "latest"))
             #expect(published.isEmpty)
             #expect(probe.snapshot().main == 0)

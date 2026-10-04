@@ -20,6 +20,7 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
     package var probe: GatewayLogCopyProbe?
     #endif
     #if DEBUG
+    package private(set) var workerTask: Task<Void, Never>?
     package var requestID: UUID { current }
     package var didPrepare: (@Sendable () async -> Void)?
     #endif
@@ -68,7 +69,7 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
         let probe = self.probe, didPrepare = self.didPrepare
         #endif
         let entries = job.entries, style = job.style
-        Task {
+        let running = Task {
             let text = await Task.detached(priority: .userInitiated) {
                 #if DEBUG
                 probe?.record()
@@ -85,9 +86,15 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
             guard active == job.id else { return }
             let accepted = current == job.id
             active = nil
+            #if DEBUG
+            workerTask = nil
+            #endif
             let next = pending; pending = nil
             if let next { start(next) }
             job.completion(accepted ? text : nil)
         }
+        #if DEBUG
+        workerTask = running
+        #endif
     }
 }
