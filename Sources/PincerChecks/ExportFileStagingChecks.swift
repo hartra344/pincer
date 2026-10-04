@@ -3,7 +3,7 @@ import Foundation
 @testable import PincerKit
 
 @MainActor private func checkActualExportFileStaging(name: String, data: Data) async {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-check-staging-\(UUID())")
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-check-staging-\(UUID())", isDirectory: true)
     let staging = ExportFileStaging(root: root), probe = ExportFileStagingProbe()
     staging.probe = probe
     guard let first = await staging.prepare(name: name, data: data), let second = await staging.prepare(name: name, data: data) else {
@@ -24,7 +24,7 @@ import Foundation
 @MainActor func runExportFileStagingChecks() async {
     let bytes = await Task.detached { Data("Exact file\né\n".utf8) }.value
     await checkActualExportFileStaging(name: "Export.txt", data: bytes)
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-check-failure-\(UUID())")
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-check-failure-\(UUID())", isDirectory: true)
     let blocker = root.appendingPathComponent("file")
     let created = await Task.detached {
         do {

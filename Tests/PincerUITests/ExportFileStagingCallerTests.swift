@@ -7,7 +7,7 @@ import Testing
 @MainActor @Suite("Actual iOS Export file staging", .timeLimit(.minutes(2)))
 struct ExportFileStagingCallerTests {
     func exerciseActualSharedFile() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-ui-staging-\(UUID())")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-ui-staging-\(UUID())", isDirectory: true)
         let data = await Task.detached { Data("Actual Export file\né\n".utf8) }.value
         let staging = ExportFileStaging(root: root), probe = ExportFileStagingProbe()
         staging.probe = probe

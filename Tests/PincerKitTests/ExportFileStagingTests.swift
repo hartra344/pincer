@@ -6,7 +6,7 @@ import Testing
 @MainActor @Suite("Export temporary file staging", .timeLimit(.minutes(2)))
 struct ExportFileStagingTests {
     @Test func actualTemporaryDirectoryAndWriteRunOffMain() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-staging-\(UUID())")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-staging-\(UUID())", isDirectory: true)
         let data = await Task.detached { Data("Exact UTF8 é\nlast line".utf8) }.value
         let staging = ExportFileStaging(root: root), probe = ExportFileStagingProbe()
         staging.probe = probe
@@ -26,7 +26,7 @@ struct ExportFileStagingTests {
         await Task.detached { try? FileManager.default.removeItem(at: root) }.value
     }
     @Test func realDirectoryAndWriteFailuresReturnNoFile() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-failure-\(UUID())")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-export-failure-\(UUID())", isDirectory: true)
         do {
             let blocking = root.appendingPathComponent("file")
             try await Task.detached {
