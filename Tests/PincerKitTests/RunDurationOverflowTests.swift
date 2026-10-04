@@ -8,10 +8,12 @@ struct RunDurationOverflowTests {
         var timeline = RunTimeline()
         let received = Date(timeIntervalSince1970: 1)
         // Explicit LOCAL legal AgentEvent fixtures, not a replay claimed to come from the Gateway.
-        #expect(timeline.apply(agent: ["runId": "local-duration", "seq": 1, "stream": "lifecycle", "ts": 1000,
-                                      "data": ["phase": "start", "startedAt": 1000]], receivedAt: received))
-        #expect(timeline.apply(agent: ["runId": "local-duration", "seq": 2, "stream": "lifecycle", "ts": .number(milliseconds),
-                                      "data": ["phase": "end", "endedAt": .number(milliseconds)]], receivedAt: received))
+        let acceptedStart = timeline.apply(agent: ["runId": "local-duration", "seq": 1, "stream": "lifecycle", "ts": 1000,
+                                      "data": ["phase": "start", "startedAt": 1000]], receivedAt: received)
+        #expect(acceptedStart)
+        let acceptedEnd = timeline.apply(agent: ["runId": "local-duration", "seq": 2, "stream": "lifecycle", "ts": .number(milliseconds),
+                                      "data": ["phase": "end", "endedAt": .number(milliseconds)]], receivedAt: received)
+        #expect(acceptedEnd)
         let lane = try #require(timeline.lane("local-duration"))
         #expect(lane.status == .done && lane.endedAt != nil)
         return lane
