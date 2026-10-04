@@ -51,7 +51,10 @@ public enum FilePreviewFiles {
             ext = preferred
         }
         if base.count > 120 {
-            let suffix = ext.isEmpty ? "" : "." + ext
+            // Reserve at least one visible stem character and the extension separator.
+            // A suffix alone can exceed the entire filename budget.
+            let boundedExtension = String(ext.prefix(118))
+            let suffix = boundedExtension.isEmpty ? "" : "." + boundedExtension
             base = String(base.prefix(120 - suffix.count)) + suffix
         }
         return base

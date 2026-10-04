@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import Synchronization
 @testable import PincerKit
 import Testing
 @testable import PincerUI
@@ -214,6 +215,13 @@ struct InlineMathOffMainTests {
         let width: CGFloat = 612
         let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
         let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
+        #if DEBUG
+        let workerPhases = Mutex([Int](repeating: 0, count: 4))
+        driver.admission.observeWorkerPhase = { phase in
+            workerPhases.withLock { if $0[phase] < 32 { $0[phase] += 1 } }
+        }
+        defer { driver.admission.observeWorkerPhase = nil }
+        #endif
         defer { driver.cancelAll() }
         driver.currentRow = { id in rows.first { $0.id == id } }
         let cold = rows.compactMap { renderer.premeasureBodies(for: $0) }
@@ -247,7 +255,14 @@ struct InlineMathOffMainTests {
             if !finished || driver.stats.adopted != rows.count {
                 print("Inline prewarm phase=\(phase) elapsed=\(fixtureStarted.duration(to: clock.now)) finished=\(finished) submitted=\(remaining.count) callbacks=\(callbacks) firstCallback=\(String(describing: firstCallback)) lastCallback=\(String(describing: lastCallback)) cacheWaiters=\(TranscriptSharedCacheLease.shared.waitingCount) inFlight=\(driver.inFlightCount) offloaded=\(driver.stats.offloaded) adopted=\(driver.stats.adopted) discarded=\(driver.stats.discardedStale) active=\(driver.admission.active) pending=\(driver.admission.pendingCount)")
             }
+            #if DEBUG
+            let phaseCounts = workerPhases.withLock { $0 }
+            #expect(phaseCounts == Array(repeating: remaining.count, count: 4),
+                    "each real submitted row must enter and exit the worker and reach its Main callback")
+            #expect(finished, "actual batch completion; submitted=\(phaseCounts[0]) workerEntered=\(phaseCounts[1]) workerExited=\(phaseCounts[2]) mainCallbacks=\(phaseCounts[3]) inFlight=\(driver.inFlightCount) adopted=\(driver.stats.adopted) pending=\(driver.admission.pendingCount)")
+            #else
             #expect(finished, "the real batch completion event must arrive before test cancellation")
+            #endif
             #expect(driver.inFlightCount == 0 && driver.stats.adopted == rows.count,
                     "every actual row must finish adoption before checking the warmed window")
         }
