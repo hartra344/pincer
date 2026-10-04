@@ -67,11 +67,20 @@ private struct AttachmentDraftOwnershipFixture {
             }.environment(self.app).environment(self.gateway).defaultAppStorage(self.scratch.defaults))
         }
 
-        func wait(_ predicate: () -> Bool) async throws {
+        func wait(_ phase: String, _ predicate: () -> Bool) async throws {
             let deadline = ContinuousClock.now + .seconds(15)
             while !predicate() {
                 try Task.checkCancellation()
-                try #require(ContinuousClock.now < deadline, "Actual composer/provider pipeline did not settle")
+                if ContinuousClock.now >= deadline {
+                    print("Attachment ownership phase=\(phase) connected=\(self.gateway.state.isConnected) bootstrapped=\(self.gateway.bootstrapped) sessionPresent=\(self.gateway.sessions[self.chat.sessionKey] != nil) owner=\(self.chat.draft.ownerID) pending=\(self.chat.draftAttachmentPreparationCount) attachments=\(self.chat.draft.attachments.count) preparationErrorPresent=\(self.chat.draftAttachmentPreparationError != nil) draftBytes=\(self.chat.draft.text.isContiguousUTF8 ? self.chat.draft.text.utf8.withContiguousStorageIfAvailable { $0.count } ?? -1 : -1) items=\(self.chat.items.count) outboxForChat=\(self.gateway.outbox.entries.count { $0.sessionKey == self.chat.sessionKey }) hostAttached=\(self.controller.view.window != nil) hostBounds=\(self.controller.view.bounds)")
+                    func fields(_ view: UIView) -> [ComposerUITextView] {
+                        (view as? ComposerUITextView).map { [$0] } ?? view.subviews.flatMap(fields)
+                    }
+                    for field in fields(self.controller.view).prefix(2) {
+                        print("Attachment native field attached=\(field.window != nil) bounds=\(field.bounds) canSubmit=\(field.canSubmit) firstResponder=\(field.isFirstResponder) textLength=\(field.textStorage.length)")
+                    }
+                }
+                try #require(ContinuousClock.now < deadline, "Actual composer/provider phase did not settle: \(phase)")
                 self.controller.view.setNeedsLayout()
                 self.controller.view.layoutIfNeeded()
                 try await Task.sleep(for: .milliseconds(10))
@@ -84,7 +93,7 @@ private struct AttachmentDraftOwnershipFixture {
                 if let field = view as? ComposerUITextView { return field }
                 return view.subviews.lazy.compactMap(find).first
             }
-            try await self.wait {
+            try await self.wait("native field ready") {
                 field = find(self.controller.view)
                 return field?.text == self.chat.draft.text && field?.canSubmit == true
             }
@@ -125,7 +134,7 @@ private struct AttachmentDraftOwnershipFixture {
         defer { held.release(nil); host.stop() }
         if send {
             host.gateway.start()
-            try await host.wait {
+            try await host.wait("Demo connected/bootstrap/session") {
                 host.gateway.state.isConnected && host.gateway.bootstrapped && host.gateway.sessions[host.chat.sessionKey] != nil
             }
         }
@@ -138,13 +147,13 @@ private struct AttachmentDraftOwnershipFixture {
         }
         let media = try #require(field.onMedia)
         media([.provider(provider)])
-        try await host.wait { held.entered }
+        try await host.wait("provider callback entered") { held.entered }
         #expect(host.chat.draft.text == "Original attachment draft" && host.chat.draft.attachments.isEmpty)
         #expect(!host.gateway.outbox.entries.contains { $0.sessionKey == host.chat.sessionKey })
 
         var other: ChatStore?
         if send {
-            try await host.wait { !field.canSubmit }
+            try await host.wait("pending preparation disables actual Return") { !field.canSubmit }
             let command = try #require(field.keyCommands?.first { $0.input == "\r" && $0.modifierFlags.isEmpty })
             let action = try #require(command.action)
             try #require(field.responds(to: action))
@@ -163,7 +172,7 @@ private struct AttachmentDraftOwnershipFixture {
                 if let field = view as? ComposerUITextView { return field.text == "Other chat draft" }
                 return view.subviews.contains(where: hasReplacementField)
             }
-            try await host.wait { hasReplacementField(host.controller.view) }
+            try await host.wait("replacement chat native field") { hasReplacementField(host.controller.view) }
         }
 
         // A sentinel on the same actual shared FIFO proves the held preparation and publication finished.
@@ -171,7 +180,7 @@ private struct AttachmentDraftOwnershipFixture {
         var drained = false
         observer.imageQueue.submit(operation: { .failure("fixture drain") }, completion: { _ in drained = true })
         held.release(discardWithFailure || failThenRetry ? nil : source)
-        try await host.wait { drained }
+        try await host.wait("shared preparation FIFO sentinel") { drained }
         if discardWithFailure {
             #expect(host.chat.draft.text == "Replacement draft" && host.chat.draft.attachments.isEmpty)
             #expect(host.chat.draftAttachmentPreparationError == nil && host.chat.draftAttachmentPreparationCount == 0,
@@ -191,11 +200,11 @@ private struct AttachmentDraftOwnershipFixture {
             let retryField = try await host.field()
             let retryMedia = try #require(retryField.onMedia)
             retryMedia([.provider(retry)])
-            try await host.wait { host.chat.draft.attachments.count == 1 && host.chat.draftAttachmentPreparationCount == 0 }
+            try await host.wait("retry attachment ready") { host.chat.draft.attachments.count == 1 && host.chat.draftAttachmentPreparationCount == 0 }
             #expect(host.chat.draftAttachmentPreparationError == nil)
         }
         if send {
-            try await host.wait { field.canSubmit && host.chat.draft.attachments.count == 1 }
+            try await host.wait("prepared attachment enables actual Return") { field.canSubmit && host.chat.draft.attachments.count == 1 }
             let prepared = try #require(host.chat.draft.attachments.first)
             #expect(prepared.isImage && !prepared.data.isEmpty)
             var reservations: [OutboxEntry] = []
@@ -211,14 +220,14 @@ private struct AttachmentDraftOwnershipFixture {
             let action = try #require(command.action)
             try #require(field.canPerformAction(action, withSender: command) && field.responds(to: action))
             _ = field.perform(action, with: command)
-            try await host.wait { reservations.count == 1 && host.chat.draft.isEmpty }
+            try await host.wait("actual send outbox reservation and replacement draft") { reservations.count == 1 && host.chat.draft.isEmpty }
             let entry = try #require(reservations.first)
             #expect(entry.text == "Original attachment draft" && entry.sessionKey == host.chat.sessionKey)
             #expect(entry.hasAttachments && reservedImageID == prepared.id,
                     "The actual outbox reservation owns the exact prepared image")
             #expect(host.chat.items.contains { $0.plainText == entry.text && $0.blocks.count == 2 },
                     "The actual send reserves the original text and prepared image together")
-            try await host.wait {
+            try await host.wait("Demo authoritative send acknowledgement") {
                 host.gateway.outbox.entry(id: entry.id) == nil && host.chat.items.contains {
                     $0.idempotencyKey == entry.id && $0.outboxState == nil
                 }
