@@ -424,7 +424,7 @@ public final class GatewayHealthModel {
     /// `shutdown.restartExpectedMs` when it's a number: the Gateway will be back. Nil means a terminal stop.
     public nonisolated static func restartExpectedMs(shutdown payload: JSONValue) -> Int? {
         guard case let .number(value)? = payload["restartExpectedMs"], value.isFinite, value >= 0 else { return nil }
-        return Int(value.rounded())
+        return Int(exactly: value.rounded()) ?? Int.max
     }
 
     private func beginRestarting(expectedMs: Int?) {
