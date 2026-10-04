@@ -17,6 +17,7 @@ struct ShareTargetCancellationTests {
         model.connect()
         let pump = try #require(model.actualPumpTask)
         defer { transport.release(); model.disconnect() }
+        var admittedTask: Task<Void, Never>?
         do {
             let deadline = ContinuousClock.now.advanced(by: .seconds(15))
             while model.phase != .ready { try Task.checkCancellation(); try #require(ContinuousClock.now < deadline); await Task.yield() }
@@ -28,11 +29,15 @@ struct ShareTargetCancellationTests {
             #expect(transport.calls == calls + 2 && model.target == .newChat(agentId: "main"))
             transport.open = false
             let admitted = Task { await model.refreshTargets() }
+            admittedTask = admitted
             while transport.held.count != 2 { try Task.checkCancellation(); try #require(ContinuousClock.now < deadline); await Task.yield() }
             admitted.cancel(); transport.release(); await admitted.value
             #expect(model.agents == agents && model.chats == chats && model.target == .newChat(agentId: "main"))
             model.disconnect(); await pump.value
-        } catch { transport.release(); model.disconnect(); await pump.value; throw error }
+        } catch {
+            admittedTask?.cancel(); transport.release(); model.disconnect()
+            await admittedTask?.value; await pump.value; throw error
+        }
     }
 }
 #endif
