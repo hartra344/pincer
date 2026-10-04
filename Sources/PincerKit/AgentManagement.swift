@@ -791,7 +791,9 @@ public final class AgentFileEditorModel {
     /// The last loaded or saved version.
     public private(set) var entry: AgentFileEntry?
     /// The editor's text.
-    public var text = ""
+    public var text = "" {
+        didSet { self.textRevision &+= 1 }
+    }
     public private(set) var loadState = OperationState.idle
     public private(set) var saveState = OperationState.idle
     public private(set) var conflict: AgentFileConflict?
@@ -802,6 +804,8 @@ public final class AgentFileEditorModel {
 
     @ObservationIgnored private let management: AgentManagementModel
     @ObservationIgnored private var savedText = ""
+    @ObservationIgnored private var textRevision: UInt64 = 0
+    @ObservationIgnored private var loadOwner: UUID?
 
     public init(agentId: String, name: String, management: AgentManagementModel) {
         self.agentId = agentId
@@ -823,16 +827,28 @@ public final class AgentFileEditorModel {
         self.canEdit && (self.isDirty || self.isNew) && !self.exceedsLimit && !self.isSaving && self.conflict == nil
     }
 
-    /// Reads the file, discarding any draft.
+    /// Reads the file, discarding the pre-admission draft while keeping later typing.
     public func load() async {
+        guard !Task.isCancelled else { return }
+        let owner = UUID()
+        let revision = self.textRevision
+        self.loadOwner = owner
         self.loadState = .running
+        defer {
+            if self.loadOwner == owner {
+                self.loadOwner = nil
+                if self.loadState.isRunning { self.loadState = .idle }
+            }
+        }
         do {
             let entry = try await self.management.getFile(agentId: self.agentId, name: self.name)
-            self.apply(entry)
+            guard !Task.isCancelled, self.loadOwner == owner else { return }
+            self.apply(entry, updateText: self.textRevision == revision)
             self.error = nil
             self.conflict = nil
             self.loadState = .idle
         } catch {
+            guard !Task.isCancelled, self.loadOwner == owner else { return }
             let classified = AgentManagementError.classify(error)
             self.loadState = .failed(classified.message)
         }
@@ -911,9 +927,9 @@ public final class AgentFileEditorModel {
         return AgentFileConflict(name: self.name, yours: yours, theirs: nil, theirsHash: currentHash, theirsMissing: false)
     }
 
-    private func apply(_ entry: AgentFileEntry) {
+    private func apply(_ entry: AgentFileEntry, updateText: Bool = true) {
         self.entry = entry
         self.savedText = entry.content ?? ""
-        self.text = self.savedText
+        if updateText { self.text = self.savedText }
     }
 }
