@@ -26,6 +26,18 @@ struct ContextPercentOverflowTests {
         #expect(usage.percentLabel == "\(expected)%")
     }
 
+    @Test func directConstructorExtremesRemainSafe() {
+        #expect(ContextUsage(used: Int.max, limit: 1).percent == 100)
+        #expect(ContextUsage(used: Int.max, limit: Int.max).percent == 100)
+        #expect(ContextUsage(used: 1, limit: Int.max).percent == 0)
+        #expect(ContextUsage(used: Int.min, limit: 1).percent == 0)
+        #expect(ContextUsage(used: Int.max, limit: 0).percent == 0)
+        #expect(ContextUsage(used: Int.max, limit: Int.min).percent == 0)
+        #expect(ContextUsage(used: 0, limit: 0).percent == 0)
+        #expect(ContextUsage(used: 1, limit: 200).percent == 1)
+        #expect(ContextUsage(used: 199, limit: 200).percent == 100)
+    }
+
     @Test func unknownOrInvalidContextDoesNotProduceMeter() throws {
         #expect(ContextUsage(row: nil) == nil)
         let unknown = try #require(Self.row(used: 50, limit: nil))
