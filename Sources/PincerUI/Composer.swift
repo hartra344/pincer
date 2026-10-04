@@ -29,6 +29,13 @@ struct Composer: View {
     private var dictation: DictationModel { self.dictationHolder.model }
     @ScaledMetric(relativeTo: .body) private var attachIconSize: CGFloat = 14
 
+    init(chat: ChatStore, placeholder: String, find: TranscriptFind? = nil, dictationModel: DictationModel? = nil) {
+        self.chat = chat
+        self.placeholder = placeholder
+        self.find = find
+        self._dictationHolder = State(initialValue: DictationHolder(model: dictationModel))
+    }
+
     private static let corner: CGFloat = 22
     /// Height of a single-line field, which the side controls match.
     static let controlHeight: CGFloat = 40

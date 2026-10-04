@@ -9,7 +9,9 @@ import AppKit
 /// Builds the engine and model once, when first needed; `@State`'s own initial value is rebuilt on every view init.
 @MainActor
 final class DictationHolder {
-    lazy var model = DictationModel(engine: SpeechDictationEngine())
+    private let injectedModel: DictationModel?
+    init(model: DictationModel? = nil) { self.injectedModel = model }
+    lazy var model = self.injectedModel ?? DictationModel(engine: SpeechDictationEngine())
 }
 
 /// The composer's microphone button: dictates into the draft, live, and never sends.
