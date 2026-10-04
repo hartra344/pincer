@@ -131,6 +131,8 @@ public final class DictationModel {
     public var issue: DictationIssue?
     /// True when the last dictation was ended by `finishForSend`; reset when dictation starts again.
     public private(set) var endedForSend = false
+    /// Explicit cancellation or departure invalidates a deferred composer send.
+    public private(set) var deferredSendRevision: UInt64 = 0
 
     public var isActive: Bool { self.phase != .idle }
     public var isListening: Bool { self.phase == .listening }
@@ -164,30 +166,40 @@ public final class DictationModel {
 
     /// For Send: returns once dictation is idle and every word recognised so far is in the draft. Waits for the
     /// final result, an error or `timeout`, whichever comes first. Never shows an error.
-    public func finishForSend(timeout: Duration = .milliseconds(500)) async {
+    /// Returns false if explicit cancellation or composer departure invalidated the pending send.
+    @discardableResult
+    public func finishForSend(timeout: Duration = .milliseconds(500)) async -> Bool {
+        let sendRevision = self.deferredSendRevision
         switch self.phase {
-        case .idle: return
+        case .idle: return true
         case .requestingPermission, .starting:
             self.endedForSend = true
-            return self.cancel()
-        case .listening: self.finish()
+            self.cancelForSendTimeout()
+            return true
+        case .listening:
+            self.endedForSend = true
+            self.finish()
         case .finishing: break
         }
+        // Some engines deliver their final/error synchronously from stop().
+        guard self.phase != .idle else { return self.deferredSendRevision == sendRevision }
         self.endedForSend = true
         let generation = self.generation
         let timer = Task { [weak self] in
             try? await Task.sleep(for: timeout)
             guard let self, !Task.isCancelled, generation == self.generation else { return }
-            self.cancel()
+            self.cancelForSendTimeout()
         }
         await withCheckedContinuation { continuation in
             self.finishWaiters.append(continuation)
         }
         timer.cancel()
+        return self.deferredSendRevision == sendRevision
     }
 
     private func begin(splice: DictationSplice, draft: String, apply: @escaping @MainActor (String, Int) -> Void) {
         guard self.phase == .idle else { return self.finish() }
+        self.invalidateDeferredSend()
         self.issue = nil
         self.endedForSend = false
         self.generation += 1
@@ -236,7 +248,17 @@ public final class DictationModel {
 
     /// Stops right away; nothing more is inserted. The text so far stays.
     public func cancel() {
+        self.invalidateDeferredSend()
         guard self.phase != .idle else { return }
+        self.engine.cancel()
+        self.end()
+    }
+
+    public func invalidateDeferredSend() {
+        self.deferredSendRevision &+= 1
+    }
+
+    private func cancelForSendTimeout() {
         self.engine.cancel()
         self.end()
     }
