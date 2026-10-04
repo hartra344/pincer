@@ -60,6 +60,8 @@ public final class ChannelQRLoginController {
 
     @ObservationIgnored private let request: Request
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
+    /// Only active login attempts retain a token; finished accounts keep their visible state.
+    @ObservationIgnored private var owners: [String: UUID] = [:]
 
     public init(request: @escaping Request) {
         self.request = request
@@ -75,6 +77,13 @@ public final class ChannelQRLoginController {
         self.logins[Self.key(channel: channel, accountId: accountId)] ?? .idle
     }
 
+    #if DEBUG
+    /// Read-only access to the actual active attempt for deterministic completion checks.
+    package func activeTaskForChecks(channel: String, accountId: String?) -> Task<Void, Never>? {
+        self.tasks[Self.key(channel: channel, accountId: accountId)]
+    }
+    #endif
+
     /// Any login showing a QR or starting.
     public var hasRunning: Bool { self.logins.values.contains(where: \.isRunning) }
 
@@ -83,14 +92,17 @@ public final class ChannelQRLoginController {
     public func start(channel: String, accountId: String?, force: Bool = false) {
         let key = Self.key(channel: channel, accountId: accountId)
         self.tasks[key]?.cancel()
+        let owner = UUID()
+        self.owners[key] = owner
         self.logins[key] = .starting
         self.tasks[key] = Task { [weak self] in
-            await self?.run(key: key, channel: channel, accountId: accountId, force: force)
+            await self?.run(key: key, owner: owner, channel: channel, accountId: accountId, force: force)
         }
     }
 
     public func cancel(channel: String, accountId: String?) {
         let key = Self.key(channel: channel, accountId: accountId)
+        self.owners.removeValue(forKey: key)
         self.tasks.removeValue(forKey: key)?.cancel()
         self.logins[key] = nil
     }
@@ -99,6 +111,7 @@ public final class ChannelQRLoginController {
     public func cancelAll() {
         for task in self.tasks.values { task.cancel() }
         self.tasks = [:]
+        self.owners = [:]
         self.logins = self.logins.filter { !$0.value.isRunning }
     }
 
@@ -106,6 +119,7 @@ public final class ChannelQRLoginController {
     public func reset() {
         for task in self.tasks.values { task.cancel() }
         self.tasks = [:]
+        self.owners = [:]
         self.logins = [:]
     }
 
@@ -122,26 +136,41 @@ public final class ChannelQRLoginController {
         message.lowercased().contains("is already linked")
     }
 
-    private func linked(_ key: String, channel: String, accountId: String?, message: String?) async {
+    private func linked(_ key: String, owner: UUID, channel: String, accountId: String?, message: String?) async {
+        guard self.isCurrent(key, owner: owner) else { return }
         self.logins[key] = .connected(message)
         await self.onLinked?(ChannelAccountKey(channel: channel, accountId: accountId))
     }
 
-    private func run(key: String, channel: String, accountId: String?, force: Bool) async {
+    private func isCurrent(_ key: String, owner: UUID) -> Bool {
+        !Task.isCancelled && self.owners[key] == owner
+    }
+
+    private func run(key: String, owner: UUID, channel: String, accountId: String?, force: Bool) async {
+        guard self.isCurrent(key, owner: owner) else { return }
+        defer {
+            // An older completion, including one returning from onLinked, must not
+            // remove a replacement attempt's task or ownership.
+            if self.owners[key] == owner {
+                self.owners.removeValue(forKey: key)
+                self.tasks.removeValue(forKey: key)
+            }
+        }
         var start: [String: JSONValue] = ["channel": .string(channel), "force": .bool(force),
                                           "timeoutMs": .number(Double(Self.startTimeoutMs))]
         if let accountId { start["accountId"] = .string(accountId) }
         do {
             var result = WebLoginResult(try await self.request("web.login.start", .object(start)))
+            guard self.isCurrent(key, owner: owner) else { return }
             var rounds = 0
-            while !Task.isCancelled {
+            while self.isCurrent(key, owner: owner) {
                 if result.connected == true {
-                    await self.linked(key, channel: channel, accountId: accountId, message: result.message)
+                    await self.linked(key, owner: owner, channel: channel, accountId: accountId, message: result.message)
                     return
                 }
                 // Starting on a linked account returns only a message (no `connected` flag): it's linked.
                 if result.qrImageData == nil, let message = result.message, Self.isAlreadyLinked(message) {
-                    await self.linked(key, channel: channel, accountId: accountId, message: message)
+                    await self.linked(key, owner: owner, channel: channel, accountId: accountId, message: message)
                     return
                 }
                 guard let qr = result.qrImageData else {
@@ -159,6 +188,7 @@ public final class ChannelQRLoginController {
                 if let sessionKey = result.sessionKey { wait["sessionKey"] = .string(sessionKey) }
                 if let url = result.qrDataUrl { wait["currentQrDataUrl"] = .string(url) }
                 let next = WebLoginResult(try await self.request("web.login.wait", .object(wait)))
+                guard self.isCurrent(key, owner: owner) else { return }
                 // A wait without a new QR keeps showing the current one.
                 result = next.qrDataUrl == nil && next.connected != true
                     ? WebLoginResult(qrDataUrl: result.qrDataUrl, sessionKey: next.sessionKey ?? result.sessionKey,
@@ -173,7 +203,7 @@ public final class ChannelQRLoginController {
         } catch is CancellationError {
             return
         } catch {
-            guard !Task.isCancelled else { return }
+            guard self.isCurrent(key, owner: owner) else { return }
             self.logins[key] = .failed(ChannelRules.errorText(error))
         }
     }
