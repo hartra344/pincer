@@ -510,10 +510,16 @@ public final class ToolsInspectorModel: Identifiable {
     /// The exact existing query path used by the inspector's editable filter field.
     public func searchFields(_ filter: ToolFilter, matching query: String) -> [InspectedToolGroup] {
         #if DEBUG
-        return self.inspection?.filtered(filter, search: query, observe: { self.searchProbe?.record(match: $0) }) ?? []
+        let probe = self.searchProbe
+        return self.inspection?.filtered(filter, search: query, observe: { probe?.record(match: $0) }) ?? []
         #else
         return self.inspection?.filtered(filter, search: query) ?? []
         #endif
+    }
+
+    /// Async preparation contract; neutral implementation still uses the unchanged Main filter.
+    public func prepareSearchFields(_ filter: ToolFilter, matching query: String) async -> [InspectedToolGroup] {
+        self.searchFields(filter, matching: query)
     }
 
     public init(scope: Scope, methods: @escaping @MainActor () -> Set<String>? = { nil }, request: @escaping Request) {

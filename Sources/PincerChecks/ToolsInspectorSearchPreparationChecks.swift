@@ -2,14 +2,14 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private func checkActualToolsSearch(_ model: ToolsInspectorModel, query: String, expectedID: String) {
+@MainActor private func checkActualToolsSearch(_ model: ToolsInspectorModel, query: String, expectedID: String) async {
     let probe = ToolsInspectorSearchProbe(); model.searchProbe = probe
     defer { model.searchProbe = nil }
-    let result = model.searchFields(.all, matching: query)
+    let result = await model.prepareSearchFields(.all, matching: query)
     check(result.flatMap(\.tools).contains { $0.id == expectedID }, "actual complete tool text matches the requested query")
-    let all = model.searchFields(.all, matching: "")
-    let allowed = model.searchFields(.allowed, matching: "")
-    let denied = model.searchFields(.denied, matching: "")
+    let all = await model.prepareSearchFields(.all, matching: "")
+    let allowed = await model.prepareSearchFields(.allowed, matching: "")
+    let denied = await model.prepareSearchFields(.denied, matching: "")
     check(all.flatMap(\.tools).count == allowed.flatMap(\.tools).count + denied.flatMap(\.tools).count,
           "actual allowed/denied filters partition the loaded inventory without dropping tools")
     let counts = probe.snapshot()
@@ -30,8 +30,8 @@ import Foundation
         return payload
     }
     await model.load()
-    checkActualToolsSearch(model, query: "TAILNEEDLE", expectedID: "fixture_tool")
-    check(model.searchFields(.all, matching: "no such tool").isEmpty, "actual unmatched query produces no tools")
+    await checkActualToolsSearch(model, query: "TAILNEEDLE", expectedID: "fixture_tool")
+    check(await model.prepareSearchFields(.all, matching: "no such tool").isEmpty, "actual unmatched query produces no tools")
 }
 
 @MainActor func runDemoToolsInspectorSearchPreparationChecks() async {
@@ -46,6 +46,6 @@ import Foundation
     let model = gateway.toolsInspector(sessionKey: "agent:main:main")
     await model.load()
     guard let tool = model.inspection?.allTools.first else { check(false, "actual Demo inventory includes tools"); return }
-    checkActualToolsSearch(model, query: tool.label, expectedID: tool.id)
+    await checkActualToolsSearch(model, query: tool.label, expectedID: tool.id)
 }
 #endif
