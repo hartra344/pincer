@@ -152,6 +152,7 @@ enum Suites {
             Section("Location transport") { runLocationTransportChecks() },
             Section("Location chat selection") { await runLocationSelectionChecks() },
             Section("Automations") { runAutomationChecks() },
+            Section("Automation delete versus held load") { await runAutomationDeleteLoadChecks() },
             Section("Cron run timestamp IDs") { runCronRunTimestampIDChecks() },
             Section("Activity notification timestamps") { runActivityNotificationTimestampChecks() },
             Section("Web Push") { await runWebPushChecks() },
@@ -365,6 +366,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
         LiveSection("Cron run timestamp IDs (live)") { url, token in await runLiveCronRunTimestampIDChecks(url: url, token: token) },
         LiveSection("Ingress health issues (live)") { url, token in await runLiveIngressHealthChecks(url: url, token: token) },
         LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },

@@ -440,7 +440,8 @@ public final class AutomationsModel {
     /// Actions in flight or failed, by job id.
     public private(set) var operations: [String: OperationState] = [:]
 
-    @ObservationIgnored private let connection: GatewayConnection
+    typealias Request = @MainActor (String, JSONValue, TimeInterval) async throws -> JSONValue
+    @ObservationIgnored private let request: Request
     @ObservationIgnored private let hello: () -> GatewayHello?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
@@ -448,7 +449,15 @@ public final class AutomationsModel {
     public static let runsLimit = 50
 
     init(connection: GatewayConnection, hello: @escaping () -> GatewayHello?) {
-        self.connection = connection
+        self.request = { method, params, timeout in
+            try await connection.request(method, params, timeout: timeout)
+        }
+        self.hello = hello
+    }
+
+    /// Dependency injection for the same real loading and mutation paths.
+    init(request: @escaping Request, hello: @escaping () -> GatewayHello?) {
+        self.request = request
         self.hello = hello
     }
 
@@ -469,7 +478,7 @@ public final class AutomationsModel {
             return
         }
         self.loadState = .running
-        async let status = try? self.connection.request("cron.status", [:])
+        async let status = try? self.request("cron.status", [:], 20)
         do {
             self.jobs = try await self.fetchJobs()
             self.supported = true
@@ -490,7 +499,7 @@ public final class AutomationsModel {
         for _ in 0..<20 {
             let params: JSONValue = ["includeDisabled": true, "limit": JSONValue(Self.pageSize), "offset": JSONValue(offset),
                                      "sortBy": "nextRunAtMs", "sortDir": "asc"]
-            let result = try await self.connection.request("cron.list", params, timeout: 30)
+            let result = try await self.request("cron.list", params, 30)
             let page = (result["jobs"]?.array ?? result.array ?? []).compactMap(CronJob.init)
             jobs += page
             guard result["hasMore"]?.bool == true, let next = result["nextOffset"]?.int, next > offset, !page.isEmpty
@@ -518,7 +527,7 @@ public final class AutomationsModel {
         self.runsState[jobId] = .running
         do {
             let params: JSONValue = ["scope": "job", "id": .string(jobId), "limit": JSONValue(Self.runsLimit), "sortDir": "desc"]
-            let result = try await self.connection.request("cron.runs", params, timeout: 30)
+            let result = try await self.request("cron.runs", params, 30)
             let entries = (result["entries"]?.array ?? result["runs"]?.array ?? []).compactMap(CronRun.init)
             self.runs[jobId] = entries.sorted { $0.startedAt > $1.startedAt }
             self.runsState[jobId] = .idle
@@ -529,7 +538,7 @@ public final class AutomationsModel {
 
     /// `cron.get`: refreshes one job in place.
     public func refresh(_ jobId: String) async {
-        guard let result = try? await self.connection.request("cron.get", ["id": .string(jobId)]) else { return }
+        guard let result = try? await self.request("cron.get", ["id": .string(jobId)], 20) else { return }
         self.replace(CronJob(result["job"] ?? result))
     }
 
@@ -619,7 +628,7 @@ public final class AutomationsModel {
         guard self.operations[key]?.isRunning != true else { return false }
         self.operations[key] = .running
         do {
-            let result = try await self.connection.request(method, params, timeout: 60)
+            let result = try await self.request(method, params, 60)
             await then(result)
             self.operations[key] = nil
             return true
