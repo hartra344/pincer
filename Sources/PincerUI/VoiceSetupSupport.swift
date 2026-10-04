@@ -7,7 +7,8 @@ import SwiftUI
 /// set up, and audio playback for voice previews and Test voice.
 @MainActor @Observable
 final class VoiceSetupController {
-    var busy = false
+    private let operations = VoiceSetupOperationTracker()
+    var busy: Bool { self.operations.busy }
     var notice: String?
     var error: String?
     /// The section that triggered `notice`/`error` (nil: shown at the page bottom).
@@ -25,16 +26,18 @@ final class VoiceSetupController {
     /// Runs `work`, reporting the outcome or error on the page. Returns whether it succeeded.
     @discardableResult
     func run(_ scope: String? = nil, _ work: @MainActor () async throws -> ConfigApplyOutcome?) async -> Bool {
+        let operation = self.operations.begin()
         self.error = nil
         self.notice = nil
         self.messageScope = scope
-        self.busy = true
-        defer { self.busy = false }
         do {
-            self.notice = try await work()?.message
+            let result = try await work()
+            if self.operations.finish(operation) { self.notice = result?.message }
             return true
         } catch {
-            self.error = (error as? LocalizedError)?.errorDescription ?? GatewayVoiceModel.message(error)
+            if self.operations.finish(operation) {
+                self.error = (error as? LocalizedError)?.errorDescription ?? GatewayVoiceModel.message(error)
+            }
             return false
         }
     }
