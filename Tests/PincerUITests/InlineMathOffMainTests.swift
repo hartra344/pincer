@@ -257,10 +257,8 @@ struct InlineMathOffMainTests {
             }
             #if DEBUG
             let phaseCounts = workerPhases.withLock { $0 }
-            if finished {
-                #expect(phaseCounts.allSatisfy { $0 == remaining.count },
-                        "each real submitted row must enter and exit the worker and reach its Main callback")
-            }
+            #expect(phaseCounts == Array(repeating: remaining.count, count: 4),
+                    "each real submitted row must enter and exit the worker and reach its Main callback")
             #expect(finished, "actual batch completion; submitted=\(phaseCounts[0]) workerEntered=\(phaseCounts[1]) workerExited=\(phaseCounts[2]) mainCallbacks=\(phaseCounts[3]) inFlight=\(driver.inFlightCount) adopted=\(driver.stats.adopted) pending=\(driver.admission.pendingCount)")
             #else
             #expect(finished, "the real batch completion event must arrive before test cancellation")
