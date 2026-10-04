@@ -71,5 +71,23 @@ struct ToolsInspectorSearchOwnershipTests {
         } onCancel: { Task { await gate.release() } }
     }
 
+    @Test func actualCanceledWorkerRetainsLeaseUntilCompletionButCannotPublish() async {
+        let inspection = await Task.detached {
+            ToolsInspection.build(catalog: ToolCatalog(["groups": [["id": "g", "label": "Group", "tools": [["id": "one", "label": "One", "description": "needle"]]]]]), effective: nil)
+        }.value
+        let preparation = ToolsInspectorSearchPreparation(), gate = Gate()
+        preparation.didPrepare = { await gate.holdFirst() }
+        let task = Task { await preparation.prepare(inspection, filter: .all, query: "needle", owner: UUID(), sourceRevision: 1) }
+        defer { task.cancel(); preparation.invalidate(); Task { await gate.release() } }
+        await withTaskCancellationHandler {
+            await gate.wait()
+            task.cancel()
+            #expect(preparation.activeCount == 1)
+            await gate.release()
+            let output = await task.value
+            #expect(output == nil && preparation.result == nil && preparation.activeCount == 0)
+        } onCancel: { task.cancel(); Task { await gate.release() } }
+    }
+
 }
 #endif
