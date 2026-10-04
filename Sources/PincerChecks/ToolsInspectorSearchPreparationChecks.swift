@@ -14,8 +14,16 @@ import Foundation
           "actual allowed/denied filters partition the loaded inventory without dropping tools")
     let counts = probe.snapshot()
     check(counts.mainFilters == 0 && counts.mainMatches == 0, "actual editable Tools Inspector search does no Main filtering/text matching")
-    check(counts.mainFilters + counts.workerFilters > 0 && counts.mainMatches + counts.workerMatches > 0,
+    check(counts.workerFilters > 0 && counts.workerMatches > 0,
           "bounded per-model observation records actual filter and match work")
+    let owner = UUID()
+    let displayed = await model.prepareDisplaySearch(.all, matching: query, owner: owner)
+    check(displayed?.groups.flatMap(\.tools).contains { $0.id == expectedID } == true
+          && model.searchPreparation.owns(owner, sourceRevision: model.searchSourceRevision),
+          "actual displayed query owner matches its completed source revision")
+    model.searchPreparation.invalidate()
+    check(!model.searchPreparation.owns(owner, sourceRevision: model.searchSourceRevision),
+          "section disappearance invalidates finished search publication")
 }
 
 @MainActor func runToolsInspectorSearchPreparationChecks() async {

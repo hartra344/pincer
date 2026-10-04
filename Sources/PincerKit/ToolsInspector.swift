@@ -499,6 +499,8 @@ public final class ToolsInspectorModel: Identifiable {
     public private(set) var error: String?
     /// Why the policy is catalog-only (no session, or `tools.effective` failed), shown as a note.
     public private(set) var effectiveNote: String?
+    public private(set) var searchSourceRevision = 0
+    @ObservationIgnored public let searchPreparation = ToolsInspectorSearchPreparation()
 
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
@@ -517,9 +519,19 @@ public final class ToolsInspectorModel: Identifiable {
         #endif
     }
 
-    /// Async preparation contract; neutral implementation still uses the unchanged Main filter.
+    /// Exact off-main query preparation; stale/canceled requests return no groups.
     public func prepareSearchFields(_ filter: ToolFilter, matching query: String) async -> [InspectedToolGroup] {
-        self.searchFields(filter, matching: query)
+        await self.prepareDisplaySearch(filter, matching: query, owner: UUID())?.groups ?? []
+    }
+
+    public func prepareDisplaySearch(_ filter: ToolFilter, matching query: String,
+                                     server: String? = nil, owner: UUID) async -> ToolsInspectorSearchResult? {
+        guard let inspection = self.inspection else { return nil }
+        #if DEBUG
+        self.searchPreparation.probe = self.searchProbe
+        #endif
+        return await self.searchPreparation.prepare(inspection, filter: filter, query: query,
+            server: server, owner: owner, sourceRevision: self.searchSourceRevision)
     }
 
     public init(scope: Scope, methods: @escaping @MainActor () -> Set<String>? = { nil }, request: @escaping Request) {
@@ -538,6 +550,8 @@ public final class ToolsInspectorModel: Identifiable {
     }
 
     public func load() async {
+        self.searchPreparation.invalidate()
+        self.searchSourceRevision += 1
         self.generation += 1
         let generation = self.generation
         self.isLoading = true
@@ -577,5 +591,7 @@ public final class ToolsInspectorModel: Identifiable {
         self.effective = effective
         self.effectiveNote = note
         self.inspection = ToolsInspection.build(catalog: catalog, effective: effective)
+        self.searchPreparation.invalidate()
+        self.searchSourceRevision += 1
     }
 }
