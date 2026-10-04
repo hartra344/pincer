@@ -25,6 +25,7 @@ final class VoiceSetupController {
     @ObservationIgnored private var avPlayer: AVPlayer?
     @ObservationIgnored private var clipPlayer: AVAudioPlayer?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var playbackOwnership = VoicePlaybackOwnership()
 
     /// Runs `work`, reporting the outcome or error on the page. Returns whether it succeeded.
     @discardableResult
@@ -52,8 +53,12 @@ final class VoiceSetupController {
         let player = AVPlayer(playerItem: item)
         self.avPlayer = player
         self.playingId = voice.id
+        let playback = self.playbackOwnership.begin()
         self.endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.stop() }
+            Task { @MainActor in
+                guard let self, self.playbackOwnership.owns(playback) else { return }
+                self.stop()
+            }
         }
         player.play()
     }
@@ -64,16 +69,20 @@ final class VoiceSetupController {
         guard let player = try? AVAudioPlayer(data: clip.data, fileTypeHint: clip.fileExtension) else { return }
         self.clipPlayer = player
         self.playingId = Self.testId
+        let playback = self.playbackOwnership.begin()
         player.play()
         Task { @MainActor [weak self] in
-            while let self, self.clipPlayer === player, player.isPlaying { try? await Task.sleep(for: .milliseconds(200)) }
-            if let self, self.clipPlayer === player { self.stop() }
+            while let self, self.playbackOwnership.owns(playback), self.clipPlayer === player, player.isPlaying {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            if let self, self.playbackOwnership.owns(playback), self.clipPlayer === player { self.stop() }
         }
     }
 
     static let testId = "test-voice"
 
     func stop() {
+        self.playbackOwnership.invalidate()
         self.avPlayer?.pause()
         self.avPlayer = nil
         self.clipPlayer?.stop()
