@@ -56,6 +56,7 @@ enum Suites {
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
+            Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Compact graduated header policy") { runCompactGraduatedHeaderChecks() },
             Section("Bounded cold rotor labels") { await runColdRotorLabelChecks() },
@@ -95,6 +96,7 @@ enum Suites {
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
             Section("Settings notice lifetime") { runSettingsNoticeChecks() },
+            Section("Settings save reconciliation") { await runSettingsSaveRebaseChecks() },
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section(nil) { await checkSessionManager() },
@@ -206,6 +208,7 @@ enum Suites {
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
         Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
+        Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
         Section("Device pairing action scopes (demo)") { await runDemoDevicePairingActionScopeChecks() },
         Section("Compact graduated header (demo)") { await runDemoCompactGraduatedHeaderChecks() },
@@ -248,6 +251,7 @@ enum Suites {
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
         Section("Demo agent and model settings") { await runDemoAgentModelsPageChecks() },
+        Section("Settings save (demo)") { await runSettingsSaveRebaseDemoChecks() },
         Section("Transcript headless fill (demo, #299)") { await runDemoTranscriptHeadlessFillChecks() },
         Section("Resize streaming inputs (demo, #353)") { await runDemoResizeStreamingInputs() },
         Section("Streaming clock rollback (demo, #649)") { await runDemoStreamingClockChecks() },

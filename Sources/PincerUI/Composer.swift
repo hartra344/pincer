@@ -29,6 +29,13 @@ struct Composer: View {
     private var dictation: DictationModel { self.dictationHolder.model }
     @ScaledMetric(relativeTo: .body) private var attachIconSize: CGFloat = 14
 
+    init(chat: ChatStore, placeholder: String, find: TranscriptFind? = nil, dictationModel: DictationModel? = nil) {
+        self.chat = chat
+        self.placeholder = placeholder
+        self.find = find
+        self._dictationHolder = State(initialValue: DictationHolder(model: dictationModel))
+    }
+
     private static let corner: CGFloat = 22
     /// Height of a single-line field, which the side controls match.
     static let controlHeight: CGFloat = 40
@@ -336,10 +343,21 @@ struct Composer: View {
             self.send()
             return
         }
+        let ownerID = self.chat.draft.ownerID
+        let editingMessageID = self.chat.editTarget?.messageId
+        let dictation = self.dictation
+        let sendRevision = dictation.deferredSendRevision
         self.sendPending = true
-        Task {
-            await self.dictation.finishForSend()
+        Task { [weak chat = self.chat] in
+            guard dictation.deferredSendRevision == sendRevision,
+                  let chat, chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else {
+                self.sendPending = false
+                return
+            }
+            let accepted = await dictation.finishForSend()
             self.sendPending = false
+            guard accepted, dictation.deferredSendRevision == sendRevision,
+                  chat.ownsDeferredSend(draftOwnerID: ownerID, editingMessageID: editingMessageID) else { return }
             self.send()
         }
     }

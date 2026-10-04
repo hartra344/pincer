@@ -9,7 +9,9 @@ import AppKit
 /// Builds the engine and model once, when first needed; `@State`'s own initial value is rebuilt on every view init.
 @MainActor
 final class DictationHolder {
-    lazy var model = DictationModel(engine: SpeechDictationEngine())
+    private let injectedModel: DictationModel?
+    init(model: DictationModel? = nil) { self.injectedModel = model }
+    lazy var model = self.injectedModel ?? DictationModel(engine: SpeechDictationEngine())
 }
 
 /// The composer's microphone button: dictates into the draft, live, and never sends.
@@ -176,7 +178,7 @@ extension View {
     func dictationLifecycle(_ model: DictationModel, draft: String, chatKey: String) -> some View {
         self
             .onChange(of: draft) { _, text in model.draftChangedExternally(text) }
-            .onChange(of: chatKey) { model.finish() }
-            .onDisappear { model.finish() }
+            .onChange(of: chatKey) { model.invalidateDeferredSend(); model.finish() }
+            .onDisappear { model.invalidateDeferredSend(); model.finish() }
     }
 }

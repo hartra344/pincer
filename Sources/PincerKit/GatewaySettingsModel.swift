@@ -43,12 +43,25 @@ public final class GatewaySettingsModel {
     @ObservationIgnored private let scopes: () -> [String]
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
     @ObservationIgnored private var schemaGeneration = 0
+    @ObservationIgnored private var editRevision = 0
+    @ObservationIgnored private var snapshotRevision = 0
+    @ObservationIgnored private var snapshotRequest = 0
+    @ObservationIgnored private var snapshotAppliedRequest = 0
+    @ObservationIgnored private var writeInFlight = false
+    @ObservationIgnored private var writeSubmitted: ConfigEdits?
+    @ObservationIgnored private var writeIntent = ConfigEdits.LocalIntent()
 
     /// A top-level key the demo may save without `operator.admin` (its MCP servers).
     @ObservationIgnored private let rootWritableWithoutAdmin: String?
 
     init(connection: GatewayConnection, scopes: @escaping () -> [String], rootWritableWithoutAdmin: String? = nil) {
         self.client = GatewayConfigClient(connection: connection)
+        self.scopes = scopes
+        self.rootWritableWithoutAdmin = rootWritableWithoutAdmin
+    }
+
+    init(request: @escaping GatewayConfigClient.Request, scopes: @escaping () -> [String], rootWritableWithoutAdmin: String? = nil) {
+        self.client = GatewayConfigClient(request: request)
         self.scopes = scopes
         self.rootWritableWithoutAdmin = rootWritableWithoutAdmin
     }
@@ -87,18 +100,25 @@ public final class GatewaySettingsModel {
     }
 
     func reloadConfig() async {
+        self.snapshotRequest += 1
+        let request = self.snapshotRequest
         do {
-            self.apply(try await self.client.snapshot())
+            let snapshot = try await self.client.snapshot()
+            guard request >= self.snapshotAppliedRequest else { return }
+            self.snapshotAppliedRequest = request
+            self.apply(snapshot)
             self.configSupported = true
         } catch GatewayConfigClient.Unsupported.method {
-            self.configSupported = false
+            if request >= self.snapshotAppliedRequest { self.configSupported = false }
         } catch {
-            self.loadState = .failed(error.localizedDescription)
+            if request >= self.snapshotAppliedRequest { self.loadState = .failed(error.localizedDescription) }
         }
     }
 
     /// Takes a fresh snapshot, keeping unsaved edits on top of it.
     private func apply(_ snapshot: ConfigSnapshot) {
+        self.snapshotRevision += 1
+        self.editRevision += 1
         let first = self.snapshot == nil
         self.snapshot = snapshot
         if first {
@@ -192,7 +212,9 @@ public final class GatewaySettingsModel {
     // MARK: Editing
 
     public func set(_ path: [String], _ value: JSONValue?) {
+        self.editRevision += 1
         self.edits.set(path, value)
+        if self.writeSubmitted != nil { self.writeIntent.set(path, value) }
         self.edits.texts.removeValue(forKey: ConfigPath.string(path))
         self.edits.inputErrors.removeValue(forKey: ConfigPath.string(path))
         self.clearIssue(at: path)
@@ -200,16 +222,21 @@ public final class GatewaySettingsModel {
 
     /// Text typed into a field: kept as typed, and applied once it parses.
     public func setText(_ text: String, for field: ConfigField) {
+        self.editRevision += 1
         self.edits.texts[field.id] = text
         self.clearIssue(at: field.path)
         if field.kind == .secret, text.isEmpty {
             // An empty secret box keeps the saved secret.
-            self.edits.set(field.path, self.savedValue(at: field.path))
+            let value = self.savedValue(at: field.path)
+            self.edits.set(field.path, value)
+            if self.writeSubmitted != nil { self.writeIntent.set(field.path, value) }
             self.edits.inputErrors.removeValue(forKey: field.id)
             return
         }
         do {
-            self.edits.set(field.path, try field.value(fromText: text))
+            let value = try field.value(fromText: text)
+            self.edits.set(field.path, value)
+            if self.writeSubmitted != nil { self.writeIntent.set(field.path, value) }
             self.edits.inputErrors.removeValue(forKey: field.id)
         } catch {
             self.edits.inputErrors[field.id] = error.localizedDescription
@@ -225,19 +252,33 @@ public final class GatewaySettingsModel {
     public func inputError(for field: ConfigField) -> String? { self.edits.inputErrors[field.id] }
 
     public func revert(_ path: [String]) {
+        self.editRevision += 1
+        if self.writeSubmitted != nil { self.writeIntent.set(path, self.savedValue(at: path)) }
         self.edits.revert(path)
         self.conflicts.removeAll { $0.path.starts(with: path) }
     }
 
     public func discardChanges() {
+        self.editRevision += 1
+        if let submitted = self.writeSubmitted {
+            // Capture only affected paths, not a full-config diff; values remain COW references.
+            let paths = Set(submitted.edits.keys).union(self.edits.edits.keys).union(self.writeIntent.values.keys)
+            for path in paths.sorted(by: { $0.count < $1.count }) {
+                self.writeIntent.set(path, self.savedValue(at: path))
+            }
+        }
         self.edits.discardAll()
         self.conflicts = []
         self.writeIssues = []
-        self.saveState = .idle
+        if !self.writeInFlight { self.saveState = .idle }
     }
 
     /// Resolves a conflict by keeping this draft's value or taking the Gateway's.
     public func resolve(_ conflict: ConfigEdits.Conflict, keepMine: Bool) {
+        self.editRevision += 1
+        if self.writeSubmitted != nil {
+            self.writeIntent.set(conflict.path, keepMine ? self.value(at: conflict.path) : self.savedValue(at: conflict.path))
+        }
         if !keepMine { self.edits.revert(conflict.path) }
         self.conflicts.removeAll { $0.id == conflict.id }
     }
@@ -257,21 +298,30 @@ public final class GatewaySettingsModel {
     /// meanwhile, the edits move onto the new config and are sent again unless they clash.
     @discardableResult
     public func save(note: String = "Pincer: Gateway Settings") async -> Bool {
+        guard !self.writeInFlight else { return false }
         if let blocker = self.saveBlocker {
             self.saveState = .failed(blocker)
             return false
         }
-        guard self.edits.patch != nil else {
-            self.edits.discardAll()
-            return true
-        }
+        self.writeInFlight = true
+        defer { self.writeInFlight = false; self.writeSubmitted = nil; self.writeIntent = .init() }
         self.saveState = .running
         self.writeIssues = []
         for attempt in 0..<2 {
-            guard let patch = self.edits.patch else { break }
+            let submitted = self.edits
+            self.writeSubmitted = submitted
+            self.writeIntent = .init()
+            let revision = self.editRevision
+            let snapshotAtAdmission = self.snapshotRevision
+            let requestAtAdmission = self.snapshotRequest
+            let baseHash = self.snapshot?.hash
+            let prepared = await Task.detached(priority: .userInitiated) {
+                (submitted.patch, submitted.replacePaths)
+            }.value
+            guard let patch = prepared.0 else { self.saveState = .idle; return true }
             do {
-                let result = try await self.client.patch(patch, replacePaths: self.edits.replacePaths,
-                                                         baseHash: self.snapshot?.hash, note: note)
+                let result = try await self.client.patch(patch, replacePaths: prepared.1,
+                                                         baseHash: baseHash, note: note)
                 await self.finishWrite(ConfigApplyOutcome(configWrite: result), touchedPlugins: patch["plugins"] != nil)
                 return true
             } catch .staleHash where attempt == 0 {
@@ -281,7 +331,7 @@ public final class GatewaySettingsModel {
                     return false
                 }
             } catch {
-                return await self.fail(error, touchedPlugins: patch["plugins"] != nil)
+                return await self.fail(error, touchedPlugins: patch["plugins"] != nil, revision: revision, snapshotAtAdmission: snapshotAtAdmission, requestAtAdmission: requestAtAdmission)
             }
         }
         self.saveState = .failed(ConfigWriteError.staleHash.message + " Try saving again.")
@@ -291,6 +341,9 @@ public final class GatewaySettingsModel {
     /// Writes one channel's reaction level straight away with `config.patch`, leaving any other unsaved
     /// edits in place. Returns an error message, or nil when saved.
     public func saveReactionLevel(channel: String, account: String?, level: ReactionLevel?) async -> String? {
+        guard !self.writeInFlight else { return L("A settings save is already in progress.") }
+        self.writeInFlight = true
+        defer { self.writeInFlight = false; self.writeSubmitted = nil; self.writeIntent = .init() }
         if !self.canEdit { return ConfigWriteError.adminRequired.message }
         if self.snapshot == nil { await self.reloadConfig() }
         guard self.snapshot != nil else { return "Gateway Settings hasn't loaded yet." }
@@ -299,7 +352,7 @@ public final class GatewaySettingsModel {
             do {
                 let result = try await self.client.patch(patch, replacePaths: [], baseHash: self.snapshot?.hash,
                                                          note: "Pincer: Reaction level")
-                if let fresh = try? await self.client.snapshot() { self.apply(fresh) }
+                await self.reloadConfig()
                 self.record(ConfigApplyOutcome(configWrite: result))
                 return nil
             } catch .staleHash where attempt == 0 {
@@ -314,6 +367,9 @@ public final class GatewaySettingsModel {
     /// Replaces the whole config with `config.apply`. Redacted secrets left as they are are kept.
     @discardableResult
     public func saveRaw(_ text: String) async -> Bool {
+        guard !self.writeInFlight else { return false }
+        self.writeInFlight = true
+        defer { self.writeInFlight = false; self.writeSubmitted = nil; self.writeIntent = .init() }
         if !self.canEdit {
             self.saveState = .failed(ConfigWriteError.adminRequired.message)
             return false
@@ -322,6 +378,11 @@ public final class GatewaySettingsModel {
             self.saveState = .failed("The config can't be empty.")
             return false
         }
+        self.writeSubmitted = self.edits
+        self.writeIntent = .init()
+        let revision = self.editRevision
+        let snapshotAtAdmission = self.snapshotRevision
+        let requestAtAdmission = self.snapshotRequest
         self.saveState = .running
         self.writeIssues = []
         do {
@@ -329,7 +390,7 @@ public final class GatewaySettingsModel {
             await self.finishWrite(ConfigApplyOutcome(configWrite: result), touchedPlugins: true)
             return true
         } catch {
-            return await self.fail(error, touchedPlugins: true)
+            return await self.fail(error, touchedPlugins: true, revision: revision, snapshotAtAdmission: snapshotAtAdmission, requestAtAdmission: requestAtAdmission)
         }
     }
 
@@ -344,28 +405,64 @@ public final class GatewaySettingsModel {
         if outcome.needsManualRestart { self.onRestartRequired?(outcome.message) }
     }
 
-    private func reloadAfterWrite(touchedPlugins: Bool) async {
-        if let snapshot = try? await self.client.snapshot() {
-            self.snapshot = snapshot
-            self.edits = ConfigEdits(base: snapshot.config)
+    /// One worker per active write; edits during its computation cause a fresh capture, never
+    /// another queued job per keystroke. Captures retain COW payloads; edits can fork their
+    /// buffers, so the admitted/latest/acknowledged snapshots still have a memory cost.
+    /// Main only swaps finished state after verifying its revisions.
+    private func acknowledge(_ snapshot: ConfigSnapshot) async {
+        while true {
+            let revision = self.editRevision
+            let snapshotRevision = self.snapshotRevision
+            let latest = self.edits
+            let intent = self.writeIntent
+            let hasAdmission = self.writeSubmitted != nil
+            let base = self.snapshotRevision > 0 ? (self.snapshot?.config ?? snapshot.config) : snapshot.config
+            let merged = await Task.detached(priority: .userInitiated) {
+                if hasAdmission { return ConfigEdits.acknowledging(intent: intent, latest: latest, base: base) }
+                // Immediate plugin writes keep the existing structured draft.
+                var edits = latest
+                _ = edits.rebase(onto: base)
+                return edits
+            }.value
+            guard revision == self.editRevision, snapshotRevision == self.snapshotRevision else { continue }
+            self.edits = merged
             self.conflicts = []
+            self.editRevision += 1
+            return
         }
-        // Plugin settings decide whether a plugin still needs setup.
+    }
+
+    private func reloadAfterWrite(touchedPlugins: Bool) async {
+        self.snapshotRequest += 1
+        let request = self.snapshotRequest
+        if let snapshot = try? await self.client.snapshot() {
+            if request >= self.snapshotAppliedRequest {
+                self.snapshotAppliedRequest = request
+                self.snapshot = snapshot
+                self.snapshotRevision += 1
+            }
+            await self.acknowledge(snapshot)
+        }
         if touchedPlugins, self.pluginsSupported { await self.reloadPlugins() }
     }
 
-    private func fail(_ error: ConfigWriteError, touchedPlugins: Bool) async -> Bool {
+    private func fail(_ error: ConfigWriteError, touchedPlugins: Bool, revision: Int? = nil, snapshotAtAdmission: Int? = nil, requestAtAdmission: Int? = nil) async -> Bool {
         switch error {
         case let .invalid(issues):
-            self.writeIssues = issues
+            self.writeIssues = revision == nil || revision == self.editRevision ? issues : []
             self.saveState = .failed(error.message)
         case let .notApplied(message, persisted, hash):
             // Persisted but not applied: this is now the saved config.
-            if let persisted {
-                self.snapshot = ConfigSnapshot(config: persisted, hash: hash, previous: self.snapshot)
-                self.edits = ConfigEdits(base: persisted)
-                self.conflicts = []
+            if let persisted, snapshotAtAdmission == nil || snapshotAtAdmission == self.snapshotRevision {
+                let snapshot = ConfigSnapshot(config: persisted, hash: hash, previous: self.snapshot)
+                // This provenance belongs to the admitted write, not its later error arrival.
+                self.snapshotAppliedRequest = max(self.snapshotAppliedRequest, requestAtAdmission ?? self.snapshotAppliedRequest)
+                self.snapshot = snapshot
+                self.snapshotRevision += 1
+                await self.acknowledge(snapshot)
             } else {
+                // A snapshot observed during the write may predate or postdate persistence.
+                // Fetch current authority rather than guessing that the older response is newer.
                 await self.reloadAfterWrite(touchedPlugins: touchedPlugins)
             }
             self.saveState = .idle

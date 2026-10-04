@@ -149,25 +149,37 @@ public enum OperationState: Equatable, Sendable {
 /// the Gateway validates, persists and hot-applies (or restarts) itself.
 @MainActor
 struct GatewayConfigClient {
-    let connection: GatewayConnection
+    typealias Request = @MainActor @Sendable (String, JSONValue, TimeInterval) async throws -> JSONValue
+    private let request: Request
+
+    init(connection: GatewayConnection) {
+        self.request = { method, params, timeout in
+            try await connection.request(method, params, timeout: timeout)
+        }
+    }
+
+    init(request: @escaping Request) {
+        self.request = request
+    }
 
     enum Unsupported: Error { case method }
 
     func snapshot() async throws -> ConfigSnapshot {
         do {
-            return ConfigSnapshot(response: try await self.connection.request("config.get", [:], timeout: 20))
+            return ConfigSnapshot(response: try await self.request("config.get", [:], 20))
         } catch let error where GatewayError.isUnknownMethod(error) {
             throw Unsupported.method
         }
     }
 
     func schema() async -> ConfigSchema? {
-        guard let result = try? await self.connection.request("config.schema", [:], timeout: 30) else { return nil }
+        guard let result = try? await self.request("config.schema", [:], 30) else { return nil }
         return ConfigSchema(response: result)
     }
 
     func patch(_ patch: JSONValue, replacePaths: [String], baseHash: String?, note: String?) async throws(ConfigWriteError) -> JSONValue {
-        var params: [String: JSONValue] = ["raw": .string(patch.compactString())]
+        let raw = await Task.detached(priority: .userInitiated) { patch.compactString() }.value
+        var params: [String: JSONValue] = ["raw": .string(raw)]
         if !replacePaths.isEmpty { params["replacePaths"] = JSONValue(replacePaths) }
         if let note { params["note"] = .string(note) }
         if let baseHash { params["baseHash"] = .string(baseHash) }
@@ -182,7 +194,7 @@ struct GatewayConfigClient {
 
     private func write(_ method: String, _ params: [String: JSONValue]) async throws(ConfigWriteError) -> JSONValue {
         do {
-            return try await self.connection.request(method, .object(params), timeout: 60)
+            return try await self.request(method, .object(params), 60)
         } catch {
             throw ConfigWriteError(error)
         }
@@ -190,7 +202,7 @@ struct GatewayConfigClient {
 
     func plugins() async throws -> [PluginInfo] {
         do {
-            let result = try await self.connection.request("plugins.list", [:], timeout: 20)
+            let result = try await self.request("plugins.list", [:], 20)
             return (result["plugins"]?.array ?? []).compactMap(PluginInfo.init)
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         } catch let error where GatewayError.isUnknownMethod(error) {
@@ -199,13 +211,13 @@ struct GatewayConfigClient {
     }
 
     func credentials(for pluginId: String) async -> [PluginCredential]? {
-        guard let result = try? await self.connection.request("plugins.inspect", ["pluginId": .string(pluginId)]) else {
+        guard let result = try? await self.request("plugins.inspect", ["pluginId": .string(pluginId)], 20) else {
             return nil
         }
         return (result["credentials"]?.array ?? []).compactMap(PluginCredential.init)
     }
 
     func pluginChange(_ method: String, _ params: [String: JSONValue], timeout: TimeInterval) async throws -> JSONValue {
-        try await self.connection.request(method, .object(params), timeout: timeout)
+        try await self.request(method, .object(params), timeout)
     }
 }

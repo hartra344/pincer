@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "A settings save is already in progress.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A settings save is already in progress."
+          }
+        }
+      }
+    },
     "Preparing attachments…": {
       "localizations": {
         "en": {

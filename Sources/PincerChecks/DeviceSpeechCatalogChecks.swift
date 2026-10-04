@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Synchronization
 import PincerKit
@@ -16,6 +17,7 @@ private final class CatalogSilentPlayer: ReadAloudClipPlaying {
 
 @MainActor
 func runDeviceSpeechCatalogChecks() async {
+    await checkReadAloudRateBounds()
     let probe = DiscoveryThreadProbe()
     let catalog = DeviceSpeechCatalog { locale in
         probe.record(Thread.isMainThread)
@@ -47,6 +49,7 @@ func runDeviceSpeechCatalogChecks() async {
 
 @MainActor
 func runDemoDeviceSpeechCatalogChecks() async {
+    await checkDemoReadAloudRatePlayback()
     let catalog = DeviceSpeechCatalog { locale in
         DeviceSpeechCatalogSnapshot(
             localeIdentifier: locale,
@@ -61,4 +64,63 @@ func runDemoDeviceSpeechCatalogChecks() async {
           "the demo's saved device voice appears when the platform catalog is ready")
     check(catalog.snapshot?.dictationSupport?.supported == true,
           "the demo dictation section uses the same locale support snapshot")
+}
+
+
+@MainActor
+private final class CatalogRateSpeaker: ReadAloudLocalSpeaking {
+    var rates: [Float] = []
+    func speak(_ text: String, voice: String?, rate: Float) async -> Bool {
+        self.rates.append(rate)
+        return true
+    }
+    func stop() {}
+}
+
+@MainActor
+private func checkReadAloudRateBounds() async {
+    check(ReadAloudSettings.normalizedDeviceRate(Double.greatestFiniteMagnitude) == ReadAloudSettings.rateRange.upperBound
+          && ReadAloudSettings.normalizedDeviceRate(-Double.greatestFiniteMagnitude) == ReadAloudSettings.rateRange.lowerBound,
+          "Read Aloud finite speeds clamp before Float conversion")
+    check([Double.nan, .infinity, -.infinity].allSatisfy {
+        ReadAloudSettings.normalizedDeviceRate($0) == AVSpeechUtteranceDefaultSpeechRate
+    }, "invalid stored Read Aloud speeds use the existing default")
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set(Double.greatestFiniteMagnitude, forKey: ReadAloudSettings.rateKey)
+    let speaker = CatalogRateSpeaker()
+    let controller = ReadAloudController(localSpeaker: speaker, defaults: defaults)
+    defer { controller.stop() }
+    controller.testDeviceVoice("Rate sample")
+    let spoke = await waitFor("bounded device rate", timeout: 2) { !speaker.rates.isEmpty }
+    check(spoke && speaker.rates == [ReadAloudSettings.rateRange.upperBound],
+          "actual device playback receives the bounded stored speed")
+}
+
+@MainActor
+private func checkDemoReadAloudRatePlayback() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    defer { gateway.stop() }
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let key = "agent:main:dashboard:trip"
+    guard await waitFor("Read Aloud rate Demo", timeout: 25, {
+        gateway.state.isConnected && gateway.sessions[key] != nil
+    }) else { check(false, "actual Read Aloud rate Demo connects"); return }
+    let chat = gateway.chat(for: key)
+    await chat.load()
+    let items = chat.items
+    guard let reply = await Task.detached(operation: { SpeechText.latestSpeakableReply(in: items) }).value else {
+        check(false, "actual seeded Demo has a readable reply"); return
+    }
+    defaults.set(Double.greatestFiniteMagnitude, forKey: ReadAloudSettings.rateKey)
+    let speaker = CatalogRateSpeaker()
+    let controller = ReadAloudController(localSpeaker: speaker, defaults: defaults)
+    defer { controller.stop() }
+    controller.testDeviceVoice(reply.text)
+    let spoke = await waitFor("Demo bounded device rate", timeout: 2) { !speaker.rates.isEmpty }
+    check(spoke && speaker.rates == [ReadAloudSettings.rateRange.upperBound],
+          "actual seeded Demo reply reaches device playback with a safe stored speed")
 }

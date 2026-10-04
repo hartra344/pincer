@@ -29,9 +29,14 @@ struct ReadAloudSettingsSection: View {
         return ReadAloudSettings.displayedDeviceVoice(stored: self.deviceVoice, available: self.voices.map(\.id))
     }
 
+    private var shownRate: Binding<Double> {
+        Binding(get: { Double(ReadAloudSettings.normalizedDeviceRate(self.rate)) },
+                set: { self.rate = Double(ReadAloudSettings.normalizedDeviceRate($0)) })
+    }
+
     private var rateDescription: String {
         let range = ReadAloudSettings.rateRange
-        let fraction = (Float(self.rate) - range.lowerBound) / (range.upperBound - range.lowerBound)
+        let fraction = (ReadAloudSettings.normalizedDeviceRate(self.rate) - range.lowerBound) / (range.upperBound - range.lowerBound)
         return "\(Int((fraction * 100).rounded())) \(L("percent"))"
     }
 
@@ -53,7 +58,7 @@ struct ReadAloudSettingsSection: View {
                 ForEach(self.voices) { Text($0.name).tag($0.id) }
             }
             LabeledContent(L("Speaking Rate")) {
-                Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound)) {
+                Slider(value: self.shownRate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound)) {
                     Text("Speaking Rate", bundle: .module)
                 } minimumValueLabel: {
                     Text("Slower", bundle: .module)
