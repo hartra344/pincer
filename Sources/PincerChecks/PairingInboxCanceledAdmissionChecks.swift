@@ -52,7 +52,7 @@ import Foundation
 @MainActor func runPairingInboxCanceledAdmissionChecks() async {
     await checkPairingCanceledAdmission { _, _ in
         ["accounts": [["channel": "telegram", "channelLabel": "Telegram", "accountId": "home", "accountLabel": "Home bot", "notifySupported": true]],
-         "requests": [["requestId": "fixture-request", "channel": "telegram", "accountId": "home", "senderId": "4411", "notifySupported": true]],
+         "requests": [["requestId": "fixture-request", "channel": "telegram", "channelLabel": "Telegram", "accountId": "home", "senderId": "4411", "senderLabel": "Telegram user id", "createdAt": "2026-10-04T19:00:00Z", "lastSeenAt": "2026-10-04T19:00:00Z", "expiresAt": "2026-10-04T20:00:00Z", "notifySupported": true]],
          "commandOwnerConfigured": false, "limits": ["pendingPerAccount": 3, "ttlMs": 3600000]]
     }
 }
