@@ -12,8 +12,8 @@ struct ExportFileStagingCallerTests {
         let staging = ExportFileStaging(root: root), probe = ExportFileStagingProbe()
         staging.probe = probe
         do {
-            let first = try #require(SharedFile.write(name: "Export.txt", data: data, staging: staging))
-            let second = try #require(SharedFile.write(name: "Export.txt", data: data, staging: staging))
+            let first = try #require(await SharedFile.write(name: "Export.txt", data: data, staging: staging))
+            let second = try #require(await SharedFile.write(name: "Export.txt", data: data, staging: staging))
             let bytes = try await Task.detached { try Data(contentsOf: first.url) }.value
             #expect(bytes == data && !bytes.isEmpty && first.url.lastPathComponent == "Export.txt")
             #expect(first.id != second.id && first.url.deletingLastPathComponent() != second.url.deletingLastPathComponent())

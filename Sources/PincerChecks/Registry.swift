@@ -233,6 +233,7 @@ enum Suites {
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
         sections.append(Section("Export file staging") { await runExportFileStagingChecks() })
+        sections.append(Section("Export file staging ownership") { await runExportFileStagingOwnershipChecks() })
         sections.append(Section("Tools Inspector search preparation") { await runToolsInspectorSearchPreparationChecks() })
         sections.append(Section("UI readiness cancellation") { await runUITestReadinessCancellationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })

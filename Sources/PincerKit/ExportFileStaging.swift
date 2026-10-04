@@ -23,28 +23,64 @@ package final class ExportFileStagingProbe: @unchecked Sendable {
 }
 #endif
 
-/// Actual temporary-file staging used by iOS Export. Neutral extraction retains synchronous Main I/O.
+/// Actual temporary-file staging used by iOS Export. Each invocation awaits its real worker.
 @MainActor package final class ExportFileStaging {
+    private struct Input: Sendable {
+        let root: URL?
+        let name: String
+        let data: Data
+        #if DEBUG
+        let probe: ExportFileStagingProbe?
+        let afterWrite: (@Sendable (URL?) async -> Void)?
+        #endif
+    }
     private let root: URL?
     #if DEBUG
     package var probe: ExportFileStagingProbe?
+    package var afterWrite: (@Sendable (URL?) async -> Void)?
     #endif
     package init(root: URL? = nil) { self.root = root }
-    /// Async preparation entry point preserves the same actual synchronous implementation before the worker fix.
-    package func prepare(name: String, data: Data) async -> URL? { self.write(name: name, data: data) }
-    package func write(name: String, data: Data) -> URL? {
-        let folder = (root ?? FileManager.default.temporaryDirectory).appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let url = folder.appendingPathComponent(name)
+    package func prepare(name: String, data: Data) async -> URL? {
+        guard !Task.isCancelled else { return nil }
+        #if DEBUG
+        let input = Input(root: root, name: name, data: data, probe: probe, afterWrite: afterWrite)
+        #else
+        let input = Input(root: root, name: name, data: data)
+        #endif
+        let worker = Task.detached(priority: .userInitiated) {
+            let result = Self.write(input)
+            #if DEBUG
+            await input.afterWrite?(result)
+            #endif
+            return result
+        }
+        let result = await worker.value
+        guard !Task.isCancelled else {
+            if let result { await Self.discard(result) }
+            return nil
+        }
+        return result
+    }
+    /// Removes only the unique directory belonging to this unused result, never older exports.
+    package nonisolated static func discard(_ url: URL) async {
+        await Task.detached { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }.value
+    }
+    private nonisolated static func write(_ input: Input) -> URL? {
+        let folder = (input.root ?? FileManager.default.temporaryDirectory).appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = folder.appendingPathComponent(input.name)
         do {
             #if DEBUG
-            probe?.record(writing: false)
+            input.probe?.record(writing: false)
             #endif
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             #if DEBUG
-            probe?.record(writing: true)
+            input.probe?.record(writing: true)
             #endif
-            try data.write(to: url, options: .atomic)
-        } catch { return nil }
+            try input.data.write(to: url, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            return nil
+        }
         return url
     }
 }

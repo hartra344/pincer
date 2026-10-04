@@ -138,8 +138,8 @@ struct SharedFile: Identifiable {
     let id = UUID()
     let url: URL
 
-    @MainActor static func write(name: String, data: Data, staging: ExportFileStaging? = nil) -> SharedFile? {
-        guard let url = (staging ?? ExportFileStaging()).write(name: name, data: data) else { return nil }
+    @MainActor static func write(name: String, data: Data, staging: ExportFileStaging? = nil) async -> SharedFile? {
+        guard let url = await (staging ?? ExportFileStaging()).prepare(name: name, data: data) else { return nil }
         return SharedFile(url: url)
     }
 }

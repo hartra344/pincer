@@ -47,6 +47,7 @@ struct ChatView: View {
     @Environment(\.chatPaneHandles) private var paneHandles
     #if os(iOS)
     @State private var sharedFile: SharedFile?
+    @State private var sharedFilePreparation = SharedFilePreparation()
     #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
@@ -239,6 +240,7 @@ struct ChatView: View {
         .sheet(item: self.$sharedFile) { file in
             ActivityView(url: file.url).presentationDetents([.medium, .large])
         }
+        .onDisappear { self.sharedFilePreparation.cancel() }
         #endif
         .sheet(isPresented: self.$exportState.showBookmarks) {
             BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey,
@@ -279,11 +281,13 @@ struct ChatView: View {
         guard let file = self.pendingExport else { return }
         self.pendingExport = nil
         #if os(iOS)
-        guard let shared = SharedFile.write(name: file.name, data: file.data) else {
-            self.exportError = L("The file couldn't be prepared for sharing.")
-            return
+        self.sharedFilePreparation.request(name: file.name, data: file.data) { shared in
+            guard let shared else {
+                self.exportError = L("The file couldn't be prepared for sharing.")
+                return
+            }
+            self.sharedFile = shared
         }
-        self.sharedFile = shared
         #else
         self.exporting = file
         #endif
