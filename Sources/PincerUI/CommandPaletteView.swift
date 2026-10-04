@@ -1,5 +1,6 @@
 import PincerKit
 import SwiftUI
+import Observation
 
 /// ⌘K: jump to a chat, start a chat with an agent, run a command, or search messages (⇧⌘F),
 /// all from the keyboard. Type to filter, ↑/↓ to move, Return to run, Esc to go back or close.
@@ -28,6 +29,8 @@ struct CommandPaletteView: View {
     @State private var messages: MessageResults?
     @State private var searchingMessages = false
     @State private var selection: String?
+    @State private var ranking = PaletteSearchCoordinator()
+    @State private var rankingOwner = UUID()
     @FocusState private var focused: Bool
     #if os(macOS)
     @State private var keyMonitor: Any?
@@ -42,6 +45,7 @@ struct CommandPaletteView: View {
     /// rather than on every render (hover, arrow keys, typing).
     private struct MessageResults {
         let gatewayId: UUID
+        let owner: UUID
         let results: MessageSearch.Results
         let items: [PaletteItem]
         /// Highlighted snippet text by item id.
@@ -81,13 +85,13 @@ struct CommandPaletteView: View {
             HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: self.fieldSymbol)
                     .foregroundStyle(.secondary)
-                TextField(self.placeholder, text: self.$query)
+                TextField(self.placeholder, text: self.queryBinding)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused(self.$focused)
-                    .onSubmit { self.runSelection(in: results) }
-                    .onKeyPress(.upArrow) { self.move(-1, in: results); return .handled }
-                    .onKeyPress(.downArrow) { self.move(1, in: results); return .handled }
+                    .onSubmit { self.runSelection(in: self.results) }
+                    .onKeyPress(.upArrow) { self.move(-1, in: self.results); return .handled }
+                    .onKeyPress(.downArrow) { self.move(1, in: self.results); return .handled }
                     .onKeyPress(.escape) { self.escape(); return .handled }
                     .onKeyPress(.delete) {
                         guard self.page != .root, self.query.isEmpty else { return .ignored }
@@ -105,7 +109,7 @@ struct CommandPaletteView: View {
             Divider()
             if self.page == .messages {
                 self.messagesPage(results)
-            } else if results.isEmpty {
+            } else if results.isEmpty && self.ranking.owns(self.rankingOwner) {
                 Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? L("Loading models…") : L("No matches"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
@@ -136,7 +140,14 @@ struct CommandPaletteView: View {
         #if os(macOS)
         .onDisappear { self.removeKeyMonitor() }
         #endif
+        .onDisappear { self.ranking.disappear() }
         .onChange(of: self.query) { self.selection = nil }
+        .onChange(of: self.thinkingDisplay) { self.invalidateRanking() }
+        .onChange(of: self.dictationSceneID) { self.invalidateRanking() }
+        .onChange(of: self.readAloud?.isEnabled) { self.invalidateRanking() }
+        .onChange(of: self.readAloud.map(ObjectIdentifier.init)) { self.invalidateRanking() }
+        .onChange(of: self.isPresented) { if !self.isPresented { self.ranking.disappear() } }
+        .task(id: RankingTaskKey(owner: self.rankingOwner, source: self.ranking.refreshRevision)) { await self.prepareRanking(owner: self.rankingOwner) }
         .task(id: self.page) {
             guard self.page == .models, let gateway = self.gateway, let row = self.row else { return }
             await gateway.loadModels(agentId: row.agentId)
@@ -177,6 +188,7 @@ struct CommandPaletteView: View {
             return
         }
         let key = self.messageSearchKey
+        let owner = self.rankingOwner
         guard let gateway, MessageSearch.ftsQuery(key.query) != nil else {
             self.messages = nil
             self.searchingMessages = false
@@ -206,7 +218,8 @@ struct CommandPaletteView: View {
         for item in items {
             if let snippet = item.snippet { snippets[item.id] = self.snippetText(snippet) }
         }
-        self.messages = MessageResults(gatewayId: gateway.id, results: results, items: items, snippets: snippets)
+        guard owner == self.rankingOwner else { return }
+        self.messages = MessageResults(gatewayId: gateway.id, owner: owner, results: results, items: items, snippets: snippets)
     }
 
     /// The messages page's notice for the current state, when it has one instead of results.
@@ -309,8 +322,10 @@ struct CommandPaletteView: View {
     }
 
     private func row(_ item: PaletteItem, selected: Bool) -> some View {
-        Button {
-            self.run(item)
+        let renderedOwner = self.rankingOwner
+        let renderedRevision = self.page == .messages ? nil : self.ranking.result?.revision
+        return Button {
+            self.run(item, expectedOwner: renderedOwner, expectedRevision: renderedRevision)
         } label: {
             HStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: item.symbol)
@@ -371,7 +386,42 @@ struct CommandPaletteView: View {
 
     // MARK: Items
 
+    private var queryBinding: Binding<String> {
+        Binding(get: { self.query }, set: { value in
+            self.query = value
+            self.invalidateRanking()
+        })
+    }
+
+    private func invalidateRanking() {
+        self.ranking.invalidate()
+        self.rankingOwner = UUID()
+        self.selection = nil
+    }
+
+    private var actionsAreCurrent: Bool {
+        guard self.isPresented else { return false }
+        if self.page == .messages { return self.messages?.owner == self.rankingOwner && self.messages?.gatewayId == self.gateway?.id }
+        return self.ranking.owns(self.rankingOwner)
+    }
+
     private var results: [PaletteItem] {
+        if self.page == .messages {
+            guard let gateway, let messages, messages.gatewayId == gateway.id else { return [] }
+            return messages.items
+        }
+        return self.ranking.result?.items ?? []
+    }
+
+    private struct RankingTaskKey: Equatable { let owner: UUID; let source: UInt64 }
+    private struct RankingSnapshot {
+        let items: [PaletteItem], bookmarks: [PaletteItem]
+        let page: PaletteSearchPreparation.Page
+        let gatewaySelected: Bool
+        let shortcut: String?
+    }
+    /// Snapshot construction retains its existing proportional Main cost. Ranking never runs here.
+    private func rankingSnapshot() -> RankingSnapshot {
         let items: [PaletteItem]
         switch self.page {
         case .root:
@@ -381,24 +431,40 @@ struct CommandPaletteView: View {
                 + self.commandItems
                 + CommandPalette.gatewayItems(gateways: self.app.gateways, selectedGatewayId: self.app.selectedGatewayId)
         case .models:
-            guard let gateway, let row else { return [] }
-            items = CommandPalette.modelItems(gateway: gateway, row: row)
-        case .messages:
-            guard let gateway, let messages, messages.gatewayId == gateway.id else { return [] }
-            return messages.items
+            items = if let gateway, let row { CommandPalette.modelItems(gateway: gateway, row: row) } else { [] }
+        case .messages: items = []
         }
-        func ranked() -> [PaletteItem] {
-            PaletteSearchPreparation.results(items,
-                bookmarks: self.page == .root ? CommandPalette.bookmarkItems(gateways: self.app.gateways) : [],
-                query: self.query, page: self.page == .root ? .root : .models,
-                gatewaySelected: self.gateway != nil, shortcut: ShortcutCommand.searchMessages.displayShortcut)
+        return RankingSnapshot(items: items,
+            bookmarks: self.page == .root ? CommandPalette.bookmarkItems(gateways: self.app.gateways) : [],
+            page: self.page == .root ? .root : .models, gatewaySelected: self.gateway != nil,
+            shortcut: ShortcutCommand.searchMessages.displayShortcut)
+    }
+    private func prepareRanking(owner: UUID) async {
+        self.ranking.appear()
+        guard self.page != .messages, !Task.isCancelled else { return }
+        let coordinator = self.ranking, source = coordinator.source
+        let revision = source.current
+        let snapshot = withObservationTracking {
+            self.rankingSnapshot()
+        } onChange: { [weak coordinator] in
+            // Observation may call off Main. Reject stale publication BEFORE scheduling refresh.
+            guard source.changed(revision) else { return }
+            Task { @MainActor [weak coordinator] in
+                coordinator?.refreshSource(ifCurrent: revision &+ 1)
+            }
         }
         #if DEBUG
-        let finished = PaletteSearchDiagnostics.$probe.withValue(self.searchProbe) { ranked() }
-        if let observer = self.rankedIDsObserver { observer(finished.prefix(91).map(\.id)) }
-        return finished
+        let accepted = await PaletteSearchDiagnostics.$probe.withValue(self.searchProbe) {
+            await coordinator.prepare(snapshot.items, bookmarks: snapshot.bookmarks, query: self.query,
+                page: snapshot.page, gatewaySelected: snapshot.gatewaySelected, shortcut: snapshot.shortcut,
+                owner: owner, revision: revision)
+        }
+        if accepted, coordinator.owns(owner), owner == self.rankingOwner,
+           let observer = self.rankedIDsObserver { observer(coordinator.result?.items.prefix(91).map(\.id) ?? []) }
         #else
-        return ranked()
+        _ = await coordinator.prepare(snapshot.items, bookmarks: snapshot.bookmarks, query: self.query,
+            page: snapshot.page, gatewaySelected: snapshot.gatewaySelected, shortcut: snapshot.shortcut,
+            owner: owner, revision: revision)
         #endif
     }
 
@@ -521,6 +587,7 @@ struct CommandPaletteView: View {
     }
 
     private func move(_ offset: Int, in results: [PaletteItem]) {
+        guard self.actionsAreCurrent else { return }
         let results = results.filter { !$0.isHeader }
         guard !results.isEmpty else { return }
         let current = self.currentSelection(in: results).flatMap { id in results.firstIndex { $0.id == id } } ?? 0
@@ -556,6 +623,7 @@ struct CommandPaletteView: View {
     #endif
 
     private func runSelection(in results: [PaletteItem]) {
+        guard self.actionsAreCurrent else { return }
         guard let id = self.currentSelection(in: results), let item = results.first(where: { $0.id == id }) else { return }
         self.run(item)
     }
@@ -570,19 +638,23 @@ struct CommandPaletteView: View {
 
     private func show(_ page: Page, query: String = "") {
         self.cameFromRoot = self.page == .root && page != .root || self.cameFromRoot && page != .root
+        self.invalidateRanking()
         self.page = page
         self.query = query
         self.selection = nil
     }
 
     private func close() {
+        self.ranking.disappear()
         self.isPresented = false
     }
 
     // MARK: Actions
 
-    private func run(_ item: PaletteItem) {
-        guard item.isEnabled else { return }
+    private func run(_ item: PaletteItem, expectedOwner: UUID? = nil, expectedRevision: UInt64? = nil) {
+        guard self.actionsAreCurrent, item.isEnabled else { return }
+        if let expectedOwner, expectedOwner != self.rankingOwner { return }
+        if let expectedRevision, expectedRevision != self.ranking.result?.revision { return }
         switch item.action {
         case let .openChat(target):
             self.close()
