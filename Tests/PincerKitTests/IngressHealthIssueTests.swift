@@ -47,7 +47,7 @@ struct IngressHealthIssueTests {
                         "ingressPressure": [["channelId": "telegram", "accountId": "work", "laneCount": 0,
                                              "pendingCount": 0, "claimedCount": 0, "blockedCount": 0,
                                              "oldestReceivedAt": 1_700_000_000_000]]],
-                       ["ingressFailed": [nullEntry], "ingressPressure": "wrong"]] {
+                       ["ingressFailed": [Self.nullEntry], "ingressPressure": "wrong"]] {
             #expect(try Self.issues(queues).isEmpty)
         }
     }
