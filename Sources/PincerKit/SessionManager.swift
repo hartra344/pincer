@@ -144,9 +144,9 @@ public enum SessionManager {
             total = Int(seconds.rounded(.down))
         }
         let (hours, minutes, secs) = (total / 3600, (total % 3600) / 60, total % 60)
-        if hours > 0 { return minutes > 0 ? L("\(hours) hr \(minutes) min") : L("\(hours) hr") }
-        if minutes > 0 { return secs > 0 ? L("\(minutes) min \(secs) sec") : L("\(minutes) min") }
-        return L("\(secs) sec")
+        if hours > 0 { return minutes > 0 ? L("\(String(hours)) hr \(String(minutes)) min") : L("\(String(hours)) hr") }
+        if minutes > 0 { return secs > 0 ? L("\(String(minutes)) min \(String(secs)) sec") : L("\(String(minutes)) min") }
+        return L("\(String(secs)) sec")
     }
 
     /// "Archived 3 sessions", "Deleted 1 session; 2 failed".

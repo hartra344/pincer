@@ -1,52 +1,52 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "%lld hr": {
+    "%@ hr": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld hr"
+            "value": "%@ hr"
           }
         }
       }
     },
-    "%lld hr %lld min": {
+    "%@ hr %@ min": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld hr %2$lld min"
+            "value": "%1$@ hr %2$@ min"
           }
         }
       }
     },
-    "%lld min": {
+    "%@ min": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld min"
+            "value": "%@ min"
           }
         }
       }
     },
-    "%lld min %lld sec": {
+    "%@ min %@ sec": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld min %2$lld sec"
+            "value": "%1$@ min %2$@ sec"
           }
         }
       }
     },
-    "%lld sec": {
+    "%@ sec": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld sec"
+            "value": "%@ sec"
           }
         }
       }
