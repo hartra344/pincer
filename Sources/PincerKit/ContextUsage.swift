@@ -36,7 +36,11 @@ public struct ContextUsage: Equatable, Sendable {
     }
 
     public var ratio: Double { Double(self.used) / Double(self.limit) }
-    public var percent: Int { min(Int((self.ratio * 100).rounded()), 100) }
+    public var percent: Int {
+        guard self.used > 0, self.limit > 0 else { return 0 }
+        guard self.used < self.limit else { return 100 }
+        return Int((self.ratio * 100).rounded())
+    }
     public var remaining: Int { max(self.limit - self.used, 0) }
 
     /// A stale total still orients, but mustn't drive warnings: the session may already have compacted.

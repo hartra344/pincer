@@ -83,6 +83,7 @@ func runDemo() async {
     let tripUsage = gateway.contextUsage(for: "agent:main:dashboard:trip")
     check(tripUsage?.used == 192_000 && tripUsage?.limit == 200_000 && tripUsage?.level == .critical,
           "trip context meter is critical (\(tripUsage?.summary ?? "none"))")
+    checkDemoContextPercentage(gateway)
     // A ring filled to only ~12% is a short arc that reads as a stuck loading spinner (#280).
     for idle in ["agent:kiko:main", "agent:research:dashboard:papers"] {
         let idleUsage = gateway.contextUsage(for: idle)
