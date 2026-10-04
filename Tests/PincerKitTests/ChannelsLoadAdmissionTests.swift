@@ -103,3 +103,69 @@ struct ChannelsLoadAdmissionTests {
         #expect(model.snapshot == nil && model.hasLoaded && model.supported && !model.isProbing)
     }
 }
+
+@MainActor @Suite(.timeLimit(.minutes(2)))
+struct ChannelsAdmittedCancellationTests {
+    @Test(arguments: [false, true])
+    func canceledProbeRetainsSnapshotAndDoesNotPublishLateResult(fails: Bool) async throws {
+        let gate = ChannelsReadGate()
+        let response = ChannelFixtures.status
+        let expected = try #require(ChannelsStatusSnapshot(response))
+        var calls = 0
+        let model = ChannelsModel(request: { _, _ in
+            calls += 1
+            if calls == 1 { return response }
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "Canceled channel error", details: nil) }
+            var object = response.object ?? [:]
+            object["ts"] = .number(1700000002000)
+            return .object(object)
+        })
+        await model.load()
+        let canceled = Task { await model.probe() }
+        defer { gate.release(); canceled.cancel() }
+        try await gate.waitForEntry()
+        try #require(model.loadState == .running && model.isProbing)
+        canceled.cancel(); gate.release(); await canceled.value
+        #expect(calls == 2 && model.snapshot == expected)
+        #expect(model.loadState == .idle && model.hasLoaded && model.supported && !model.isProbing)
+    }
+
+    @Test func canceledOlderReadCannotIdleNewerProbe() async throws {
+        let oldGate = ChannelsReadGate(), newGate = ChannelsReadGate()
+        let response = ChannelFixtures.status
+        let expected = try #require(ChannelsStatusSnapshot(response))
+        var calls = 0
+        let model = ChannelsModel(request: { _, _ in
+            calls += 1
+            if calls == 1 { await oldGate.hold() } else { await newGate.hold() }
+            return response
+        })
+        let old = Task { await model.load() }
+        defer { oldGate.release(); newGate.release(); old.cancel() }
+        try await oldGate.waitForEntry()
+        let newer = Task { await model.probe() }
+        defer { newer.cancel() }
+        try await newGate.waitForEntry()
+        old.cancel(); oldGate.release(); await old.value
+        #expect(model.loadState == .running && model.isProbing && !model.hasLoaded && model.snapshot == nil)
+        newGate.release(); await newer.value
+        #expect(calls == 2 && model.snapshot == expected)
+        #expect(model.loadState == .idle && model.hasLoaded && !model.isProbing)
+    }
+
+    @Test func advertisedUnsupportedStatusStillCompletesWithoutRPC() async {
+        var calls = 0
+        let model = ChannelsModel(methods: { ["health"] }, request: { _, _ in calls += 1; return [:] })
+        await model.load()
+        #expect(calls == 0 && !model.supported && model.hasLoaded && model.loadState == .idle && !model.isProbing)
+    }
+
+    @Test func currentUnknownMethodRemainsUnsupported() async {
+        let model = ChannelsModel(request: { _, _ in
+            throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: channels.status", details: nil)
+        })
+        await model.probe()
+        #expect(!model.supported && model.hasLoaded && model.snapshot == nil && model.loadState == .idle && !model.isProbing)
+    }
+}

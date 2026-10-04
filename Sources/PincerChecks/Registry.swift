@@ -107,7 +107,7 @@ enum Suites {
             Section("Bridged row authors") { checkBridgedHeaderAuthors() },
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
-            Section("Channel load admission") { await runChannelsLoadAdmissionChecks() },
+            Section("Channel load admission") { await runChannelsLoadAdmissionChecks(); await runChannelsAdmittedCancellationChecks() },
             Section("Channel action ownership") { await runChannelActionOwnershipChecks() },
             Section("Settings notice lifetime") { runSettingsNoticeChecks() },
             Section("Settings save reconciliation") { await runSettingsSaveRebaseChecks() },

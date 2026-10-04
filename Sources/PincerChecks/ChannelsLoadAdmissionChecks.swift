@@ -87,3 +87,44 @@ import Foundation
     guard connected else { return }
     await checkChannelsReadAdmission { method, params in try await gateway.connection.request(method, params) }
 }
+
+@MainActor func runChannelsAdmittedCancellationChecks() async {
+    let response: JSONValue = ["ts": 1700000000000, "channelOrder": ["discord"],
+                               "channelLabels": ["discord": "Discord"],
+                               "channels": ["discord": ["configured": true, "running": true, "connected": true]],
+                               "channelAccounts": ["discord": [["accountId": "default", "configured": true, "running": true, "connected": true]]],
+                               "channelDefaultAccountId": ["discord": "default"]]
+    guard let expected = ChannelsStatusSnapshot(response), !expected.channels.isEmpty else {
+        check(false, "admitted cancellation fixture contains a decoded status snapshot"); return
+    }
+    for fails in [false, true] {
+        let gate = ChannelsStatusReadGate()
+        var calls = 0
+        let model = ChannelsModel(request: { _, _ in
+            calls += 1
+            if calls == 1 { return response }
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "Canceled channel error", details: nil) }
+            var object = response.object ?? [:]
+            object["ts"] = .number(1700000002000)
+            return .object(object)
+        })
+        await model.load()
+        let canceled = Task { await model.probe() }
+        defer { gate.release(); canceled.cancel() }
+        let entered = await waitFor("admitted canceled channel probe") { gate.entered }
+        check(entered, "actual channel probe reaches the response hold")
+        guard entered else { gate.release(); canceled.cancel(); await canceled.value; return }
+        check(model.isProbing && model.loadState == .running, "admitted probe shows its actual running state")
+        canceled.cancel(); gate.release(); await canceled.value
+        check(model.snapshot == expected && model.hasLoaded && model.supported,
+              "canceled admitted channel probe preserves the full prior snapshot")
+        check(model.loadState == .idle && !model.isProbing,
+              "canceled admitted success or error clears only its own running state")
+    }
+    var unsupportedCalls = 0
+    let unsupported = ChannelsModel(methods: { ["health"] }, request: { _, _ in unsupportedCalls += 1; return [:] })
+    await unsupported.load()
+    check(unsupportedCalls == 0 && !unsupported.supported && unsupported.hasLoaded && unsupported.loadState == .idle,
+          "advertised unsupported channel status retains its ordinary no-RPC policy")
+}
