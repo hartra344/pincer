@@ -28,7 +28,9 @@ struct EmbeddedImageDecodeLeaseTests {
             while await gate.entered != 1 && ContinuousClock.now < deadline && !Task.isCancelled {
                 try await Task.sleep(for: .milliseconds(5))
             }
-            try #require(await gate.entered == 1 && loader.activeInlineDecodeCount == 1)
+            let entered = await gate.entered
+            try #require(entered == 1)
+            try #require(loader.activeInlineDecodeCount == 1)
             let queued = (0..<2).map { _ in Task { await loader.data(for: fixture.1, sessionKey: "fixture") } }
             defer { for task in queued { task.cancel() } }
             let all = tasks + queued
