@@ -213,6 +213,7 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
+        sections.append(Section("UI readiness cancellation") { await runUITestReadinessCancellationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)

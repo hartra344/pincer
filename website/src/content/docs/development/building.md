@@ -268,3 +268,5 @@ Debug reconnect checks wait for the current connection's actual bootstrap and pr
 
 
 Cache-reconciliation checks observe the actual directory inventory on the cache writer's background actor. They verify that an authoritative complete session list removes orphan manifests while current chats and retained outbox entries keep theirs, including owners created while inventory is in flight. Session-key hashing and live-owner bookkeeping remain separate main-actor work; these checks do not establish a physical interaction-latency improvement.
+
+UI readiness polling stops when its test task is canceled, including during the final readiness grace period. This keeps canceled tests from continuing to evaluate UI predicates; readiness deadlines and test time limits are unchanged.
