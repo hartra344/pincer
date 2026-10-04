@@ -421,7 +421,8 @@ public struct RunTimeline: Sendable, Hashable {
 public enum RunDuration {
     public static func format(_ interval: TimeInterval) -> String {
         guard interval.isFinite, interval >= 1 else { return "<1s" }
-        let total = Int(interval)
+        // Double(Int.max) rounds up to 2^63; branch before the integer conversion.
+        let total = interval >= Double(Int.max) ? Int.max : Int(interval)
         let hours = total / 3600, minutes = total / 60 % 60, seconds = total % 60
         return hours > 0
             ? String(format: "%d:%02d:%02d", hours, minutes, seconds)

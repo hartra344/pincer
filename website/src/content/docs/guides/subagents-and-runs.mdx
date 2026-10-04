@@ -52,7 +52,7 @@ Each row shows:
 | **Unknown** | gray ? | Pincer is disconnected, so it can't tell whether the run is still going. |
 | **Idle** | dotted circle | The session hasn't run anything yet. |
 
-Durations show as `m:ss`, `h:mm:ss` for an hour or longer, and `<1s` for very short runs. **Last activity** is the most recent thing the run streamed: thinking, a reply or a tool call starting or finishing. For a run Pincer hasn't seen stream, it falls back to the session's last update.
+Durations show as `m:ss`, `h:mm:ss` for an hour or longer, and `<1s` for very short runs. Very large finite durations are bounded before display so an unusual timestamp cannot crash the Runs panel. **Last activity** is the most recent thing the run streamed: thinking, a reply or a tool call starting or finishing. For a run Pincer hasn't seen stream, it falls back to the session's last update.
 
 ### Opening a helper
 

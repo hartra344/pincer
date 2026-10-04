@@ -104,6 +104,7 @@ enum Suites {
             Section("Agent file write authority") { await runAgentFileWriteAuthorityChecks() },
             Section(nil) { checkSubagents() },
             Section("Runs duration boundary") { runRunDurationOverflowChecks() },
+            Section("Runs duration safe bounds") { runRunDurationBoundsChecks() },
             Section(nil) { checkForwardedMessages() },
             Section("Bridged row authors") { checkBridgedHeaderAuthors() },
             Section(nil) { await checkChannelStatus() },
