@@ -583,7 +583,12 @@ struct RawConfigPage: View {
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
+                        #if os(iOS)
+                        // Keep long files inside the native editor's scrolling viewport.
+                        .frame(height: 360)
+                        #else
                         .frame(minHeight: 360)
+                        #endif
                         .disabled(!settings.canEdit)
                 } footer: {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {

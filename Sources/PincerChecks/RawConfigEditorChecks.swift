@@ -166,6 +166,25 @@ func runDemoRawConfigEditorChecks() async {
     guard let original = gateway.settings.snapshot?.raw else {
         check(false, "actual Demo config.get supplies the authored raw file"); return
     }
+    // Long editor text uses the real loaded Demo baseline without writing that fixture back.
+    let largeSource = await Task.detached {
+        original + "\n/* " + String(repeating: "x", count: 2 * 1024 * 1024) + " */\n"
+    }.value
+    let longDraft = RawConfigEditorDraft()
+    let longObservation = RawValidationObservation()
+    longDraft.validationObserver = { longObservation.record() }
+    longDraft.updateSnapshot(original)
+    longDraft.edit(largeSource)
+    await longDraft.waitForValidation()
+    let longMeasured = longObservation.snapshot()
+    check(longDraft.text == largeSource && longDraft.isEdited && !longDraft.validationPending
+          && longDraft.validationError == nil && longMeasured.main == 0 && longMeasured.offMain > 0,
+          "a large raw editor draft preserves the actual Demo baseline and validates off-main")
+    longDraft.revert()
+    await longDraft.waitForValidation()
+    check(longDraft.text == original && !longDraft.isEdited && !longDraft.validationPending,
+          "reverting the large local editor restores the actual Demo file without saving")
+
     var unauthorizedApplies = 0
     let unauthorized = GatewaySettingsModel(request: { method, params, timeout in
         if method == "config.apply" { unauthorizedApplies += 1 }
