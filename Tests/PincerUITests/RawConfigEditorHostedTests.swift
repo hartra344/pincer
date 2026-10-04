@@ -127,12 +127,12 @@ struct RawConfigEditorHostedTests {
             print("Raw config Save readiness: public items=\(self.toolbarItems(window).map { String(describing: $0.title) + " target=" + String(describing: $0.target) + " action=" + String(describing: $0.action) }); AX=\(CenteredChatHeaderNativeFixtures.labels(window))")
         }
         phase("save-readiness-after", field: field, window: window, saving: model.isSaving)
-        try #require(saveReady, "Actual public native toolbar enables Save after current validation")
+        try #require(saveReady, "Raw Save \(later.rawValue) phase=save-readiness: actual toolbar enables Save")
         phase("save-activation-before", field: field, window: window, saving: model.isSaving)
-        try #require(activate("Save", window: window), "Invoke the actual native toolbar Save action")
+        try #require(activate("Save", window: window), "Raw Save \(later.rawValue) phase=save-activation: invoke actual Save")
         phase("save-activation-after", field: field, window: window, saving: model.isSaving)
         phase("request-admission-before", field: field, window: window, saving: model.isSaving)
-        try #require(await eventually { server.submitted == admitted && model.isSaving })
+        try #require(await eventually { server.submitted == admitted && model.isSaving }, "Raw Save \(later.rawValue) phase=request-admission")
         phase("request-admission-after", field: field, window: window, saving: model.isSaving)
         phase("later-intent-before", field: field, window: window)
         switch later {
@@ -140,9 +140,9 @@ struct RawConfigEditorHostedTests {
         case .changed: edit(field, newer)
         case .revert:
             phase("revert-activation-before", field: field, window: window)
-            try #require(activate("Revert", window: window), "Invoke actual toolbar Revert after Save admission")
+            try #require(activate("Revert", window: window), "Raw Save \(later.rawValue) phase=revert-activation: invoke actual Revert")
             phase("revert-activation-after", field: field, window: window)
-            try #require(await eventually { field.text == baseline })
+            try #require(await eventually { field.text == baseline }, "Raw Save \(later.rawValue) phase=revert-ready")
             phase("revert-ready", field: field, window: window)
         case .aba: edit(field, newer); edit(field, baseline)
         }
@@ -151,15 +151,15 @@ struct RawConfigEditorHostedTests {
         server.release()
         phase("response-release-after", field: field, window: window, saving: model.isSaving)
         phase("ack-before", field: field, window: window, saving: model.isSaving)
-        try #require(await eventually { !model.isSaving && model.snapshot?.raw == admitted })
+        try #require(await eventually { !model.isSaving && model.snapshot?.raw == admitted }, "Raw Save \(later.rawValue) phase=ack")
         phase("ack-after", field: field, window: window, saving: model.isSaving)
         phase("fixed-settlement-before", field: field, window: window)
         for _ in 0..<4 { await Task.yield() }; window.layoutIfNeeded()
         phase("final-field-assertion-before", field: field, window: window, saving: model.isSaving)
         #expect(field.text == (later == .unchanged ? admitted : later == .changed ? newer : baseline),
-                "Actual acknowledgement must not replace later editor typing or explicit Revert/ABA")
+                "Raw Save \(later.rawValue) phase=final-field: acknowledgement preserves later intent")
         phase("final-field-assertion-after", field: field, window: window)
-        #expect(server.submitted == admitted, "Only the captured raw file reaches config.apply")
+        #expect(server.submitted == admitted, "Raw Save \(later.rawValue) phase=final-wire: only captured raw reaches config.apply")
         phase("final-assertions-after", field: field, window: window)
     }
     @Test(.timeLimit(.minutes(2))) func actualEditedBodyDoesNotParseJSON5OnMain() async throws {
@@ -236,9 +236,17 @@ struct RawConfigEditorHostedTests {
     }
 }
 extension TranscriptUIKitHostedTests {
-    @Test(.timeLimit(.minutes(2)), arguments: RawConfigEditorHostedTests.Later.allCases)
-    func actualRawConfigSavePreservesLaterEditorIntent(_ later: RawConfigEditorHostedTests.Later) async throws {
-        try await RawConfigEditorHostedTests().actualSaveRetainsOnlyPostAdmissionEditorIntent(later)
+    @Test(.timeLimit(.minutes(2))) func actualRawConfigSavePreservesUnchanged() async throws {
+        try await RawConfigEditorHostedTests().actualSaveRetainsOnlyPostAdmissionEditorIntent(.unchanged)
+    }
+    @Test(.timeLimit(.minutes(2))) func actualRawConfigSavePreservesTyping() async throws {
+        try await RawConfigEditorHostedTests().actualSaveRetainsOnlyPostAdmissionEditorIntent(.changed)
+    }
+    @Test(.timeLimit(.minutes(2))) func actualRawConfigSavePreservesRevert() async throws {
+        try await RawConfigEditorHostedTests().actualSaveRetainsOnlyPostAdmissionEditorIntent(.revert)
+    }
+    @Test(.timeLimit(.minutes(2))) func actualRawConfigSavePreservesABA() async throws {
+        try await RawConfigEditorHostedTests().actualSaveRetainsOnlyPostAdmissionEditorIntent(.aba)
     }
     @Test(.timeLimit(.minutes(2))) func actualRawConfigJSON5ValidationStaysOffMain() async throws {
         try await RawConfigEditorHostedTests().actualEditedBodyDoesNotParseJSON5OnMain()
