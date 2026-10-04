@@ -68,6 +68,7 @@ enum Suites {
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
             Section("Voice playback ownership") { runVoicePlaybackOwnershipChecks() },
             Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },
+            Section("Voice catalog request ownership") { await runVoiceListRequestOwnershipChecks() },
             Section("Voice settings draft ownership") { runVoiceSettingsDraftChecks() },
             Section("Settings content height") { checkSettingsContentHeight() },
             Section("Display name editing") { await runOwnerNameChecks() },
@@ -213,6 +214,7 @@ enum Suites {
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
+        Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Attachment draft ownership (demo)") { await runDemoAttachmentDraftOwnershipChecks() },
         Section("Device pairing action scopes (demo)") { await runDemoDevicePairingActionScopeChecks() },
@@ -275,6 +277,7 @@ enum Suites {
         Section("MCP tool links (demo)") { await runDemoMCPToolLinks() },
         Section("Voice playback ownership (demo)") { await runDemoVoicePlaybackOwnershipChecks() },
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
+        Section("Voice catalog request ownership (demo)") { await runDemoVoiceListRequestOwnershipChecks() },
         Section("Voice settings draft ownership (demo)") { await runDemoVoiceSettingsDraftChecks() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
