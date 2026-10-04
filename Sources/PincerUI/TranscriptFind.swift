@@ -31,7 +31,8 @@ final class TranscriptFind {
     }
 
     private(set) var matches: [TranscriptSearch.Match] = []
-    private(set) var current: Int?
+    private var selection = TranscriptFindSelection()
+    var current: Int? { self.selection.current }
     /// True while matches for the latest query and transcript are still being computed.
     private(set) var isSearching = false
     /// Bumped to put keyboard focus in the find field (⌘F while it's already open).
@@ -95,7 +96,7 @@ final class TranscriptFind {
     func present(query: String, select match: TranscriptSearch.Match?) {
         self.query = query
         self.preferredMatch = match
-        self.current = nil
+        self.selection.select(nil)
         self.matches = []
         self.pendingReveal = true
         self.isPresented = true
@@ -121,7 +122,7 @@ final class TranscriptFind {
             return
         }
         guard let index = TranscriptSearch.step(from: self.current, count: self.matches.count, forward: forward) else { return }
-        self.current = index
+        self.selection.select(index)
         self.revealRequest += 1
     }
 
@@ -142,7 +143,7 @@ final class TranscriptFind {
         let query = TranscriptSearch.normalized(self.query)
         guard !query.isEmpty else {
             self.matches = []
-            self.current = nil
+            self.selection.select(nil)
             self.isSearching = false
             self.pendingReveal = false
             return
@@ -151,9 +152,9 @@ final class TranscriptFind {
         self.isSearching = true
         let entries = self.entries
         let options = self.options
-        let previous = self.currentMatch
-        let previousRow = previous.flatMap { self.rowIndex[$0.entryId] }
-        let preferred = self.preferredMatch
+        let capture = self.selection.capture(matches: self.matches, rowIndex: self.rowIndex, preferred: self.preferredMatch)
+        let previous = capture.previous
+        let preferred = capture.preferred
         self.search = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             guard !Task.isCancelled else { return }
@@ -162,15 +163,13 @@ final class TranscriptFind {
                  Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
             }.value
             guard !Task.isCancelled, let self else { return }
-            let selected = TranscriptSearch.reselect(previous, in: matches, rowIndex: rowIndex, near: previousRow,
-                                                     preferred: preferred)
+            let selected = self.selection.complete(capture, matches: matches, rowIndex: rowIndex)
             let foundPreferred = preferred != nil && selected.map { matches[$0] } == preferred
             if foundPreferred { self.preferredMatch = nil }
             self.matches = matches
             self.rowIndex = rowIndex
             self.isSearching = false
             let moved = selected.map { matches[$0] } != previous
-            self.current = selected
             // Follow the selection as the query is typed; a message arriving doesn't move the reader.
             if selected != nil, self.pendingReveal || moved && (previous == nil || foundPreferred) { self.revealRequest += 1 }
             // Still waiting for the transcript to load: reveal once there are matches.
