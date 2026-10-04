@@ -233,7 +233,18 @@ struct InlineMathOffMainTests {
                     "every actual row must finish adoption before checking the warmed window")
         }
         #expect(cold.allSatisfy { keys in keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
-        // A second pass finds everything warm and sends nothing.
+        // Global eviction tokens conservatively invalidate earlier row memos even when this
+        // exact window remains warm. Render the finished window, as the real controller does,
+        // and prove its already-adopted sizes avoid any additional Main TextKit measurement.
+        let mainLayoutsBefore = TranscriptText.measureStats.mainLayouts
+        for row in rows {
+            let layout = renderer.layout(for: row, width: width)
+            #expect(layout.height.isFinite && layout.height > 0)
+            #expect(layout.width.isFinite && layout.width == width)
+            #expect(renderer.hasLayout(for: row, width: width))
+        }
+        #expect(TranscriptText.measureStats.mainLayouts == mainLayoutsBefore)
+        // The actual rendered-window cache then makes a second pass send nothing.
         #expect(driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer) == 0)
         // A zero budget returns at once, even with work left.
         let more = (0..<8).map { Self.assistant("pz\($0)-\(salt)", text: "Cold \($0) " + body + salt, at: $0) }
