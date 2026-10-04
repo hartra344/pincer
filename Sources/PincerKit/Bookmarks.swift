@@ -97,9 +97,20 @@ public final class BookmarkStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var index: Set<String> = []
     @ObservationIgnored private var persistenceRevision = 0
+    private struct PersistenceInput: Sendable {
+        let revision: Int
+        let bookmarks: [Bookmark]
+    }
+    @ObservationIgnored private var persistenceEncodingTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingPersistence: PersistenceInput?
     @ObservationIgnored var previewPreparationQueue = BookmarkPreviewPreparationQueue.shared
     @ObservationIgnored private var previewOperations: [String: UUID] = [:]
 #if DEBUG
+    @ObservationIgnored package var persistenceEncodingProbe: BookmarkPersistenceEncodingProbe?
+    @ObservationIgnored package var persistenceEncodingGate: (@Sendable () async -> Void)?
+    package var persistenceActiveCount: Int { self.persistenceEncodingTask == nil ? 0 : 1 }
+    package var persistencePendingCount: Int { self.pendingPersistence == nil ? 0 : 1 }
+    package var actualPersistenceTask: Task<Void, Never>? { self.persistenceEncodingTask }
     /// Causal probe for the actual item-toggle preview preparation, never for removal.
     @ObservationIgnored var previewPreparationProbe: (@Sendable (String, Bool) -> Void)?
     func waitForPreviewPreparation() async { await self.previewPreparationQueue.waitUntilIdle() }
@@ -262,13 +273,9 @@ public final class BookmarkStore {
         for bookmark in removed { self.invalidatePreview(bookmark.id) }
         self.bookmarks.removeAll { sessionKeys.contains($0.sessionKey) }
         for bookmark in removed { self.index.remove(bookmark.id) }
-        self.persistenceRevision += 1
-        let revision = self.persistenceRevision
-        let remaining = self.bookmarks
+        self.save()
         self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
-        let data = await Task.detached { try? JSONEncoder().encode(remaining) }.value
-        guard revision == self.persistenceRevision, let data else { return }
-        self.defaults.set(data, forKey: self.defaultsKey)
+        await self.waitForPersistenceEncoding()
     }
 
     /// Drops the oldest bookmarks over the cap, then the oldest in `shard` until its synced map fits.
@@ -351,13 +358,45 @@ public final class BookmarkStore {
     public func removeAll() {
         for id in Array(self.previewOperations.keys) { self.invalidatePreview(id) }
         self.persistenceRevision += 1
+        self.pendingPersistence = nil
         self.bookmarks = []
         self.index = []
         self.defaults.removeObject(forKey: self.defaultsKey)
     }
 
+    /// Waits for accepted local persistence, including a coalesced newer snapshot. Canceling this
+    /// waiter cannot cancel the store's accepted write or release its worker early.
+    package func waitForPersistenceEncoding() async {
+        while let task = self.persistenceEncodingTask { await task.value }
+    }
+
     private func save() {
         self.persistenceRevision += 1
-        if let data = try? JSONEncoder().encode(self.bookmarks) { self.defaults.set(data, forKey: self.defaultsKey) }
+        let input = PersistenceInput(revision: self.persistenceRevision, bookmarks: self.bookmarks)
+        self.pendingPersistence = input
+        guard self.persistenceEncodingTask == nil else { return }
+        // Retain this store until the latest accepted write is encoded and applied to local defaults. The worker only captures
+        // its COW source array; there is one active source and one latest pending source per store.
+        self.persistenceEncodingTask = Task { [self] in
+            while let captured = self.pendingPersistence {
+                self.pendingPersistence = nil
+                #if DEBUG
+                let probe = self.persistenceEncodingProbe
+                let gate = self.persistenceEncodingGate
+                #endif
+                let data = await Task.detached {
+                    #if DEBUG
+                    if let gate { await gate() }
+                    probe?.record()
+                    #endif
+                    return try? JSONEncoder().encode(captured.bookmarks)
+                }.value
+                // Always await real worker completion before admitting the next source.
+                if captured.revision == self.persistenceRevision, let data {
+                    self.defaults.set(data, forKey: self.defaultsKey)
+                }
+            }
+            self.persistenceEncodingTask = nil
+        }
     }
 }
