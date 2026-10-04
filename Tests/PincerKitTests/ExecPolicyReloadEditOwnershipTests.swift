@@ -31,15 +31,15 @@ struct ExecPolicyReloadEditOwnershipTests {
         }
         await model.load()
         try #require(model.snapshot == ExecApprovalsSnapshot(initial))
-        model.set(.ask, "always", agent: nil)
+        let originalAsk = model.savedValue(.ask, agent: nil)
         let admittedDraft = model.draft
         let task = Task { await model.load() }
         do {
             let deadline = ContinuousClock.now.advanced(by: .seconds(15))
             while !gate.entered { try Task.checkCancellation(); try #require(ContinuousClock.now < deadline); await Task.yield() }
         } catch { task.cancel(); gate.release(); await task.value; throw error }
-        if mode != "none" { model.set(.ask, "on-miss", agent: nil) }
-        if mode == "aba" { model.set(.ask, "always", agent: nil) }
+        if mode != "none" { model.set(.ask, "always", agent: nil) }
+        if mode == "aba" { model.set(.ask, originalAsk, agent: nil) }
         let expected = mode == "none" ? ExecApprovalsSnapshot(returned).file : model.draft
         if mode == "aba" { #expect(model.draft == admittedDraft) }
         gate.release(); await task.value

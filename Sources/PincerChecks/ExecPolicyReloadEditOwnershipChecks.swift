@@ -28,9 +28,8 @@ import Foundation
         guard let initial = model.snapshot, initial.exists, let hash = initial.hash, !hash.isEmpty else {
             check(false, "initial actual policy snapshot is loaded"); return
         }
-        let localA: JSONValue = model.savedValue(.ask, agent: nil) == "always" ? "off" : "always"
-        let localB: JSONValue = localA == "off" ? "on-miss" : "off"
-        model.set(.ask, localA, agent: nil)
+        let localA = model.savedValue(.ask, agent: nil)
+        let localB: JSONValue = localA == "always" ? "off" : "always"
         let admittedDraft = model.draft
         let task = Task { await model.load() }
         let entered = await waitFor("actual exec policy reload delivery", timeout: 15) { gate.entered }
