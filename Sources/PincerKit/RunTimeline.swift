@@ -425,7 +425,7 @@ public enum RunDuration {
         let total = interval >= Double(Int.max) ? Int.max : Int(interval)
         let hours = total / 3600, minutes = total / 60 % 60, seconds = total % 60
         return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
+            ? "\(hours):" + String(format: "%02d:%02d", minutes, seconds)
             : String(format: "%d:%02d", minutes, seconds)
     }
 }
