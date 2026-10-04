@@ -5,6 +5,7 @@
 #   scripts/run-checks.sh [extra swift flags…]
 #
 # Env: CHECKS_LOG_DIR (default: a temp folder), CHECKS_PORT_BASE (default 18801; uses 6 ports).
+# CHECKS_PROGRESS_INTERVAL defaults to 30s; fractional intervals are for the owned harness only.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -22,7 +23,18 @@ CHECKS="$BIN/PincerChecks"
 mocks=()
 mock_names=()
 mock_ports=()
-cleanup() { for pid in ${mocks[@]+"${mocks[@]}"}; do kill "$pid" 2>/dev/null; done; }
+progress_pid=""
+stop_progress() {
+    if [ -n "$progress_pid" ]; then
+        kill "$progress_pid" 2>/dev/null || true
+        wait "$progress_pid" 2>/dev/null || true
+        progress_pid=""
+    fi
+}
+cleanup() {
+    stop_progress
+    for pid in ${mocks[@]+"${mocks[@]}"}; do kill "$pid" 2>/dev/null; done
+}
 trap cleanup EXIT
 
 # name, port, env… → a mock on that port, logging to $LOGS/mock-name.log
@@ -76,6 +88,8 @@ pids=()
 lane() {
     local name=$1
     shift
+    # A reused log directory must not identify an older invocation as this lane's completion.
+    rm -f "$LOGS/$name.seconds"
     (
         start=$(date +%s)
         "$@"
@@ -109,6 +123,15 @@ summary=()
 # Waits for lanes from index $1 on, then prints their logs and adds them to the summary.
 report() {
     local i name result seconds
+    local progress_lanes=()
+    for ((i = $1; i < ${#pids[@]}; i++)); do
+        progress_lanes+=("${names[$i]}=${pids[$i]}")
+    done
+    # The solo performance lanes must keep the CPU to themselves.
+    if [ "$1" -eq 0 ]; then
+        node scripts/checks-pending-progress.mjs "$LOGS" "${CHECKS_PROGRESS_INTERVAL:-30}" "${progress_lanes[@]}" &
+        progress_pid=$!
+    fi
     for ((i = $1; i < ${#pids[@]}; i++)); do
         name=${names[$i]}
         if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
@@ -118,6 +141,7 @@ report() {
         echo "::endgroup::"
         summary+=("$(printf '%-18s %-7s %4ss  %s' "$name" "$result" "$seconds" "$(tail -n 1 "$LOGS/$name.log")")")
     done
+    stop_progress
 }
 report 0
 # The perf smoke budgets are wall-clock, so they only mean something with the CPU to themselves.

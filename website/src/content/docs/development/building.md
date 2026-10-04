@@ -127,6 +127,8 @@ While a reply streams, text-growth updates are coalesced to the configured frame
 
 ## Self-checks
 
+While `scripts/run-checks.sh` waits for its parallel lanes, it prints a bounded progress snapshot about every 30 seconds. The snapshot names the pending lane, process, log filename, and last recognized unfinished unit-test identifier; it never prints raw log tails or test arguments. Started and finished counts cover only the bounded portion observed, with `skipped=1` when earlier output could not be retained. Final logs and exit status are unchanged. The progress reader stops before the solo performance lanes, which keep the CPU to themselves.
+
 The live core paging check uses a separate uncached, headless chat store, so the newest-page and older-page assertions remain independent of background prefetch and already-open transcripts.
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
