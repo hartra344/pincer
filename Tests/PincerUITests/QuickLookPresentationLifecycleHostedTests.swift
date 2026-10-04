@@ -22,18 +22,18 @@ private struct ActualQuickLookFixture: View {
 }
 @MainActor extension TranscriptUIKitHostedTests {
     @Test(.timeLimit(.minutes(2)))
-    func actualQuickLookPresentationRetainsFileUntilOwnerRemoval() async throws {
+    func actualQuickLookPresentationRetainsFileUntilDismissal() async throws {
         let root = FilePreviewFiles.root.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let file = root.appendingPathComponent("Preview.txt")
-        try await Task.detached {
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try Data("Actual local Quick Look text preview.".utf8).write(to: file)
-        }.value
         let state = QuickLookFixtureState()
         let host = UIHostingController(rootView: ActualQuickLookFixture(state: state))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = host; window.isHidden = false
         do {
+        try await Task.detached {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try Data("Actual local Quick Look text preview.".utf8).write(to: file)
+        }.value
             try #require(await eventually(timeout: .seconds(15)) { window.layoutIfNeeded(); return host.view.window != nil })
             state.url = file
             func preview(_ controller: UIViewController) -> QLPreviewController? {
@@ -42,7 +42,7 @@ private struct ActualQuickLookFixture: View {
                 for child in controller.children { if let found = preview(child) { return found } }
                 return nil
             }
-            try #require(await eventually(timeout: .seconds(15)) { preview(host)?.viewIfLoaded?.window != nil },
+            try #require(await eventually(timeout: .seconds(15)) { { guard let ql = preview(host) else { return false }; return ql.viewIfLoaded?.window != nil && !ql.isBeingPresented && ql.transitionCoordinator == nil }() },
                          "The actual public Quick Look modifier must present a real QLPreviewController")
             #expect(state.url == file, "Opening Quick Look must not clear its owner binding")
             let existsWhileOpen = await Task.detached { FileManager.default.fileExists(atPath: file.path) }.value
@@ -50,9 +50,7 @@ private struct ActualQuickLookFixture: View {
             let presented = try #require(host.presentedViewController)
             await withCheckedContinuation { continuation in presented.dismiss(animated: false) { continuation.resume() } }
             try #require(await eventually(timeout: .seconds(15)) { host.presentedViewController == nil })
-            // Remove the actual owner view. A dismissal may already clear the binding;
-            // removal must still leave no retained URL or task-owned backing file.
-            state.visible = false
+            // Dismissal alone must retire the actual binding and backing file.
             try #require(await eventually(timeout: .seconds(15)) { state.url == nil })
             let deadline = ContinuousClock.now.advanced(by: .seconds(15))
             while await Task.detached(operation: { FileManager.default.fileExists(atPath: file.path) }).value {
@@ -60,7 +58,10 @@ private struct ActualQuickLookFixture: View {
                 try await Task.sleep(for: .milliseconds(10))
             }
         } catch {
-            host.dismiss(animated: false); window.isHidden = true
+            if let presented = host.presentedViewController {
+                await withCheckedContinuation { continuation in presented.dismiss(animated: false) { continuation.resume() } }
+            }
+            window.isHidden = true
             await Task.detached { try? FileManager.default.removeItem(at: root) }.value
             throw error
         }
