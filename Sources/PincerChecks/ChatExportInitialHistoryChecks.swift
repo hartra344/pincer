@@ -34,8 +34,8 @@ import Foundation
     check(complete && !current.hasOlderItems, "genuine seeded history has complete export coverage")
     guard complete && !current.hasOlderItems else { return }
     let expected = current.items.filter { !$0.isPending }
-    check(current.hasLoaded && !expected.isEmpty, "genuine seeded history loads nonempty")
-    guard current.hasLoaded && !expected.isEmpty else { return }
+    check(current.hasLoaded && expected.count == 302, "genuine seeded history loads all 302 committed messages")
+    guard current.hasLoaded && expected.count == 302 else { return }
     let exported = await current.exportItems()
     check(exported == expected, "ordinary real Demo history exports exact committed messages")
     // A separate disconnected Demo instance has no local cache; no RPC overlay or server write.
