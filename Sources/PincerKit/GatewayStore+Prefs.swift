@@ -487,7 +487,8 @@ extension GatewayStore {
     /// its cached transcript is dropped, and an open chat reloads from scratch. A rewind's cut message
     /// goes back into an empty composer. Deduplicated per key while one is under way (the RPC reply
     /// and its `sessions.changed` both land here).
-    func transcriptChanged(key: String, change: SessionTranscriptChange) async {
+    func transcriptChanged(key: String, change: SessionTranscriptChange,
+                           feedbackAuthority: ChatStore.MessageEditFeedbackAuthority? = nil) async {
         if case let .changed(text?) = change, !text.isEmpty {
             if let chat = self.chats[key] {
                 if chat.draft.text.isEmpty { chat.draft.text = text }
@@ -508,7 +509,7 @@ extension GatewayStore {
             await self.forgetTranscript(key)
         } else if let chat = self.chats[key], !chat.isDehydrated {
             // The whole cache entry goes (messages and tool details) before the refetch can save.
-            await chat.reloadAfterHistoryChange { await self.forgetTranscript(key) }
+            await chat.reloadAfterHistoryChange(feedbackAuthority: feedbackAuthority) { await self.forgetTranscript(key) }
         } else {
             await self.forgetTranscript(key)
         }

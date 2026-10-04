@@ -199,6 +199,9 @@ enum Suites {
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership" }) {
+            sections.insert(Section("Message edit completion ownership") { await runMessageEditCompletionOwnershipChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Channel QR ownership") { await runChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
@@ -315,6 +318,9 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership (demo)" }) {
+            sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks() }, at: index + 1)
+        }
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
         }

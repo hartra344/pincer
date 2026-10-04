@@ -74,6 +74,10 @@ extension ChatStore {
     }
 
     public func load(force: Bool = false) async {
+        await self.load(force: force, feedbackAuthority: nil)
+    }
+
+    private func load(force: Bool, feedbackAuthority: MessageEditFeedbackAuthority?) async {
         self.isDehydrated = false
         await self.restoreDraft()
         await self.restoreFromCache()
@@ -85,14 +89,14 @@ extension ChatStore {
         if !force, let running = self.loadTask {
             await Self.value(of: running)
             // The caller that started it went away mid-fetch; this one still wants the history.
-            if running.isCancelled, !Task.isCancelled { await self.load() }
+            if running.isCancelled, !Task.isCancelled { await self.load(force: false, feedbackAuthority: feedbackAuthority) }
             return
         }
         self.loadGeneration += 1
         let generation = self.loadGeneration
         // Waiters await this task; only the caller that started it passes its cancellation on.
         let task = Task {
-            await self.fetchHistory(gateway)
+            await self.fetchHistory(gateway, feedbackAuthority: feedbackAuthority)
             if self.loadGeneration == generation { self.loadTask = nil }
         }
         self.loadTask = task
@@ -115,7 +119,10 @@ extension ChatStore {
         }
     }
 
-    private func fetchHistory(_ gateway: GatewayStore) async {
+    private func fetchHistory(_ gateway: GatewayStore, feedbackAuthority: MessageEditFeedbackAuthority?) async {
+        // Ordinary refreshes keep their existing feedback behavior unless a newer assignment
+        // arrives while awaiting history. Only an explicit edit refresh also checks selection.
+        let feedbackRevision = self.errorMessageRevision
         self.isLoading = !self.hasLoaded
         defer { self.isLoading = false }
         do {
@@ -139,7 +146,9 @@ extension ChatStore {
             self.hasLoaded = true
             self.stale = false
             self.loadCount += 1
-            self.errorMessage = nil
+            if self.errorMessageRevision == feedbackRevision && (feedbackAuthority?.isCurrent(in: self) ?? true) {
+                self.errorMessage = nil
+            }
             self.scheduleSave()
             self.startBackfill()
             self.refreshProgressCard()
@@ -150,7 +159,9 @@ extension ChatStore {
         } catch is CancellationError {
             return
         } catch {
-            self.errorMessage = error.localizedDescription
+            if self.errorMessageRevision == feedbackRevision && (feedbackAuthority?.isCurrent(in: self) ?? true) {
+                self.errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -653,7 +664,8 @@ extension ChatStore {
 
     /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
-    func reloadAfterHistoryChange(clearingCache clearCache: @MainActor () async -> Void = {}) async {
+    func reloadAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil,
+                                 clearingCache clearCache: @MainActor () async -> Void = {}) async {
         self.stopQuotePreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
@@ -672,7 +684,7 @@ extension ChatStore {
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
         await clearCache()
-        await self.load(force: true)
+        await self.load(force: true, feedbackAuthority: feedbackAuthority)
     }
 
     /// The session was deleted: nothing more is written to the transcript cache.
