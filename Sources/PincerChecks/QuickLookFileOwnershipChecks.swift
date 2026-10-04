@@ -13,13 +13,16 @@ import Foundation
         check(opened.1 == data && a != b, "second preview has exact bytes and distinct URL")
         #if DEBUG
         let probe = QuickLookCleanupProbe()
-        FilePreviewFiles.dismiss(a, in: root, probe: probe)
+        await FilePreviewFiles.dismiss(a, in: root, probe: probe)
         check(probe.counts.main == 0 && probe.counts.worker == 1, "actual dismissal cleanup runs off Main")
         #else
-        FilePreviewFiles.dismiss(a, in: root)
+        await FilePreviewFiles.dismiss(a, in: root)
         #endif
         let remaining = await Task.detached { try? Data(contentsOf: b) }.value
         check(remaining == data, "dismissing first preview retains second presented file")
+        await FilePreviewFiles.dismiss(b, in: root)
+        let closed = await Task.detached { !FileManager.default.fileExists(atPath: b.deletingLastPathComponent().path) }.value
+        check(closed, "current owner close awaits actual owned-directory cleanup")
     } catch { check(false, "actual owned Quick Look writes completed") }
     await Task.detached { FilePreviewFiles.clear(in: root) }.value
 }

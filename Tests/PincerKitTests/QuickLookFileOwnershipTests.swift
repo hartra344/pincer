@@ -16,10 +16,10 @@ import Testing
             #expect(afterOpen.1 == bytes && first != second && second.lastPathComponent == "B.pdf")
             #if DEBUG
             let probe = QuickLookCleanupProbe()
-            FilePreviewFiles.dismiss(first, in: root, probe: probe)
+            await FilePreviewFiles.dismiss(first, in: root, probe: probe)
             #expect(probe.counts.main == 0 && probe.counts.worker == 1, "actual dismissal disk cleanup must run off Main")
             #else
-            FilePreviewFiles.dismiss(first, in: root)
+            await FilePreviewFiles.dismiss(first, in: root)
             #endif
             let afterClose = await Task.detached { try? Data(contentsOf: second) }.value
             #expect(afterClose == bytes, "dismissing A must retain B's presented file")
@@ -32,17 +32,17 @@ import Testing
 
     @Test func currentPreviewAndRealWriteFailureControls() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("QuickLookControl-" + UUID().uuidString, isDirectory: true)
-        let control = await Task.detached { () -> Bool in
+        let control = await Task.detached { () async -> Bool in
             defer { FilePreviewFiles.clear(in: root) }
             guard let url = try? FilePreviewFiles.write(Data([1, 2]), name: "Current.pdf", mimeType: "application/pdf", in: root),
                   (try? Data(contentsOf: url)) == Data([1, 2]) else { return false }
-            FilePreviewFiles.dismiss(url, in: root)
+            await FilePreviewFiles.dismiss(url, in: root)
             let removed = !FileManager.default.fileExists(atPath: url.path)
             // Existing name policy allows a single component; a nonexistent nested name is sanitized.
             return removed && FilePreviewFiles.fileName("../Current.pdf", mimeType: nil) == "Current.pdf"
         }.value
         #expect(control)
-        let failed = await Task.detached { () -> Bool in
+        let failed = await Task.detached { () async -> Bool in
             let parent = root.appendingPathComponent("blocking", isDirectory: false)
             defer { FilePreviewFiles.clear(in: root) }
             do {
