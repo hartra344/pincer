@@ -564,19 +564,11 @@ struct RawConfigPage: View {
     #endif
     init(settings: GatewaySettingsModel? = nil) { self.injectedSettings = settings }
     private var settings: GatewaySettingsModel { self.injectedSettings ?? self.gateway.settings }
-    @State private var text = ""
-    /// The file text last loaded, to tell edits apart from a newer file.
-    @State private var baseline: String?
+    @State private var draft = RawConfigEditorDraft()
 
     var body: some View {
         let settings = self.settings
         let raw = settings.snapshot?.raw
-        let edited = raw != nil && self.text != raw
-        #if DEBUG
-        let parseError = edited ? Self.parseError(self.text, probe: self.parserProbe) : nil
-        #else
-        let parseError = edited ? Self.parseError(self.text) : nil
-        #endif
         Form {
             if raw == nil {
                 Section {
@@ -585,7 +577,7 @@ struct RawConfigPage: View {
                 }
             } else {
                 Section {
-                    TextEditor(text: self.$text)
+                    TextEditor(text: Binding(get: { self.draft.text }, set: { self.draft.edit($0) }))
                         .font(.body.monospaced())
                         .autocorrectionDisabled()
                         #if os(iOS)
@@ -595,7 +587,7 @@ struct RawConfigPage: View {
                         .disabled(!settings.canEdit)
                 } footer: {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        if let parseError {
+                        if let parseError = self.draft.validationError {
                             Label(parseError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                         }
                         if settings.hasChanges {
@@ -611,43 +603,36 @@ struct RawConfigPage: View {
         .navigationTitle(L("Raw Config"))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if edited {
-                    Button(L("Revert")) { self.text = raw ?? "" }
+                if self.draft.isEdited {
+                    Button(L("Revert")) { self.draft.revert() }
                 }
                 Button(L("Save")) {
-                    Task { if await settings.saveRaw(self.text) { self.text = settings.snapshot?.raw ?? "" } }
+                    let source = self.draft.text
+                    guard let admission = self.draft.beginSave() else { return }
+                    Task {
+                        let saved = await settings.saveRaw(source)
+                        self.draft.finishSave(admission: admission, acknowledgedRaw: saved ? settings.snapshot?.raw : nil)
+                    }
                 }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(!edited || parseError != nil || settings.hasChanges || settings.isSaving || !settings.canEdit)
+                .disabled(!self.draft.isEdited || self.draft.savePending || self.draft.validationPending || self.draft.validationError != nil || settings.hasChanges || settings.isSaving || !settings.canEdit)
             }
         }
-        .onAppear(perform: self.sync)
+        .onAppear {
+            #if DEBUG
+            let probe = self.parserProbe
+            self.draft.validationObserver = { probe?.record() }
+            #endif
+            self.sync()
+        }
         .onChange(of: settings.snapshot?.hash) { self.sync() }
     }
 
-    /// Loads the file text, unless the user is in the middle of editing it.
     private func sync() {
         guard let raw = self.settings.snapshot?.raw else { return }
-        if self.baseline == nil || self.text == self.baseline { self.text = raw }
-        self.baseline = raw
+        self.draft.updateSnapshot(raw)
     }
-
-    /// Local JSON5 check before sending. The Gateway still validates against its schema.
-    static func parseError(_ text: String) -> String? {
-        do {
-            _ = try JSONSerialization.jsonObject(with: Data(text.utf8), options: [.json5Allowed, .fragmentsAllowed])
-            return nil
-        } catch {
-            let description = (error as NSError).userInfo[NSDebugDescriptionErrorKey] as? String
-            return "Not valid JSON5\(description.map { ": \($0)" } ?? ".")"
-        }
-    }
-    #if DEBUG
-    static func parseError(_ text: String, probe: RawConfigParserProbe?) -> String? {
-        probe?.record()
-        return Self.parseError(text)
-    }
-    #endif
+    static func parseError(_ text: String) -> String? { RawConfigEditorDraft.parseError(text) }
 }
 
 #if DEBUG
