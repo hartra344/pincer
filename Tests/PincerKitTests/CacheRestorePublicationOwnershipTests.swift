@@ -41,7 +41,9 @@ struct CacheRestorePublicationOwnershipTests {
         let gateway = GatewayStore(profile: GatewayProfile(name: "Offline", url: "ws://127.0.0.1:1", authMode: .none), defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = temp.url; gateway.outboxRoot = nil
         let key = "agent:main:restore", chat = gateway.chat(for: "agent:main:restore")
-        defer { chat.stopCaching(); gateway.stop(); temp.remove(); scratch.remove() }
+        defer { chat.stopCaching(); gateway.stop(); scratch.remove() }
+        let cleanupURL = temp.url
+        do {
         let old = [item("old"), item("shared")]
         let file = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: key, root: temp.url))
         let writer = TranscriptCache.Writer(writeOptions: .atomic)
@@ -58,13 +60,21 @@ struct CacheRestorePublicationOwnershipTests {
         #expect(expected.items == (currentOverlap ? [item("shared"), item("fresh")] : []))
         await gate.release(); await restore.value
         #expect(State(chat) == expected)
+        } catch {
+            await gate.release()
+            await Task.detached { try? FileManager.default.removeItem(at: cleanupURL) }.value
+            throw error
+        }
+        await Task.detached { try? FileManager.default.removeItem(at: cleanupURL) }.value
     }
     @Test func ordinaryRestorePreservesPendingInputAndExactCachedRows() async throws {
         let scratch = ScratchDefaults(), temp = TempDir()
         let gateway = GatewayStore(profile: GatewayProfile(name: "Offline", url: "ws://127.0.0.1:1", authMode: .none), defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = temp.url; gateway.outboxRoot = nil
         let key = "agent:main:ordinary", chat = gateway.chat(for: "agent:main:ordinary")
-        defer { chat.stopCaching(); gateway.stop(); temp.remove(); scratch.remove() }
+        defer { chat.stopCaching(); gateway.stop(); scratch.remove() }
+        let cleanupURL = temp.url
+        do {
         let cached = item("cached"), pending = ChatItem(id: "pending", role: .user, blocks: [.text("Unsent input")], isPending: true)
         let file = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: key, root: temp.url))
         let writer = TranscriptCache.Writer(writeOptions: .atomic)
@@ -74,6 +84,11 @@ struct CacheRestorePublicationOwnershipTests {
         await chat.restoreFromCache()
         #expect(chat.items == [cached, pending])
         #expect(chat.cacheOutcome == .loaded && !chat.hasOlderItems && chat.hasPagedOlder && chat.olderOffset == 1)
+        } catch {
+            await Task.detached { try? FileManager.default.removeItem(at: cleanupURL) }.value
+            throw error
+        }
+        await Task.detached { try? FileManager.default.removeItem(at: cleanupURL) }.value
     }
 }
 #endif
