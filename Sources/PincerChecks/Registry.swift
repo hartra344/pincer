@@ -57,7 +57,6 @@ enum Suites {
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
-            Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Compact graduated header policy") { runCompactGraduatedHeaderChecks() },
             Section("Bounded cold rotor labels") { await runColdRotorLabelChecks() },
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
@@ -111,6 +110,7 @@ enum Suites {
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
+            Section("MCP refresh outcomes") { await runMCPRefreshOutcomeChecks() },
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
@@ -144,6 +144,7 @@ enum Suites {
             Section("Find in chat") { await runFindInChatChecks() },
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
+            Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
             Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },
@@ -216,7 +217,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
-        Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
+        Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Usage totals bounds (demo)") { await runDemoUsageTotalsBoundsChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
@@ -228,6 +229,7 @@ enum Suites {
         Section("Heartbeat event ordering (demo)") { await runDemoHeartbeatEventOrderingChecks() },
         Section("Health event ordering (demo)") { await runDemoHealthEventOrderingChecks() },
         Section("Cold transcript geometry sources (demo)") { await runDemoColdTranscriptHeightEstimateChecks() },
+        Section("Premeasure metadata admission (demo)") { await runDemoPremeasureMetadataChecks() },
         Section("Centered chat identity (demo)") { await runDemoCenteredChatHeaderChecks() },
         Section("Reply Last availability (demo)") { await runDemoReplyLastAvailabilityChecks() },
         Section("Slash suggestion announcements (demo)") { await runDemoSlashSuggestionAnnouncementChecks() },

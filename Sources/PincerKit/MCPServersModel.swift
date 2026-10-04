@@ -168,17 +168,20 @@ public final class MCPServersModel {
         let task = Task { @MainActor in
             repeat {
                 self.reloadQueued = false
+                self.loadState = .running
                 async let plugins: Void = self.fetchPluginServers()
                 await self.fetchStatuses()
                 await plugins
             } while self.reloadQueued
-            // Cleared with no suspension after the last check, so no caller can wait on a finished load.
+            // Finalize the shared operation before releasing ownership. An earlier awaiting caller
+            // must not mark a newer load idle after this task has finished.
+            self.hasLoaded = true
+            if self.loadState.isRunning { self.loadState = .idle }
+            // No suspension after the last queued-round check or before clearing ownership.
             self.loadTask = nil
         }
         self.loadTask = task
         await task.value
-        self.hasLoaded = true
-        if self.loadState.isRunning { self.loadState = .idle }
     }
 
     private func fetchStatuses() async {
