@@ -11,6 +11,15 @@ struct VoiceSetupSettingsSection: View {
     @State private var draft = TTSVoiceSettings.elevenLabsDefault
     @State private var expanded = false
 
+    init(model: GatewayVoiceModel, setup: VoiceSetupController, provider: String, editable: Bool,
+         initialExpanded: Bool = false) {
+        self.model = model
+        self.setup = setup
+        self.provider = provider
+        self.editable = editable
+        self._expanded = State(initialValue: initialExpanded)
+    }
+
     private var saved: TTSVoiceSettings { self.model.setups[self.provider]?.voiceSettings ?? .elevenLabsDefault }
 
     var body: some View {
