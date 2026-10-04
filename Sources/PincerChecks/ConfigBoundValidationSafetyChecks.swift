@@ -6,7 +6,7 @@ import Foundation
         ConfigSchema(schema: ["type": "object", "properties": ["limit": ["type": "number", "minimum": .number(1e30)]]])
     }.value
     guard let field = schema.field(at: ["limit"]) else { check(false, "actual numeric schema field parses"); return }
-    check(field.validationMessage(for: .number(0)) == "Must be at least 1e+30.",
+    check(field.validate( .number(0)) == "Must be at least 1e+30.",
           "actual field validation formats finite out-of-Int64 bounds without trapping")
 }
 
@@ -25,14 +25,14 @@ import Foundation
         guard schema.root.object != nil, let ordinary = schema.field(at: ["gateway", "port"]) else {
             check(false, "actual Demo schema supplies the existing port field"); return
         }
-        check(ordinary.kind == .integer && ordinary.validationMessage(for: .number(18789)) == nil,
+        check(ordinary.kind == .integer && ordinary.validate( .number(18789)) == nil,
               "actual Demo port schema retains ordinary valid-number behavior")
         // Explicitly LOCAL valid JSON Schema constraint, interpreted by the same parsed
         // schema field API; no Gateway response overlay or configuration write.
         guard let local = schema.field(at: ["localBound"], node: ["type": "number", "maximum": .number(-1e30)]) else {
             check(false, "local numeric constraint field parses through actual schema"); return
         }
-        check(local.validationMessage(for: .number(0)) == "Must be at most -1e+30.",
+        check(local.validate( .number(0)) == "Must be at most -1e+30.",
               "genuine Demo schema field API safely validates the explicit LOCAL finite bound")
     } catch { check(false, "actual Demo config.schema read failed: \(error)") }
 }

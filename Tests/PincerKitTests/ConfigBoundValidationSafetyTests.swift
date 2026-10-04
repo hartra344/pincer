@@ -14,15 +14,15 @@ struct ConfigBoundValidationSafetyTests {
             Self.field(bound: minimum ? "minimum" : "maximum", value: minimum ? 1e30 : -1e30)
         }.value)
         let expected = minimum ? "Must be at least 1e+30." : "Must be at most -1e+30."
-        #expect(field.validationMessage(for: .number(0)) == expected)
+        #expect(field.validate( .number(0)) == expected)
     }
 
     @Test func ordinaryIntegerAndFractionalMessagesStayExact() async throws {
         let integer = try #require(Self.field(bound: "minimum", value: 10))
         let fractional = try #require(Self.field(bound: "maximum", value: 2.5))
-        #expect(integer.validationMessage(for: .number(9)) == "Must be at least 10.")
-        #expect(integer.validationMessage(for: .number(10)) == nil)
-        #expect(fractional.validationMessage(for: .number(3)) == "Must be at most 2.5.")
-        #expect(fractional.validationMessage(for: .number(2.5)) == nil)
+        #expect(integer.validate( .number(9)) == "Must be at least 10.")
+        #expect(integer.validate( .number(10)) == nil)
+        #expect(fractional.validate( .number(3)) == "Must be at most 2.5.")
+        #expect(fractional.validate( .number(2.5)) == nil)
     }
 }
