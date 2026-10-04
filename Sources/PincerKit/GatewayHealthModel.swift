@@ -137,6 +137,8 @@ public final class GatewayHealthModel {
     @ObservationIgnored private var restartTimer: Task<Void, Never>?
     @ObservationIgnored private var notBackTimer: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
+    // A heartbeat event supersedes only older heartbeat responses and errors.
+    @ObservationIgnored private var heartbeatEventRevision = 0
     // Health events supersede only in-flight health RPCs, including their errors.
     @ObservationIgnored private var healthEventRevision = 0
 
@@ -395,6 +397,7 @@ public final class GatewayHealthModel {
             }
         case "heartbeat":
             if let beat = GatewayHeartbeat(payload) {
+                self.heartbeatEventRevision += 1
                 self.heartbeat = beat
                 self.heartbeatLoaded = true
                 self.prune(.heartbeat)
@@ -544,14 +547,17 @@ public final class GatewayHealthModel {
     private func call(_ section: Section, _ params: JSONValue, _ generation: Int) async -> JSONValue? {
         guard self.isAvailable(section) else { return nil }
         let healthEventRevision = self.healthEventRevision
+        let heartbeatEventRevision = self.heartbeatEventRevision
         do {
             let result = try await self.request(section.method, params)
             guard generation == self.generation,
-                  section != .health || healthEventRevision == self.healthEventRevision else { return nil }
+                  section != .health || healthEventRevision == self.healthEventRevision,
+                  section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             return result
         } catch {
             guard generation == self.generation,
-                  section != .health || healthEventRevision == self.healthEventRevision else { return nil }
+                  section != .health || healthEventRevision == self.healthEventRevision,
+                  section != .heartbeat || heartbeatEventRevision == self.heartbeatEventRevision else { return nil }
             if Self.isUnavailableMethod(error) {
                 self.unavailable.insert(section)
             } else if section == .health, case let GatewayError.rpc(code, message, _) = error, code == "UNAVAILABLE" {

@@ -3,6 +3,23 @@ import Testing
 
 @Suite("Compact graduated chat header layout")
 struct CompactChatHeaderLayoutTests {
+    @Test func devicePreferenceDefaultsNormalizesWithoutWritingAndPersistsChoice() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        #expect(ChatHeaderAvatarSize.load(from: scratch.defaults) == .small)
+        #expect(scratch.defaults.object(forKey: ChatHeaderAvatarSize.defaultsKey) == nil)
+        scratch.defaults.set("future-size", forKey: ChatHeaderAvatarSize.defaultsKey)
+        #expect(ChatHeaderAvatarSize.load(from: scratch.defaults) == .small)
+        #expect(scratch.defaults.string(forKey: ChatHeaderAvatarSize.defaultsKey) == "future-size")
+        for size in ChatHeaderAvatarSize.allCases {
+            scratch.defaults.set(size.rawValue, forKey: ChatHeaderAvatarSize.defaultsKey)
+            #expect(ChatHeaderAvatarSize.load(from: scratch.defaults) == size)
+            let base = CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22, size: size)
+            let grown = CompactChatHeaderLayout.reservation(measuredTitleHeight: 100, scaledTitleAllowance: 48, size: size)
+            #expect(base == size.minimumReservation && grown > base)
+            #expect(size.avatarSize + 4 + 100 - CompactChatHeaderLayout.navigationOverlap <= grown)
+        }
+    }
     @Test func defaultGeometryIsCompactAndFinishedTitleCanGrowThenShrink() {
         #expect(CompactChatHeaderLayout.avatarSize == 48)
         let ordinary = CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22)

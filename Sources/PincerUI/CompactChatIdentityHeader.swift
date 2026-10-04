@@ -8,6 +8,7 @@ struct CompactChatIdentityHeader: View {
     let gateway: GatewayStore
     let key: String
     let row: SessionRow?
+    @AppStorage(ChatHeaderAvatarSize.defaultsKey) private var avatarSizePreference = ChatHeaderAvatarSize.small.rawValue
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     #if DEBUG
     @Environment(\.compactChatHeaderGeometryProbe) private var geometryProbe
@@ -17,10 +18,12 @@ struct CompactChatIdentityHeader: View {
     static let navigationOverlap: CGFloat = CGFloat(CompactChatHeaderLayout.navigationOverlap)
     @ScaledMetric(relativeTo: .headline) private var titleLineAllowance: CGFloat = 22
     @State private var measuredTitleHeight: CGFloat = 0
+    private var selectedSize: ChatHeaderAvatarSize { ChatHeaderAvatarSize(normalizing: self.avatarSizePreference) }
+    private var selectedAvatarSize: CGFloat { CGFloat(self.selectedSize.avatarSize) }
 
     private var reservedHeight: CGFloat {
         CGFloat(CompactChatHeaderLayout.reservation(measuredTitleHeight: Double(self.measuredTitleHeight),
-                                                   scaledTitleAllowance: Double(self.titleLineAllowance)))
+                                                   scaledTitleAllowance: Double(self.titleLineAllowance), size: self.selectedSize))
     }
 
     private var agent: AgentSummary {
@@ -55,9 +58,9 @@ struct CompactChatIdentityHeader: View {
             .overlay(alignment: .top) {
                 VStack(spacing: 4) {
                     ChatAgentAvatar(chat: self.gateway.chat(for: self.key), agent: self.agent,
-                                    size: Self.avatarSize, announces: true)
+                                    size: self.selectedAvatarSize, announces: true)
                         .id(self.key)
-                        .frame(width: Self.avatarSize, height: Self.avatarSize)
+                        .frame(width: self.selectedAvatarSize, height: self.selectedAvatarSize)
                         .accessibilityIdentifier("compact-chat-header-avatar")
                         #if DEBUG
                         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: {

@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Settings → Appearance → Avatars: the animated companions on or off, pixel or plush, and which
 /// creature each agent is. The style and characters sync to your other devices through each
-/// Gateway's `users.prefs`; animated on or off stays on this device.
+/// Gateway's `users.prefs`; animation and compact chat-header size stay on this device.
 struct AvatarSettingsSection: View {
     @Environment(AppModel.self) private var app
     @AppStorage(AvatarSettings.animatedKey) private var enabled = true
@@ -24,6 +24,9 @@ struct AvatarSettingsSection: View {
 
     var body: some View {
         SwiftUI.Section {
+            #if os(iOS)
+            ChatHeaderAvatarSizePicker()
+            #endif
             Toggle(isOn: self.$enabled) {
                 Text("Animated avatars", bundle: .module)
                 Text("Each agent gets a little companion that shows what it's doing. Off keeps the initial or emoji.", bundle: .module)
@@ -53,6 +56,22 @@ struct AvatarSettingsSection: View {
         for gateway in self.app.gateways { gateway.setAvatarRenderStyle(style) }
     }
 }
+
+#if os(iOS)
+/// Shares the device-local storage key with the actual compact header.
+struct ChatHeaderAvatarSizePicker: View {
+    @AppStorage(ChatHeaderAvatarSize.defaultsKey) private var size = ChatHeaderAvatarSize.small.rawValue
+    var body: some View {
+        Picker(L("Chat header avatar"), selection: Binding(
+            get: { ChatHeaderAvatarSize(normalizing: self.size).rawValue }, set: { self.size = $0 })) {
+            Text("Small", bundle: .module).tag(ChatHeaderAvatarSize.small.rawValue)
+            Text("Large", bundle: .module).tag(ChatHeaderAvatarSize.large.rawValue)
+        }
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("chat-header-avatar-size")
+    }
+}
+#endif
 
 struct AvatarSettingsRow: Identifiable {
     let agent: AgentSummary
