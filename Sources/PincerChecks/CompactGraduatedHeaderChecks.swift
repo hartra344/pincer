@@ -9,6 +9,8 @@ func runCompactGraduatedHeaderChecks() {
           "actual compact header policy reduces avatar and default reservation")
     check(accessible > standard && CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22) == standard,
           "actual finished-title policy expands and shrinks without accumulating height")
+    check(CompactChatHeaderLayout.fadeMidpointOpacity == 0.45 && CompactChatHeaderLayout.fadeHeight == 32,
+          "actual header protects upper controls and uses a wider graduated lower fade")
     check(CompactChatHeaderLayout.backdrop(reduceTransparency: true) == .opaque,
           "actual compact backdrop policy honors Reduce Transparency")
 }

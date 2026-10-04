@@ -36,12 +36,16 @@ struct CompactChatIdentityHeader: View {
                     Color(uiColor: .systemBackground)
                         .ignoresSafeArea(.container, edges: .top)
                 case .graduatedMaterial:
-                    Rectangle().fill(.regularMaterial)
+                    Rectangle().fill(.ultraThinMaterial)
                         .ignoresSafeArea(.container, edges: .top)
                         .mask {
                             VStack(spacing: 0) {
                                 Color.black
-                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                LinearGradient(stops: [
+                                    .init(color: .black, location: 0),
+                                    .init(color: .black.opacity(CompactChatHeaderLayout.fadeMidpointOpacity), location: 0.5),
+                                    .init(color: .clear, location: 1)
+                                ], startPoint: .top, endPoint: .bottom)
                                     .frame(height: CGFloat(CompactChatHeaderLayout.fadeHeight))
                             }
                             .ignoresSafeArea(.container, edges: .top)
