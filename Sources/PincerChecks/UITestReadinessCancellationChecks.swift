@@ -31,6 +31,21 @@ import PincerKit
     check(!selfCancelingResult && calls == 1, "a ready predicate cannot bypass its own actual task cancellation")
 
     calls = 0
+    var boundaries = 0
+    let boundaryCanceled = Task {
+        await UITestReadinessProbe.$beforeGraceSleep.withValue({
+            boundaries += 1; owner.task?.cancel()
+        }) {
+            await uiTestEventually(timeout: .zero) { calls += 1; return false }
+        }
+    }
+    owner.task = boundaryCanceled
+    let boundaryResult = await boundaryCanceled.value
+    owner.task = nil
+    check(boundaries == 1 && !boundaryResult && calls == 1,
+          "actual final grace sleep catches cancellation at its observed sleep boundary")
+
+    calls = 0
     let ready = await uiTestEventually { calls += 1; return true }
     check(ready && calls == 1, "current ready predicate completes normally")
     calls = 0

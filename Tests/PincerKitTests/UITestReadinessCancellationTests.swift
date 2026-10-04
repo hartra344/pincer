@@ -50,19 +50,21 @@ struct UITestReadinessCancellationTests {
         #expect(!result && calls == 1)
     }
 
-    @Test func cancellationDuringFinalGraceDoesNotReadPredicateAgain() async {
+    @Test func cancellationAtFinalGraceSleepBoundaryDoesNotReadPredicateAgain() async {
         let owner = TaskOwner()
-        var calls = 0
-        let task = Task { await uiTestEventually(timeout: .zero) {
-            calls += 1
-            // Enqueued on MainActor: runs only after the helper suspends for its final grace.
-            Task { owner.task?.cancel() }
-            return false
-        } }
+        var calls = 0, boundaries = 0
+        let task = Task {
+            await UITestReadinessProbe.$beforeGraceSleep.withValue({
+                boundaries += 1
+                owner.task?.cancel()
+            }) {
+                await uiTestEventually(timeout: .zero) { calls += 1; return false }
+            }
+        }
         owner.task = task
         defer { task.cancel(); owner.task = nil }
         let result = await task.value
-        #expect(!result && calls == 1)
+        #expect(boundaries == 1 && !result && calls == 1)
     }
 
 }
