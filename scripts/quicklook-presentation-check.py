@@ -9,6 +9,9 @@ parser.add_argument("--timeout", type=int, default=600, help="Per-process fence 
 args = parser.parse_args()
 if args.timeout <= 0:
     parser.error("timeout must be positive")
+def interrupted(_signal, _frame):
+    raise KeyboardInterrupt("Interrupted; stopping only owned process group")
+signal.signal(signal.SIGTERM, interrupted)
 repo = Path(__file__).resolve().parent.parent
 root = Path(tempfile.mkdtemp(prefix="pincer-quicklook-app-host-"))
 print("Owned harness and results:", root, flush=True)
