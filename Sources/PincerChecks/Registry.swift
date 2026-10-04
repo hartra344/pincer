@@ -113,6 +113,7 @@ enum Suites {
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
             Section("Gateway preference rejections") { runRejectedPrefHealthChecks() },
+            Section("Shutdown restart delay bounds") { runShutdownRestartDelayBoundsChecks() },
             Section("MCP refresh outcomes") { await runMCPRefreshOutcomeChecks() },
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
