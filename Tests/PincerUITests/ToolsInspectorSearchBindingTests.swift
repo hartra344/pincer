@@ -39,4 +39,12 @@ struct ToolsInspectorSearchBindingTests {
         }, "actual query binding must publish only its finished matching rows")
     }
 }
+// The existing CI selector includes TranscriptUIKitHostedTests.
+@MainActor
+extension TranscriptUIKitHostedTests {
+    @Test(.timeLimit(.minutes(2)))
+    func actualToolsInspectorFieldUsesOffMainPreparedResults() async throws {
+        try await ToolsInspectorSearchBindingTests().actualEditableFieldPublishesCurrentPreparedRows()
+    }
+}
 #endif
