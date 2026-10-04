@@ -65,6 +65,7 @@ struct TranscriptPremeasureTests {
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > 0)
     }
 
+    #if DEBUG
     @Test func repeatedSplitReusesPremeasureEligibilityForAnUnchangedRow() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -89,6 +90,8 @@ struct TranscriptPremeasureTests {
                     "warm-cache probes should reuse the memoized full-source digest in their own split scope")
         }
     }
+
+    #endif
 
     private enum OwnershipFixtureError: Error { case admissionRejected }
 
