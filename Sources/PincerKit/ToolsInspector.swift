@@ -372,6 +372,11 @@ public struct ToolsInspection: Hashable, Sendable {
     }
 
     public func filtered(_ filter: ToolFilter, search: String = "") -> [InspectedToolGroup] {
+        self.filtered(filter, search: search, observe: nil)
+    }
+
+    func filtered(_ filter: ToolFilter, search: String, observe: ((Bool) -> Void)?) -> [InspectedToolGroup] {
+        observe?(false)
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return self.groups.compactMap { group in
             let tools = group.tools.filter { tool in
@@ -380,6 +385,7 @@ public struct ToolsInspection: Hashable, Sendable {
                 case .allowed: guard tool.isAllowed else { return false }
                 case .denied: guard !tool.isAllowed else { return false }
                 }
+                if !query.isEmpty { observe?(true) }
                 return query.isEmpty || tool.matches(query)
             }
             return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
@@ -493,10 +499,40 @@ public final class ToolsInspectorModel: Identifiable {
     public private(set) var error: String?
     /// Why the policy is catalog-only (no session, or `tools.effective` failed), shown as a note.
     public private(set) var effectiveNote: String?
+    public private(set) var searchSourceRevision = 0
+    @ObservationIgnored public let searchPreparation = ToolsInspectorSearchPreparation()
 
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private var generation = 0
+    #if DEBUG
+    @ObservationIgnored package var searchProbe: ToolsInspectorSearchProbe?
+    #endif
+
+    /// The exact existing query path used by the inspector's editable filter field.
+    public func searchFields(_ filter: ToolFilter, matching query: String) -> [InspectedToolGroup] {
+        #if DEBUG
+        let probe = self.searchProbe
+        return self.inspection?.filtered(filter, search: query, observe: { probe?.record(match: $0) }) ?? []
+        #else
+        return self.inspection?.filtered(filter, search: query) ?? []
+        #endif
+    }
+
+    /// Exact off-main query preparation; stale/canceled requests return no groups.
+    public func prepareSearchFields(_ filter: ToolFilter, matching query: String) async -> [InspectedToolGroup] {
+        await self.prepareDisplaySearch(filter, matching: query, owner: UUID())?.groups ?? []
+    }
+
+    public func prepareDisplaySearch(_ filter: ToolFilter, matching query: String,
+                                     server: String? = nil, owner: UUID) async -> ToolsInspectorSearchResult? {
+        guard let inspection = self.inspection else { return nil }
+        #if DEBUG
+        self.searchPreparation.probe = self.searchProbe
+        #endif
+        return await self.searchPreparation.prepare(inspection, filter: filter, query: query,
+            server: server, owner: owner, sourceRevision: self.searchSourceRevision)
+    }
 
     public init(scope: Scope, methods: @escaping @MainActor () -> Set<String>? = { nil }, request: @escaping Request) {
         self.scope = scope
@@ -514,6 +550,8 @@ public final class ToolsInspectorModel: Identifiable {
     }
 
     public func load() async {
+        self.searchPreparation.invalidate()
+        self.searchSourceRevision += 1
         self.generation += 1
         let generation = self.generation
         self.isLoading = true
@@ -553,5 +591,7 @@ public final class ToolsInspectorModel: Identifiable {
         self.effective = effective
         self.effectiveNote = note
         self.inspection = ToolsInspection.build(catalog: catalog, effective: effective)
+        self.searchPreparation.invalidate()
+        self.searchSourceRevision += 1
     }
 }
