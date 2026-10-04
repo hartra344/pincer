@@ -558,6 +558,16 @@ public final class GatewayStore: Identifiable {
     }
 
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+    #if DEBUG
+    /// Test dependency at the actual background reconciliation boundary; nil in production.
+    @ObservationIgnored package var beforeBootstrapReconciliation: (@MainActor @Sendable () async -> Void)?
+    @ObservationIgnored private var observedBootstrapBackground: (epoch: Int, task: Task<Void, Never>)?
+    package var bootstrapBackgroundTask: Task<Void, Never>? {
+        guard self.observedBootstrapBackground?.epoch == self.connectionEpoch else { return nil }
+        return self.observedBootstrapBackground?.task
+    }
+    #endif
+
 
     /// Row changes seen while the bootstrap's session list is being read; they win over that snapshot.
     private struct ListReconcile {
@@ -621,10 +631,23 @@ public final class GatewayStore: Identifiable {
         Task { await self.loadConfiguredServerNames() }
         // Preference reads can restore remote bookmarks; reconcile deleted chats afterwards.
         // Both operations stay in the background so opening the chat never waits for them.
+        #if DEBUG
+        let beforeReconciliation = self.beforeBootstrapReconciliation
+        let background = Task {
+            defer {
+                if self.observedBootstrapBackground?.epoch == epoch { self.observedBootstrapBackground = nil }
+            }
+            await self.pullBootstrapPrefs(epoch: epoch)
+            await beforeReconciliation?()
+            await self.reconcileOrphanedTranscripts(epoch: epoch)
+        }
+        self.observedBootstrapBackground = (epoch, background)
+        #else
         Task {
             await self.pullBootstrapPrefs(epoch: epoch)
             await self.reconcileOrphanedTranscripts(epoch: epoch)
         }
+        #endif
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.

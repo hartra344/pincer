@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 // #202: reconnect / bootstrap behaviour against the mock (uses its mock.control RPC for counters,
 // delayed responses, mid-flight events and drops). Run alone with:
@@ -79,16 +79,16 @@ private func connectedStore(url: String, token: String) async -> GatewayStore? {
 
 /// Waits for the socket to drop, come back and the store to be bootstrapped again, then for traffic to go quiet.
 @MainActor
-private func settleAfterReconnect(_ gateway: GatewayStore, control: MockControl, minConnections: Int = 1) async -> Bool {
+private func settleAfterReconnect(_ gateway: GatewayStore, control: MockControl, minConnections: Int = 1, timeout: TimeInterval = 40) async -> Bool {
     // The new connection shows up in the mock's stats once it sends its first request.
     var seen = false
-    let waitUntil = Date().addingTimeInterval(40)
+    let waitUntil = Date().addingTimeInterval(timeout)
     while Date() < waitUntil {
         if await control.stats().connections.count >= minConnections { seen = true; break }
         try? await Task.sleep(for: .milliseconds(100))
     }
     var back = false
-    if seen { back = await waitFor("reconnect", timeout: 40) { gateway.state.isConnected && !gateway.sessions.isEmpty } }
+    if seen { back = await waitFor("reconnect", timeout: timeout) { gateway.state.isConnected && !gateway.sessions.isEmpty } }
     var last = await control.stats().total.values.reduce(0, +), since = Date()
     while Date().timeIntervalSince(since) < 2, Date().timeIntervalSince(since) < 15 {
         try? await Task.sleep(for: .milliseconds(250))
@@ -107,6 +107,9 @@ func runLiveReconnect(url: String, token: String) async {
     guard controlReady else { check(false, "control connection to the mock"); return }
     defer { Task { await control.stop() } }
 
+    #if DEBUG
+    await runHeldBootstrapTerminalProof(url: url, token: token, control: control)
+    #endif
     await runRPCCountProbe(url: url, token: token, control: control)
     await runBootstrapRace(url: url, token: token, control: control)
     await runOverlappingReconnects(url: url, token: token, control: control)
@@ -390,3 +393,55 @@ private func runChatSubscriptionChecks(url: String, token: String, control: Mock
     await chat.load()
     check(chat.isSubscribed, "opening it again resubscribes")
 }
+
+#if DEBUG
+@MainActor
+private func runHeldBootstrapTerminalProof(url: String, token: String, control: MockControl) async {
+    let gate = ReconnectTerminalGate()
+    let profile = GatewayProfile(name: "Held bootstrap", url: url, authMode: .token)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile)
+    gateway.beforeBootstrapReconciliation = { await gate.hold() }
+    gateway.start()
+    defer { gateway.stop() }
+    await withTaskCancellationHandler {
+        await gate.waitForEntry()
+        guard let actualTask = gateway.bootstrapBackgroundTask else {
+            check(false, "capture actual current-epoch bootstrap background task")
+            await gate.release(); return
+        }
+        let premature = await settleAfterReconnect(gateway, control: control, timeout: 4)
+        check(!premature, "reconnect settling cannot finish while actual reconciliation task is held")
+        let held = await gate.isHeld()
+        check(held, "negative proof holds real reconciliation work until settling returns")
+        await gate.release()
+        await actualTask.value
+        check(gateway.bootstrapBackgroundTask == nil, "actual background task terminal cleanup follows release")
+        let completed = await settleAfterReconnect(gateway, control: control, timeout: 4)
+        check(completed, "completed bootstrap background task permits settling")
+    } onCancel: {
+        Task { await gate.release() }
+    }
+}
+
+private actor ReconnectTerminalGate {
+    private var entered = false
+    private var open = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var arrival: CheckedContinuation<Void, Never>?
+    func hold() async {
+        self.entered = true
+        self.arrival?.resume(); self.arrival = nil
+        if !self.open { await withCheckedContinuation { self.held = $0 } }
+    }
+    func waitForEntry() async {
+        if !self.entered, !self.open { await withCheckedContinuation { self.arrival = $0 } }
+    }
+    func isHeld() -> Bool { self.entered && !self.open }
+    func release() {
+        self.open = true
+        self.held?.resume(); self.held = nil
+        self.arrival?.resume(); self.arrival = nil
+    }
+}
+#endif
