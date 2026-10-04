@@ -26,7 +26,7 @@ struct CacheRestorePublicationOwnershipTests {
         let older: Bool, more: Bool, paged: Bool, loaded: Bool, unreadable: Bool, forwarded: Bool
         let offset: Int?
         let outcome: TranscriptCache.LoadOutcome?
-        init(_ chat: ChatStore) {
+        @MainActor init(_ chat: ChatStore) {
             items = chat.items; older = chat.olderInCache; more = chat.hasMoreHistory
             paged = chat.hasPagedOlder; loaded = chat.hasLoaded; offset = chat.olderOffset
             unreadable = chat.cacheUnreadable; forwarded = chat.forwardedSenderRefreshPending; outcome = chat.cacheOutcome
