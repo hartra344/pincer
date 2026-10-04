@@ -18,6 +18,7 @@ struct GatewayHealthEventOrderingTests {
     private final class Requests {
         let oldHealth: JSONValue
         let beat: JSONValue = ["ts": 1700000000000, "status": "failed", "reason": "held heartbeat"]
+        var healthError: GatewayError?
         var entered: Set<String> = []
         private var waiters: [String: CheckedContinuation<Void, Never>] = [:]
         private var released = false
@@ -39,6 +40,7 @@ struct GatewayHealthEventOrderingTests {
                 Task { @MainActor [weak self] in self?.release() }
             }
             try Task.checkCancellation()
+            if method == "health", let error = self.healthError { throw error }
             return method == "health" ? self.oldHealth : self.beat
         }
 
@@ -101,4 +103,43 @@ struct GatewayHealthEventOrderingTests {
         #expect(model.activeIssues.map(\.id) == ["channel:telegram:default", "heartbeat:failed"])
         #expect(model.heartbeat?.reason == "held heartbeat")
     }
+    @Test(.timeLimit(.minutes(2)), arguments: ["UNAVAILABLE", "INVALID_REQUEST", "FAILED"])
+    func newerHealthEventSurvivesOlderRequestError(_ code: String) async throws {
+        let requests = Requests(connected: false)
+        requests.healthError = .rpc(code: code,
+                                   message: code == "INVALID_REQUEST" ? "unknown method: health" : "held health failure",
+                                   details: nil)
+        let model = GatewayHealthModel { method, params in try await requests.request(method, params) }
+        let refresh = Task { await model.refresh() }
+        defer { refresh.cancel(); requests.release() }
+        try await requests.waitUntilBothEntered()
+        model.handle(event: "health", payload: Self.health(connected: true, timestamp: 1700000001000))
+        try #require(model.health?.channels.first?.summary.connected == true)
+        try #require(model.healthFailure == nil && model.isAvailable(.health) && model.loadState == .idle)
+        requests.release()
+        await refresh.value
+        #expect(model.health?.checkedAt == Date(timeIntervalSince1970: 1700000001))
+        #expect(model.healthFailure == nil)
+        #expect(model.isAvailable(.health))
+        #expect(model.loadState == .idle)
+        #expect(model.activeIssues.filter { $0.kind == .channel }.isEmpty)
+        #expect(model.heartbeatLoaded && model.heartbeat?.reason == "held heartbeat")
+    }
+
+    @Test(.timeLimit(.minutes(2)))
+    func ignoredMalformedHealthEventDoesNotInvalidatePendingHealthResult() async throws {
+        let requests = Requests(connected: false)
+        let model = GatewayHealthModel { method, params in try await requests.request(method, params) }
+        let refresh = Task { await model.refresh() }
+        defer { refresh.cancel(); requests.release() }
+        try await requests.waitUntilBothEntered()
+        model.handle(event: "health", payload: .array([]))
+        try #require(model.health == nil)
+        requests.release()
+        await refresh.value
+        #expect(model.health?.checkedAt == Date(timeIntervalSince1970: 1700000000))
+        #expect(model.health?.channels.first?.summary.connected == false)
+        #expect(model.activeIssues.map(\.id) == ["channel:telegram:default", "heartbeat:failed"])
+    }
+
 }
