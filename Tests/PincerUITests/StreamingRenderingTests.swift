@@ -74,7 +74,11 @@ struct StreamingRenderingTests {
         #expect(cache.count == 1)
     }
 
-    @Test func sharedCachesStayBounded() {
+    @Test func sharedCachesStayBounded() async {
+        let acquiredCacheLease = await TranscriptSharedCacheLease.shared.acquire()
+        #expect(acquiredCacheLease, "the actual cache fixture must acquire its cancellable isolation lease")
+        guard acquiredCacheLease else { return }
+        defer { TranscriptSharedCacheLease.shared.release() }
         for i in 0..<(MarkdownCache.blockCapacity + 200) { _ = MarkdownCache.blocks("paragraph number \(i)") }
         #expect(MarkdownCache.counts.blocks <= MarkdownCache.blockCapacity)
         for i in 0..<(TranscriptText.segmentCapacity + 100) { _ = TranscriptText.markdown("message \(i)", tone: .primary) }

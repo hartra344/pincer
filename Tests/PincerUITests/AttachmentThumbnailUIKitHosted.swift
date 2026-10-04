@@ -54,7 +54,11 @@ enum AttachmentThumbnailUIKitHostedVerification {
         controller.view.setNeedsLayout()
         controller.view.layoutIfNeeded()
 
-        #expect(await self.waitForSamples(1, attachment: original), "UIKit hosts and decodes the real thumbnail")
+        let originalReady = await self.waitForSamples(1, attachment: original)
+        if !originalReady {
+            print("Thumbnail actual host diagnostic: windowHidden=\(window.isHidden) hostAttached=\(controller.view.window != nil) viewBounds=\(controller.view.bounds) bodyEvaluations=\(AttachmentThumbnailDecodeProbe.bodyEvaluationCount(for: original)) owner=\(String(describing: AttachmentThumbnailDecodeProbe.loaderOwner(for: original))) loaderRevision=\(AttachmentThumbnailLoader.shared.revision) samples=\(AttachmentThumbnailDecodeProbe.samples(for: original).count) displayed=\(String(describing: AttachmentThumbnailDecodeProbe.displayedPreviewIdentity(for: original)))")
+        }
+        #expect(originalReady, "UIKit hosts and decodes the real thumbnail")
         let first = AttachmentThumbnailDecodeProbe.samples(for: original)
         let originalOwner = AttachmentThumbnailDecodeProbe.loaderOwner(for: original)
         #expect(originalOwner != nil, "the hosted AttachmentThumb retains one stateful loader owner")
@@ -117,6 +121,7 @@ enum AttachmentThumbnailUIKitHostedVerification {
             if AttachmentThumbnailDecodeProbe.samples(for: attachment).count >= count { return true }
             try? await Task.sleep(for: .milliseconds(5))
         }
+        print("Thumbnail sample deadline: requested=\(count) actual=\(AttachmentThumbnailDecodeProbe.samples(for: attachment).count) bodies=\(AttachmentThumbnailDecodeProbe.bodyEvaluationCount(for: attachment)) owner=\(String(describing: AttachmentThumbnailDecodeProbe.loaderOwner(for: attachment))) loaderRevision=\(AttachmentThumbnailLoader.shared.revision)")
         return false
     }
 

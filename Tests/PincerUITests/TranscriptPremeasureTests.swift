@@ -120,6 +120,10 @@ struct TranscriptPremeasureTests {
     }
 
     @Test func warmRowMemoRechecksAfterTextCacheEviction() async {
+        let acquiredCacheLease = await TranscriptSharedCacheLease.shared.acquire()
+        #expect(acquiredCacheLease, "the actual cache fixture must acquire its cancellable isolation lease")
+        guard acquiredCacheLease else { return }
+        defer { TranscriptSharedCacheLease.shared.release() }
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
