@@ -72,23 +72,66 @@ private func connectedStore(url: String, token: String) async -> GatewayStore? {
     profile.secret = token
     let gateway = GatewayStore(profile: profile)
     gateway.start()
-    let ok = await waitFor("connected and bootstrapped", timeout: 30) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let ok = await waitFor("connected and bootstrapped", timeout: 30) { gateway.state.isConnected && !gateway.sessions.isEmpty && probeBootstrapTerminal(gateway) }
     guard ok else { gateway.stop(); return nil }
     return gateway
 }
 
-/// Waits for the socket to drop, come back and the store to be bootstrapped again, then for traffic to go quiet.
 @MainActor
-private func settleAfterReconnect(_ gateway: GatewayStore, control: MockControl, minConnections: Int = 1) async -> Bool {
+private func probeConnectionEpoch(_ gateway: GatewayStore) -> Int {
+    #if DEBUG
+    gateway.bootstrapProbeEpoch
+    #else
+    0
+    #endif
+}
+
+@MainActor
+private func probeBootstrapTerminal(_ gateway: GatewayStore) -> Bool {
+    #if DEBUG
+    gateway.bootstrapProbeIsTerminal
+    #else
+    true
+    #endif
+}
+
+/// Debug checks await actual current-epoch bootstrap completion; Release retains the legacy quiet-traffic fallback.
+@MainActor
+private func settleAfterReconnect(_ gateway: GatewayStore, control: MockControl, minConnections: Int = 1, timeout: TimeInterval = 40, afterEpoch: Int? = nil) async -> Bool {
+    #if DEBUG
+    let deadline = Date().addingTimeInterval(timeout)
+    var mainTask: Task<Void, Never>?
+    var backgroundTask: Task<Void, Never>?
+    var capturedEpoch: Int?
+    while Date() < deadline, !Task.isCancelled {
+        let stats = await control.stats()
+        let epoch = gateway.bootstrapProbeEpoch
+        if capturedEpoch != epoch {
+            capturedEpoch = epoch; mainTask = nil; backgroundTask = nil
+        }
+        mainTask = gateway.bootstrapMainTask ?? mainTask
+        backgroundTask = gateway.bootstrapLastBackgroundTask ?? backgroundTask
+        if stats.connections.count >= minConnections,
+           afterEpoch.map({ epoch > $0 }) ?? true,
+           gateway.state.isConnected, !gateway.sessions.isEmpty, gateway.bootstrapProbeIsTerminal {
+            // The flags are set by actual task exits, not request admission or quiet traffic.
+            await mainTask?.value
+            await backgroundTask?.value
+            return !Task.isCancelled && gateway.bootstrapProbeEpoch == epoch && gateway.bootstrapProbeIsTerminal
+        }
+        do { try await Task.sleep(for: .milliseconds(100)) } catch { return false }
+    }
+    return false
+    #else
     // The new connection shows up in the mock's stats once it sends its first request.
     var seen = false
-    let waitUntil = Date().addingTimeInterval(40)
+    let waitUntil = Date().addingTimeInterval(timeout)
     while Date() < waitUntil {
         if await control.stats().connections.count >= minConnections { seen = true; break }
         try? await Task.sleep(for: .milliseconds(100))
     }
     var back = false
-    if seen { back = await waitFor("reconnect", timeout: 40) { gateway.state.isConnected && !gateway.sessions.isEmpty } }
+    if seen { back = await waitFor("reconnect", timeout: timeout) { gateway.state.isConnected && !gateway.sessions.isEmpty } }
     var last = await control.stats().total.values.reduce(0, +), since = Date()
     while Date().timeIntervalSince(since) < 2, Date().timeIntervalSince(since) < 15 {
         try? await Task.sleep(for: .milliseconds(250))
@@ -96,6 +139,7 @@ private func settleAfterReconnect(_ gateway: GatewayStore, control: MockControl,
         if now != last { last = now; since = Date() }
     }
     return back
+    #endif
 }
 
 @MainActor
@@ -107,6 +151,9 @@ func runLiveReconnect(url: String, token: String) async {
     guard controlReady else { check(false, "control connection to the mock"); return }
     defer { Task { await control.stop() } }
 
+    #if DEBUG
+    await runHeldBootstrapTerminalProof(url: url, token: token, control: control)
+    #endif
     await runRPCCountProbe(url: url, token: token, control: control)
     await runBootstrapRace(url: url, token: token, control: control)
     await runOverlappingReconnects(url: url, token: token, control: control)
@@ -142,10 +189,11 @@ private func runRPCCountProbe(url: String, token: String, control: MockControl) 
     check(launch.count("sessions.messages.subscribe") <= 1, "launch: sessions.messages.subscribe ≤ 1 for one open chat (\(launch.count("sessions.messages.subscribe")))")
     check(launch.count("sessions.subscribe") == 1, "launch: one sessions.subscribe (\(launch.count("sessions.subscribe")))")
 
+    let reconnectEpoch = probeConnectionEpoch(gateway)
     await control.call("resetStats")
     await control.call("drop")
     let prefetchesBefore = gateway.prefetchesFinished
-    let reconnected = await settleAfterReconnect(gateway, control: control)
+    let reconnected = await settleAfterReconnect(gateway, control: control, afterEpoch: reconnectEpoch)
     check(reconnected, "reconnected after a drop")
     let reprefetched = await waitFor("reconnect prefetch", timeout: 60) {
         gateway.prefetchesFinished > prefetchesBefore && !gateway.isPrefetching
@@ -198,13 +246,15 @@ private func runBootstrapRace(url: String, token: String, control: MockControl) 
     guard let key = gateway.sessions.keys.sorted().first(where: { $0 != "agent:main:main" }) else { check(false, "a second session"); return }
 
     // Baseline: how many sessions.list does a plain reconnect send?
+    let baselineEpoch = probeConnectionEpoch(gateway)
     await control.call("resetStats")
     await control.call("drop")
-    _ = await settleAfterReconnect(gateway, control: control)
+    _ = await settleAfterReconnect(gateway, control: control, afterEpoch: baselineEpoch)
     let baseline = await control.stats().count("sessions.list")
 
     // A row change arrives while the snapshot (taken earlier) is still in flight.
     let label = "RACE \(UUID().uuidString.prefix(6))"
+    let rowEpoch = probeConnectionEpoch(gateway)
     await control.setDelays(["sessions.subscribe": 900])
     await control.call("resetStats")
     await control.call("drop")
@@ -212,13 +262,14 @@ private func runBootstrapRace(url: String, token: String, control: MockControl) 
     check(sawSubscribe, "delayed sessions.subscribe reached the mock")
     await control.call("patchSession", ["key": .string(key), "patch": ["label": .string(label)]])
     await control.setDelays([:])
-    let back = await settleAfterReconnect(gateway, control: control)
+    let back = await settleAfterReconnect(gateway, control: control, afterEpoch: rowEpoch)
     check(back, "bootstrap finished after the delayed subscribe")
     check(gateway.sessions[key]?.raw["label"]?.text == label,
           "row changed during the delayed subscribe survives the stale snapshot (\(gateway.sessions[key]?.raw["label"]?.text ?? "nil"))")
 
     // An event that only invalidates the list: exactly one trailing sessions.list on top of the baseline.
     // A short delay: the 400 ms scheduleRefresh debounce mustn't fire on its own before the snapshot lands.
+    let invalidationEpoch = probeConnectionEpoch(gateway)
     await control.setDelays(["sessions.subscribe": 300])
     await control.call("resetStats")
     await control.call("drop")
@@ -226,7 +277,7 @@ private func runBootstrapRace(url: String, token: String, control: MockControl) 
     check(sawSecond, "second delayed sessions.subscribe reached the mock")
     await control.call("emit", ["event": "sessions.changed", "payload": ["reason": "groups"]])
     await control.setDelays([:])
-    _ = await settleAfterReconnect(gateway, control: control)
+    _ = await settleAfterReconnect(gateway, control: control, afterEpoch: invalidationEpoch)
     let lists = await control.stats().count("sessions.list")
     print("  sessions.list per reconnect: baseline \(baseline), with an invalidation-only event \(lists)")
     check(lists == baseline + 1, "invalidation-only event during the subscribe → one trailing sessions.list (\(lists) vs baseline \(baseline))")
@@ -254,11 +305,12 @@ private func runOverlappingReconnects(url: String, token: String, control: MockC
     check(sawFirst, "first bootstrap started")
     // Second drop while the first bootstrap is still in flight; the row changes in between.
     await control.call("patchSession", ["key": .string(key), "patch": ["label": .string(new)]])
+    let overlapEpoch = probeConnectionEpoch(gateway)
     await control.call("drop")
 
     var history: [String?] = []
     await control.setDelays([:])
-    let done = await settleAfterReconnect(gateway, control: control, minConnections: 2)
+    let done = await settleAfterReconnect(gateway, control: control, minConnections: 2, afterEpoch: overlapEpoch)
     check(done, "second bootstrap finished")
     check(gateway.sessions[key]?.raw["label"]?.text == new, "final state shows the newest row (\(gateway.sessions[key]?.raw["label"]?.text ?? "nil"))")
     for _ in 0..<40 {
@@ -390,3 +442,102 @@ private func runChatSubscriptionChecks(url: String, token: String, control: Mock
     await chat.load()
     check(chat.isSubscribed, "opening it again resubscribes")
 }
+
+#if DEBUG
+/// Focused fresh-mock proof, independent of the unrelated disk-cache RPC-count prerequisite.
+@MainActor
+func runLiveHeldBootstrapTerminalProof(url: String, token: String) async {
+    let profile = GatewayProfile(name: "Held bootstrap control", url: url, authMode: .token)
+    profile.secret = token
+    let control = MockControl(profile: profile)
+    let ready = await control.start()
+    check(ready, "held bootstrap proof control connection is ready")
+    guard ready else { await control.stop(); return }
+    await runHeldBootstrapTerminalProof(url: url, token: token, control: control)
+    await runOldEpochTerminalProof(url: url, token: token, control: control)
+    await control.stop()
+}
+
+@MainActor
+private func runHeldBootstrapTerminalProof(url: String, token: String, control: MockControl) async {
+    let gate = ReconnectTerminalGate()
+    let profile = GatewayProfile(name: "Held bootstrap", url: url, authMode: .token)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile)
+    let entered = Scripted(false)
+    gateway.beforeBootstrapReconciliation = { entered.value = true; await gate.hold() }
+    gateway.start()
+    defer { Task { await gate.release() }; gateway.stop() }
+    await withTaskCancellationHandler {
+        let admitted = await waitFor("actual bootstrap reconciliation admission", timeout: 30) { entered.value }
+        check(admitted, "actual bootstrap reconciliation reaches its held dependency")
+        guard admitted else { await gate.release(); return }
+        guard let actualTask = gateway.bootstrapBackgroundTask else {
+            check(false, "capture actual current-epoch bootstrap background task")
+            await gate.release(); return
+        }
+        let premature = await settleAfterReconnect(gateway, control: control, timeout: 4)
+        check(!premature, "reconnect settling cannot finish while actual reconciliation task is held")
+        let held = await gate.isHeld()
+        check(held, "negative proof holds real reconciliation work until settling returns")
+        await gate.release()
+        await actualTask.value
+        check(gateway.bootstrapBackgroundTask == nil, "actual background task terminal cleanup follows release")
+        let completed = await settleAfterReconnect(gateway, control: control, timeout: 4)
+        check(completed, "completed bootstrap background task permits settling")
+    } onCancel: {
+        Task { await gate.release() }
+    }
+}
+
+@MainActor
+private func runOldEpochTerminalProof(url: String, token: String, control: MockControl) async {
+    guard let gateway = await connectedStore(url: url, token: token) else {
+        check(false, "old-epoch proof initial bootstrap completes"); return
+    }
+    let gate = ReconnectTerminalGate()
+    let entered = Scripted(false)
+    defer { Task { await gate.release() }; gateway.stop() }
+    let previousEpoch = gateway.bootstrapProbeEpoch
+    gateway.beforeBootstrapReconciliation = { entered.value = true; await gate.hold() }
+    await control.call("resetStats")
+    await control.call("drop")
+    await withTaskCancellationHandler {
+        let admitted = await waitFor("new epoch reconciliation admission", timeout: 30) { entered.value }
+        check(admitted && gateway.bootstrapProbeEpoch > previousEpoch,
+              "real reconnect advances epoch and reaches new held background work")
+        guard admitted, let actualTask = gateway.bootstrapBackgroundTask else { await gate.release(); return }
+        let oldFinished = await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch)
+        check(!oldFinished, "old completed epoch cannot satisfy held new reconnect")
+        let canceled = Task { await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch) }
+        canceled.cancel()
+        let canceledResult = await canceled.value
+        check(!canceledResult, "canceled settling does not cancel or accept actual held background task")
+        await gate.release()
+        await actualTask.value
+        let done = await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch)
+        check(done, "new epoch actual task completion satisfies reconnect readiness")
+    } onCancel: { Task { await gate.release() } }
+}
+
+private actor ReconnectTerminalGate {
+    private var entered = false
+    private var open = false
+    private var held: CheckedContinuation<Void, Never>?
+    private var arrival: CheckedContinuation<Void, Never>?
+    func hold() async {
+        self.entered = true
+        self.arrival?.resume(); self.arrival = nil
+        if !self.open { await withCheckedContinuation { self.held = $0 } }
+    }
+    func waitForEntry() async {
+        if !self.entered, !self.open { await withCheckedContinuation { self.arrival = $0 } }
+    }
+    func isHeld() -> Bool { self.entered && !self.open }
+    func release() {
+        self.open = true
+        self.held?.resume(); self.held = nil
+        self.arrival?.resume(); self.arrival = nil
+    }
+}
+#endif
