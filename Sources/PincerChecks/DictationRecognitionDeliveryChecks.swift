@@ -52,6 +52,8 @@ import Foundation
     await chat.load()
     let items = chat.items
     let texts = await Task.detached { items.filter { !$0.isPending }.map(\.plainText).filter { !$0.isEmpty } }.value
+    let distinct = texts.first.map { first in texts.contains { $0 != first } } ?? false
+    check(distinct, "actual Demo history supplies distinct nonempty text inputs")
     guard let old = texts.first, let current = texts.first(where: { $0 != old }) else {
         check(false, "actual Demo history supplies distinct nonempty text inputs"); return
     }

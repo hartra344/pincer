@@ -20,13 +20,22 @@ import Testing
     @Test func obsoleteCallbackCannotPoisonCurrentFinal() async throws {
         let engine = RelayEngine()
         let actual = DictationModel(engine: engine)
+        defer { actual.cancel() }
         var draft = ""
         actual.toggle(draft: draft, caret: nil) { draft = $0 }
-        while engine.callbacks.count < 1 { try Task.checkCancellation(); await Task.yield() }
+        let firstDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while engine.callbacks.count < 1 {
+            try Task.checkCancellation(); try #require(ContinuousClock.now < firstDeadline)
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let old = engine.callbacks[0]
         actual.cancel()
         actual.toggle(draft: draft, caret: nil) { draft = $0 }
-        while engine.callbacks.count < 2 { try Task.checkCancellation(); await Task.yield() }
+        let secondDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+        while engine.callbacks.count < 2 {
+            try Task.checkCancellation(); try #require(ContinuousClock.now < secondDeadline)
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let current = engine.callbacks[1]
         current(.text("Current words", isFinal: false))
         try #require(draft == "Current words" && actual.isListening)
@@ -35,7 +44,6 @@ import Testing
         current(.ignorable)
         #expect(draft == "Current words", "Current final must not forward obsolete shared relay text")
         #expect(actual.phase == .idle)
-        actual.cancel()
     }
     @Test func ordinaryFinalErrorAndInactiveControls() {
         let relay = DictationRecognitionDelivery()
