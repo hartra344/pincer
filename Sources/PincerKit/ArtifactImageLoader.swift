@@ -48,6 +48,9 @@ public final class ArtifactImageLoader {
 
     weak var gateway: GatewayStore?
     public private(set) var images: [String: CGImage] = [:]
+    #if DEBUG
+    @ObservationIgnored package var base64Probe: EmbeddedImageBase64Probe?
+    #endif
     private var failureRecords: [String: FailureRecord] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
     @ObservationIgnored private var cache: DecodedImageCache
@@ -125,7 +128,7 @@ public final class ArtifactImageLoader {
 
     /// Raw bytes for "Save image…" / sharing. The last result is kept so the preview sheet doesn't download twice.
     public func data(for ref: ImageRef, sessionKey: String) async -> Data? {
-        if let base64 = ref.base64 { return try? Self.decodeCapped(base64, limit: GatewayMediaClient.explicitMaxBytes) }
+        if let base64 = ref.base64 { return try? self.decodeInline(base64, limit: GatewayMediaClient.explicitMaxBytes) }
         if let slot = self.dataSlot, slot.key == ref.cacheKey { return slot.data }
         guard let data = try? await self.download(ref, sessionKey: sessionKey, limit: GatewayMediaClient.explicitMaxBytes) else { return nil }
         self.dataSlot = (ref.cacheKey, data)
@@ -157,7 +160,7 @@ public final class ArtifactImageLoader {
             let data: Data?
             do {
                 data = if let base64 = ref.base64 {
-                    try Self.decodeCapped(base64)
+                    try self.decodeInline(base64)
                 } else {
                     try await self.download(ref, sessionKey: sessionKey)
                 }
@@ -299,6 +302,14 @@ public final class ArtifactImageLoader {
         let payload = self.stripDataURL(value)
         guard payload.utf8.count / 4 * 3 <= maxBytes else { return nil }
         return Data(base64Encoded: payload)
+    }
+
+    /// Neutral observation at the actual capped inline decode boundary.
+    private func decodeInline(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) throws -> Data? {
+        #if DEBUG
+        self.base64Probe?.record()
+        #endif
+        return try Self.decodeCapped(value, limit: limit)
     }
 
     private static func decodeCapped(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) throws -> Data? {
