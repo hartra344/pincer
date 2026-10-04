@@ -400,6 +400,7 @@ public final class GatewayLogsModel {
     public private(set) var bufferedBytes = 0
     /// Bumped by `retry()`, so a view restarts polling.
     public private(set) var retryGeneration = 0
+    @ObservationIgnored private var displayEpoch: UInt64 = 0
     /// Paused: no polling; the cursor is kept so Resume catches up.
     public var isPaused = false
 
@@ -461,6 +462,7 @@ public final class GatewayLogsModel {
             self.markUnsupported()
             return
         }
+        let displayEpoch = self.displayEpoch
         self.isFetching = true
         defer { self.isFetching = false }
         var params: [String: JSONValue] = ["limit": JSONValue(Self.limit), "maxBytes": JSONValue(Self.maxBytes)]
@@ -470,7 +472,7 @@ public final class GatewayLogsModel {
             guard let page = GatewayLogPage(result) else {
                 throw GatewayError.protocolViolation("logs.tail returned no cursor")
             }
-            await self.apply(page)
+            await self.apply(page, displayEpoch: displayEpoch)
             self.supported = true
             self.failure = nil
             self.consecutiveFailures = 0
@@ -495,6 +497,7 @@ public final class GatewayLogsModel {
 
     /// Empties the buffer; the cursor stays, so only newer lines arrive.
     public func clear() {
+        self.displayEpoch &+= 1
         self.entries = []
         self.levelCounts = [:]
         self.lineCount = 0
@@ -504,7 +507,8 @@ public final class GatewayLogsModel {
 
     public func count(_ level: GatewayLogLevel) -> Int { self.levelCounts[level] ?? 0 }
 
-    func apply(_ page: GatewayLogPage) async {
+    func apply(_ page: GatewayLogPage, displayEpoch: UInt64? = nil) async {
+        let admittedEpoch = displayEpoch ?? self.displayEpoch
         let firstRead = self.cursor == nil
         var markers: [String] = []
         if let previous = self.file, let file = page.file, previous != file {
@@ -518,7 +522,6 @@ public final class GatewayLogsModel {
         } else if page.truncated, !firstRead {
             markers.append("Some lines were skipped (too much output at once)")
         }
-        if firstRead { self.showsRecentOnly = page.truncated }
 
         let raw = Array(page.lines.suffix(self.capacity))
         let parsed: [GatewayLogLine] = if raw.count > Self.backgroundParseThreshold {
@@ -526,6 +529,13 @@ public final class GatewayLogsModel {
         } else {
             raw.map(GatewayLogLine.parse)
         }
+
+        // Even a cleared page advances the transport cursor; its old lines must not replay.
+        self.cursor = page.cursor
+        self.size = page.size
+        if let file = page.file { self.file = file }
+        guard self.displayEpoch == admittedEpoch else { return }
+        if firstRead { self.showsRecentOnly = page.truncated }
 
         var fresh = markers.map { marker in
             defer { self.nextId += 1 }
@@ -536,9 +546,6 @@ public final class GatewayLogsModel {
             fresh.append(GatewayLogEntry(id: self.nextId, line: line))
             self.nextId += 1
         }
-        self.cursor = page.cursor
-        self.size = page.size
-        if let file = page.file { self.file = file }
         self.append(fresh)
     }
 

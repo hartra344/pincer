@@ -39,7 +39,7 @@ While filtering, the bottom bar shows "312 of 2,000 lines". If nothing matches, 
 
 **Pause** stops fetching new lines so you can read in peace. **Resume** picks up where it stopped. If the gateway wrote more than about 250 KB in the meantime, Pincer skips ahead and says how much it skipped.
 
-**Clear** empties the list. Only lines written after that appear.
+**Clear** empties the list. An earlier in-flight page cannot bring cleared lines back. Its cursor still advances so those lines are not replayed; later pages continue normally.
 
 ## Copying and exporting
 

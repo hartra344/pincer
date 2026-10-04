@@ -107,4 +107,22 @@ struct GatewayLogsClearOwnershipTests {
         #expect(model.lineCount == 2 && model.entries.count == 3)
         #expect(model.entries.last?.message == "rotated")
     }
+    @Test func repeatedClearSuppressesOldRotationMarkerButKeepsTransportMetadata() async throws {
+        let gate = ComputedLogPageGate(); defer { gate.release() }
+        var requests = 0
+        let model = GatewayLogsModel { _, _ in
+            requests += 1
+            let response = requests == 1 ? Self.page(10, "old") : Self.page(3, "old rotated",
+                file: "/tmp/openclaw/rotated.log", reset: true)
+            if requests == 2 { await gate.hold() }
+            return response
+        }
+        await model.poll()
+        let old = Task { await model.poll() }; defer { old.cancel(); gate.release() }
+        try await gate.waitEntered()
+        model.clear(); model.clear(); gate.release(); await old.value
+        #expect(model.entries.isEmpty && model.lineCount == 0 && model.bufferedBytes == 0 && !model.showsRecentOnly)
+        #expect(model.cursor == 3 && model.size == 3 && model.file == "/tmp/openclaw/rotated.log")
+    }
+
 }
