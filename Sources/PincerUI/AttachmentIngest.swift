@@ -30,6 +30,7 @@ struct AttachmentIngest: Sendable {
     /// The limits come from a saved policy while offline, so a size problem says so.
     var limitsAreLastKnown = false
     let add: @MainActor @Sendable (OutgoingAttachment) -> Void
+    let reserve: @MainActor @Sendable () -> (@MainActor @Sendable () -> Void)?
     let report: @MainActor @Sendable (String?) -> Void
 
     init(
@@ -37,6 +38,7 @@ struct AttachmentIngest: Sendable {
         limitsAreLastKnown: Bool = false,
         imageQueue: BoundedPreparationQueue<AttachmentIngestResult>? = nil,
         providerTimeoutNanoseconds: UInt64 = 30_000_000_000,
+        reserve: @escaping @MainActor @Sendable () -> (@MainActor @Sendable () -> Void)? = { {} },
         add: @escaping @MainActor @Sendable (OutgoingAttachment) -> Void,
         report: @escaping @MainActor @Sendable (String?) -> Void)
     {
@@ -44,6 +46,7 @@ struct AttachmentIngest: Sendable {
         self.limitsAreLastKnown = limitsAreLastKnown
         self.imageQueue = imageQueue ?? Self.sharedImageQueue
         self.providerTimeoutNanoseconds = providerTimeoutNanoseconds
+        self.reserve = reserve
         self.add = add
         self.report = report
     }
@@ -127,9 +130,14 @@ struct AttachmentIngest: Sendable {
         name: String,
         operation: @escaping @MainActor @Sendable () async -> AttachmentIngestResult)
     {
+        guard let finish = self.reserve() else {
+            self.report(Self.queueFull(name))
+            return
+        }
         let add = self.add
         let report = self.report
         let admission = self.imageQueue.submit(retainedBytes: retainedBytes, operation: operation) { result in
+            defer { finish() }
             switch result {
             case let .attachment(attachment):
                 add(attachment)
@@ -142,6 +150,7 @@ struct AttachmentIngest: Sendable {
         case .started, .queued:
             break
         case .rejectedPendingCount, .rejectedPendingBytes:
+            finish()
             self.report(Self.queueFull(name))
         }
     }

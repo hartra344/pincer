@@ -1,6 +1,36 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Preparing attachments…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing attachments…"
+          }
+        }
+      }
+    },
+    "Too many attachments are being prepared. Try again shortly.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many attachments are being prepared. Try again shortly."
+          }
+        }
+      }
+    },
+    "Couldn’t load the selected photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load the selected photo."
+          }
+        }
+      }
+    },
     "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.": {
       "localizations": {
         "en": {
