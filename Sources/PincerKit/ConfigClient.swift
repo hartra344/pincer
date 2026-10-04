@@ -178,7 +178,8 @@ struct GatewayConfigClient {
     }
 
     func patch(_ patch: JSONValue, replacePaths: [String], baseHash: String?, note: String?) async throws(ConfigWriteError) -> JSONValue {
-        var params: [String: JSONValue] = ["raw": .string(patch.compactString())]
+        let raw = await Task.detached(priority: .userInitiated) { patch.compactString() }.value
+        var params: [String: JSONValue] = ["raw": .string(raw)]
         if !replacePaths.isEmpty { params["replacePaths"] = JSONValue(replacePaths) }
         if let note { params["note"] = .string(note) }
         if let baseHash { params["baseHash"] = .string(baseHash) }

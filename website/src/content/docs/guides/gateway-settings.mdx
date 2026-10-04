@@ -77,6 +77,8 @@ For the config draft:
 2. Choose the **Unsaved** count in the toolbar to review the old and new values. Use **Show** to return to a field or **Revert** to undo that edit.
 3. Choose **Save** to send the draft. The gateway validates, saves and applies it. The toolbar’s **Save** button (<kbd>⌘</kbd> <kbd>S</kbd>) also saves directly.
 
+You can keep editing while Save runs. That save acknowledges the values it submitted; changes made afterward remain unsaved, including changes to the same field or a Revert. Raw Config replaces the earlier configuration, while later edits in the form remain in the draft.
+
 If a value is invalid, the gateway sends back the field and the reason. Changes that need a gateway restart say so ("Saved. Restart the Gateway to finish applying it."), and you can restart from the [Health page](../gateway-health/).
 
 If someone else changed the config on the gateway in the meantime, Pincer rebases your draft on top and asks about any setting that conflicts.

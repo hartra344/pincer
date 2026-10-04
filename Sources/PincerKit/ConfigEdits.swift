@@ -180,6 +180,37 @@ public struct ConfigEdits: Sendable, Equatable {
         }
     }
 
+    /// Explicit local intent during one admitted write. Values coalesce by path, including
+    /// deletions. A newer ancestor supersedes earlier descendants; a newer descendant is
+    /// applied after its ancestor off-main, avoiding a large ancestor buffer copy while typing.
+    public struct LocalIntent: Sendable {
+        public private(set) var values: [[String]: JSONValue] = [:]
+        public init() {}
+        public mutating func set(_ path: [String], _ value: JSONValue?) {
+            for old in self.values.keys where old.count > path.count && old.starts(with: path) {
+                self.values.removeValue(forKey: old)
+            }
+            self.values[path] = value ?? .null
+        }
+    }
+
+    /// Acknowledges a write using only explicit post-admission local intent, never differences
+    /// between independently loaded server bases. Compute off-main: applying an ancestor and
+    /// collecting the remaining changes may fork and traverse large config payloads.
+    public static func acknowledging(intent: LocalIntent, latest: Self, base: JSONValue) -> Self {
+        var current = base
+        for path in intent.values.keys.sorted(by: { $0.count < $1.count }) {
+            current = current.setting(intent.values[path]!, at: path)
+        }
+        var remaining: [Change] = []
+        Self.collect(from: base, to: current, at: [], into: &remaining)
+        var result = Self(base: base)
+        for change in remaining { result.set(change.path, change.new) }
+        result.texts = latest.texts
+        result.inputErrors = latest.inputErrors
+        return result
+    }
+
     // MARK: Rebasing
 
     /// Moves the edits onto a newer loaded config. Edits are kept; the ones whose value also

@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "A settings save is already in progress.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A settings save is already in progress."
+          }
+        }
+      }
+    },
     "Device pairing actions require operator.pairing or Full Management. The Gateway decides which devices and requests you can manage.": {
       "localizations": {
         "en": {

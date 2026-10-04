@@ -366,4 +366,30 @@ struct SettingsSaveRebaseTests {
         #expect(model.value(at: Self.port) == 18791 && model.savedValue(at: Self.port) == 18790 && model.isChanged(Self.port))
     }
 
+    @Test(.timeLimit(.minutes(2)), arguments: [false, true])
+    func laterParentAndChildEditsKeepTheirActualOrder(_ parentFirst: Bool) async throws {
+        let gateway = Gateway()
+        let model = GatewaySettingsModel(request: { method, params, timeout in
+            try await gateway.request(method, params, timeout)
+        }, scopes: { [GatewayConnection.adminScope] })
+        await model.reloadConfig()
+        model.set(Self.port, 18790)
+        let save = Task { await model.save() }
+        defer { save.cancel(); gateway.release() }
+        try await self.waitForPatch(gateway)
+        let parent: JSONValue = ["port": 19000, "bind": "lan"]
+        if parentFirst {
+            model.set(["gateway"], parent)
+            model.set(Self.port, 19001)
+        } else {
+            model.set(Self.port, 19001)
+            model.set(["gateway"], parent)
+        }
+        gateway.release()
+        let succeeded = await save.value
+        #expect(succeeded && model.savedValue(at: Self.port) == 18790)
+        #expect(model.value(at: Self.port) == .number(parentFirst ? 19001 : 19000))
+        #expect(model.value(at: Self.bind) == "lan" && model.hasChanges)
+    }
+
 }
