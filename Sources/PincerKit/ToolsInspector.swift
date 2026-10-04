@@ -372,6 +372,11 @@ public struct ToolsInspection: Hashable, Sendable {
     }
 
     public func filtered(_ filter: ToolFilter, search: String = "") -> [InspectedToolGroup] {
+        self.filtered(filter, search: search, observe: nil)
+    }
+
+    func filtered(_ filter: ToolFilter, search: String, observe: ((Bool) -> Void)?) -> [InspectedToolGroup] {
+        observe?(false)
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         return self.groups.compactMap { group in
             let tools = group.tools.filter { tool in
@@ -380,6 +385,7 @@ public struct ToolsInspection: Hashable, Sendable {
                 case .allowed: guard tool.isAllowed else { return false }
                 case .denied: guard !tool.isAllowed else { return false }
                 }
+                if !query.isEmpty { observe?(true) }
                 return query.isEmpty || tool.matches(query)
             }
             return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
@@ -497,6 +503,18 @@ public final class ToolsInspectorModel: Identifiable {
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private var generation = 0
+    #if DEBUG
+    @ObservationIgnored package var searchProbe: ToolsInspectorSearchProbe?
+    #endif
+
+    /// The exact existing query path used by the inspector's editable filter field.
+    public func searchFields(_ filter: ToolFilter, matching query: String) -> [InspectedToolGroup] {
+        #if DEBUG
+        return self.inspection?.filtered(filter, search: query, observe: { self.searchProbe?.record(match: $0) }) ?? []
+        #else
+        return self.inspection?.filtered(filter, search: query) ?? []
+        #endif
+    }
 
     public init(scope: Scope, methods: @escaping @MainActor () -> Set<String>? = { nil }, request: @escaping Request) {
         self.scope = scope

@@ -58,7 +58,7 @@ struct ToolsInspectorView: View {
                     TextField(L("Filter tools"), text: self.$search)
                         .textFieldStyle(.roundedBorder)
                 }
-                let groups = self.serverGroups(inspection.filtered(self.filter, search: self.search))
+                let groups = self.serverGroups(model.searchFields(self.filter, matching: self.search))
                 if groups.isEmpty {
                     Section {
                         Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)

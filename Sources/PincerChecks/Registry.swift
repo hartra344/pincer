@@ -212,6 +212,7 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
+        sections.append(Section("Tools Inspector search preparation") { await runToolsInspectorSearchPreparationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
             sections.insert(Section("Log page preparation") { await runGatewayLogPagePreparationChecks() }, at: index + 1)
@@ -349,6 +350,7 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
+        sections.append(Section("Tools Inspector search preparation (demo)") { await runDemoToolsInspectorSearchPreparationChecks() })
         sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Log page preparation (demo)") { await runDemoGatewayLogPagePreparationChecks() }, at: index + 1)
