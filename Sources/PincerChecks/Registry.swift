@@ -217,6 +217,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Embedded image base64 preparation") { await runEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Avatar phase diagnostics") { runAvatarPhaseDiagnosticsChecks() })
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
         sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
@@ -363,6 +364,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
         sections.append(Section("Tools Inspector search preparation (demo)") { await runDemoToolsInspectorSearchPreparationChecks() })

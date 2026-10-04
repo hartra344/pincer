@@ -152,7 +152,7 @@ With shared reactions, the agent sees each change to your reactions as a System 
 
 ## Images
 
-Pincer shows images inline, with a Quick Look-style preview and sharing. This covers:
+Pincer shows images inline, with a Quick Look-style preview and sharing. Embedded image data is prepared in the background, with one inline decoding worker per gateway at a time. This covers:
 
 - attachments on messages;
 - the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route;

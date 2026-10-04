@@ -48,10 +48,19 @@ public final class ArtifactImageLoader {
 
     weak var gateway: GatewayStore?
     public private(set) var images: [String: CGImage] = [:]
+    #if DEBUG
+    @ObservationIgnored package var base64Probe: EmbeddedImageBase64Probe?
+    package var activeImageFetchCount: Int { self.inFlight.count }
+    package var activeInlineDecodeCount: Int { self.inlineDecodeLimiter.active }
+    package var peakInlineDecodeCount: Int { self.inlineDecodeLimiter.peak }
+    package var pendingInlineDecodeCount: Int { self.inlineDecodeLimiter.waitingCount }
+    @ObservationIgnored package var didDecodeInline: (@Sendable () async -> Void)?
+    #endif
     private var failureRecords: [String: FailureRecord] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
     @ObservationIgnored private var cache: DecodedImageCache
     @ObservationIgnored private let limiter = DownloadLimiter(limit: ArtifactImageLoader.maxConcurrentDownloads)
+    @ObservationIgnored private let inlineDecodeLimiter = DownloadLimiter(limit: 1)
     @ObservationIgnored private var pressureMonitor: MemoryPressureMonitor?
     @ObservationIgnored private var pins: [ObjectIdentifier: Set<String>] = [:]
     @ObservationIgnored private var dataSlot: (key: String, data: Data)?
@@ -125,7 +134,7 @@ public final class ArtifactImageLoader {
 
     /// Raw bytes for "Save image…" / sharing. The last result is kept so the preview sheet doesn't download twice.
     public func data(for ref: ImageRef, sessionKey: String) async -> Data? {
-        if let base64 = ref.base64 { return try? Self.decodeCapped(base64, limit: GatewayMediaClient.explicitMaxBytes) }
+        if let base64 = ref.base64 { return try? await self.decodeInline(base64, limit: GatewayMediaClient.explicitMaxBytes) }
         if let slot = self.dataSlot, slot.key == ref.cacheKey { return slot.data }
         guard let data = try? await self.download(ref, sessionKey: sessionKey, limit: GatewayMediaClient.explicitMaxBytes) else { return nil }
         self.dataSlot = (ref.cacheKey, data)
@@ -157,7 +166,7 @@ public final class ArtifactImageLoader {
             let data: Data?
             do {
                 data = if let base64 = ref.base64 {
-                    try Self.decodeCapped(base64)
+                    try await self.decodeInline(base64)
                 } else {
                     try await self.download(ref, sessionKey: sessionKey)
                 }
@@ -289,7 +298,7 @@ public final class ArtifactImageLoader {
         return components?.url
     }
 
-    private static func stripDataURL(_ value: String) -> String {
+    nonisolated private static func stripDataURL(_ value: String) -> String {
         guard value.hasPrefix("data:"), let comma = value.firstIndex(of: ",") else { return value }
         return String(value[value.index(after: comma)...])
     }
@@ -301,7 +310,33 @@ public final class ArtifactImageLoader {
         return Data(base64Encoded: payload)
     }
 
-    private static func decodeCapped(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) throws -> Data? {
+    /// A separate lease avoids holding a download slot while waiting for an inline worker.
+    /// Waiters retain only their existing COW source; at most one decoded buffer is active.
+    private func decodeInline(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) async throws -> Data? {
+        try Task.checkCancellation()
+        try await self.inlineDecodeLimiter.acquire()
+        defer { self.inlineDecodeLimiter.release() }
+        try Task.checkCancellation()
+        #if DEBUG
+        let probe = self.base64Probe, didDecode = self.didDecodeInline
+        #endif
+        let worker = Task.detached(priority: .userInitiated) {
+            #if DEBUG
+            probe?.record()
+            #endif
+            let result = try Self.decodeCapped(value, limit: limit)
+            #if DEBUG
+            await didDecode?()
+            #endif
+            return result
+        }
+        // Await real completion even when the parent is canceled; only then release the lease.
+        let result = try await worker.value
+        try Task.checkCancellation()
+        return result
+    }
+
+    nonisolated private static func decodeCapped(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) throws -> Data? {
         let payload = self.stripDataURL(value)
         guard payload.utf8.count / 4 * 3 <= limit else { throw MediaError.tooLarge }
         return Data(base64Encoded: payload)
@@ -326,6 +361,9 @@ final class DownloadLimiter {
     private(set) var peak = 0
     private var waiters: [(id: Int, continuation: CheckedContinuation<Void, any Error>)] = []
     private var nextID = 0
+    #if DEBUG
+    var waitingCount: Int { self.waiters.count }
+    #endif
 
     init(limit: Int) {
         self.limit = limit
