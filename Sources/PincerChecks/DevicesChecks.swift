@@ -108,12 +108,13 @@ func checkDeviceManagement() async {
     let removedAgain = await model.remove(other)
     check(removedAgain && model.notice?.text == DeviceManagementModel.staleDeviceMessage, "removing a removed device → notice")
 
-    // Without operator.admin: view with operator.pairing, nothing without it.
+    // Pairing enables only device actions; administrative gates stay unchanged.
     scopes = ["operator.read", DeviceManagementModel.pairingScope]
     check(model.canView && !model.canManage && model.readOnlyReason == DeviceManagementModel.readOnlyMessage && !model.canRename,
-          "operator.pairing views read-only")
-    let blocked = await model.remove(model.paired[0])
-    check(!blocked && fake.methods.last != DeviceManagementModel.removeMethod, "read-only sends no changes")
+          "operator.pairing keeps administrative operations read-only")
+    let pairingRemoval = await model.remove(model.paired[0])
+    check(pairingRemoval && fake.methods.last == DeviceManagementModel.removeMethod,
+          "operator.pairing reaches the existing device removal RPC")
     scopes = GatewayConnection.scopes
     check(!model.canView && model.needsAccess && model.pendingCount == 0, "without operator.pairing → needs access, no badge")
 

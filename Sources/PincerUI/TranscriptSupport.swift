@@ -1268,13 +1268,6 @@ enum TranscriptLayout {
                                 hasReactions: (String) -> Bool = { _ in false }) -> CGFloat {
         let textWidth = max(width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 120)
         let charactersPerLine = max(textWidth / 7, 10)
-        func lines(_ text: String) -> CGFloat {
-            var total: CGFloat = 0
-            for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-                total += max(1, (CGFloat(line.count) / charactersPerLine).rounded(.up))
-            }
-            return total
-        }
         let scaffold: CGFloat = 12 + 22
         let footer: CGFloat = TranscriptMetrics.footerSpacing + 16
         let chips = TranscriptLayoutBuilder.chipHeight + 6
@@ -1284,12 +1277,18 @@ enum TranscriptLayout {
         case .entry(.marker):
             return 32
         case let .entry(.user(item)):
-            let images = item.blocks.filter { if case .image = $0 { true } else { false } }.count
-            let files = item.blocks.filter { if case .file = $0 { true } else { false } }.count
-            return scaffold + lines(item.plainText) * 18 + (images > 0 ? 240 : 0) + CGFloat(files) * 36
-                + (item.plainText.isEmpty && item.outboxState == nil ? 0 : footer) + (item.replyToId != nil ? 50 : 0)
-                + (item.isReplyable && item.transcriptId.map(hasReactions) == true ? chips : 0)
+            let footprint = ColdTranscriptFootprint.estimate(.user(item), charactersPerLine: Double(charactersPerLine), hasReactions: hasReactions)
+            #if DEBUG
+            ColdTranscriptHeightEstimateProbe.recordWork(row.id, bytes: footprint.inspectedBytes, visits: footprint.metadataVisits)
+            #endif
+            return scaffold + CGFloat(footprint.lines) * 18 + (footprint.hasImages ? 240 : 0) + CGFloat(footprint.fileCount) * 36
+                + (!footprint.hasRawText && item.outboxState == nil ? 0 : footer) + (item.replyToId != nil ? 50 : 0)
+                + CGFloat(footprint.reactionCount) * chips + CGFloat(footprint.extraHeight)
         case let .entry(.assistant(turn)):
+            let footprint = ColdTranscriptFootprint.estimate(.assistant(turn), charactersPerLine: Double(charactersPerLine), hasReactions: hasReactions)
+            #if DEBUG
+            ColdTranscriptHeightEstimateProbe.recordWork(row.id, bytes: footprint.inspectedBytes, visits: footprint.metadataVisits)
+            #endif
             var height = scaffold
             if turn.isStreaming, ThinkingDisplay.current != .none {
                 if !turn.thinking.isEmpty { height += 26 }
@@ -1297,10 +1296,10 @@ enum TranscriptLayout {
             } else if ThinkingDisplay.current == .all, !turn.thinking.isEmpty || !turn.tools.isEmpty {
                 height += 26
             }
-            if !turn.text.isEmpty { height += lines(turn.body) * 18 + CGFloat(turn.text.count) * footer }
+            if footprint.textSourceCount > 0 { height += CGFloat(footprint.lines) * 18 + CGFloat(footprint.textSourceCount) * footer }
             if !turn.images.isEmpty { height += 240 }
             height += CGFloat(turn.files.count) * 36
-            height += CGFloat(turn.textIds.compactMap(\.self).filter(hasReactions).count) * chips
+            height += CGFloat(footprint.reactionCount) * chips + CGFloat(footprint.extraHeight)
             return height
         }
     }

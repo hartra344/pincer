@@ -308,6 +308,38 @@ func runDemo() async {
     }
     let demoSkipped = await waitFor("skip reply", timeout: 20) { !chat.isRunning }
     check(demoSkipped, "demo run finishes after a skip")
+
+    await chat.send("sign in to gmail")
+    let secureAsked = await waitFor("demo secure form") { !gateway.pendingQuestions(for: key).isEmpty }
+    check(secureAsked, "demo secure_form question surfaced")
+    if let prompt = gateway.pendingQuestions(for: key).first {
+        check(prompt.kind == .secureForm, "pending prompt is a secure form")
+        check(prompt.secureForm?.origin == "mail.google.com", "secure form shows the gateway-derived origin")
+        check(prompt.secureForm?.fields.map(\.role) == [.username, .password, .otp], "secure form asks for username, password and otp")
+        let incomplete = await gateway.answerSecureForm(prompt, answers: ["identifier": "demo@example.com"])
+        check(incomplete != nil && !gateway.questions.isEmpty, "incomplete secure-form answers are rejected and the card stays")
+        let answered = await gateway.answerSecureForm(prompt, answers: [
+            "identifier": "demo@example.com", "password": "hunter2", "otp": "123456",
+        ])
+        check(answered == nil && gateway.questions.isEmpty, "demo secure form answered")
+    } else {
+        check(false, "demo secure form prompt available")
+    }
+    let secureCompleted = await waitFor("secure form reply", timeout: 20) {
+        if case let .assistant(turn)? = chat.entries.last { return !chat.isRunning && turn.body.contains("I filled the verified sign-in fields") }
+        return false
+    }
+    check(secureCompleted, "demo reply confirms the secure form was completed, never echoing the values")
+    let secureToolCalls = chat.entries.compactMap { entry -> ToolActivity? in
+        if case let .assistant(turn) = entry { return turn.tools.first { $0.name == "requestSecureInput" } }
+        return nil
+    }
+    let leaked = secureToolCalls.contains {
+        ($0.arguments ?? "").contains("hunter2") || ($0.result ?? "").contains("hunter2")
+            || ($0.arguments ?? "").contains("123456") || ($0.result ?? "").contains("123456")
+    }
+    check(!secureToolCalls.isEmpty && !leaked, "the secure-form tool call never carries the filled values in args or result")
+
     await chat.send("follow a plan")
     let demoPlanned = await waitFor("demo progress card", timeout: 20) {
         chat.progressCard?.isComplete == true && !chat.isRunning

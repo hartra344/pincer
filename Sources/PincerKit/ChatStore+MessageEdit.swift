@@ -7,7 +7,7 @@ public struct MessageEditTarget: Equatable, Sendable {
     public let entryId: String
     public let originalText: String
     /// The composer's content before the edit began; Cancel puts it back.
-    public let savedDraft: ComposerDraft
+    public var savedDraft: ComposerDraft
 
     public init(messageId: String, entryId: String, originalText: String, savedDraft: ComposerDraft) {
         self.messageId = messageId
@@ -145,8 +145,9 @@ extension ChatStore {
             self.errorMessage = message
             return .failed(message)
         }
+        let savedDraft = self.editTarget?.savedDraft ?? target.savedDraft
         self.editTarget = nil
-        self.draft = target.savedDraft
+        self.draft = savedDraft
         return await self.sendMarkingBranchAnchor { await self.sendMessage(text, attachments: attachments + outcome.attachments) }
     }
 

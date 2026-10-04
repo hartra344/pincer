@@ -173,7 +173,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func notifyQuestion(_ prompt: QuestionPrompt, gateway: GatewayStore) {
-        guard prompt.questions.first != nil else { return }
+        guard prompt.promptText != nil else { return }
         let agent = gateway.agent(prompt.agentId ?? prompt.sessionKey.flatMap(SessionKey.agentId(from:)) ?? gateway.defaultAgentId)
         let chat = prompt.sessionKey.flatMap { gateway.sessions[$0]?.title }
         let target = Target(gatewayId: gateway.id, sessionKey: prompt.sessionKey ?? "")
@@ -204,10 +204,10 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     nonisolated static func questionRequest(
         _ prompt: QuestionPrompt, gatewayId: UUID, agent: AgentSummary, chatTitle: String?) -> UNNotificationRequest?
     {
-        guard let first = prompt.questions.first else { return nil }
+        guard let text = prompt.promptText else { return nil }
         let content = UNMutableNotificationContent()
         content.title = "\(agent.emoji.map { "\($0) " } ?? "")\(agent.name) has a question" + (chatTitle.map { " · \($0)" } ?? "")
-        content.body = Self.clip(first.question)
+        content.body = Self.clip(text)
         content.sound = .default
         content.categoryIdentifier = replyCategory
         content.interruptionLevel = .timeSensitive

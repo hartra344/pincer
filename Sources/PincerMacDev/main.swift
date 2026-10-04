@@ -59,6 +59,24 @@ if let index = CommandLine.arguments.firstIndex(of: "--first-run-screens") {
     }
 }
 #endif
+// `--secure-form-snapshots <dir>` renders the secure sign-in card to PNGs (via a real offscreen
+// window, so materials composite correctly) and exits. Needs the app's run loop, so it falls
+// through to `PincerMacApp.main()` instead of exiting synchronously.
+if let index = CommandLine.arguments.firstIndex(of: "--secure-form-snapshots") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "secure-form-snapshots"
+    let directory = URL(filePath: (path as NSString).expandingTildeInPath)
+    Task { @MainActor in
+        try? await Task.sleep(for: .milliseconds(300))
+        do {
+            let count = try await SecureFormSnapshots.write(to: directory)
+            print("Wrote \(count) images to \(directory.path)")
+            exit(0)
+        } catch {
+            print("Couldn't write secure-form snapshots: \(error)")
+            exit(1)
+        }
+    }
+}
 // `--sidebar-working-snapshots <dir>` renders the sidebar's working indicator to PNGs and exits.
 if let index = CommandLine.arguments.firstIndex(of: "--sidebar-working-snapshots") {
     let path = CommandLine.arguments.dropFirst(index + 1).first ?? "sidebar-working-snapshots"

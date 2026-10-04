@@ -228,8 +228,11 @@ struct DeviceManagementModelTests {
         #expect(pairer.canView && !pairer.canManage && !pairer.needsAccess && !pairer.canRename)
         await pairer.load()
         #expect(pairer.pending.count == 1 && pairer.pendingCount == 1)
+        fake.results["device.pair.approve"] = ["requestId": "r1",
+            "device": DeviceFixtures.paired(pairer.pending[0].deviceId)]
         let approved = await pairer.approve(pairer.pending[0])
-        #expect(!approved && fake.params("device.pair.approve").isEmpty, "approving needs Full Management")
+        #expect(approved && fake.params("device.pair.approve") == [["requestId": "r1"]],
+                "pairing scope reaches the Gateway, which decides whether this request may be approved")
 
         let admin = makeModel(fake)
         #expect(admin.canView && admin.canManage && admin.readOnlyReason == nil && admin.canRename && admin.canRenameNodes && admin.canRemoveNodes)
@@ -342,6 +345,8 @@ struct DeviceManagementModelTests {
         await model.load()
         #expect(!(await model.approve(model.pending[0])))
         #expect(!model.canManage && model.notice?.text == DeviceManagementModel.readOnlyMessage)
+        #expect(model.deviceReadOnlyReason == DeviceManagementModel.readOnlyMessage,
+                "Administrative denial keeps the existing connection recovery guidance")
         #expect(model.notice?.severity == .warning)
         #expect(model.pending.count == 1 && model.operation(for: model.pending[0]) == .idle)
         #expect(!(await model.remove(model.paired[0])) && fake.params("device.pair.remove").isEmpty)

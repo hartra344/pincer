@@ -364,7 +364,7 @@ public enum SetupTips {
 
     public static let all: [Tip] = [
         Tip(id: "slash", text: "Type / in the composer for slash commands.", symbol: "slash.circle", usesKeyboard: false),
-        Tip(id: "thinking", text: "Ask for deeper reasoning with /think; expand a thinking section to read it.",
+        Tip(id: "thinking", text: "Ask for deeper reasoning with /think. Expand a thinking section to read it.",
             symbol: "brain.head.profile", usesKeyboard: false),
         Tip(id: "approvals", text: "Approvals for commands and tools appear in the chat and as notifications. Allow once or always.",
             symbol: "checkmark.shield", usesKeyboard: false),
@@ -385,6 +385,9 @@ public enum SetupTips {
             ? ShortcutCommand.findInChat.defaultCombo?.displayString
             : shortcuts?.combo(for: .findInChat)?.displayString
         func currentText(for tip: Tip) -> String {
+            if tip.id == "thinking" {
+                return L("Ask for deeper reasoning with /think. Expand a thinking section to read it.")
+            }
             guard shortcuts != nil else {
                 return iPhone && tip.id == "search"
                     ? L("Search all messages from the sidebar search field.") : tip.text

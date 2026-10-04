@@ -236,10 +236,17 @@ public final class ChatStore: Identifiable {
     /// The agent's task checklist for this session, shown above the composer.
     public internal(set) var progressCard: ProgressCard?
     /// Unsent composer text and attachments, kept across chat switches and saved to disk.
+    var attachmentPreparationTokens: [UUID: UUID] = [:]
+    var attachmentPreparationErrors: [UUID: String] = [:]
     public var draft = ComposerDraft() {
         didSet {
-            guard !self.headless, !self.restoringDraft, self.draft != oldValue else { return }
-            self.draftEdited = true
+            self.pruneAttachmentPreparations()
+            guard !self.headless, !self.restoringDraft else { return }
+            let payloadChanged = self.draft != oldValue
+            if self.draft.ownerID != oldValue.ownerID || payloadChanged {
+                self.draftEdited = true
+            }
+            guard payloadChanged else { return }
             self.scheduleDraftSave()
         }
     }

@@ -7,6 +7,33 @@ import Testing
 /// and the demo Gateway end to end.
 @Suite("Session manager")
 struct SessionManagerTests {
+    /// A finite Gateway duration can exceed the integer formatter's range. Exercise the wire
+    /// row and real duration calculation before formatting, not an isolated replacement guard.
+    @Test func hugeFiniteGatewayRunDurationFormatsWithoutTrapping() throws {
+        let finished = Self.row("huge-duration", ["status": "done", "runtimeMs": .number(1e30)])
+        let seconds = try #require(SessionManager.runDuration(finished, now: Date(timeIntervalSince1970: 0)))
+        #expect(seconds > Double(Int.max) && seconds.isFinite)
+        let expected = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+        let formatted = SessionManager.formatDuration(seconds)
+        #expect(formatted == expected, "Oversized finite durations saturate at Int.max seconds using the existing hour/minute display")
+    }
+
+    @Test func durationFormatterHandlesIntegerBoundaryAndNonfiniteInputs() {
+        let saturated = "\(Int.max / 3600)h \((Int.max % 3600) / 60)m"
+        #expect(SessionManager.formatDuration(Double(Int.max)) == saturated,
+                "Double rounds Int.max above the convertible range on 64-bit platforms")
+        let below = Double(Int.max).nextDown
+        let whole = Int(below)
+        #expect(SessionManager.formatDuration(below) == "\(whole / 3600)h \((whole % 3600) / 60)m")
+        #expect(SessionManager.formatDuration(.nan) == "0s")
+        #expect(SessionManager.formatDuration(.infinity) == "0s")
+        #expect(SessionManager.formatDuration(-.infinity) == "0s")
+        #expect(SessionManager.formatDuration(Double(Int.min)) == "0s")
+        #expect(SessionManager.formatDuration(59.99) == "59s")
+        #expect(SessionManager.formatDuration(60) == "1m")
+        #expect(SessionManager.formatDuration(3601) == "1h")
+    }
+
     // MARK: Fixtures
 
     static func row(_ key: String, _ extra: [String: JSONValue] = [:]) -> SessionRow {
