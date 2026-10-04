@@ -13,7 +13,8 @@ import Foundation
     func release() { open = true; held?.resume(); held = nil }
 }
 
-@MainActor private func checkExecReloadEdits(request: @escaping ExecPolicyModel.Request) async {
+@MainActor private func checkExecReloadEdits(request: @escaping ExecPolicyModel.Request,
+    changeIsolatedPolicy: ((ExecApprovalsSnapshot) async throws -> Void)? = nil) async {
     for mode in ["aba", "edit", "none"] {
         let gate = ExecPolicyReloadDeliveryGate()
         var calls = 0, delivered: JSONValue = .null
@@ -28,6 +29,10 @@ import Foundation
         guard let initial = model.snapshot, initial.exists, let hash = initial.hash, !hash.isEmpty else {
             check(false, "initial actual policy snapshot is loaded"); return
         }
+        if let changeIsolatedPolicy {
+            do { try await changeIsolatedPolicy(initial) }
+            catch { check(false, "isolated Demo policy update succeeds before held reload"); return }
+        }
         let localA = model.savedValue(.ask, agent: nil)
         let localB: JSONValue = localA == "always" ? "off" : "always"
         let admittedDraft = model.draft
@@ -39,6 +44,11 @@ import Foundation
               delivered["path"]?.text != nil, delivered["exists"]?.bool != nil else {
             check(false, "held actual reply contains the legal full snapshot")
             task.cancel(); gate.release(); await task.value; return
+        }
+        if changeIsolatedPolicy != nil {
+            let different = ExecApprovalsSnapshot(delivered).file != initial.file
+            check(different, "actual returned Demo policy C differs from admitted baseline A")
+            guard different else { gate.release(); await task.value; return }
         }
         if mode != "none" { model.set(.ask, localB, agent: nil) }
         if mode == "aba" { model.set(.ask, localA, agent: nil) }
@@ -54,11 +64,11 @@ import Foundation
 
 @MainActor func runExecPolicyReloadEditOwnershipChecks() async {
     var calls = 0
-    await checkExecReloadEdits { _, _ in
+    await checkExecReloadEdits(request: { _, _ in
         calls += 1
         return ["path": "policy.json", "exists": true, "hash": .string(calls.isMultiple(of: 2) ? "current" : "initial"),
                 "file": ["version": 1, "defaults": ["ask": .string(calls.isMultiple(of: 2) ? "off" : "on-miss")]]]
-    }
+    })
 }
 
 @MainActor func runDemoExecPolicyReloadEditOwnershipChecks() async {
@@ -70,5 +80,16 @@ import Foundation
     let ready = await waitFor("actual exec policy reload Demo", timeout: 25) { gateway.state.isConnected && gateway.bootstrapped }
     check(ready, "genuine Demo policy read connection is ready")
     guard ready else { return }
-    await checkExecReloadEdits { method, params in try await gateway.connection.request(method, params, timeout: 30) }
+    let read: ExecPolicyModel.Request = { method, params in try await gateway.connection.request(method, params, timeout: 30) }
+    await checkExecReloadEdits(request: read) // Unchanged-server ordinary source coverage.
+    await checkExecReloadEdits(request: read, changeIsolatedPolicy: { snapshot in
+        // Only this isolated built-in Demo is mutated; no response overlays or real Gateway writes.
+        var changed = snapshot.file
+        let next: JSONValue = snapshot.file.value(.ask, agent: nil) == "always" ? "off" : "always"
+        changed.set(.ask, next, agent: nil)
+        let result = try await gateway.connection.request(ExecPolicy.setMethod, ExecPolicy.setParams(draft: changed, snapshot: snapshot), timeout: 30)
+        guard result["file"]?.object != nil, ExecApprovalsSnapshot(result).file == changed else {
+            throw NSError(domain: "IsolatedDemoPolicySetup", code: 1)
+        }
+    })
 }
