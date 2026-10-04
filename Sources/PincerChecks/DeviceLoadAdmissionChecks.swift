@@ -57,6 +57,22 @@ import Foundation
         return response
     }
 
+    for fails in [false, true] {
+        let gate = DeviceAdmissionGate()
+        let model = DeviceManagementModel { _, _ in
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "late device error", details: nil) }
+            return response
+        }
+        let load = Task { await model.load() }; defer { load.cancel(); gate.release() }
+        let entered = await waitFor("admitted device cancellation") { gate.entered }
+        check(entered, "actual device load reaches admitted cancellation boundary")
+        guard entered else { return }
+        load.cancel(); gate.release(); await load.value
+        check(model.pending.isEmpty && model.paired.isEmpty && !model.hasLoaded && model.loadState == .idle,
+              "canceled admitted device load cannot publish late rows or errors")
+    }
+
 }
 
 /// Read-only fresh mock coverage: actual authenticated device.pair.list response, no overlays.

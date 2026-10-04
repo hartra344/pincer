@@ -66,3 +66,21 @@ struct DeviceLoadAdmissionTests {
         #expect(model.loadState == .failed("device list unavailable") && model.hasLoaded)
     }
 }
+
+// These controls cover the new post-admission publication guard independently of the neutral case.
+extension DeviceLoadAdmissionTests {
+    @Test(arguments: [false, true])
+    func canceledAdmittedReadCannotPublishLateSuccessOrFailure(fails: Bool) async throws {
+        let gate = DeviceLoadGate()
+        let model = DeviceManagementModel { _, _ in
+            await gate.hold()
+            if fails { throw GatewayError.rpc(code: "UNAVAILABLE", message: "late device error", details: nil) }
+            return Self.response
+        }
+        let load = Task { await model.load() }; defer { load.cancel(); gate.release() }
+        try await gate.waitForEntry()
+        load.cancel(); gate.release(); await load.value
+        #expect(model.pending.isEmpty && model.paired.isEmpty && !model.hasLoaded)
+        #expect(model.loadState == .idle && model.notice == nil)
+    }
+}

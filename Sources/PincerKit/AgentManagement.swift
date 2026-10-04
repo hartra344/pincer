@@ -891,7 +891,12 @@ public final class AgentFileEditorModel {
     }
 
     private func write(expectedHash: String?, expectedMissing: Bool) async -> Bool {
+        guard !Task.isCancelled else { return false }
         let content = self.text
+        // An accepted write supersedes earlier reads, including their feedback. Rejected
+        // writes never reach this admission point and leave the active reload intact.
+        self.loadOwner = nil
+        if self.loadState.isRunning { self.loadState = .idle }
         self.saveState = .running
         self.error = nil
         do {
