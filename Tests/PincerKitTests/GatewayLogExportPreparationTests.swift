@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Testing
 @testable import PincerKit
@@ -26,3 +27,4 @@ struct GatewayLogExportPreparationTests {
         #expect(counts.mainJoins + counts.workerJoins == 1 && counts.mainEncodes + counts.workerEncodes == 1)
     }
 }
+#endif

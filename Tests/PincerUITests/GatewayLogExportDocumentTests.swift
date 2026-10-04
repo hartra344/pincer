@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Testing
 @testable import PincerKit
@@ -21,3 +22,4 @@ struct GatewayLogExportDocumentTests {
         #expect(probe.snapshot().mainJoins == 0 && probe.snapshot().mainEncodes == 0)
     }
 }
+#endif
