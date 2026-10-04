@@ -146,11 +146,12 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     check(manager.visibleRows(search: "garden").map(\.key) == [garden], "demo search")
 
     if let running = manager.row(refactor), let failed = manager.row(ciFix) {
-        let elapsed = SessionManager.runDuration(running, now: Date())
-    check(SessionRunState(row: running).title == "Running" && SessionRunState(row: failed).title == "Error",
-          "actual Demo run state titles use localized English fallback") ?? -1
+        let elapsed = SessionManager.runDuration(running, now: Date()) ?? -1
         // The seeded run finishes on its own 90 s after connecting, so a slow run may see it done.
         let state = SessionRunState(row: running)
+        check((state == .running && state.title == "Running" || state == .done && state.title == "Done")
+              && SessionRunState(row: failed).title == "Error",
+              "actual Demo run state titles use localized English fallback")
         check((state == .running || state == .done) && elapsed >= 300, "demo running session with duration (\(state), \(elapsed))")
         check(SessionRunState(row: failed) == .failed && SessionManager.runDuration(failed, now: Date()) == 94, "demo failed run 1m 34s")
         checkDemoSessionDurationFormatting(running: running, failed: failed)
