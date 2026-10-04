@@ -21,14 +21,15 @@ import Foundation
 }
 
 /// The held request has already obtained its response. Only local delivery is deferred.
-@MainActor private func checkDeviceLoadAdmission(response: JSONValue,
-                                                request: @escaping DeviceManagementModel.Request) async {
+@MainActor private func checkDeviceLoadAdmission(request: @escaping DeviceManagementModel.Request) async {
     let gate = DeviceAdmissionGate()
     var requests = 0
+    var heldResponse: JSONValue?
     let model = DeviceManagementModel { method, params in
         requests += 1
         try Task.checkCancellation()
         let result = try await request(method, params)
+        heldResponse = result
         await gate.hold()
         return result
     }
@@ -43,8 +44,11 @@ import Foundation
     check(requests == 1, "pre-canceled device list load sends no additional request")
     gate.release()
     await current.value
-    check(model.pending == (response["pending"]?.array ?? []).compactMap(PendingDeviceRequest.init)
-          && model.paired == (response["paired"]?.array ?? []).compactMap(PairedDevice.init),
+    guard let response = heldResponse else { check(false, "actual held device response is captured"); return }
+    check(response["pending"]?.array != nil && response["paired"]?.array != nil,
+          "actual held response contains legal pending and paired arrays")
+    check(model.pending == DeviceManagementModel.sorted((response["pending"]?.array ?? []).compactMap(PendingDeviceRequest.init))
+          && model.paired == model.sorted((response["paired"]?.array ?? []).compactMap(PairedDevice.init)),
           "healthy device read retains exact pending and paired rows")
     check(model.hasLoaded && model.loadState == .idle, "healthy device read finishes idle")
 }
@@ -52,7 +56,7 @@ import Foundation
 @MainActor func runDeviceLoadAdmissionChecks() async {
     let response: JSONValue = ["pending": [["requestId": "request-a", "deviceId": "pending-device", "publicKey": "pk", "roles": ["operator"], "scopes": ["operator.read"], "ts": 1700000000000]],
         "paired": [["deviceId": "paired-device", "publicKey": "pk", "roles": ["operator"], "scopes": ["operator.read"], "tokens": []]]]
-    await checkDeviceLoadAdmission(response: response) { method, params in
+    await checkDeviceLoadAdmission { method, params in
         check(method == DeviceManagementModel.listMethod && params == [:], "device list load uses existing get method and empty params")
         return response
     }
@@ -94,14 +98,7 @@ import Foundation
         && gateway.hello?.methods.contains(DeviceManagementModel.listMethod) == true
     check(authorized, "mock advertises device list reads and grants actual admin scope")
     guard authorized else { return }
-    do {
-        let response = try await gateway.connection.request(DeviceManagementModel.listMethod, [:])
-        check(response["pending"]?.array != nil && response["paired"]?.array != nil,
-              "actual mock provides pending and paired device arrays")
-        await checkDeviceLoadAdmission(response: response) { method, params in
-            try await gateway.connection.request(method, params)
-        }
-    } catch {
-        check(false, "actual mock device list read failed")
+    await checkDeviceLoadAdmission { method, params in
+        try await gateway.connection.request(method, params)
     }
 }
