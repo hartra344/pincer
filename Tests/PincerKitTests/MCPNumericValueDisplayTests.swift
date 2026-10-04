@@ -13,8 +13,8 @@ struct MCPNumericValueDisplayTests {
     }
 
     @Test func oversizedNumericEnvironmentValueCannotCrashSettings() throws {
-        // Defensive decoding of malformed config: env/header values should be strings.
-        // Loading a config error must not kill the client before it can be corrected.
+        // Official McpServerSchema accepts strings, numbers and booleans for env/headers.
+        // A finite number has no native Int ceiling and must remain displayable.
         let server = try #require(MCPServer(name: "display", json: Fixtures.json(#"{"command":"fixture","env":{"OVERSIZED":1e30}}"#)))
         let value = try #require(server.env.first { $0.key == "OVERSIZED" }?.value)
         #expect(value == String(1e30))
