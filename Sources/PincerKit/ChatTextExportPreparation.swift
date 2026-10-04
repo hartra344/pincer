@@ -30,29 +30,60 @@ package final class ChatTextExportProbe: @unchecked Sendable {
 }
 #endif
 
-/// The actual Markdown/plain-text preparation used by Export Chat. Neutral extraction keeps Main execution.
+/// Exact text Export preparation. One worker per invocation; source/output storage is input-proportional.
 @MainActor package final class ChatTextExportPreparation {
+    private struct Input: Sendable {
+        let items: [ChatItem]
+        let format: TranscriptExport.Format
+        let options: TranscriptExport.Options
+        let header: TranscriptExport.Header
+        #if DEBUG
+        let probe: ChatTextExportProbe?
+        let afterPreparation: (@Sendable () async -> Void)?
+        #endif
+    }
     #if DEBUG
     package var probe: ChatTextExportProbe?
+    /// Holds the actual completed computation before its worker returns.
+    package var afterPreparation: (@Sendable () async -> Void)?
     #endif
     package init() {}
     package func prepare(_ items: [ChatItem], format: TranscriptExport.Format,
                          options: TranscriptExport.Options, header: TranscriptExport.Header) async -> ChatTextExport? {
-        guard format != .pdf else { return nil }
+        guard format != .pdf, !Task.isCancelled else { return nil }
         #if DEBUG
-        probe?.formatting()
+        let input = Input(items: items, format: format, options: options, header: header,
+                          probe: probe, afterPreparation: afterPreparation)
+        #else
+        let input = Input(items: items, format: format, options: options, header: header)
+        #endif
+        let worker = Task.detached(priority: .userInitiated) {
+            let output = Self.build(input)
+            #if DEBUG
+            await input.afterPreparation?()
+            #endif
+            return output
+        }
+        // A canceled consumer still awaits the actual worker; it cannot release work early.
+        let output = await worker.value
+        guard !Task.isCancelled else { return nil }
+        return output
+    }
+    private nonisolated static func build(_ input: Input) -> ChatTextExport? {
+        #if DEBUG
+        input.probe?.formatting()
         #endif
         let text: String
-        switch format {
-        case .markdown: text = TranscriptExport.markdown(items, header: header, options: options)
-        case .plainText: text = TranscriptExport.plainText(items, header: header, options: options)
+        switch input.format {
+        case .markdown: text = TranscriptExport.markdown(input.items, header: input.header, options: input.options)
+        case .plainText: text = TranscriptExport.plainText(input.items, header: input.header, options: input.options)
         case .pdf: return nil
         }
         #if DEBUG
-        probe?.encoding()
+        input.probe?.encoding()
         #endif
         let data = Data(text.utf8)
         guard !data.isEmpty else { return nil }
-        return ChatTextExport(name: TranscriptExport.fileName(title: header.title, format: format), data: data)
+        return ChatTextExport(name: TranscriptExport.fileName(title: input.header.title, format: input.format), data: data)
     }
 }
