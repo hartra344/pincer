@@ -39,6 +39,8 @@ Each row shows the server's name, how it starts (its command, or its URL) and a 
 
 An OAuth server that's signed in says **Signed in as** *account*, or **Signed in**. Choose a row to open the server.
 
+If a refresh is already running, another refresh queues a new fetch and waits for it. The latest fetch controls the loading notice: a successful refresh clears an earlier refresh error, while a failed latest refresh keeps its error visible.
+
 ### From Plugins
 
 Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the server's name and the plugin it belongs to. Each row shows one status: **Unavailable** if your Gateway can't run the server, otherwise its live status when the Gateway reports one, otherwise its sign-in badge (**Signed in**, **Sign-in required**, **Waiting for Sign-In…**). These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
