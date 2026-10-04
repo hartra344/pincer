@@ -25,6 +25,7 @@ struct GatewayLogsPage: View {
     @State private var searchRequest = false
     @State private var selection: Set<Int> = []
     @State private var selectionAnchor: Int?
+    @State private var copyPreparation = GatewayLogCopyPreparation()
     @State private var confirmExport = false
     @State private var exportLines: [GatewayLogEntry] = []
     @State private var exportDocument: ExportedFile?
@@ -72,6 +73,7 @@ struct GatewayLogsPage: View {
             }
         }
         .navigationTitle(L("Gateway Logs"))
+        .onDisappear { self.copyPreparation.invalidate() }
         .onChange(of: filterKey, initial: true) { self.refresh() }
         #if os(macOS)
         .focusedSceneValue(\.gatewayLogsSearch, model.supported ? self.$searchRequest : nil)
@@ -158,10 +160,10 @@ struct GatewayLogsPage: View {
                         .contextMenu {
                             if !entry.isMarker {
                                 Button(L("Copy"), systemImage: "doc.on.doc") {
-                                    Clipboard.copy(GatewayLogs.copyText(self.targets(entry, in: visible)))
+                                    self.copy(self.targets(entry, in: visible), style: .formatted)
                                 }
                                 Button(L("Copy Raw"), systemImage: "curlybraces") {
-                                    Clipboard.copy(GatewayLogs.rawText(self.targets(entry, in: visible)))
+                                    self.copy(self.targets(entry, in: visible), style: .raw)
                                 }
                             }
                         }
@@ -256,6 +258,10 @@ struct GatewayLogsPage: View {
         self.matches = matches
         self.totalLines = GatewayLogs.lineCount(self.rows)
         self.freshCount = self.following ? 0 : fresh
+    }
+
+    private func copy(_ entries: [GatewayLogEntry], style: GatewayLogCopyPreparation.Style) {
+        self.copyPreparation.request(entries, style: style) { Clipboard.copy($0) }
     }
 
     /// The row's lines for Copy: the selection when the row is in it, else the row.
@@ -474,7 +480,7 @@ struct GatewayLogsPage: View {
                 Menu {
                     Toggle(isOn: self.$showRaw) { Label(L("Show Raw"), systemImage: "curlybraces") }
                     Button(L("Copy Visible Lines"), systemImage: "doc.on.doc") {
-                        Clipboard.copy(GatewayLogs.copyText(visible))
+                        self.copy(visible, style: .formatted)
                     }
                     .disabled(self.matches == 0)
                     Button(L("Export…"), systemImage: "square.and.arrow.up") { self.export(visible) }

@@ -212,6 +212,7 @@ enum Suites {
         ]
         #if DEBUG
         sections.append(Section("Owned task work probe") { await runTaskScopeWorkProbeChecks() })
+        sections.append(Section("Log Copy preparation") { await runGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation") { await runGatewayLogExportPreparationChecks() })
         sections.append(Section("Cache inventory preparation") { await runCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness" }) {
@@ -348,6 +349,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
         sections.append(Section("Cache inventory preparation (demo)") { await runDemoCacheInventoryPreparationChecks() })
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
