@@ -9,8 +9,10 @@ struct ToolDiffLineNumberBoundaryTests {
             ToolFileEditTests.parse("apply_patch", ["input": "--- a/file.txt\n+++ b/file.txt\n@@ -\(Int.max),1 +\(Int.max),1 @@\n context"])
         }.value
         let edit = try #require(result)
-        #expect(edit.files.count == 1 && edit.files[0].path == "file.txt")
-        #expect(edit.files[0].hunks.count == 1)
+        try #require(edit.files.count == 1)
+        #expect(edit.files[0].path == "file.txt")
+        try #require(edit.files[0].hunks.count == 1)
+        try #require(edit.files[0].hunks[0].lines.count == 1)
         #expect(edit.files[0].hunks[0].lines.map(\.unified) == [" context"])
         #expect(edit.files[0].hunks[0].lines.map(\.lineNumber) == [Int.max])
         #expect(edit.additions == 0 && edit.deletions == 0)
