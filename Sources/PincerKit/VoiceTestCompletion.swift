@@ -5,6 +5,11 @@ import Foundation
     private var generation: UInt64 = 0
     package init() {}
     package func invalidate() { self.generation &+= 1 }
+    package func start(model: GatewayVoiceModel, sample: String,
+                       publish: @escaping (TTSTestResult) -> Void, finished: @escaping () -> Void = {},
+                       play: @escaping (TTSClip) -> Void) -> Task<Void, Never> {
+        Task { await self.run(model: model, sample: sample, publish: publish, finished: finished, play: play) }
+    }
     package func run(model: GatewayVoiceModel, sample: String,
                      publish: (TTSTestResult) -> Void, finished: () -> Void = {}, play: (TTSClip) -> Void) async {
         defer { finished() }

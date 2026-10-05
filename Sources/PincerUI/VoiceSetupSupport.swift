@@ -12,6 +12,15 @@ final class VoiceSetupController {
     #if DEBUG
     var testPlaybackOverride: ((TTSClip) -> Void)?
     #endif
+    func startTestVoice(model: GatewayVoiceModel, sample: String, finished: @escaping () -> Void = {},
+                        publish: @escaping (TTSTestResult) -> Void) -> Task<Void, Never> {
+        self.testCompletion.start(model: model, sample: sample, publish: publish, finished: finished) { clip in
+            #if DEBUG
+            if let override = self.testPlaybackOverride { override(clip); return }
+            #endif
+            self.play(clip)
+        }
+    }
     func testVoice(model: GatewayVoiceModel, sample: String, finished: () -> Void = {}, publish: (TTSTestResult) -> Void) async {
         await self.testCompletion.run(model: model, sample: sample, publish: publish, finished: finished) { clip in
             #if DEBUG
