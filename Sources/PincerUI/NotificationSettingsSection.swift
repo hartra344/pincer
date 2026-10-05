@@ -41,6 +41,7 @@ struct NotificationSettingsSection: View {
                     }
                 }
                 if self.delivery == .backgroundRefresh {
+                    BackgroundRefreshPowerNote(delivery: self.delivery)
                     let _ = self.refreshTick
                 let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
                     let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
