@@ -25,14 +25,15 @@ import PincerKit
     }
     check(ready, "actual Demo app has a connected nonempty gateway"); guard ready else { return }
     ClosedAppDelivery.set(.backgroundRefresh, defaults)
-    let preferences = defaults.dictionaryRepresentation()
+    let deliveryPreference = defaults.string(forKey: ClosedAppDelivery.key)
+    let notificationsEnabled = app.notifier.enabled
     var lowPower = false
     let state = BackgroundRefreshPowerState(read: { lowPower })
     check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)), "actual saved background selection has no note at normal power")
     lowPower = true; state.refresh()
     check(state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)), "actual saved background selection displays local low power explanation")
     lowPower = false; state.refresh()
-    check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)) && defaults.dictionaryRepresentation() as NSDictionary == preferences as NSDictionary,
+    check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)) && defaults.string(forKey: ClosedAppDelivery.key) == deliveryPreference && app.notifier.enabled == notificationsEnabled,
           "local power transitions preserve actual Demo app notification preferences")
     ClosedAppDelivery.set(.pushRelay, defaults)
     lowPower = true; state.refresh()
