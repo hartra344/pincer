@@ -5,6 +5,7 @@ import Foundation
 }
 
 @MainActor func runUnitTerminalCompletionChecks() async {
+    await checkActualRunner(arguments: ["--partial-unit-run-control"])
     await checkActualRunner(arguments: ["--unit-start-only-control"])
     await checkActualRunner(arguments: ["--completed-control"])
 }

@@ -24,6 +24,9 @@ name = Path(sys.argv[0]).name
 if name == "swift":
     if "--show-bin-path" in sys.argv:
         print(root / "bin"); sys.exit(0)
+    print("◇ Test run started.", flush=True)
+    if os.environ.get("CHECKS_FIXTURE_UNIT_PARTIAL_RUN") == "1":
+        print("◇ Test run started.", flush=True)
     if "--parallel" in sys.argv:
         (root / "unit-admitted").touch()
         print("◇ Test heldUnitFixture() started.", flush=True)
@@ -62,7 +65,7 @@ def wait_until(predicate, timeout=5):
         time.sleep(0.01)
 
 
-def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False, unit_start_only=False):
+def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False, unit_start_only=False, partial_unit_run=False):
     source = Path(__file__).resolve().with_name("run-checks.sh")
     with tempfile.TemporaryDirectory(prefix="pincer-checks-progress-") as temporary:
         root = Path(temporary)
@@ -88,6 +91,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
         if unit_start_only: env["CHECKS_FIXTURE_UNIT_START_ONLY"] = "1"
+        if partial_unit_run: env["CHECKS_FIXTURE_UNIT_PARTIAL_RUN"] = "1"
         process = subprocess.Popen(["/bin/bash", str(root / "scripts" / "run-checks.sh")],
                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    start_new_session=True, bufsize=0)
@@ -137,13 +141,15 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "pendingOutputBounded": len(before_release) <= 8192 and all(len(line) <= 512 for line in progress_lines),
                 "pendingContainsNoLogPayload": b"PRIVATE_FIXTURE_LOG_CONTENT" not in before_release,
                 "allLanesCompleted": "Lane               Result" in text and "perf-tests" in text and "perf-smoke" in text,
-                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else (process.returncode in (0, 1) if unit_start_only else process.returncode == (1 if fail_lane else 0)),
+                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else (process.returncode in (0, 1) if (unit_start_only or partial_unit_run) else process.returncode == (1 if fail_lane else 0)),
+                "partialUnitRunRejected": not partial_unit_run or process.returncode == 1,
                 "startOnlyUnitRejected": not unit_start_only or process.returncode == 1,
                 "allMocksCleaned": len(list((root / "mocks").glob("*.stopped"))) == 6,
                 "progressReaderCleaned": not reader_alive,
                 "soloPerformanceHasNoReader": reader_count == 1 if helper.exists() else reader_count == 0,
             }
             assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
+            if partial_unit_run: assertions.append("partialUnitRunRejected")
             if unit_start_only: assertions.append("startOnlyUnitRejected")
             if interrupt: assertions.remove("allLanesCompleted")
             if require_progress: assertions.append("pendingVisible")
@@ -186,8 +192,9 @@ def main():
     parser.add_argument("--interrupt-control", action="store_true")
     parser.add_argument("--stale-completion-control", action="store_true")
     parser.add_argument("--unit-start-only-control", action="store_true")
+    parser.add_argument("--partial-unit-run-control", action="store_true")
     args = parser.parse_args()
-    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control, args.unit_start_only_control)
+    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control, args.unit_start_only_control, args.partial_unit_run_control)
 
 
 if __name__ == "__main__":

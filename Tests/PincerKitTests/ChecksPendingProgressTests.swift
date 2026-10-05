@@ -19,6 +19,10 @@ struct ChecksPendingProgressTests {
             return (process.terminationStatus, String(decoding: data, as: UTF8.self))
         }.value
     }
+    @Test func everyStartedUnitRunMustCompleteBeforeZeroExitIsAccepted() async throws {
+        let result = try await execute(["--partial-unit-run-control"])
+        #expect(result.0 == 0, "Actual runner must reject two started runs with only one completion: \(result.1)")
+    }
     @Test func zeroExitWithoutActualUnitCompletionIsRejected() async throws {
         let result = try await execute(["--unit-start-only-control"])
         #expect(result.0 == 0, "Actual runner must reject exit 0 with only START records: \(result.1)")
