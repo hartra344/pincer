@@ -48,3 +48,5 @@ The sidebar marks the chat currently shown in the right pane with a split-view s
 On iPad, **Open in Split View** is in a chat's context menu in the sidebar while the window is wide enough for two chats. The action and an existing split hide when the window is too narrow (for example in Slide Over), then come back when you widen it.
 
 On macOS, a detached chat window adds **Chat window** to its native window title. This distinguishes it from the same chat in the main window’s Window menu and Mission Control. The main window and iOS chat headers keep their existing titles.
+
+On macOS, **File → Open Chat in New Window** (⌥⌘N) targets the front chat window’s chat. In the main window it follows the active split pane. A removed Gateway or deleted chat cannot redirect the command to a different main-window chat.

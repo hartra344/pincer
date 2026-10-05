@@ -159,21 +159,28 @@ struct ChatWindowCommands: Commands {
     @FocusedValue(\.chatWindowCommandTarget) private var focusedTarget
     @Environment(\.openWindow) private var openWindow
 
+    private var resolvedTarget: ChatWindowCommandTarget? {
+        let main = self.app.selectedGateway.flatMap { gateway in
+            gateway.focusedKey.map { ChatWindowCommandTarget(ref: .init(gatewayId: gateway.id, sessionKey: $0), isDetached: false) }
+        }
+        return ChatWindowCommandTarget.resolve(main: main, focused: self.focusedTarget) { ref in
+            guard let gateway = self.app.gateways.first(where: { $0.id == ref.gatewayId }) else { return false }
+            return !ChatWindow.isGone(ref.sessionKey, in: gateway)
+        }
+    }
+
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button(L("Open Chat in New Window")) {
                 // The focused side of the split view (#404); opening it in a window closes the split.
-                let main = self.app.selectedGateway.flatMap { gateway in
-                    gateway.focusedKey.map { ChatWindowCommandTarget(ref: ChatWindowRef(gatewayId: gateway.id, sessionKey: $0), isDetached: false) }
-                }
-                guard let target = ChatWindowCommandTarget.resolve(main: main, focused: self.focusedTarget),
+                guard let target = self.resolvedTarget,
                       let gateway = self.app.gateways.first(where: { $0.id == target.ref.gatewayId }) else { return }
                 let key = target.ref.sessionKey
                 ChatWindowOpener.window(self.openWindow)(gateway, key: key)
                 if !target.isDetached && key == gateway.visibleSplitKey { gateway.closeSplit() }
             }
             .shortcut(.openChatInNewWindow)
-            .disabled(self.app.selectedGateway?.selectedKey == nil)
+            .disabled(self.resolvedTarget == nil)
         }
         CommandGroup(after: .sidebar) {
             if let gateway = self.app.selectedGateway, gateway.visibleSplitKey != nil {
