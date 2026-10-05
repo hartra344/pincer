@@ -92,6 +92,7 @@ package struct SettingsDiscoveryWorkerChildResult: Sendable {
     let catalog = DeviceSpeechCatalog { gate.discover(locale: $0) }
     let observed = SettingsDiscoveryObservation()
     let signal = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    let continuationCompletion = AsyncStream<TaskPriority>.makeStream(bufferingPolicy: .bufferingNewest(1))
     let fallbackAction: @Sendable () -> Void = { gate.open(fallback: true) }
     let fallback = DispatchWorkItem(block: fallbackAction)
     defer { fallback.cancel(); gate.open(); gate.onEntry = nil }
@@ -107,9 +108,11 @@ package struct SettingsDiscoveryWorkerChildResult: Sendable {
                         observed.continuation = Task.detached(priority: priority) {
                             let actual = Task.currentPriority
                             gate.continuationRan()
+                            continuationCompletion.continuation.yield(actual)
+                            continuationCompletion.continuation.finish()
                             return actual
                         }
-                    } else { gate.open() }
+                    } else { gate.open(); continuationCompletion.continuation.finish() }
                     signal.continuation.yield(())
                 }
             }
@@ -123,7 +126,12 @@ package struct SettingsDiscoveryWorkerChildResult: Sendable {
         observed.task = catalog.actualDiscoveryTaskForTesting
         observed.unpublished = catalog.snapshot == nil && catalog.isRefreshing
     }
-    let actualPriority = await observed.continuation?.value
+    var actualPriority: TaskPriority?
+    if holdWorker {
+        // Observe completion without awaiting its Task handle, which can donate the parent priority.
+        for await priority in continuationCompletion.stream { actualPriority = priority; break }
+        _ = await observed.continuation?.value
+    }
     let result = await observed.task?.value
     let deadline = ContinuousClock.now + .seconds(2)
     while catalog.isRefreshing && ContinuousClock.now < deadline {

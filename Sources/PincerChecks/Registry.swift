@@ -57,7 +57,8 @@ enum Suites {
         if CommandLine.arguments.contains("--settings-discovery-worker-proof") || CommandLine.arguments.contains("--settings-discovery-worker-ordinary") {
             return [Section(nil) {
                 let evidence = await runSettingsDiscoveryWorkerProof(holdWorker: !CommandLine.arguments.contains("--settings-discovery-worker-ordinary"))
-                guard let data = try? JSONEncoder().encode(evidence) else { exit(2) }
+                let encoded = await Task.detached(priority: .utility) { try? JSONEncoder().encode(evidence) }.value
+                guard let data = encoded else { exit(2) }
                 print(String(decoding: data, as: UTF8.self))
                 exit(evidence.passed ? 0 : 1)
             }]
