@@ -106,7 +106,7 @@ fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
-lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+lane unit-tests python3 scripts/checks-unit-command.py swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
 lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
 lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras

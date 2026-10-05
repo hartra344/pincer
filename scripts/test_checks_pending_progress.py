@@ -28,6 +28,11 @@ if name == "swift":
     if os.environ.get("CHECKS_FIXTURE_UNIT_PARTIAL_RUN") == "1":
         print("◇ Test run started.", flush=True)
     if "--parallel" in sys.argv:
+        (root / "unit-owned.pid").write_text(str(os.getpid()))
+        def unit_stop(signum, _frame):
+            (root / "unit-owned.stopped").touch()
+            sys.exit(128 + signum)
+        signal.signal(signal.SIGTERM, unit_stop)
         (root / "unit-admitted").touch()
         print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
@@ -65,12 +70,13 @@ def wait_until(predicate, timeout=5):
         time.sleep(0.01)
 
 
-def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False, unit_start_only=False, partial_unit_run=False):
+def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False, unit_start_only=False, partial_unit_run=False, unit_timeout=False):
     source = Path(__file__).resolve().with_name("run-checks.sh")
     with tempfile.TemporaryDirectory(prefix="pincer-checks-progress-") as temporary:
         root = Path(temporary)
         (root / "scripts").mkdir()
         shutil.copyfile(source, root / "scripts" / "run-checks.sh")
+        shutil.copyfile(source.with_name("checks-unit-command.py"), root / "scripts" / "checks-unit-command.py")
         helper = source.with_name("checks-pending-progress.mjs")
         if helper.exists(): shutil.copyfile(helper, root / "scripts" / helper.name)
         (root / "mock-gateway" / "node_modules").mkdir(parents=True)
@@ -89,6 +95,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
         env = dict(os.environ, PATH=str(root / "fake") + os.pathsep + os.environ["PATH"],
                    CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "", CHECKS_LOG_DIR=str(root / "logs"),
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
+        if unit_timeout: env["CHECKS_UNIT_TIMEOUT_SECONDS"] = "1"
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
         if unit_start_only: env["CHECKS_FIXTURE_UNIT_START_ONLY"] = "1"
         if partial_unit_run: env["CHECKS_FIXTURE_UNIT_PARTIAL_RUN"] = "1"
@@ -98,6 +105,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ)
         before_release = bytearray()
+        watchdog_output = bytearray()
         released = False
         try:
             wait_until(lambda: (root / "unit-admitted").exists())
@@ -114,14 +122,23 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                     if len(before_release) > 8192: break
                     if b"[checks progress]" in before_release and b"unit-tests" in before_release:
                         if not require_identity or b"heldUnitFixture()" in before_release: break
+            timeout_evidence = root / "logs" / "unit-watchdog.json"
+            if unit_timeout:
+                deadline = time.monotonic() + 3
+                while not timeout_evidence.exists() and time.monotonic() < deadline:
+                    for key, _ in selector.select(timeout=0.05):
+                        chunk = os.read(key.fd, 4096)
+                        if chunk: watchdog_output.extend(chunk)
+                if timeout_evidence.exists():
+                    released = True  # Only the watchdog, not this fixture, released the held child.
             if interrupt:
                 process.terminate()  # Only the actual task-owned script, while its unit lane is held.
-            else:
+            elif not released:
                 with open(root / "unit-gate", "w") as gate: gate.write("release")
                 released = True
             after_release, _ = process.communicate(timeout=10)
             wait_until(lambda: len(list((root / "mocks").glob("*.stopped"))) == 6)
-            output = bytes(before_release) + after_release
+            output = bytes(before_release) + bytes(watchdog_output) + after_release
             text = output.decode("utf-8", errors="replace")
             progress_lines = [line for line in bytes(before_release).splitlines() if b"[checks progress]" in line]
             reader_file = root / "progress-readers"
@@ -141,7 +158,8 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "pendingOutputBounded": len(before_release) <= 8192 and all(len(line) <= 512 for line in progress_lines),
                 "pendingContainsNoLogPayload": b"PRIVATE_FIXTURE_LOG_CONTENT" not in before_release,
                 "allLanesCompleted": "Lane               Result" in text and "perf-tests" in text and "perf-smoke" in text,
-                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else (process.returncode in (0, 1) if (unit_start_only or partial_unit_run) else process.returncode == (1 if fail_lane else 0)),
+                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else (process.returncode in (0, 1) if (unit_start_only or partial_unit_run or unit_timeout) else process.returncode == (1 if fail_lane else 0)),
+                "heldUnitTimeoutRejected": not unit_timeout or (timeout_evidence.exists() and process.returncode == 1 and (root / "unit-owned.stopped").exists()),
                 "partialUnitRunRejected": not partial_unit_run or process.returncode == 1,
                 "startOnlyUnitRejected": not unit_start_only or process.returncode == 1,
                 "allMocksCleaned": len(list((root / "mocks").glob("*.stopped"))) == 6,
@@ -149,6 +167,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "soloPerformanceHasNoReader": reader_count == 1 if helper.exists() else reader_count == 0,
             }
             assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
+            if unit_timeout: assertions.append("heldUnitTimeoutRejected")
             if partial_unit_run: assertions.append("partialUnitRunRejected")
             if unit_start_only: assertions.append("startOnlyUnitRejected")
             if interrupt: assertions.remove("allLanesCompleted")
@@ -177,6 +196,10 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
             # Interruption can leave the owned held unit child alive; kill only this process group.
             try: os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError: pass
+            owned_unit = root / "unit-owned.pid"
+            if owned_unit.exists():
+                try: os.killpg(int(owned_unit.read_text()), signal.SIGKILL)
+                except ProcessLookupError: pass
             # Only task-owned fake processes are eligible for cleanup.
             for file in (root / "mocks").glob("*.pid"):
                 if file.with_suffix(".stopped").exists(): continue
@@ -193,8 +216,9 @@ def main():
     parser.add_argument("--stale-completion-control", action="store_true")
     parser.add_argument("--unit-start-only-control", action="store_true")
     parser.add_argument("--partial-unit-run-control", action="store_true")
+    parser.add_argument("--unit-timeout-control", action="store_true")
     args = parser.parse_args()
-    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control, args.unit_start_only_control, args.partial_unit_run_control)
+    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control, args.unit_start_only_control, args.partial_unit_run_control, args.unit_timeout_control)
 
 
 if __name__ == "__main__":

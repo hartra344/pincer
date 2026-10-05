@@ -19,6 +19,10 @@ struct ChecksPendingProgressTests {
             return (process.terminationStatus, String(decoding: data, as: UTF8.self))
         }.value
     }
+    @Test func heldUnitCommandProducesOwnedTimeoutEvidenceAndFails() async throws {
+        let result = try await execute(["--unit-timeout-control"])
+        #expect(result.0 == 0, "Actual runner must time out its owned held unit command, retain evidence and fail: \(result.1)")
+    }
     @Test func everyStartedUnitRunMustCompleteBeforeZeroExitIsAccepted() async throws {
         let result = try await execute(["--partial-unit-run-control"])
         #expect(result.0 == 0, "Actual runner must reject two started runs with only one completion: \(result.1)")
