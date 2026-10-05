@@ -107,7 +107,7 @@ import Foundation
 }
 @MainActor func runDemoSkillApiKeyChecks() async { await checkConnectedSkillApiKey(profile: .demo()) }
 @MainActor func runLiveSkillApiKeyChecks(url: String, token: String) async {
-    let profile = GatewayProfile(name: "Owned skill key fixture", url: url, authMode: .token)
+    let profile = GatewayProfile(name: "Owned skill key fixture", url: url, authMode: .token, access: .admin)
     profile.secret = token
     await checkConnectedSkillApiKey(profile: profile)
 }
