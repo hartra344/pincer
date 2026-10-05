@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
+            Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
@@ -302,6 +303,7 @@ enum Suites {
     static var demoExtras: [Section] {
         var sections: [Section] = [
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
+        Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
@@ -460,6 +462,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog plugin validation (live)") { url, token in await runLiveToolsCatalogPluginValidationChecks(url: url, token: token) },
         LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
