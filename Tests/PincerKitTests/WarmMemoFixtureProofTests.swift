@@ -6,6 +6,7 @@ import Testing
 struct WarmMemoFixtureProofTests {
     @Test func actualTargetWarmMemoSurvivesHeldForeignOwner() async throws {
         let evidence = try await warmMemoFixtureProof()
+        try #require(evidence.cancellationPassed, "Actual UI cancellation waits for worker drain: \(evidence.diagnostics)")
         try #require(evidence.ordinaryPassed, "Actual UI ordinary warm/adopt prerequisite: \(evidence.diagnostics)")
         try #require(evidence.heldQualified, "Actual held foreign owner and completed real worker prerequisites: \(evidence.diagnostics)")
         #expect(evidence.targetWarmAdopted, "Actual target warm/adopt contract: \(evidence.diagnostics)")

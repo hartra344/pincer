@@ -3,6 +3,7 @@ import Foundation
 import Darwin
 
 package struct WarmMemoFixtureEvidence: Sendable {
+    package let cancellationPassed: Bool
     package let ordinaryPassed: Bool
     package let targetWarmAdopted: Bool
     package let heldQualified: Bool
@@ -121,14 +122,14 @@ package func warmMemoFixtureProof() async throws -> WarmMemoFixtureEvidence {
             let pid = text.split(whereSeparator: \.isNewline).first { $0.hasPrefix(marker) }.flatMap { Int($0.dropFirst(marker.count)) }
             let oneEntry = (pid ?? 0) > 0 && text.components(separatedBy: marker).count == 2
             let passed = process.terminationReason == .exit && process.terminationStatus == 0 && oneEntry
-                && text.contains("PINCER_WARM_MEMO_CHILD_COMPLETE=ordinary") && summaries == 1 && functions == 1
+                && text.contains("PINCER_WARM_MEMO_CHILD_COMPLETE=" + mode) && summaries == 1 && functions == 1
             let jsonMarker = "PINCER_WARM_MEMO_CHILD_EVIDENCE="
             let jsonLines = text.split(whereSeparator: \.isNewline).filter { $0.hasPrefix(jsonMarker) }
             let payload = jsonLines.count == 1 ? (try? JSONSerialization.jsonObject(with: Data(jsonLines[0].dropFirst(jsonMarker.count).utf8)) as? [String: Any]) : nil
             let fields = ["ordinaryPassed", "foreignHeldOffMain", "distinctOwners", "targetJobCaptured", "targetAdmissionHeld", "foreignCompleted", "queueSentinelCompleted", "admissionsIdle", "safetyDidNotExpire"]
             let held = mode == "held"
             let prerequisites = payload?["mode"] as? String == mode && payload?["prerequisites"] as? Bool == true
-                && payload?["ordinaryChurnPassed"] as? Bool == true
+                && (mode == "cancellation" ? (payload?["admissionsIdle"] as? Bool == true && payload?["safetyDidNotExpire"] as? Bool == true) : payload?["ordinaryChurnPassed"] as? Bool == true)
                 && (!held || (fields.allSatisfy { payload?[$0] as? Bool == true }
                     && payload?["evictedOffloadCount"] as? Int == 1))
             let semantic = payload?["semanticPassed"] as? Bool == true
@@ -140,15 +141,17 @@ package func warmMemoFixtureProof() async throws -> WarmMemoFixtureEvidence {
                 && oneEntry && pid == ownedPid && failedRuns == 1 && text.contains("recorded an issue")
             let complete = text.components(separatedBy: "PINCER_WARM_MEMO_CHILD_COMPLETE=" + mode).count == 2
             let normalHeldCompletion = process.terminationReason == .exit && oneEntry && complete && prerequisites
-                && ((process.terminationStatus == 0 && summaries == 1 && functions == 1) || ownedFailure)
+                && (passed || ownedFailure)
             let qualified = held ? normalHeldCompletion : passed && complete && prerequisites && semantic
             let verdict = held ? qualified && semantic && process.terminationStatus == 0 : qualified
             return (process.terminationStatus, verdict, String(text.suffix(16_384)), qualified)
         }
+        let cancellation = try child("cancellation")
+        guard cancellation.1 else { return WarmMemoFixtureEvidence(cancellationPassed: false, ordinaryPassed: false, targetWarmAdopted: false, heldQualified: false, ordinaryStatus: -1, heldStatus: -1, diagnostics: cancellation.2) }
         let ordinary = try child("ordinary")
-        guard ordinary.1 else { return WarmMemoFixtureEvidence(ordinaryPassed: false, targetWarmAdopted: false, heldQualified: false, ordinaryStatus: ordinary.0, heldStatus: -1, diagnostics: ordinary.2) }
+        guard ordinary.1 else { return WarmMemoFixtureEvidence(cancellationPassed: cancellation.1, ordinaryPassed: false, targetWarmAdopted: false, heldQualified: false, ordinaryStatus: ordinary.0, heldStatus: -1, diagnostics: ordinary.2) }
         let crashed = try child("held")
-        return WarmMemoFixtureEvidence(ordinaryPassed: ordinary.1, targetWarmAdopted: crashed.1, heldQualified: crashed.3, ordinaryStatus: ordinary.0, heldStatus: crashed.0, diagnostics: crashed.2)
+        return WarmMemoFixtureEvidence(cancellationPassed: cancellation.1, ordinaryPassed: ordinary.1, targetWarmAdopted: crashed.1, heldQualified: crashed.3, ordinaryStatus: ordinary.0, heldStatus: crashed.0, diagnostics: crashed.2)
         }()
         continuation.resume(returning: evidence)
         } catch { continuation.resume(throwing: error) }

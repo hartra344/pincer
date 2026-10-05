@@ -70,10 +70,16 @@ struct WarmMemoQueueOwnershipTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["PINCER_WARM_MEMO_CHILD"] != nil))
     func actualWarmMemoQueueOwnershipChild() async throws {
         let mode = ProcessInfo.processInfo.environment["PINCER_WARM_MEMO_CHILD"]
-        try #require(mode == "ordinary" || mode == "held")
+        try #require(mode == "ordinary" || mode == "held" || mode == "cancellation")
         print("PINCER_WARM_MEMO_CHILD_PID=\(ProcessInfo.processInfo.processIdentifier)")
         fflush(stdout)
         defer { print("PINCER_WARM_MEMO_CHILD_COMPLETE=\(mode ?? "")"); fflush(stdout) }
+        if mode == "cancellation" {
+            try await actualCancellationControl()
+            try emit(["mode": "cancellation", "prerequisites": true, "semanticPassed": true,
+                      "admissionsIdle": true, "safetyDidNotExpire": true])
+            return
+        }
         let acquired = await TranscriptSharedCacheLease.shared.acquire()
         try #require(acquired)
         defer { TranscriptSharedCacheLease.shared.release() }
@@ -151,15 +157,21 @@ struct WarmMemoQueueOwnershipTests {
         let normalRelease = DispatchWorkItem(block: releaseAction)
         defer { normalRelease.cancel(); gate.open() }
         var measured: [PremeasuredRow] = []
+        var helperSucceeded = true
         if held && !Task.isCancelled {
             // Normal explicit release is independent of this helper returning, so an eventual
             // actual-completion helper can await the same held worker without safety expiry.
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 8, execute: safety)
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 6, execute: normalRelease)
-            measured = prepareWarmMemoFixtureRows(targetJob, driver: target, env: renderer.textEnvironment) {
-                targetAdmissionHeld = gate.actualHeldOffMain && gate.notNormallyReleased && gate.safetyDidNotExpire
-                    && target.admission.active && foreign.admission.active && foreign.admission !== target.admission
-                targetObservationCompleted = true
+            do {
+                measured = try await prepareWarmMemoFixtureRows(targetJob, driver: target, env: renderer.textEnvironment) {
+                    targetAdmissionHeld = gate.actualHeldOffMain && gate.notNormallyReleased && gate.safetyDidNotExpire
+                        && target.admission.active && foreign.admission.active && foreign.admission !== target.admission
+                    targetObservationCompleted = true
+                }
+            } catch {
+                helperSucceeded = false
+                gate.open()
             }
         } else { gate.open() }
         var sentinelCompleted = false
@@ -172,7 +184,7 @@ struct WarmMemoQueueOwnershipTests {
                       "setupDrainFailed": true])
             Darwin._exit(2)
         }
-        let prerequisites = ordinaryPassed && ordinaryChurnPassed && held && distinct && captured && targetAdmissionHeld
+        let prerequisites = helperSucceeded && ordinaryPassed && ordinaryChurnPassed && held && distinct && captured && targetAdmissionHeld
             && foreignCompleted && sentinelCompleted && actualDrained && admissionsIdle && gate.safetyDidNotExpire
         // Compute original readiness results only after all actual worker ownership has drained.
         let adopted = target.adopt(measured, width: 700, epoch: target.epoch.current).count
@@ -194,20 +206,64 @@ struct WarmMemoQueueOwnershipTests {
         #expect(warm == [0], "original immediate warm memo readiness")
         #expect(offload == 1, "an evicted text entry invalidates the warm shortcut")
     }
+    private func actualCancellationControl() async throws {
+        let acquired = await TranscriptSharedCacheLease.shared.acquire()
+        try #require(acquired)
+        defer { TranscriptSharedCacheLease.shared.release() }
+        let scratch = ScratchDefaults()
+        var safeToRemoveScratch = false
+        defer { if safeToRemoveScratch { scratch.remove() } }
+        let renderer = TranscriptLayoutCacheTests.renderer(scratch)
+        let rows = [Self.row("Cancellation ownership " + UUID().uuidString)]
+        let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
+        driver.currentRow = { id in rows.first { $0.id == id } }
+        let job = try #require(driver.split([0], all: rows, width: 700, renderer: renderer).offload.first)
+        let gate = WarmMemoForeignGate()
+        driver.admission.beforeSourcePreparation = { gate.hold($0) }
+        let safetyAction: @Sendable () -> Void = { gate.open(failedSafety: true) }
+        let safety = DispatchWorkItem(block: safetyAction)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 8, execute: safety)
+        defer { safety.cancel(); gate.open() }
+        var finished = false
+        var cancelled = false
+        var returnedRows = false
+        let awaiter = Task { @MainActor in
+            defer { finished = true }
+            do {
+                _ = try await prepareWarmMemoFixtureRows(job, driver: driver, env: renderer.textEnvironment)
+                returnedRows = true
+            } catch is CancellationError { cancelled = true }
+            catch { /* Setup error is rejected by the strict terminal checks below. */ }
+        }
+        let entered = await observed { gate.actualHeldOffMain && driver.admission.active }
+        awaiter.cancel()
+        // A genuine subsequent Main dispatch turn allows a premature cancellation resume
+        // to run. No Task.yield guessing and no synchronous wait on Main.
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        let retainedUntilRelease = entered && awaiter.isCancelled && !finished
+            && gate.actualHeldOffMain && driver.admission.active
+        gate.open()
+        let actualDrained = await drained { finished && !driver.admission.active }
+        safeToRemoveScratch = actualDrained
+        // A failed finite drain remains inside the owned child. Never release its cache
+        // isolation lease or remove scratch while actual work could still be running.
+        if !actualDrained {
+            try? emit(["mode": "cancellation", "prerequisites": false, "semanticPassed": false,
+                       "setupDrainFailed": true])
+            Darwin._exit(2)
+        }
+        await awaiter.value
+        try #require(entered && retainedUntilRelease && gate.safetyDidNotExpire,
+                     "cancelled awaiter retains its real worker until explicit release")
+        try #require(cancelled && !returnedRows, "cancellation throws only after the actual worker drains")
+    }
     private func emit(_ fields: [String: Any]) throws {
         let data = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
         print("PINCER_WARM_MEMO_CHILD_EVIDENCE=" + String(decoding: data, as: UTF8.self))
         fflush(stdout)
     }
 }
-    // Shared functional fixture seam: neutral is the original unchanged five-second pass.
-    // Future fix changes this helper to actual admission completion and invokes the same
-    // observation after submitting, before awaiting; original warm fixture adopts its result.
-    @MainActor func prepareWarmMemoFixtureRows(_ job: PremeasureJob, driver: TranscriptPremeasureDriver,
-                                           env: TextBuildEnvironment,
-                                           observeSubmitted: @escaping @MainActor @Sendable () -> Void) -> [PremeasuredRow] {
-        DispatchQueue.main.async { MainActor.assumeIsolated { observeSubmitted() } }
-        return TranscriptPremeasurer.shared.measureWithin(5, jobs: [job], env: env, epoch: driver.epoch)
-    }
 
 #endif
