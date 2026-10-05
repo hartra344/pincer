@@ -12,18 +12,11 @@ private final class ShareProofGate: @unchecked Sendable {
     private var released = false
     private var fallback = false
     private var progressed = false
-    let entry: AsyncStream<Void>
-    private let entered: AsyncStream<Void>.Continuation
-
-    init() {
-        let pair = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        entry = pair.stream
-        entered = pair.continuation
-    }
+    var onEntry: (@Sendable () -> Void)?
     func hold() {
         let first = lock.withLock { () -> Bool in calls += 1; if calls == 1 { priority = Task.currentPriority }; return calls == 1 }
         guard first else { return }
-        entered.yield(())
+        onEntry?()
         suspension.wait()
     }
     func open(expired: Bool = false) {
@@ -39,8 +32,18 @@ private final class ShareProofGate: @unchecked Sendable {
         lock.withLock { progressed = !fallback }
         open()
     }
+    var isHeld: Bool { lock.withLock { !released && calls > 0 } }
     var workerPriority: TaskPriority? { lock.withLock { priority } }
     var progressedBeforeFallback: Bool { lock.withLock { progressed } }
+}
+
+@MainActor private final class ShareProofObservation {
+    var oldTask: Task<Void, Never>?
+    var currentTask: Task<Void, Never>?
+    var continuation: Task<TaskPriority, Never>?
+    var held = false
+    var unpublished = false
+    var recorded: TaskPriority?
 }
 
 package struct ShareWorkerGateEvidence: Codable, Sendable {
@@ -72,7 +75,7 @@ package struct ShareWorkerChildResult: Sendable {
     let fallback = DispatchWorkItem(block: action)
     let suite = "share-proof-" + UUID().uuidString
     let defaults = UserDefaults(suiteName: suite)!
-    defer { fallback.cancel(); gate.open(); defaults.removePersistentDomain(forName: suite) }
+    defer { fallback.cancel(); gate.open(); gate.onEntry = nil; defaults.removePersistentDomain(forName: suite) }
     let roomy = GatewayProfile(name: "Roomy", url: "ws://127.0.0.1:10", authMode: .none)
     let tight = GatewayProfile(name: "Tight", url: "ws://127.0.0.1:9", authMode: .none)
     let policy = UploadPolicy(maxPayload: nil, maxImageBytes: nil, maxAttachmentBytes: 100)
@@ -92,25 +95,38 @@ package struct ShareWorkerChildResult: Sendable {
         let rejected = model.attachments.isEmpty && model.attachmentProblems.count == 1 && model.attachmentProblems.first?.contains("last known limit") == true && !model.isPreparingAttachments
         return ShareWorkerGateEvidence(ordinaryPassed: ordinary && rejected, strictEnvironment: ProcessInfo.processInfo.environment["LIBDISPATCH_COOPERATIVE_POOL_STRICT"] == "1", actualLeaseHeld: false, noEarlyPublication: ordinaryAdmission, priorityRecorded: false, priorityMatched: false, workerPriorityRaw: nil, continuationPriorityRaw: nil, bothTasksCapturedAndDrained: ordinaryTask != nil, oldCancelled: false, heldMode: false, continuationBeforeFallback: false, exactCompletion: ordinary && rejected, idleAfterCompletion: !model.isPreparingAttachments)
     }
+    let observed = ShareProofObservation()
+    let signal = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    gate.onEntry = {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                observed.oldTask = model.actualAttachmentPreparationTaskForTesting
+                observed.held = gate.isHeld && observed.oldTask != nil && model.isPreparingAttachments
+                observed.unpublished = model.attachments.isEmpty && model.attachmentProblems.isEmpty
+                model.profileId = tight.id
+                observed.currentTask = model.actualAttachmentPreparationTaskForTesting
+                observed.recorded = gate.workerPriority
+                if let recorded = observed.recorded {
+                    observed.continuation = Task.detached(priority: recorded) { () -> TaskPriority in
+                        let priority = Task.currentPriority
+                        gate.continuationRan()
+                        return priority
+                    }
+                } else { gate.open() }
+                signal.continuation.yield(())
+            }
+        }
+    }
     model.attachmentPreparationProbe = { gate.hold() }
     model.setContent(content)
     DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: fallback)
-    for await _ in gate.entry { break }
-    let oldTask = model.actualAttachmentPreparationTaskForTesting
-    let held = oldTask != nil && model.isPreparingAttachments
-    let unpublished = model.attachments.isEmpty && model.attachmentProblems.isEmpty
-    model.profileId = tight.id
-    let currentTask = model.actualAttachmentPreparationTaskForTesting
-    let recorded = gate.workerPriority
-    var actualPriority: TaskPriority?
-    if let recorded {
-        let continuation = Task.detached(priority: recorded) { () -> TaskPriority in
-            let priority = Task.currentPriority
-            gate.continuationRan()
-            return priority
-        }
-        actualPriority = await continuation.value
-    } else { gate.open() }
+    for await _ in signal.stream { break }
+    let oldTask = observed.oldTask
+    let currentTask = observed.currentTask
+    let held = observed.held
+    let unpublished = observed.unpublished
+    let recorded = observed.recorded
+    let actualPriority = await observed.continuation?.value
     await oldTask?.value
     await currentTask?.value
     let exact = model.attachments.isEmpty && model.attachmentProblems.count == 1 && model.attachmentProblems.first?.contains("last known limit") == true
