@@ -44,7 +44,15 @@ struct EditSendAttachmentAdmissionTests {
         let key = try #require(await source.branch(from: assistant.id))
         let chat = gateway.chat(for: key)
         await chat.load()
-        let user = try #require(chat.items.last { $0.role == .user && $0.isCommittedEntry })
+        let user = try #require(chat.items.last {
+            $0.role == .user && $0.isCommittedEntry && !$0.plainText.isEmpty && !$0.blocks.contains { if case .image = $0 { return true }; return false }
+        })
+        let transcriptId = try #require(user.transcriptId)
+        let before = try await gateway.connection.request("chat.history", ["sessionKey": .string(key), "limit": .number(200)])
+        let original = try #require(before["messages"]?.array?.first { $0["__openclaw"]?["id"]?.string == transcriptId })
+        let originalContent = try #require(original["content"]?.array)
+        try #require(original["role"]?.string == "user" && originalContent.contains { $0["type"]?.string == "text" && $0["text"]?.string?.isEmpty == false })
+        try #require(!originalContent.contains { $0["type"]?.string == "image" }, "The actual selected editable row has no images before rewind")
         chat.draft = ComposerDraft(text: "ordinary normal draft")
         let normalOwner = chat.draft.ownerID
         let queue = BoundedPreparationQueue<AttachmentIngestResult>()

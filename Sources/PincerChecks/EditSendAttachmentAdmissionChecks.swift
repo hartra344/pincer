@@ -32,7 +32,19 @@ import Foundation
           let key = await source.branch(from: assistant.id) else { check(false, "actual seeded branch is created"); return }
     let chat = gateway.chat(for: key)
     await chat.load()
-    guard let user = chat.items.last(where: { $0.role == .user && $0.isCommittedEntry }) else { check(false, "actual branch has an editable user row"); return }
+    guard let user = chat.items.last(where: {
+        $0.role == .user && $0.isCommittedEntry && !$0.plainText.isEmpty && !$0.blocks.contains { if case .image = $0 { return true }; return false }
+    }), let transcriptId = user.transcriptId else { check(false, "actual branch has an editable text-only user row"); return }
+    do {
+        let before = try await gateway.connection.request("chat.history", ["sessionKey": .string(key), "limit": .number(200)])
+        guard let original = before["messages"]?.array?.first(where: { $0["__openclaw"]?["id"]?.string == transcriptId }),
+              original["role"]?.string == "user", let content = original["content"]?.array,
+              content.contains(where: { $0["type"]?.string == "text" && $0["text"]?.string?.isEmpty == false }),
+              !content.contains(where: { $0["type"]?.string == "image" }) else {
+            check(false, "actual selected history row is nonempty text-only before rewind"); return
+        }
+        check(true, "actual selected history row is nonempty text-only before rewind")
+    } catch { check(false, "actual original history prerequisite completes"); return }
     chat.draft = ComposerDraft(text: "normal saved draft")
     let normalOwner = chat.draft.ownerID
     guard let ordinary = chat.beginAttachmentPreparation(ownerID: normalOwner) else { check(false, "ordinary draft admits preparation"); return }
