@@ -76,7 +76,12 @@ private func inspectSoloSessionBudgetSynchronously(executable: URL) throws -> So
     let labels = controls.map { String($0.dropFirst(2)) }
     for label in labels {
         if lines.contains("✓ " + label) { diagnosticLines.append("PASS " + label) }
-        else if lines.contains(where: { $0.hasPrefix("✗ " + label + " (line") || $0 == "✗ " + label }) {
+        else if lines.contains(where: { line in
+            let prefix = "✗ " + label
+            guard line.hasPrefix(prefix) else { return false }
+            let suffix = line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+            return suffix.isEmpty || suffix.hasPrefix("(line")
+        }) {
             diagnosticLines.append("FAIL " + label)
         } else { diagnosticLines.append("MISSING " + label) }
     }
