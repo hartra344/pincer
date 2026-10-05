@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite(.timeLimit(.minutes(2)))
 struct EditSendAttachmentAdmissionTests {
+    @MainActor
     final class Gate {
         var entered: Bool?
         private var released = false
