@@ -314,3 +314,34 @@ struct ReadAloudControllerTests {
         #expect(h.speaker.spoken.map(\.text) == ["Fast device."])
     }
 }
+
+#if DEBUG && os(macOS)
+extension ReadAloudControllerTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["PINCER_READ_ALOUD_LIFETIME_CHILD"] != nil))
+    func actualHarnessLifetimeChild() async throws {
+        let mode = ProcessInfo.processInfo.environment["PINCER_READ_ALOUD_LIFETIME_CHILD"]
+        try #require(mode == "retained" || mode == "released")
+        print("PINCER_LIFETIME_CHILD_BEGIN")
+        var owner: Harness? = Harness()
+        weak var weakOwner = owner
+        let controller = try #require(owner?.controller)
+        let gateway = try #require(owner?.gateway)
+        let long = String(repeating: "This is a sentence. ", count: 400)
+        controller.start(messageId: "owned-lifetime", text: long, gateway: gateway)
+        let task = try #require(controller.deviceVoiceTaskForTesting)
+        if mode == "released" {
+            owner = nil
+            try #require(weakOwner == nil, "actual Harness last strong reference released before queued admission")
+        }
+        defer { controller.stop() }
+        await task.value
+        #expect(controller.phase == .idle)
+        if let owner {
+            #expect(owner.speakCalls.count > 10 && owner.speakCalls.allSatisfy { $0.count <= SpeechChunker.limit })
+            #expect(owner.speakCalls.joined(separator: " ").count == long.trimmingCharacters(in: .whitespaces).count)
+            #expect(owner.player.played.count == owner.speakCalls.count && owner.speaker.spoken.isEmpty)
+        }
+        print("PINCER_LIFETIME_CHILD_COMPLETE")
+    }
+}
+#endif
