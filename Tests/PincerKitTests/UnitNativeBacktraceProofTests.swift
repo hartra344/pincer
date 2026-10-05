@@ -31,6 +31,15 @@ struct UnitNativeBacktraceProofTests {
         try #require(evidence.ordinaryPassed, "Actual one-child ordinary prerequisite: \(evidence.diagnostics)")
         try #require(evidence.crashOwnedStatus, "Actual SIGSEGV/PID metadata prerequisite: \(evidence.diagnostics)")
         #expect(evidence.crashBacktracePassed, "Actual owned Swift signal backtrace: \(evidence.diagnostics)")
+        try #require(evidence.phases.count == 2)
+        #expect(evidence.phases.map(\.mode) == ["ordinary", "crash"])
+        #expect(evidence.phases.allSatisfy(\.observationsFollowLaunch))
+        #expect(evidence.phases.allSatisfy { $0.wrapperExitMilliseconds != nil })
+    }
+    @Test func actualFailedNativeControlRetainsBoundedOwnedArtifacts() async throws {
+        let evidence = try await unitNativeRetentionProof()
+        try #require(evidence.actualFailureQualified)
+        #expect(evidence.retainedOwnedArtifacts && evidence.boundedManifest)
     }
 }
 #endif
