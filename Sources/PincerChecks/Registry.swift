@@ -121,7 +121,7 @@ enum Suites {
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section("Demo skill detail parameter error") { await runDemoSkillDetailParamErrorOfflineChecks() },
-            Section("Demo skill search fields") { await runDemoSkillSearchFieldValidationOfflineChecks() },
+            Section("Demo skill search fields") { await runDemoSkillSearchFieldValidationOfflineChecks(); await runDemoSkillSearchBoundaryChecks() },
             Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks(); await runDemoSkillDetailErrorReferenceChecks() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
             Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },

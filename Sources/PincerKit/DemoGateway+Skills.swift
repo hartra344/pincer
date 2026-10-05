@@ -28,6 +28,21 @@ extension DemoGateway {
                     "agentId": .string(agentId), "skills": .array(self.skillEntries.map(Self.publicSkill))]
         case "skills.search":
             try Self.checkKeys(method, params, ["query", "limit"])
+            if let query = params["query"] {
+                guard case let .string(value) = query else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /query: must be string")
+                }
+                guard !value.isEmpty else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /query: must NOT have fewer than 1 characters")
+                }
+            }
+            if let limit = params["limit"] {
+                guard case let .number(value) = limit, value.isFinite, value.rounded() == value else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /limit: must be integer")
+                }
+                guard value >= 1 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be >= 1") }
+                guard value <= 100 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be <= 100") }
+            }
             return ["results": .array(self.searchClawHub(params["query"]?.text, limit: params["limit"]?.int ?? 20))]
         case "skills.detail":
             try Self.checkKeys(method, params, ["slug", "version"])
