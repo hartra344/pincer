@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("unit_native_evidence", Path(__file__).with_name("checks-unit-command.py"))
 wrapper = importlib.util.module_from_spec(spec)
@@ -87,3 +88,31 @@ with tempfile.TemporaryDirectory(prefix="pincer-native-report-parser-") as tempo
     expired = wrapper.collect_native_reports(captures, identities, time.monotonic() - 1, source=reports)
     assert not expired["reports"], "expired scanner budget must not read reports"
 print("actual owned native identity and synthetic parser/scanner controls PASS")
+
+# Actual healthy owned command must bypass failure-only native report scanning.
+with tempfile.TemporaryDirectory(prefix="pincer-healthy-unit-evidence-") as temporary:
+    marker = Path(temporary) / "healthy-pid"
+    command = [sys.executable, "-c", "import os,sys; open(sys.argv[1],'w').write(str(os.getpid()))", str(marker)]
+    real_spawn = subprocess.Popen
+    primary = []
+    def spawn(*args, **kwargs):
+        process = real_spawn(*args, **kwargs)
+        if args and args[0] == command:
+            primary.append(process)
+        return process
+    try:
+        with patch.object(wrapper.subprocess, "Popen", side_effect=spawn), patch.object(sys, "argv", ["checks-unit-command.py", *command]), patch.dict(os.environ, {"CHECKS_LOG_DIR": temporary, "CHECKS_UNIT_TIMEOUT_SECONDS": "10"}), patch.object(wrapper, "collect_native_reports", side_effect=AssertionError("healthy command must not scan reports")):
+            status = wrapper.main()
+        assert len(primary) == 1 and marker.is_file()
+        assert int(marker.read_text()) == primary[0].pid and primary[0].returncode == 0 and status == 0
+        assert not (Path(temporary) / "unit-command-exit.json").exists(), "healthy command must not emit failure metadata"
+    finally:
+        for process in primary:
+            if process.poll() is None:
+                process.terminate()
+                try: process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    if process.poll() is None: process.kill()
+                    process.wait(timeout=3)
+            else: process.wait()
+print("actual healthy owned command bypasses native report scanning PASS")
