@@ -29,7 +29,9 @@ if name == "swift":
         print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
         with open(root / "unit-gate", "r") as gate: gate.read()
-    print("fixture unit complete"); sys.exit(0)
+    if os.environ.get("CHECKS_FIXTURE_UNIT_START_ONLY") != "1":
+        print("✔ Test run with 1 test in 1 suite passed after 0.1 seconds.")
+    sys.exit(0)
 if name == "node":
     if any(x.endswith("checks-pending-progress.mjs") for x in sys.argv[1:]):
         with open(root / "progress-readers", "a") as readers: readers.write(str(os.getpid()) + "\n")
@@ -60,7 +62,7 @@ def wait_until(predicate, timeout=5):
         time.sleep(0.01)
 
 
-def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False):
+def execute(require_progress, fail_lane, require_identity=False, interrupt=False, stale_markers=False, unit_start_only=False):
     source = Path(__file__).resolve().with_name("run-checks.sh")
     with tempfile.TemporaryDirectory(prefix="pincer-checks-progress-") as temporary:
         root = Path(temporary)
@@ -85,6 +87,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                    CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "", CHECKS_LOG_DIR=str(root / "logs"),
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
+        if unit_start_only: env["CHECKS_FIXTURE_UNIT_START_ONLY"] = "1"
         process = subprocess.Popen(["/bin/bash", str(root / "scripts" / "run-checks.sh")],
                                    env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                    start_new_session=True, bufsize=0)
@@ -134,12 +137,14 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "pendingOutputBounded": len(before_release) <= 8192 and all(len(line) <= 512 for line in progress_lines),
                 "pendingContainsNoLogPayload": b"PRIVATE_FIXTURE_LOG_CONTENT" not in before_release,
                 "allLanesCompleted": "Lane               Result" in text and "perf-tests" in text and "perf-smoke" in text,
-                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else process.returncode == (1 if fail_lane else 0),
+                "statusPreserved": process.returncode in (-signal.SIGTERM, 128 + signal.SIGTERM) if interrupt else (process.returncode in (0, 1) if unit_start_only else process.returncode == (1 if fail_lane else 0)),
+                "startOnlyUnitRejected": not unit_start_only or process.returncode == 1,
                 "allMocksCleaned": len(list((root / "mocks").glob("*.stopped"))) == 6,
                 "progressReaderCleaned": not reader_alive,
                 "soloPerformanceHasNoReader": reader_count == 1 if helper.exists() else reader_count == 0,
             }
             assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
+            if unit_start_only: assertions.append("startOnlyUnitRejected")
             if interrupt: assertions.remove("allLanesCompleted")
             if require_progress: assertions.append("pendingVisible")
             if require_identity: assertions.append("safeUnitIdentityVisible")
@@ -180,8 +185,9 @@ def main():
     parser.add_argument("--require-safe-identity", action="store_true")
     parser.add_argument("--interrupt-control", action="store_true")
     parser.add_argument("--stale-completion-control", action="store_true")
+    parser.add_argument("--unit-start-only-control", action="store_true")
     args = parser.parse_args()
-    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control)
+    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control, args.unit_start_only_control)
 
 
 if __name__ == "__main__":

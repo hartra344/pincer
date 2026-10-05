@@ -19,6 +19,10 @@ struct ChecksPendingProgressTests {
             return (process.terminationStatus, String(decoding: data, as: UTF8.self))
         }.value
     }
+    @Test func zeroExitWithoutActualUnitCompletionIsRejected() async throws {
+        let result = try await execute(["--unit-start-only-control"])
+        #expect(result.0 == 0, "Actual runner must reject exit 0 with only START records: \(result.1)")
+    }
     @Test func heldFirstUnitLaneExposesBoundedPendingProgressBeforeCompletion() async throws {
         let result = try await execute([])
         #expect(result.0 == 0, "Actual run-checks.sh must expose bounded pending metadata before releasing the held unit lane: \(result.1)")
