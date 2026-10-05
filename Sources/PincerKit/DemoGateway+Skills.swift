@@ -228,10 +228,10 @@ extension DemoGateway {
             return ["ok": true, "skillKey": .string(slug ?? "*"), "config": ["source": "clawhub", "results": .array(results)]]
         }
         try Self.checkKeys("skills.update", params, ["skillKey", "enabled", "apiKey", "env"])
+        guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
         if let apiKey = params["apiKey"], apiKey.string == nil {
             throw Self.skillsInvalid("invalid skills.update params: at /apiKey: must be string")
         }
-        guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
         var config: [String: JSONValue] = [:]
         if let index = self.skillEntries.firstIndex(where: { $0["skillKey"]?.text == key }) {
             var entry = self.skillEntries[index]

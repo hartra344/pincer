@@ -123,6 +123,7 @@ enum Suites {
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
             Section("Demo skill API key validation") { await runDemoSkillApiKeyOfflineChecks() },
+            Section("Demo skill API key compatibility") { await runDemoSkillApiKeyCompatibilityChecks() },
             Section("Demo skill status fields") { await runDemoSkillStatusFieldOfflineChecks(); await runDemoSkillStatusBoundaryChecks() },
             Section("Demo skill detail parameter error") { await runDemoSkillDetailParamErrorOfflineChecks() },
             Section("Demo skill search fields") { await runDemoSkillSearchFieldValidationOfflineChecks(); await runDemoSkillSearchBoundaryChecks() },
