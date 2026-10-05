@@ -1,6 +1,7 @@
 #if DEBUG && os(macOS)
 import Foundation
 import Darwin
+import CoreFoundation
 
 package struct UnitNativeBacktraceEvidence: Sendable {
     package let ordinaryPassed: Bool
@@ -10,8 +11,57 @@ package struct UnitNativeBacktraceEvidence: Sendable {
     package let crashStatus: Int32
     package let diagnostics: String
     package let phases: [UnitNativePhaseEvidence]
+    package var imageMappings: [UnitNativeImageMappingEvidence] = []
 }
 
+
+
+package struct UnitNativeImageMappingEvidence: Codable, Sendable {
+    package let mode: String
+    package let markerValid: Bool
+    package let outputBytes: Int
+    package let imageRowCount: Int
+    package let targetBasename: String?
+    package let targetUUID: String?
+    package let targetHeaderAddress: UInt64?
+    package let referenceBasename: String?
+    package let referenceUUID: String?
+    package let imagesTablePresent: Bool
+    package let referenceMappingPresent: Bool
+    package let reportMappingPresent: Bool
+}
+private func nativeImageMapping(_ text: String, mode: String) -> UnitNativeImageMappingEvidence {
+    let marker = "PINCER_NATIVE_IMAGE_MAPPING="
+    let lines = text.split(whereSeparator: \.isNewline).filter { $0.hasPrefix(marker) }
+    let object = lines.count == 1 ? (try? JSONSerialization.jsonObject(with: Data(lines[0].dropFirst(marker.count).utf8)) as? [String: Any]) : nil
+    func identity(_ key: String) -> (String, String, UInt64)? {
+        guard let value = object?[key] as? [String: Any], let name = value["basename"] as? String,
+              let uuid = value["uuid"] as? String, uuid.count == 32,
+              uuid.allSatisfy({ $0.isHexDigit && $0.isASCII }), !name.isEmpty,
+              let address = value["headerAddress"] as? NSNumber,
+              CFGetTypeID(address) != CFBooleanGetTypeID(), address.uint64Value > 0 else { return nil }
+        return (name, uuid.lowercased(), address.uint64Value)
+    }
+    let target = identity("target"), reference = identity("reference")
+    let table = text.contains("\nImages (") || text.contains("\nImages:\n")
+    func mapped(_ value: (String, String, UInt64)?) -> Bool {
+        guard let value, table else { return false }
+        let regex = try? NSRegularExpression(pattern: #"^0x([0-9a-fA-F]+)[–-]0x([0-9a-fA-F]+)\s+([0-9a-fA-F]{32})\s+(\S+)\s+.+$"#, options: .anchorsMatchLines)
+        guard let regex else { return false }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).contains { match in
+            func part(_ index: Int) -> String { Range(match.range(at: index), in: text).map { String(text[$0]) } ?? "" }
+            guard let start = UInt64(part(1), radix: 16), let end = UInt64(part(2), radix: 16) else { return false }
+            return part(3).lowercased() == value.1 && part(4) == value.0 && start <= value.2 && value.2 < end
+        }
+    }
+    let rowRegex = try? NSRegularExpression(pattern: #"^0x[0-9a-fA-F]+[–-]0x[0-9a-fA-F]+\s+[0-9a-fA-F]{32}\s+"#, options: .anchorsMatchLines)
+    let rowCount = rowRegex?.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) ?? 0
+    return UnitNativeImageMappingEvidence(mode: mode, markerValid: target != nil && reference != nil,
+        outputBytes: text.utf8.count, imageRowCount: rowCount,
+        targetBasename: target?.0, targetUUID: target?.1, targetHeaderAddress: target?.2,
+        referenceBasename: reference?.0, referenceUUID: reference?.1,
+        imagesTablePresent: table, referenceMappingPresent: mapped(reference), reportMappingPresent: mapped(target))
+}
 
 /// Times are observed offsets, not exact SDK events. Missing observations stay nil.
 package struct UnitNativePhaseEvidence: Codable, Sendable {
@@ -61,7 +111,7 @@ private func nativePhaseBytes(_ url: URL, offset: Int64 = 0, cap: Int) -> Data? 
 }
 
 /// Runs only the actual owned Swift child; never invokes a broad test command.
-package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil, retentionRootForTesting: URL? = nil) async throws -> UnitNativeBacktraceEvidence {
+package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil, retentionRootForTesting: URL? = nil, imageMappingControl: Bool = false) async throws -> UnitNativeBacktraceEvidence {
     guard ProcessInfo.processInfo.environment["PINCER_NATIVE_BACKTRACE_CHILD"] == nil else {
         throw CocoaError(.validationMissingMandatoryProperty)
     }
@@ -73,6 +123,7 @@ package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil
         let origin = ContinuousClock.now
         let overallDeadline = origin + .seconds(100)
         var phases: [UnitNativePhaseEvidence] = []
+        var imageMappings: [UnitNativeImageMappingEvidence] = []
         func milliseconds() -> Int64 {
             let elapsed = origin.duration(to: .now).components
             return elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000
@@ -153,6 +204,7 @@ package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil
             let inheritedLibraries = env["DYLD_LIBRARY_PATH"].flatMap { $0.isEmpty ? nil : $0 }
             env["DYLD_LIBRARY_PATH"] = libraries.path + (inheritedLibraries.map { ":" + $0 } ?? "")
             env["PINCER_NATIVE_BACKTRACE_CHILD"] = mode
+            env["PINCER_NATIVE_IMAGE_MAPPING_CONTROL"] = imageMappingControl ? "1" : nil
             env["PINCER_DEV_NAMESPACE"] = "backtrace-" + UUID().uuidString
             env["PINCER_KEYCHAIN"] = "memory"
             env["CHECKS_LOG_DIR"] = dir.path
@@ -258,6 +310,7 @@ package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil
             phase.wrapperExitMilliseconds = milliseconds()
             try handle.synchronize()
             let text = String(decoding: try Data(contentsOf: output), as: UTF8.self)
+            if imageMappingControl { imageMappings.append(nativeImageMapping(text, mode: mode)) }
             let summaryPattern = #"Test run with 1 test(?: in 1 suite)? passed[^\n]*"#
             let summaries = try NSRegularExpression(pattern: summaryPattern).numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
             let functionPattern = #"Test [^\n]*actualOwnedSwiftCrashChild[^\n]* passed[^\n]*"#
@@ -280,7 +333,9 @@ package func unitNativeBacktraceProof(backtraceOverrideForTesting: String? = nil
         let ordinary = try child("ordinary")
         guard ordinary.1 else { return UnitNativeBacktraceEvidence(ordinaryPassed: false, crashBacktracePassed: false, crashOwnedStatus: false, ordinaryStatus: ordinary.0, crashStatus: -1, diagnostics: ordinary.2, phases: phases) }
         let crashed = try child("crash")
-        return UnitNativeBacktraceEvidence(ordinaryPassed: ordinary.1, crashBacktracePassed: crashed.1, crashOwnedStatus: crashed.3, ordinaryStatus: ordinary.0, crashStatus: crashed.0, diagnostics: crashed.2, phases: phases)
+        var result = UnitNativeBacktraceEvidence(ordinaryPassed: ordinary.1, crashBacktracePassed: crashed.1, crashOwnedStatus: crashed.3, ordinaryStatus: ordinary.0, crashStatus: crashed.0, diagnostics: crashed.2, phases: phases)
+        result.imageMappings = imageMappings
+        return result
         }()
         continuation.resume(returning: evidence)
         } catch { continuation.resume(throwing: error) }
