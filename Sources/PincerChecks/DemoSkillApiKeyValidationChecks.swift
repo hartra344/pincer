@@ -49,9 +49,47 @@ import Foundation
         if keyWasSaved { _ = try? await request("skills.update", ["skillKey": "notion", "apiKey": ""]) }
     }
 }
+@MainActor private func checkSkillApiKeyAtomicity(_ request: (String, JSONValue) async throws -> JSONValue) async {
+    var restore: JSONValue?
+    do {
+        let baseline = try await request("skills.status", [:])
+        guard let original = baseline["skills"]?.array?.first(where: { $0["skillKey"]?.string == "notion" }),
+              let disabled = original["disabled"]?.bool, original["primaryEnv"]?.string == "NOTION_API_KEY",
+              original["missing"]?["env"]?.array?.contains(.string("NOTION_API_KEY")) == true else {
+            check(false, "actual atomicity baseline has a known primary-env skill"); return
+        }
+        let restoreParams: JSONValue = ["skillKey": "notion", "enabled": .bool(!disabled), "apiKey": ""]
+        restore = restoreParams
+        let saved = try await request("skills.update", ["skillKey": "notion", "enabled": true, "apiKey": "owned-atomic-api-key"])
+        let current = try await request("skills.status", [:])
+        guard saved["ok"]?.bool == true && saved["config"]?["enabled"]?.bool == true && saved["config"]?["apiKey"]?.string == "__OPENCLAW_REDACTED__",
+              let notion = current["skills"]?.array?.first(where: { $0["skillKey"]?.string == "notion" }),
+              notion["disabled"]?.bool == false && notion["eligible"]?.bool == true && notion["missing"]?["env"]?.array?.isEmpty == true else {
+            check(false, "actual valid Boolean and key update establishes ready saved state")
+            _ = try? await request("skills.update", restoreParams); return
+        }
+        check(true, "actual valid Boolean and key update establishes ready saved state")
+        do {
+            _ = try await request("skills.update", ["skillKey": "notion", "enabled": false, "apiKey": .null])
+            check(false, "invalid API key rejects an otherwise valid enabled change")
+        } catch let GatewayError.rpc(code, message, _) {
+            check(code == "INVALID_REQUEST" && message == "invalid skills.update params: at /apiKey: must be string", "atomicity request has canonical mock config-field error")
+        }
+        let after = try await request("skills.status", [:])
+        check(after == current, "invalid API key cannot partially change any actual status field")
+        _ = try await request("skills.update", restoreParams)
+        let restored = try await request("skills.status", [:])
+        check(restored == baseline, "actual Boolean and empty key restore the full original baseline")
+        restore = nil
+    } catch {
+        check(false, "actual API key atomicity controls complete")
+        if let restore { _ = try? await request("skills.update", restore) }
+    }
+}
 @MainActor func runDemoSkillApiKeyOfflineChecks() async {
     let demo = DemoGateway()
     await checkSkillApiKeyValidation { try await demo.handle($0, $1) }
+    await checkSkillApiKeyAtomicity { try await demo.handle($0, $1) }
 }
 @MainActor private func checkConnectedSkillApiKey(profile: GatewayProfile) async {
     let (defaults, suite) = scratchDefaults()
@@ -65,6 +103,7 @@ import Foundation
     let supported = methods.contains("skills.status") && methods.contains("skills.update")
     check(supported, "actual Gateway advertises existing local skill methods"); guard supported else { return }
     await checkSkillApiKeyValidation { try await gateway.connection.request($0, $1) }
+    await checkSkillApiKeyAtomicity { try await gateway.connection.request($0, $1) }
 }
 @MainActor func runDemoSkillApiKeyChecks() async { await checkConnectedSkillApiKey(profile: .demo()) }
 @MainActor func runLiveSkillApiKeyChecks(url: String, token: String) async {
