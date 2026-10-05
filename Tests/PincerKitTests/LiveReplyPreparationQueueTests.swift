@@ -243,7 +243,11 @@ struct LiveReplyPreparationQueueTests {
                                               normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let candidate = self.input(owner: owner, generation: 7, sequence: 1, id: "old-candidate", text: "Original candidate.")
-        let candidateOrder = try await initialCandidateOrder(candidate, queue: queue, completed: completed)
+        let candidateOrder = try await initialCandidateOrder(candidate, queue: queue, completed: completed,
+            failureCleanup: { task in
+                gate.releaseBlockedWork()
+                await task?.value
+            })
 
         let active = self.input(owner: owner, generation: 7, sequence: 2, id: activeID, text: "Active.")
         let later = self.input(owner: owner, generation: 7, sequence: 3, id: "later", text: "Later queued item.")
@@ -266,20 +270,30 @@ struct LiveReplyPreparationQueueTests {
 #endif
 
     #if DEBUG
-    /// Neutral shared boundary: the original readiness expectation is followed by the
-    /// original unchecked index. The child observes actual state without changing it.
+    /// A failed readiness snapshot stays failed even if cleanup later delivers a callback.
+    /// Every failure path drains the captured actual task before it throws to its caller.
     @inline(never) private func initialCandidateOrder(
         _ candidate: LiveReplyPreparationInput, queue: LiveReplyPreparationQueue,
         completed: LiveReplyCompletionRecorder,
-        afterSubmit: (@MainActor () async throws -> Void)? = nil,
+        failureCleanup: @MainActor (Task<Void, Never>?) async -> Void,
+        afterSubmit: (@MainActor (Task<Void, Never>?) async throws -> Void)? = nil,
         beforeIndex: (@MainActor (Bool) async throws -> Void)? = nil
     ) async throws -> UInt64 {
         #expect(queue.submit(candidate) { completed.append($0, $1) } == .started)
-        try await afterSubmit?()
-        let ready = await eventually { queue.isIdle && completed.values.count == 1 }
-        #expect(ready, "original candidate readiness before queue-order index")
-        try await beforeIndex?(ready)
-        return completed.values[0].0.queueOrder
+        let actualTask = queue.actualPreparationTaskForTesting
+        do {
+            try await afterSubmit?(actualTask)
+            let ready = await eventually { queue.isIdle && completed.values.count == 1 }
+            #expect(ready, "original candidate readiness before queue-order index")
+            try await beforeIndex?(ready)
+        } catch {
+            await failureCleanup(actualTask)
+            throw error
+        }
+        let snapshot = completed.values.first
+        if snapshot == nil { await failureCleanup(actualTask) }
+        let completedCandidate = try #require(snapshot, "candidate queue order requires the original readiness result")
+        return completedCandidate.0.queueOrder
     }
     #endif
 
@@ -314,17 +328,39 @@ struct LiveReplyPreparationQueueTests {
         defer { safety.cancel(); gate.releaseBlockedWork() }
         var held = false
         let order = try await initialCandidateOrder(candidate, queue: queue, completed: completed,
-            afterSubmit: {
-                actualTask = queue.actualPreparationTaskForTesting
+            failureCleanup: { task in
+                await self.releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: task)
+                guard mode == "held" else { return }
+                guard task != nil, queue.isIdle, queue.activeCount == 0, queue.pendingCount == 0,
+                      queue.retainedByteCount == 0, completed.values.count == 1,
+                      let callback = completed.values.first,
+                      callback.0.ownerID == candidate.ownerID, callback.0.itemID == candidate.itemID,
+                      callback.0.generation == candidate.generation, callback.0.sequence == candidate.sequence,
+                      callback.1, !safetyState.expired else {
+                    print("PINCER_LIVE_CANDIDATE_SETUP_DRAIN_FAILED")
+                    fflush(stdout)
+                    Darwin._exit(2)
+                }
+                let fields: [String: Any] = ["mode": "held", "capturedTaskAwaited": true,
+                    "callbackCount": completed.values.count, "callbackOwnerID": callback.0.ownerID.uuidString,
+                    "callbackItemID": callback.0.itemID, "callbackGeneration": callback.0.generation,
+                    "callbackSequence": callback.0.sequence, "speakable": callback.1,
+                    "queueIdle": queue.isIdle, "activeCount": queue.activeCount,
+                    "pendingCount": queue.pendingCount, "retainedBytes": queue.retainedByteCount,
+                    "safetyDidNotExpire": !safetyState.expired]
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
+                    print("PINCER_LIVE_CANDIDATE_CHILD_DRAIN=" + String(decoding: data, as: UTF8.self))
+                    fflush(stdout)
+                } catch { Darwin._exit(2) }
+            }, afterSubmit: { task in
+                actualTask = task
                 if mode == "held" {
                     let entered = await gate.waitUntilEntered()
                     held = entered && gate.workerIsHeld && actualTask != nil && queue.activeCount == 1
                         && queue.pendingCount == 0 && queue.retainedByteCount == candidate.retainedBytes
                         && gate.startedIDs == [id] && gate.mainThreadFlags == [false] && completed.values.isEmpty
-                    if !held {
-                        await self.releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: actualTask)
-                        try #require(held, "actual held candidate ownership prerequisite")
-                    }
+                    try #require(held, "actual held candidate ownership prerequisite")
                 }
             }, beforeIndex: { ready in
                 guard mode == "held" else { return }
@@ -332,10 +368,7 @@ struct LiveReplyPreparationQueueTests {
                     && queue.activeCount == 1 && queue.pendingCount == 0
                     && queue.retainedByteCount == candidate.retainedBytes && completed.values.isEmpty
                     && gate.startedIDs == [id] && gate.mainThreadFlags == [false] && !safetyState.expired
-                if !prerequisites {
-                    await self.releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: actualTask)
-                    try #require(prerequisites, "actual candidate readiness failure prerequisites")
-                }
+                try #require(prerequisites, "actual candidate readiness failure prerequisites")
                 try self.emitCandidate(["mode": "held", "prerequisites": prerequisites,
                     "heldActualWorker": held && gate.workerIsHeld, "actualTaskCaptured": actualTask != nil,
                     "offMain": gate.mainThreadFlags == [false], "activeCount": queue.activeCount,
@@ -345,7 +378,7 @@ struct LiveReplyPreparationQueueTests {
                     "ownerID": candidate.ownerID.uuidString, "generation": candidate.generation,
                     "sequence": candidate.sequence, "itemID": candidate.itemID])
             })
-        // Neutral held mode reaches the unchecked index only after the evidence above.
+        // Ordinary mode reaches this point; held mode throws after its captured worker drains.
         await actualTask?.value
         let ordinary = actualTask != nil && queue.isIdle && queue.retainedByteCount == 0
             && completed.values.count == 1 && completed.values.first?.0.ownerID == owner
