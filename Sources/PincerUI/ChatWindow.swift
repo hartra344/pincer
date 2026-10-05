@@ -18,6 +18,7 @@ extension EnvironmentValues {
     /// The chat a chat window shows. Chat chrome reads it instead of the gateway's selection, which
     /// belongs to the main window.
     @Entry var chatWindowKey: String?
+    @Entry var isDetachedChatScene = false
 }
 
 extension ChatWindowOpener {
@@ -26,6 +27,11 @@ extension ChatWindowOpener {
         ChatWindowOpener { openWindow(id: ChatWindow.sceneId, value: $0) }
     }
     #endif
+}
+
+/// Marks the detached scene without conflating the split pane's chatWindowKey override.
+struct DetachedChatScene: ViewModifier {
+    func body(content: Content) -> some View { content.environment(\.isDetachedChatScene, true) }
 }
 
 /// One chat, its title, toolbar and composer, sharing the app's gateway connection. While it's on
@@ -80,6 +86,7 @@ private struct ChatWindowContent: View {
         }
         .environment(self.gateway)
         .environment(\.chatWindowKey, self.ref.sessionKey)
+        .modifier(DetachedChatScene())
         .environment(\.dictationSceneID, self.dictationSceneID)
         .environment(\.openGatewaySettings, GatewaySettingsOpener { gateway, destination, routes in
             gateway.settings.requestedRoutes = routes

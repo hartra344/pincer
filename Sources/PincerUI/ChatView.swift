@@ -25,7 +25,7 @@ struct ChatView: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
     #if os(macOS)
-    @Environment(\.chatWindowKey) private var commandWindowKey
+    @Environment(\.isDetachedChatScene) private var isDetachedCommandScene
     #endif
     #if DEBUG && os(iOS)
     @Environment(\.chatTopChromeGeometryProbe) private var topChromeGeometryProbe
@@ -220,7 +220,7 @@ struct ChatView: View {
         #if os(macOS)
         .focusedSceneValue(\.chatWindowCommandTarget, self.paneIsActive
             ? ChatWindowCommandTarget(ref: .init(gatewayId: self.gateway.id, sessionKey: self.chat.sessionKey),
-                                      isDetached: self.commandWindowKey != nil) : nil)
+                                      isDetached: self.isDetachedCommandScene) : nil)
         #endif
         .onAppear {
             self.paneHandles?.find = self.find
