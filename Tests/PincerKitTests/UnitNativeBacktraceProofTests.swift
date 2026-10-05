@@ -5,7 +5,7 @@ import Testing
 @testable import PincerKit
 
 @inline(never) private func pincerOwnedSwiftCrashFrameForTesting() {
-    Darwin.raise(SIGSEGV)
+    UnsafeMutablePointer<UInt8>(bitPattern: 1)!.pointee = 0
     _exit(99)
 }
 
