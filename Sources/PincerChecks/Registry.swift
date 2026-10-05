@@ -54,6 +54,14 @@ enum Suites {
     /// (CI's demo and live runs, since the plain run already covers it).
     static func unit(skipIntentChecks: Bool) -> [Section] {
         #if DEBUG && os(macOS)
+        if CommandLine.arguments.contains("--raw-worker-gate-ordinary") || CommandLine.arguments.contains("--raw-worker-gate-proof") {
+            return [Section(nil) {
+                let evidence = await runRawWorkerGateProof(holdWorker: !CommandLine.arguments.contains("--raw-worker-gate-ordinary"))
+                guard let data = try? JSONEncoder().encode(evidence) else { exit(2) }
+                print(String(decoding: data, as: UTF8.self))
+                exit(evidence.passed ? 0 : 1)
+            }]
+        }
         if CommandLine.arguments.contains("--share-worker-gate-ordinary") || CommandLine.arguments.contains("--share-worker-gate-proof") {
             return [Section(nil) {
                 let evidence = await runShareWorkerGateProof(holdWorker: !CommandLine.arguments.contains("--share-worker-gate-ordinary"))
@@ -285,6 +293,7 @@ enum Suites {
         sections.append(Section("Read Aloud harness lifetime") { await runReadAloudHarnessLifetimeProofChecks() })
         sections.append(Section("Native Swift backtrace") { await runUnitNativeBacktraceProofChecks() })
         sections.append(Section("Share worker gate") { await runShareWorkerGateChecks() })
+        sections.append(Section("Raw config worker gate") { await runRawWorkerGateChecks() })
         #endif
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
@@ -524,6 +533,7 @@ enum Suites {
         sections.append(Section("Read Aloud harness lifetime infrastructure (Demo lane)") { await runReadAloudHarnessLifetimeProofChecks() })
         sections.append(Section("Native Swift backtrace infrastructure (Demo lane)") { await runUnitNativeBacktraceProofChecks() })
         sections.append(Section("Share worker gate infrastructure (Demo lane)") { await runShareWorkerGateChecks() })
+        sections.append(Section("Raw config worker gate infrastructure (Demo lane)") { await runRawWorkerGateChecks() })
         #endif
         return sections
     }

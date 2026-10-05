@@ -25,6 +25,9 @@ package final class RawConfigEditorDraft {
     }
     @ObservationIgnored private var pending: ValidationInput?
     @ObservationIgnored package var validationObserver: (@Sendable () -> Void)?
+    #if DEBUG
+    package var actualValidationTaskForTesting: Task<Void, Never>? { active }
+    #endif
     package init() {}
 
     package func edit(_ text: String) {
