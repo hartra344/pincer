@@ -285,6 +285,7 @@ enum Suites {
         #endif
         #if DEBUG
         sections.append(Section("Outbox restore attachment file work") { await runOutboxRestoreFileWorkChecks() })
+        sections.append(Section("Outbox restore worker persistence window") { await runOutboxRestoreWorkerWindowChecks() })
         #endif
         return sections
     }
