@@ -141,6 +141,7 @@ enum Suites {
             Section("Usage totals bounds") { await runUsageTotalsBoundsChecks() },
             Section("Usage & cost") { await checkUsage() },
             Section("Usage load admission") { await runUsageLoadAdmissionChecks() },
+            Section("Find refresh selection") { await runTranscriptFindSelectionChecks(); runTranscriptFindChangedInventoryChecks() },
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Quoted row preview preparation") { await runQuotePreviewChecks() },
             Section("Agent avatar signals") { runAvatarSignalChecks() },
@@ -230,6 +231,7 @@ enum Suites {
         ]
         #if DEBUG
         sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks(); await runTranscriptFindWorkerQueueChecks() })
+        sections.append(Section("Palette search preparation") { await runPaletteSearchPreparationChecks(); await runPaletteSearchOwnershipChecks() })
         sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
         sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
         sections.append(Section("Share target ownership") { await runShareTargetOwnershipChecks() })
@@ -291,6 +293,7 @@ enum Suites {
         Section("Usage load admission (demo)") { await runDemoUsageLoadAdmissionChecks() },
         Section("Cron run timestamp IDs (demo)") { await runDemoCronRunTimestampIDChecks() },
         Section("Activity notification timestamps (demo)") { await runDemoActivityNotificationTimestampChecks() },
+        Section("Find refresh selection (demo)") { await runDemoTranscriptFindSelectionChecks() },
         Section("Context usage (demo)") { await runDemoContextUsageChecks() },
         Section("Deferred dictation send ownership (demo)") { await runDemoDeferredDictationSendChecks() },
         Section("Composer edit admission ownership (demo)") { await runDemoComposerEditAdmissionOwnershipChecks() },
@@ -395,6 +398,7 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Find worker admission (demo)") { await runDemoTranscriptFindWorkerChecks() })
         sections.append(Section("Cache restore publication ownership (demo)") { await runDemoCacheRestorePublicationOwnershipChecks() })
+        sections.append(Section("Palette search preparation (demo)") { await runDemoPaletteSearchPreparationChecks(); await runDemoPaletteSearchOwnershipChecks() })
         sections.append(Section("Bookmark persistence encoding (demo)") { await runDemoBookmarkPersistenceEncodingChecks() })
         sections.append(Section("Share target ownership (demo)") { await runDemoShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
