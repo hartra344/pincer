@@ -19,14 +19,14 @@ def ceiling():
         return 300
 
 
-def process_snapshot():
+def process_snapshot(timeout=5):
     result = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,lstart=,comm="], capture_output=True,
-                            text=True, timeout=5, check=True)
+                            text=True, timeout=timeout, check=True)
     records = {}
     for line in result.stdout.splitlines():
         fields = line.split(None, 7)
         if len(fields) == 8 and fields[0].isdigit() and fields[1].isdigit():
-            records[int(fields[0])] = (int(fields[1]), " ".join(fields[2:7]))
+            records[int(fields[0])] = (int(fields[1]), " ".join(fields[2:7]), fields[7])
     return records
 
 
@@ -36,31 +36,42 @@ def owned_members(leader, records):
     changed = True
     while changed:
         changed = False
-        for pid, (parent, _) in records.items():
+        for pid, (parent, _, _) in records.items():
             if parent in owned and pid not in owned:
                 owned.add(pid); changed = True
-    return sorted(owned, key=lambda pid: (pid == leader, pid))[:8]
+    def priority(pid):
+        command = records.get(pid, (0, "", ""))[2]
+        helper = any(name in command for name in ("swiftpm-testing-helper", ".xctest", "PincerKitTests", "PincerUITests"))
+        return (not helper, pid == leader, pid)
+    return sorted(owned, key=priority)[:8]
 
 
 def sample_owned(group, directory):
     samples = []
     if sys.platform != "darwin":
         return samples
+    deadline = time.monotonic() + 10
     try:
-        records = process_snapshot()
+        records = process_snapshot(timeout=min(5, deadline - time.monotonic()))
         members = owned_members(group, records)
     except (OSError, subprocess.SubprocessError):
         return samples
     for pid in members:
         try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             # Recheck start identity AND current ancestry immediately before reading stacks.
-            current = process_snapshot()
+            current = process_snapshot(timeout=min(5, remaining))
             if current.get(pid) != records.get(pid) or pid not in owned_members(group, current):
                 continue
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             name = "unit-stack-" + str(pid) + ".txt"
             with (directory / (name + ".sampler.log")).open("wb") as output:
                 result = subprocess.run(["/usr/bin/sample", str(pid), "1", "1", "-file", str(directory / name)],
-                                        stdout=output, stderr=subprocess.STDOUT, timeout=5)
+                                        stdout=output, stderr=subprocess.STDOUT, timeout=min(5, remaining))
             if result.returncode == 0 and (directory / name).is_file():
                 samples.append(name)
         except (OSError, subprocess.SubprocessError):

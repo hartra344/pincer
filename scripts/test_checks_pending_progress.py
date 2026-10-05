@@ -138,7 +138,8 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
             elif not released:
                 with open(root / "unit-gate", "w") as gate: gate.write("release")
                 released = True
-            after_release, _ = process.communicate(timeout=10)
+            # Only watchdog diagnostics need capture (10s) + cleanup (7s) + runner drain.
+            after_release, _ = process.communicate(timeout=25 if unit_timeout else 10)
             wait_until(lambda: len(list((root / "mocks").glob("*.stopped"))) == 6)
             output = bytes(before_release) + bytes(watchdog_output) + after_release
             text = output.decode("utf-8", errors="replace")
