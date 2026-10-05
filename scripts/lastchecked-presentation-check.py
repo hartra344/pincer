@@ -127,21 +127,29 @@ spec["packages"]["Pincer"]["path"] = str(repo)
 spec["options"]["bundleIdPrefix"] = "chat.pincer.verification." + namespace
 spec["schemes"]["LastCheckedHarness"]["test"]["environmentVariables"]["PINCER_DEV_NAMESPACE"] = namespace
 (root / "project.json").write_text(json.dumps(spec, indent=2))
-run(["xcodegen", "generate", "--spec", str(root / "project.json"), "--project", str(root)])
-base = ["xcodebuild", "-project", str(root / "LastCheckedHarness.xcodeproj"), "-scheme", "LastCheckedHarness", "-destination", args.destination, "-derivedDataPath", str(root / "build"), "-jobs", "4", "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=NO", "-only-testing:" + selector]
-enumeration = root / "enumeration.json"
-run(base[:1] + ["test"] + base[1:] + ["-enumerate-tests", "-test-enumeration-style", "flat", "-test-enumeration-format", "json", "-test-enumeration-output-path", str(enumeration)])
-listing = json.loads(enumeration.read_text())
-enabled = [test["identifier"] for value in listing.get("values", []) for test in value.get("enabledTests", [])]
-if listing.get("errors") or enabled not in ([selector], [selector + "()"]) or any("SVG" in name.upper() for name in enabled):
-    raise RuntimeError("Expected exactly one enabled lifecycle test and zero SVG: " + repr(enabled))
-result = root / "result.xcresult"
 try:
+    run(["xcodegen", "generate", "--spec", str(root / "project.json"), "--project", str(root)])
+    base = ["xcodebuild", "-project", str(root / "LastCheckedHarness.xcodeproj"), "-scheme", "LastCheckedHarness", "-destination", args.destination, "-derivedDataPath", str(root / "build"), "-jobs", "4", "-parallel-testing-enabled", "NO", "CODE_SIGNING_ALLOWED=NO", "-only-testing:" + selector]
+    enumeration = root / "enumeration.json"
+    run(base[:1] + ["test"] + base[1:] + ["-enumerate-tests", "-test-enumeration-style", "flat", "-test-enumeration-format", "json", "-test-enumeration-output-path", str(enumeration)])
+    listing = json.loads(enumeration.read_text())
+    enabled = [test["identifier"] for value in listing.get("values", []) for test in value.get("enabledTests", [])]
+    if listing.get("errors") or enabled not in ([selector], [selector + "()"]) or any("SVG" in name.upper() for name in enabled):
+        raise RuntimeError("Expected exactly one enabled lifecycle test and zero SVG: " + repr(enabled))
+    result = root / "result.xcresult"
     run(base[:1] + ["test-without-building"] + base[1:] + [
         "-test-timeouts-enabled", "YES",
         "-default-test-execution-time-allowance", "60",
         "-maximum-test-execution-time-allowance", "60",
         "-collect-test-diagnostics", "never", "-resultBundlePath", str(result)])
+    summary_file = root / "summary.json"
+    with summary_file.open("w") as output:
+        subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", str(result)], stdout=output, check=True, timeout=30)
+    summary = json.loads(summary_file.read_text())
+    if summary.get("passedTests") != 1 or summary.get("failedTests") != 0 or summary.get("skippedTests") != 0:
+        raise RuntimeError("Lifecycle test must actually pass, never skip: " + repr(summary))
+    print("PASS: one actual app-hosted lifecycle test; zero skipped/SVG. Results retained:", root)
+
 finally:
     # Explicit destination and unique bundle IDs only; no booted/global simulator cleanup.
     for owned_id in (app_id, test_id + ".xctrunner"):
@@ -150,10 +158,3 @@ finally:
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
         except (subprocess.TimeoutExpired, OSError):
             print("Owned-app cleanup did not complete within its bound", flush=True)
-summary_file = root / "summary.json"
-with summary_file.open("w") as output:
-    subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", str(result)], stdout=output, check=True, timeout=30)
-summary = json.loads(summary_file.read_text())
-if summary.get("passedTests") != 1 or summary.get("failedTests") != 0 or summary.get("skippedTests") != 0:
-    raise RuntimeError("Lifecycle test must actually pass, never skip: " + repr(summary))
-print("PASS: one actual app-hosted lifecycle test; zero skipped/SVG. Results retained:", root)
