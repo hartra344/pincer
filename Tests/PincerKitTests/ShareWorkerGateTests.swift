@@ -19,6 +19,7 @@ struct ShareWorkerGateTests {
         try #require(evidence.bothTasksCapturedAndDrained && evidence.oldCancelled)
         try #require(evidence.exactCompletion && evidence.idleAfterCompletion)
         #expect(evidence.continuationBeforeFallback, "Actual Share worker controls: \(evidence)")
+        #expect(evidence.serializedEvidence?.passed == true, "Actual nil-probe Share lease controls: \(evidence.serializedEvidence)")
     }
 }
 #endif

@@ -3,6 +3,28 @@ import Testing
 import UniformTypeIdentifiers
 @testable import PincerKit
 
+#if DEBUG
+private final class SharePreparationGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let gate = ExplicitWorkerTestGate()
+    private var calls = 0
+    private var wasMain = false
+
+    var ranOnMain: Bool { lock.withLock { wasMain } }
+    func waitForEntry() async -> Bool { await gate.waitUntilEntered(timeout: 3) }
+    func open() { gate.open() }
+    private func recordInvocation() -> Bool {
+        lock.withLock {
+            calls += 1
+            wasMain = wasMain || Thread.isMainThread
+            return calls == 1
+        }
+    }
+    func probe() async {
+        if recordInvocation() { await gate.hold() }
+    }
+}
+#else
 private final class SharePreparationGate: @unchecked Sendable {
     private let lock = NSLock()
     private let entered = DispatchSemaphore(value: 0)
@@ -25,6 +47,8 @@ private final class SharePreparationGate: @unchecked Sendable {
         }
     }
 }
+
+#endif
 
 @MainActor
 @Suite("Share upload policy")
@@ -101,7 +125,12 @@ struct ShareUploadPolicyTests {
         let model = ShareModel(profiles: [roomy, tight], identity: nil, defaults: scratch.defaults)
         model.attachmentPreparationProbe = gate.probe
         model.setContent(content)
+        #if DEBUG
+        let oldTask = model.actualAttachmentPreparationTaskForTesting
+        let entered = await gate.waitForEntry()
+        #else
         let entered = await Task.detached { gate.waitForEntry() }.value
+        #endif
         #expect(entered)
         #expect(!gate.ranOnMain, "local decoding and preparation cannot block the share-sheet actor")
         let start = ContinuousClock.now
@@ -110,6 +139,9 @@ struct ShareUploadPolicyTests {
         #expect(model.isPreparingAttachments)
         #expect(model.attachments.isEmpty && model.attachmentProblems.isEmpty)
         gate.open()
+        #if DEBUG
+        await oldTask?.value
+        #endif
         await model.waitForAttachmentPreparation()
         #expect(model.attachments.isEmpty, "the cancelled roomy result never overwrites the tight Gateway's result")
         #expect(model.attachmentProblems.first?.contains("last known limit") == true)

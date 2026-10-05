@@ -76,7 +76,11 @@ public final class ShareModel {
     #endif
     @ObservationIgnored private var attachmentPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var attachmentPreparationGeneration = 0
+    #if DEBUG
+    @ObservationIgnored var attachmentPreparationProbe: (@Sendable () async -> Void)?
+    #else
     @ObservationIgnored var attachmentPreparationProbe: (@Sendable () -> Void)?
+    #endif
     @ObservationIgnored private var hello: GatewayHello?
     /// Latest live limits seen in this extension process, kept only for its configured profiles.
     @ObservationIgnored private var lastKnownUploadPolicies: [UUID: UploadPolicy] = [:]

@@ -6,18 +6,18 @@ import Darwin
 /// Explicit release owns the held worker even when its task is cancelled.
 private final class ShareProofGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let suspension = DispatchSemaphore(value: 0)
+    private let suspension = ExplicitWorkerTestGate()
     private var priority: TaskPriority?
     private var calls = 0
     private var released = false
     private var fallback = false
     private var progressed = false
     var onEntry: (@Sendable () -> Void)?
-    func hold() {
+    func hold() async {
         let first = lock.withLock { () -> Bool in calls += 1; if calls == 1 { priority = Task.currentPriority }; return calls == 1 }
         guard first else { return }
         onEntry?()
-        suspension.wait()
+        await suspension.hold()
     }
     func open(expired: Bool = false) {
         let signal = lock.withLock { () -> Bool in
@@ -26,7 +26,7 @@ private final class ShareProofGate: @unchecked Sendable {
             fallback = expired
             return true
         }
-        if signal { suspension.signal() }
+        if signal { suspension.open() }
     }
     func continuationRan() {
         lock.withLock { progressed = !fallback }
@@ -47,6 +47,7 @@ private final class ShareProofGate: @unchecked Sendable {
 }
 
 package struct ShareWorkerGateEvidence: Codable, Sendable {
+    package let serializedEvidence: SharePreparationLeaseEvidence?
     package let ordinaryPassed: Bool
     package let strictEnvironment: Bool
     package let actualLeaseHeld: Bool
@@ -61,7 +62,7 @@ package struct ShareWorkerGateEvidence: Codable, Sendable {
     package let continuationBeforeFallback: Bool
     package let exactCompletion: Bool
     package let idleAfterCompletion: Bool
-    package var passed: Bool { ordinaryPassed && strictEnvironment && noEarlyPublication && exactCompletion && idleAfterCompletion && (!heldMode || (actualLeaseHeld && priorityRecorded && priorityMatched && bothTasksCapturedAndDrained && oldCancelled && continuationBeforeFallback)) }
+    package var passed: Bool { ordinaryPassed && strictEnvironment && noEarlyPublication && exactCompletion && idleAfterCompletion && (!heldMode || (actualLeaseHeld && priorityRecorded && priorityMatched && bothTasksCapturedAndDrained && oldCancelled && continuationBeforeFallback && serializedEvidence?.passed == true)) }
 }
 package struct ShareWorkerChildResult: Sendable {
     package let status: Int32
@@ -93,7 +94,7 @@ package struct ShareWorkerChildResult: Sendable {
         model.profileId = tight.id
         await model.actualAttachmentPreparationTaskForTesting?.value
         let rejected = model.attachments.isEmpty && model.attachmentProblems.count == 1 && model.attachmentProblems.first?.contains("last known limit") == true && !model.isPreparingAttachments
-        return ShareWorkerGateEvidence(ordinaryPassed: ordinary && rejected, strictEnvironment: ProcessInfo.processInfo.environment["LIBDISPATCH_COOPERATIVE_POOL_STRICT"] == "1", actualLeaseHeld: false, noEarlyPublication: ordinaryAdmission, priorityRecorded: false, priorityMatched: false, workerPriorityRaw: nil, continuationPriorityRaw: nil, bothTasksCapturedAndDrained: ordinaryTask != nil, oldCancelled: false, heldMode: false, continuationBeforeFallback: false, exactCompletion: ordinary && rejected, idleAfterCompletion: !model.isPreparingAttachments)
+        return ShareWorkerGateEvidence(serializedEvidence: nil, ordinaryPassed: ordinary && rejected, strictEnvironment: ProcessInfo.processInfo.environment["LIBDISPATCH_COOPERATIVE_POOL_STRICT"] == "1", actualLeaseHeld: false, noEarlyPublication: ordinaryAdmission, priorityRecorded: false, priorityMatched: false, workerPriorityRaw: nil, continuationPriorityRaw: nil, bothTasksCapturedAndDrained: ordinaryTask != nil, oldCancelled: false, heldMode: false, continuationBeforeFallback: false, exactCompletion: ordinary && rejected, idleAfterCompletion: !model.isPreparingAttachments)
     }
     let observed = ShareProofObservation()
     let signal = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -117,7 +118,7 @@ package struct ShareWorkerChildResult: Sendable {
             }
         }
     }
-    model.attachmentPreparationProbe = { gate.hold() }
+    model.attachmentPreparationProbe = { await gate.hold() }
     model.setContent(content)
     DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: fallback)
     for await _ in signal.stream { break }
@@ -130,7 +131,8 @@ package struct ShareWorkerChildResult: Sendable {
     await oldTask?.value
     await currentTask?.value
     let exact = model.attachments.isEmpty && model.attachmentProblems.count == 1 && model.attachmentProblems.first?.contains("last known limit") == true
-    return ShareWorkerGateEvidence(ordinaryPassed: ordinary, strictEnvironment: ProcessInfo.processInfo.environment["LIBDISPATCH_COOPERATIVE_POOL_STRICT"] == "1", actualLeaseHeld: held, noEarlyPublication: unpublished, priorityRecorded: recorded != nil, priorityMatched: recorded != nil && actualPriority == recorded, workerPriorityRaw: recorded?.rawValue, continuationPriorityRaw: actualPriority?.rawValue, bothTasksCapturedAndDrained: oldTask != nil && currentTask != nil, oldCancelled: oldTask?.isCancelled == true, heldMode: true, continuationBeforeFallback: gate.progressedBeforeFallback, exactCompletion: exact, idleAfterCompletion: !model.isPreparingAttachments && model.actualAttachmentPreparationTaskForTesting == nil)
+    let serialized = await runSharePreparationLeaseProof()
+    return ShareWorkerGateEvidence(serializedEvidence: serialized, ordinaryPassed: ordinary, strictEnvironment: ProcessInfo.processInfo.environment["LIBDISPATCH_COOPERATIVE_POOL_STRICT"] == "1", actualLeaseHeld: held, noEarlyPublication: unpublished, priorityRecorded: recorded != nil, priorityMatched: recorded != nil && actualPriority == recorded, workerPriorityRaw: recorded?.rawValue, continuationPriorityRaw: actualPriority?.rawValue, bothTasksCapturedAndDrained: oldTask != nil && currentTask != nil, oldCancelled: oldTask?.isCancelled == true, heldMode: true, continuationBeforeFallback: gate.progressedBeforeFallback, exactCompletion: exact, idleAfterCompletion: !model.isPreparingAttachments && model.actualAttachmentPreparationTaskForTesting == nil)
 }
 
 /// The child receives STRICT before runtime startup. All process work stays off Main.

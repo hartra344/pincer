@@ -22,6 +22,7 @@ import PincerKit
         check(prerequisites, "actual Share worker entry, priority, policy and drain prerequisites: \(evidence)")
         guard prerequisites else { return }
         check(evidence.continuationBeforeFallback, "same-priority Share continuation progresses before external fallback: \(evidence)")
+        check(evidence.serializedEvidence?.passed == true, "cancelled held Share lease serializes actual nil-probe preparation: \(evidence.serializedEvidence)")
     } catch { check(false, "strict owned Share worker child setup: \(error)") }
     #endif
 }

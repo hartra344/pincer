@@ -96,6 +96,50 @@ public struct SharedContent: Hashable, Sendable {
 actor SharedAttachmentPreparer {
     static let shared = SharedAttachmentPreparer()
 
+    #if DEBUG
+    private var preparationLeaseHeld = false
+    private var preparationLeaseWaiters: [CheckedContinuation<Void, Never>] = []
+    package var preparationLeaseStateForTesting: (active: Bool, pending: Int) {
+        (preparationLeaseHeld, preparationLeaseWaiters.count)
+    }
+
+    // Async fixture probes must preserve the original actor's serial preparation turn,
+    // including nil-probe callers. Cancellation does not retire an explicitly held lease.
+    private func acquirePreparationLease() async {
+        if !preparationLeaseHeld {
+            preparationLeaseHeld = true
+            return
+        }
+        await withCheckedContinuation { preparationLeaseWaiters.append($0) }
+    }
+
+    private func releasePreparationLease() {
+        if preparationLeaseWaiters.isEmpty {
+            preparationLeaseHeld = false
+        } else {
+            preparationLeaseWaiters.removeFirst().resume()
+        }
+    }
+
+    func prepare(
+        _ content: SharedContent,
+        livePolicy: UploadPolicy?,
+        observedPolicy: UploadPolicy?,
+        savedPolicyData: Data?,
+        probe: (@Sendable () async -> Void)?) async -> (attachments: [OutgoingAttachment], problems: [String])
+    {
+        await acquirePreparationLease()
+        defer { releasePreparationLease() }
+        guard !Task.isCancelled else { return ([], []) }
+        await probe?()
+        guard !Task.isCancelled else { return ([], []) }
+        let savedPolicy = savedPolicyData.flatMap { try? JSONDecoder().decode(UploadPolicy.self, from: $0) }
+        let policy = livePolicy ?? observedPolicy ?? savedPolicy
+        return content.attachments(
+            limits: UploadLimits(policy: policy), isLastKnown: livePolicy == nil && policy != nil,
+            shouldCancel: { Task.isCancelled })
+    }
+    #else
     func prepare(
         _ content: SharedContent,
         livePolicy: UploadPolicy?,
@@ -112,6 +156,7 @@ actor SharedAttachmentPreparer {
             limits: UploadLimits(policy: policy), isLastKnown: livePolicy == nil && policy != nil,
             shouldCancel: { Task.isCancelled })
     }
+    #endif
 }
 
 /// Reads the share sheet's item providers into `SharedContent`. Main-actor bound because the
