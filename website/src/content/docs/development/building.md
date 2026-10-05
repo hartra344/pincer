@@ -129,6 +129,8 @@ While a reply streams, text-growth updates are coalesced to the configured frame
 
 While `scripts/run-checks.sh` waits for its parallel lanes, it prints a bounded progress snapshot about every 30 seconds. The snapshot names the pending lane, process, log filename, and last recognized unfinished unit-test identifier; it never prints raw log tails or test arguments. Started and finished counts cover only the bounded portion observed, with `skipped=1` when earlier output could not be retained. Final logs and exit status are unchanged. The progress reader stops before the solo performance lanes, which keep the CPU to themselves.
 
+The parallel unit lane requires a positive terminal summary for every started Swift Testing run. A separate 300-second diagnostic ceiling captures up to eight currently owned process stack samples on macOS, then cancels the unit command and fails the lane so CI retains its logs. `CHECKS_UNIT_TIMEOUT_SECONDS` can shorten this ceiling for the owned runner fixture; it cannot raise it. Sampling uses current parentage and start identity, while termination targets only the command’s pinned process group. SwiftPM is given time to clean up its helpers; cleanup of separately grouped native descendants remains unverified until hosted evidence is available. This diagnostic ceiling does not change app assertions or the solo performance budgets.
+
 The live core paging check uses a separate uncached, headless chat store, so the newest-page and older-page assertions remain independent of background prefetch and already-open transcripts.
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
