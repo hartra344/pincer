@@ -19,8 +19,9 @@ private final class CooperativeProofGate: @unchecked Sendable {
     }
     func hold() async {
         entered.yield(())
-        semaphore.wait()
+        waitSynchronouslyForRelease()
     }
+    private func waitSynchronouslyForRelease() { semaphore.wait() }
     func open(expired: Bool = false) {
         let signal = lock.withLock { () -> Bool in
             guard !released else { return false }
