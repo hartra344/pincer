@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Qualify the actual rendered Last checked timestamp through an isolated XCUI app host."""
-import argparse, json, os, signal, subprocess, tempfile, uuid
+import argparse, json, os, re, signal, subprocess, tempfile, uuid
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
@@ -19,6 +19,12 @@ root = Path(tempfile.mkdtemp(prefix="pincer-lastchecked-app-host-"))
 print("Owned harness and results:", root, flush=True)
 namespace = "lastchecked-" + uuid.uuid4().hex
 selector = "LastCheckedHarnessTests/LastCheckedUITests/testActualFixedSavedTimestampChangesRenderedLabel"
+app_id = "chat.pincer.verification." + namespace + ".app"
+test_id = "chat.pincer.verification." + namespace + ".tests"
+device_match = re.search(r"(?:^|,)\s*id=([0-9A-Fa-f-]{36})(?:,|$)", args.destination)
+if not device_match:
+    parser.error("destination must include an explicit Simulator id for owned-app cleanup")
+device_id = device_match.group(1)
 
 def run(command):
     process = subprocess.Popen(command, start_new_session=True)
@@ -115,6 +121,8 @@ spec = json.loads(r'''{
     }
   }
 }''')
+spec["targets"]["LastCheckedHarnessApp"]["settings"]["base"]["PRODUCT_BUNDLE_IDENTIFIER"] = app_id
+spec["targets"]["LastCheckedHarnessTests"]["settings"]["base"]["PRODUCT_BUNDLE_IDENTIFIER"] = test_id
 spec["packages"]["Pincer"]["path"] = str(repo)
 spec["options"]["bundleIdPrefix"] = "chat.pincer.verification." + namespace
 spec["schemes"]["LastCheckedHarness"]["test"]["environmentVariables"]["PINCER_DEV_NAMESPACE"] = namespace
@@ -128,7 +136,20 @@ enabled = [test["identifier"] for value in listing.get("values", []) for test in
 if listing.get("errors") or enabled not in ([selector], [selector + "()"]) or any("SVG" in name.upper() for name in enabled):
     raise RuntimeError("Expected exactly one enabled lifecycle test and zero SVG: " + repr(enabled))
 result = root / "result.xcresult"
-run(base[:1] + ["test-without-building"] + base[1:] + ["-collect-test-diagnostics", "never", "-resultBundlePath", str(result)])
+try:
+    run(base[:1] + ["test-without-building"] + base[1:] + [
+        "-test-timeouts-enabled", "YES",
+        "-default-test-execution-time-allowance", "60",
+        "-maximum-test-execution-time-allowance", "60",
+        "-collect-test-diagnostics", "never", "-resultBundlePath", str(result)])
+finally:
+    # Explicit destination and unique bundle IDs only; no booted/global simulator cleanup.
+    for owned_id in (app_id, test_id + ".xctrunner"):
+        try:
+            subprocess.run(["xcrun", "simctl", "terminate", device_id, owned_id],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        except (subprocess.TimeoutExpired, OSError):
+            print("Owned-app cleanup did not complete within its bound", flush=True)
 summary_file = root / "summary.json"
 with summary_file.open("w") as output:
     subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", str(result)], stdout=output, check=True, timeout=30)

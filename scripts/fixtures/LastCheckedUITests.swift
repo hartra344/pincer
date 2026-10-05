@@ -4,6 +4,7 @@ final class LastCheckedUITests: XCTestCase {
     @MainActor
     func testActualFixedSavedTimestampChangesRenderedLabel() throws {
         let app = XCUIApplication()
+        defer { app.terminate() }
         app.launch()
         let value = app.staticTexts.matching(identifier: "notification-last-checked-value")
         guard value.firstMatch.waitForExistence(timeout: 15), value.count == 1 else {
