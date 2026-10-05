@@ -580,6 +580,14 @@ struct ChatChrome: ViewModifier {
         return self.lastRow.flatMap { $0.key == self.key ? $0 : nil }
     }
 
+    private var usesDetachedWindowTitle: Bool {
+        #if os(macOS)
+        self.windowKey != nil
+        #else
+        false
+        #endif
+    }
+
     private var showsCompactIdentity: Bool {
         #if os(iOS)
         self.sizeClass == .compact && !self.showsSplit
@@ -605,7 +613,8 @@ struct ChatChrome: ViewModifier {
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
             .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
-            .navigationTitle(self.showsCompactIdentity ? "" : (self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat")))
+            .navigationTitle(self.showsCompactIdentity ? "" : ChatWindowTitle.title(
+                self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"), isDetached: self.usesDetachedWindowTitle))
             #if os(macOS)
             .navigationSubtitle(split ? "" : self.subtitle)
             #else

@@ -46,3 +46,5 @@ Both chats have their own composer, and the right chat stays loaded and live and
 The sidebar marks the chat currently shown in the right pane with a split-view symbol. Its accessibility hint says **Shown in right pane**. The marker follows the pane in that window and disappears when the pane is hidden or closed.
 
 On iPad, **Open in Split View** is in a chat's context menu in the sidebar while the window is wide enough for two chats. The action and an existing split hide when the window is too narrow (for example in Slide Over), then come back when you widen it.
+
+On macOS, a detached chat window adds **Chat window** to its native window title. This distinguishes it from the same chat in the main window’s Window menu and Mission Control. The main window and iOS chat headers keep their existing titles.

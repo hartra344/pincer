@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%@ — Chat window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — Chat window"
+          }
+        }
+      }
+    },
     "%@ hr": {
       "localizations": {
         "en": {
@@ -87,6 +97,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat header avatar"
+          }
+        }
+      }
+    },
+    "Low Power Mode is on, so iOS won't check until it's off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low Power Mode is on, so iOS won't check until it's off."
           }
         }
       }
