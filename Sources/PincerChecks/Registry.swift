@@ -161,7 +161,7 @@ enum Suites {
             Section("Selected helper sidebar visibility") { runSidebarSelectedHelperChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
-            Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks() },
+            Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks(); runBackgroundRefreshOverflowContentChecks() },
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
