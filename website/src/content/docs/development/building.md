@@ -133,11 +133,14 @@ The parallel unit lane requires a positive terminal summary for every started Sw
 
 Held-worker test fixtures suspend rather than block Swift cooperative threads. Cancelling a held operation does not release its slot: fixtures explicitly open the gate and await the actual worker completion. A bounded owned-child check uses the strict cooperative runtime with one real excerpt worker and one same-priority continuation; its external fallback releases failed setup without treating that fallback as successful progress. These diagnostics do not establish the cause of any other unfinished hosted test.
 
+The macOS Debug Read Aloud lifetime check runs one selected test from the actual prebuilt test bundle. A retained-owner control must complete before the released-owner case runs; both require gateway playback and positive one-test completion. The launcher uses the selected Xcode SDK’s verified XCTest framework and support-library paths. Gateway fixture callbacks retain independent request state, so releasing a test owner does not leave an unsafe unowned callback. This validates fixture lifetime, not a physical-device outcome.
+
 The live core paging check uses a separate uncached, headless chat store, so the newest-page and older-page assertions remain independent of background prefetch and already-open transcripts.
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
 
 ```sh
+swift build --build-tests       # prebuild the actual bundle used by Debug lifetime checks
 swift run PincerChecks          # offline (unit) checks
 swift run PincerChecks --demo   # the built-in demo gateway (--demo-core + --demo-extras)
 swift run PincerChecks --live-core ws://127.0.0.1:18789 dev-token
