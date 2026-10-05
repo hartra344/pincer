@@ -18,7 +18,8 @@ struct NotificationSettingsSection: View {
     private let powerNotifications: NotificationCenter
     private let initialDelivery: ClosedAppDelivery?
     init(power: BackgroundRefreshPowerState? = nil, powerNotifications: NotificationCenter = .default,
-         initialDelivery: ClosedAppDelivery? = nil) {
+         initialDelivery: ClosedAppDelivery? = nil, initialNotifications: Bool = true) {
+        self._notifications = State(initialValue: initialNotifications)
         self._power = State(initialValue: power ?? BackgroundRefreshPowerState())
         self.powerNotifications = powerNotifications
         self.initialDelivery = initialDelivery

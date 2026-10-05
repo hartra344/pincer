@@ -17,7 +17,7 @@ import UIKit
         let app = AppModel(defaults: scratch.defaults)
         defer { for gateway in app.gateways { app.remove(gateway.id) }; scratch.remove() }
         let controller = UIHostingController(rootView: Form {
-            NotificationSettingsSection(power: power, powerNotifications: center, initialDelivery: .backgroundRefresh)
+            NotificationSettingsSection(power: power, powerNotifications: center, initialDelivery: .backgroundRefresh, initialNotifications: app.notifier.enabled)
         }.environment(app))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
         window.rootViewController = controller; window.makeKeyAndVisible()
