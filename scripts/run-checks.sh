@@ -134,10 +134,26 @@ report() {
     for ((i = $1; i < ${#pids[@]}; i++)); do
         name=${names[$i]}
         if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
+        # An AppKit interaction can stop the async main run loop and end the unit process with
+        # exit 0 before Testing completes. Exit status alone is not terminal test evidence.
+        local unit_completion=""
+        if [ "$name" = unit-tests ]; then
+            unit_completion=$(grep -E '^[✓✔] Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed after [0-9.]+ seconds\.$' "$LOGS/$name.log" | tail -n 1)
+            if [ -z "$unit_completion" ]; then result=FAILED; status=1; fi
+        fi
         seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
         echo "::group::$name ($result)"
         cat "$LOGS/$name.log"
         echo "::endgroup::"
+        if [ "$name" = unit-tests ]; then
+            echo "::group::Unit terminal completion evidence"
+            if [ -n "$unit_completion" ]; then
+                printf '%s\n' "$unit_completion"
+            else
+                echo "MISSING: final Swift Testing completion summary; unit lane rejected"
+            fi
+            echo "::endgroup::"
+        fi
         summary+=("$(printf '%-18s %-7s %4ss  %s' "$name" "$result" "$seconds" "$(tail -n 1 "$LOGS/$name.log")")")
     done
     stop_progress

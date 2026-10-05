@@ -115,12 +115,7 @@ struct ComposerTabNavigationTests {
             windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
             isARepeat: false, keyCode: 48
         ) else { Issue.record("could not create Tab event"); return }
-        NSApp.postEvent(event, atStart: true)
-        guard let queued = NSApp.nextEvent(matching: .keyDown, until: Date(), inMode: .default, dequeue: true) else {
-            Issue.record("Tab event was not queued")
-            return
-        }
-        NSApp.sendEvent(queued)
+        NSApp.sendEvent(event)
     }
 }
 #endif
