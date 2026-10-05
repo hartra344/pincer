@@ -420,7 +420,10 @@ public final class QuickCaptureModel {
     public let app: AppModel
     public var text = ""
     public var attachments: [OutgoingAttachment] = []
-    public var target: QuickCaptureTarget?
+    public var target: QuickCaptureTarget? {
+        didSet { self.targetRevision &+= 1 }
+    }
+    @ObservationIgnored private var targetRevision: UInt64 = 0
     /// The picker's search text.
     public var query = "" {
         didSet { if oldValue != self.query { self.highlightedId = nil } }
@@ -582,6 +585,7 @@ public final class QuickCaptureModel {
     @discardableResult
     public func send(reveal: Bool = false) async -> Bool {
         guard self.canSend, let picked = self.target, let gateway else { return false }
+        var ownedTargetRevision = self.targetRevision
         self.isSending = true
         self.error = nil
         defer { self.isSending = false }
@@ -596,7 +600,10 @@ public final class QuickCaptureModel {
             }
             key = created
             // A retry after a failed send goes to this chat instead of creating another one.
-            self.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat(created))
+            if self.targetRevision == ownedTargetRevision {
+                self.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat(created))
+                ownedTargetRevision = self.targetRevision
+            }
         }
         let text = SlashCommand.outgoingText(self.text, commands: gateway.slashCommands(for: key))
         let outcome = await gateway.chat(for: key).sendMessage(text, attachments: self.attachments,
@@ -609,7 +616,7 @@ public final class QuickCaptureModel {
         self.settings.lastTarget = QuickCaptureTarget(gatewayId: gateway.id, target: .chat(key))
         self.text = ""
         self.attachments = []
-        self.target = nil
+        if self.targetRevision == ownedTargetRevision { self.target = nil }
         self.closePicker()
         if reveal { self.app.open(Notifier.Target(gatewayId: gateway.id, sessionKey: key)) }
         return true
