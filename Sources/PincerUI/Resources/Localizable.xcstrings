@@ -21,6 +21,26 @@
         }
       }
     },
+    "Enhanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhanced"
+          }
+        }
+      }
+    },
+    "Premium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium"
+          }
+        }
+      }
+    },
     "%@ — Chat window": {
       "localizations": {
         "en": {
