@@ -229,6 +229,11 @@ extension DemoGateway {
         }
         try Self.checkKeys("skills.update", params, ["skillKey", "enabled", "apiKey", "env"])
         guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
+        if let enabled = params["enabled"] {
+            guard case .bool = enabled else {
+                throw Self.skillsInvalid("invalid skills.update params: at /enabled: must be boolean")
+            }
+        }
         if let apiKey = params["apiKey"], apiKey.string == nil {
             throw Self.skillsInvalid("invalid skills.update params: at /apiKey: must be string")
         }
