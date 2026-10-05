@@ -39,6 +39,9 @@ final class ReadAloudChatState {
     @ObservationIgnored private var activeAutoReadID: UUID?
 
 #if DEBUG
+    /// The actual worker lease for fixture cleanup that must await completion.
+    var actualAutoReadTaskForTesting: Task<SpeechText.PreparedReply?, Never>? { self.activeAutoRead }
+
     /// Internal worker status for deterministic tests waiting for all auto-read preparation to drain.
     var autoReadPreparationIsIdle: Bool {
         self.activeAutoRead == nil && self.pendingAutoRead == nil

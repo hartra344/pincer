@@ -233,15 +233,14 @@ struct ImageRSSProbe {
         let rssBefore = ProbeMeter.footprintMiB()
         let start = ProbeMeter.wall()
         for ref in refs { loader.load(ref, sessionKey: "agent:probe:main") }
-        _ = await eventually(timeout: .seconds(90)) {
+        let completed = await eventually(timeout: .seconds(90)) {
             #if DEBUG
             imageRSSPreparationIsComplete(loader, admittedCount: refs.count)
             #else
             loader.images.count + loader.failures.count >= refs.count || loader.failures.count == refs.count
             #endif
         }
-        // Loaders that evict never reach `count`; let in-flight work drain.
-        try? await Task.sleep(for: .seconds(1))
+        #expect(completed, "The actual image fetch tasks must finish before measuring retained pixels and RSS")
         let wall = ProbeMeter.wall() - start
         let rssAfter = ProbeMeter.footprintMiB()
         // Downscaling every retained image into a 16x16 bitmap reads all its pixels, like showing it would,

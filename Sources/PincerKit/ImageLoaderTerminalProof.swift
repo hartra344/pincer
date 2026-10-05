@@ -1,9 +1,9 @@
 #if DEBUG
 import Foundation
 
-/// The unchanged completion decision used by ImageRSSProbe, shared for causal coverage.
+/// Actual fetch terminal ownership used by ImageRSSProbe, independent of bounded cache retention.
 @MainActor package func imageRSSPreparationIsComplete(_ loader: ArtifactImageLoader, admittedCount: Int) -> Bool {
-    loader.images.count + loader.failures.count >= admittedCount || loader.failures.count == admittedCount
+    loader.activeImageFetchCount == 0
 }
 
 package struct ImageLoaderTerminalEvidence: Sendable {

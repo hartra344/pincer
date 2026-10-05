@@ -11,29 +11,23 @@ private final class CatalogThreadProbe: @unchecked Sendable {
     func record(_ isMain: Bool) { self.lock.withLock { self.value = isMain } }
 }
 
+#if DEBUG
 private final class CatalogRefreshGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+    private let gate = ExplicitWorkerTestGate()
     private var calls = 0
-
     var callCount: Int { self.lock.withLock { self.calls } }
-
-    func waitForSecondCall() -> Bool { self.entered.wait(timeout: .now() + 2) == .success }
-    func open() { self.release.signal() }
-
+    func waitForSecondCall() async -> Bool { await gate.waitUntilEntered(timeout: 2) }
+    func open() { gate.open() }
+    func hold(_ locale: String) async {
+        let call = self.lock.withLock { () -> Int in self.calls += 1; return self.calls }
+        if locale == "en-US", call == 2 { await gate.hold() }
+    }
     func discover(_ locale: String) -> DeviceSpeechCatalogSnapshot {
-        let call = self.lock.withLock { () -> Int in
-            self.calls += 1
-            return self.calls
-        }
-        if locale == "en-US", call == 2 {
-            self.entered.signal()
-            self.release.wait()
-        }
-        return DeviceSpeechCatalogSnapshot(localeIdentifier: locale, voices: [], dictationSupport: nil)
+        DeviceSpeechCatalogSnapshot(localeIdentifier: locale, voices: [], dictationSupport: nil)
     }
 }
+#endif
 
 @MainActor
 @Suite("Device speech catalog")
@@ -67,26 +61,32 @@ struct DeviceSpeechCatalogTests {
                 <= DeviceSpeechCatalogSnapshot.maximumSnapshotBytes)
     }
 
+    #if DEBUG
     @Test func forcedRefreshKeepsOneWorkerAndOnlyTheLatestPendingLocale() async {
         let gate = CatalogRefreshGate()
         let catalog = DeviceSpeechCatalog(discover: gate.discover)
+        catalog.discoveryHoldForTesting = { await gate.hold($0) }
+        defer { gate.open() }
         catalog.refresh(localeIdentifier: "en-US")
         let initiallyLoaded = await eventually(timeout: .seconds(2)) { catalog.snapshot?.localeIdentifier == "en-US" }
         #expect(initiallyLoaded)
 
         catalog.refresh(localeIdentifier: "en-US", force: true)
-        let entered = await Task.detached { gate.waitForSecondCall() }.value
+        let entered = await gate.waitForSecondCall()
         #expect(entered, "the forced refresh is held by the deterministic discovery gate")
         catalog.refresh(localeIdentifier: "fr-FR")
         catalog.refresh(localeIdentifier: "de-DE")
         #expect(catalog.isRefreshing)
         #expect(catalog.snapshot?.localeIdentifier == "en-US", "the last usable snapshot stays available while refreshing")
 
+        let actualTask = catalog.actualDiscoveryTaskForTesting
         gate.open()
+        await actualTask?.value
         let latestLoaded = await eventually(timeout: .seconds(2)) {
             catalog.snapshot?.localeIdentifier == "de-DE" && !catalog.isRefreshing
         }
         #expect(latestLoaded, "the newest queued locale wins")
         #expect(gate.callCount == 3, "the intermediate locale is coalesced instead of starting another worker")
     }
+    #endif
 }

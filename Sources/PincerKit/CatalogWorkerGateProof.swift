@@ -2,11 +2,11 @@
 import Foundation
 import Darwin
 
-/// Neutral fixture reproduces the existing synchronous catalog discovery gate.
+/// Fixture suspension retains the actual catalog worker until explicit release.
 /// Explicit release owns the held worker even when its task is cancelled.
 private final class CatalogProofGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let suspension = DispatchSemaphore(value: 0)
+    private let suspension = ExplicitWorkerTestGate()
     private var released = false
     private var fallback = false
     private var progressed = false
@@ -18,9 +18,9 @@ private final class CatalogProofGate: @unchecked Sendable {
         entry = pair.stream
         entered = pair.continuation
     }
-    func hold() {
+    func hold() async {
         entered.yield(())
-        suspension.wait()
+        await suspension.hold()
     }
     func open(expired: Bool = false) {
         let signal = lock.withLock { () -> Bool in
@@ -29,7 +29,7 @@ private final class CatalogProofGate: @unchecked Sendable {
             fallback = expired
             return true
         }
-        if signal { suspension.signal() }
+        if signal { suspension.open() }
     }
     func continuationRan() {
         lock.withLock { progressed = !fallback }
@@ -48,7 +48,8 @@ private final class CatalogProofGate: @unchecked Sendable {
     let expected = DeviceSpeechCatalogSnapshot(localeIdentifier: "en-US", voices: [
         DeviceSpeechVoice(id: "fixture.voice", name: "Fixture", language: "en-US", quality: 1)
     ], dictationSupport: nil)
-    let catalog = DeviceSpeechCatalog { _ in gate.hold(); return expected }
+    let catalog = DeviceSpeechCatalog { _ in expected }
+    catalog.discoveryHoldForTesting = { _ in await gate.hold() }
     catalog.refresh(localeIdentifier: "en-US")
     for await _ in gate.entry { break }
     let actualTask = catalog.actualDiscoveryTaskForTesting

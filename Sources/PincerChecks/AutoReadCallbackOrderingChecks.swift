@@ -16,7 +16,7 @@ import Foundation
     defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
     chat.handleChat(["runId": "ordering-run", "sessionKey": .string(chat.sessionKey), "state": "final"])
     chat.handleSessionMessage(["message": ["role": "assistant", "content": [["type": "text", "text": "Actual accepted reply."]], "__openclaw": ["id": .string(id)]]])
-    check(delivered.count == 1, "neutral: obsolete synchronous accepted-callback premise")
+    check(delivered.isEmpty, "accepted callback waits for actual off-main eligibility preparation")
     let finished = await waitFor("actual accepted callback completion", timeout: 5) {
         delivered.count == 1 && chat.liveReplyPreparationQueue.isIdle
     }
