@@ -53,7 +53,7 @@ enum Suites {
     /// (CI's demo and live runs, since the plain run already covers it).
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
-            Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks() },
+            Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },

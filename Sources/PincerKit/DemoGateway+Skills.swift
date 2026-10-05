@@ -49,6 +49,11 @@ extension DemoGateway {
             return try self.updateSkill(params)
         case "tools.catalog":
             try Self.checkKeys(method, params, ["agentId", "includePlugins"])
+            if let includePlugins = params["includePlugins"] {
+                guard case .bool = includePlugins else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /includePlugins: must be boolean")
+                }
+            }
             let agentId = try self.skillsAgentId(params)
             var catalog = Self.seedToolCatalog(agentId: agentId)
             if params["includePlugins"]?.bool == false, let groups = catalog["groups"]?.array {
