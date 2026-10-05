@@ -86,6 +86,9 @@ public final class ReadAloudController {
     @ObservationIgnored var gatewayTimer: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
+    #if DEBUG
+    package var deviceVoiceTaskForTesting: Task<Void, Never>? { self.task }
+    #endif
     @ObservationIgnored private var nowPlayingTitle: String?
     @ObservationIgnored private var systemIntegration: ReadAloudSystemIntegrating?
 
