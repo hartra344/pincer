@@ -55,6 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
             Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
+        Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks() },
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
@@ -312,6 +313,7 @@ enum Suites {
         var sections: [Section] = [
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
         Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
+        Section("Effective tools agent validation (demo)") { await runDemoEffectiveAgentValidationChecks() },
         Section("Skill enabled validation (demo)") { await runDemoSkillEnabledValidationChecks() },
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
@@ -479,6 +481,7 @@ enum Suites {
     static let liveExtras: [LiveSection] = [
         LiveSection("Skill enabled validation (live)") { url, token in await runLiveSkillEnabledValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
+        LiveSection("Effective tools agent validation (live)") { url, token in await runLiveToolsEffectiveAgentValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog plugin validation (live)") { url, token in await runLiveToolsCatalogPluginValidationChecks(url: url, token: token) },
         LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
