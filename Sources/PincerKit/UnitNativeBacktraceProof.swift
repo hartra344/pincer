@@ -101,7 +101,8 @@ package func unitNativeBacktraceProof() async throws -> UnitNativeBacktraceEvide
             env["PINCER_DEV_NAMESPACE"] = "backtrace-" + UUID().uuidString
             env["PINCER_KEYCHAIN"] = "memory"
             env["CHECKS_LOG_DIR"] = dir.path
-            env["CHECKS_UNIT_TIMEOUT_SECONDS"] = "15"
+            // Hosted native symbolication took 19.46s; use the existing 30s diagnostic window.
+            env["CHECKS_UNIT_TIMEOUT_SECONDS"] = "30"
             env["SWIFT_BACKTRACE"] = nil
             let bootstrap = "import os,runpy,sys; os.environ['DYLD_FRAMEWORK_PATH']=sys.argv[1]; os.environ['DYLD_LIBRARY_PATH']=sys.argv[2]; sys.argv=sys.argv[3:]; runpy.run_path(sys.argv[0],run_name='__main__')"
             process.arguments = ["-c", bootstrap, env["DYLD_FRAMEWORK_PATH"]!, env["DYLD_LIBRARY_PATH"]!] + (process.arguments ?? [])
