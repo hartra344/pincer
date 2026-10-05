@@ -55,7 +55,7 @@ struct ReadAloudSettingsSection: View {
                 {
                     Text("Loading voices…", bundle: .module).tag(self.deviceVoice)
                 }
-                ForEach(self.voices) { Text($0.name).tag($0.id) }
+                ForEach(self.voices) { Text($0.displayLabel).tag($0.id) }
             }
             LabeledContent(L("Speaking Rate")) {
                 Slider(value: self.shownRate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound)) {

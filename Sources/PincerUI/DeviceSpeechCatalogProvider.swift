@@ -48,7 +48,9 @@ private enum AppleSpeechCatalogDiscovery {
         let language = String(AVSpeechSynthesisVoice.currentLanguageCode().prefix(2))
         let voices = AVSpeechSynthesisVoice.speechVoices()
             .filter { $0.language.hasPrefix(language) }
-            .map { DeviceSpeechVoice(id: $0.identifier, name: $0.name, language: $0.language, quality: $0.quality.rawValue) }
+            .map { DeviceSpeechVoice(id: $0.identifier, name: $0.name, language: $0.language, quality: $0.quality.rawValue,
+                displayLabel: DeviceSpeechVoiceLabel.prepare(name: $0.name, language: $0.language,
+                    quality: $0.quality.rawValue, localeIdentifier: localeIdentifier)) }
             .sorted {
                 if $0.quality != $1.quality { return $0.quality > $1.quality }
                 return $0.name > $1.name

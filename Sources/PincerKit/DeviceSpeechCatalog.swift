@@ -7,12 +7,14 @@ public struct DeviceSpeechVoice: Sendable, Equatable, Identifiable {
     public let name: String
     public let language: String
     public let quality: Int
+    public let displayLabel: String
 
-    public init(id: String, name: String, language: String, quality: Int) {
+    public init(id: String, name: String, language: String, quality: Int, displayLabel: String? = nil) {
         self.id = id
         self.name = name
         self.language = language
         self.quality = quality
+        self.displayLabel = displayLabel ?? name
     }
 }
 
