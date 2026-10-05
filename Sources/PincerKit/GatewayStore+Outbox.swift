@@ -182,19 +182,26 @@ extension GatewayStore {
         #else
         let fileScan: (@Sendable (Bool) -> Void)? = nil
         #endif
-        // Saving starts only now, so what's composed while the file is read doesn't overwrite it.
+        let gatewayId = self.id
+        let root = self.outboxRoot
+        // Keep saving disabled until the actual validation worker has exited. New composition
+        // must not replace the still-unrestored persisted queue during this suspension.
+        let worker = Task.detached {
+            guard var saved, !saved.isEmpty else { return saved }
+            saved.recoverAfterLaunch()
+            // Missing attachment files leave a non-retryable entry available for Delete.
+            for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: gatewayId, root: root, observer: fileScan) {
+                let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
+                saved.markFailed(id: entry.id, kind: .rejected(message), message: message)
+            }
+            return saved
+        }
+        let restored = await worker.value
         self.outboxRestored = true
-        guard var saved, !saved.isEmpty else {
+        guard var saved = restored, !saved.isEmpty else {
             OutboxAttachmentStore.enqueueSweep(keeping: Set(self.outbox.entries.map(\.id)), gatewayId: self.id, root: self.outboxRoot)
             if !self.outbox.persistable.isEmpty { OutboxStore.enqueueSave(self.outbox, gatewayId: self.id, root: self.outboxRoot) }
             return
-        }
-        saved.recoverAfterLaunch()
-        // An entry whose attachment files are gone can't be sent: it fails (non-retryable, so it
-        // stays put with Delete) instead of vanishing.
-        for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot, observer: fileScan) {
-            let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
-            saved.markFailed(id: entry.id, kind: .rejected(message), message: message)
         }
         // Anything composed while the file was being read goes after what was saved.
         for entry in self.outbox.entries where saved.entry(id: entry.id) == nil { saved.enqueue(entry) }
