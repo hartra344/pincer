@@ -9,22 +9,27 @@ import Testing
 @Suite(.timeLimit(.minutes(2)))
 struct NotificationLastCheckedMacHostedTests {
     @Test func fixedSavedTimestampChangesActualRenderedLabel() async throws {
+        _ = NSApplication.shared
         let scratch = ScratchDefaults()
+        defer { scratch.remove() }
         scratch.defaults.set(Date().addingTimeInterval(-2), forKey: "pincer.refresh.lastRun")
         scratch.defaults.set("Up to date", forKey: "pincer.refresh.lastResult")
         let saved = BackgroundRefreshLastCheck(defaults: scratch.defaults)
         let host = NSHostingView(rootView: NotificationLastCheckedValue(saved: saved))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 100),
                               styleMask: [.titled], backing: .buffered, defer: false)
+        host.frame = NSRect(x: 0, y: 0, width: 420, height: 100)
         window.contentView = host
         window.orderFront(nil)
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
         defer { window.orderOut(nil); window.contentView = nil }
         let clock = ContinuousClock()
         let baselineDeadline = clock.now.advanced(by: .seconds(15))
         var initial: String?
         while clock.now < baselineDeadline {
             try Task.checkCancellation()
-            let labels = Self.actualLabels(host)
+            let labels = Self.actualLabels([window, host])
             if labels.count == 1 { initial = labels.first; break }
             try await Task.sleep(for: .milliseconds(100))
         }
@@ -33,7 +38,7 @@ struct NotificationLastCheckedMacHostedTests {
         var changed = false
         while clock.now < changeDeadline {
             try Task.checkCancellation()
-            let labels = Self.actualLabels(host)
+            let labels = Self.actualLabels([window, host])
             if labels.count == 1, let current = labels.first, current != baseline {
                 changed = true
                 break
@@ -44,14 +49,14 @@ struct NotificationLastCheckedMacHostedTests {
     }
 
     /// Public AppKit accessibility getters only; bounded against aggregate/cyclic trees.
-    private static func actualLabels(_ root: NSObject) -> Set<String> {
+    private static func actualLabels(_ roots: [NSObject]) -> Set<String> {
         typealias Getter = @convention(c) (AnyObject, Selector) -> Unmanaged<AnyObject>?
         func get(_ object: NSObject, _ name: String) -> AnyObject? {
             let selector = NSSelectorFromString(name)
             guard object.responds(to: selector), let implementation = object.method(for: selector) else { return nil }
             return unsafeBitCast(implementation, to: Getter.self)(object, selector)?.takeUnretainedValue()
         }
-        var stack: [(NSObject, Int)] = [(root, 0)]
+        var stack: [(NSObject, Int)] = roots.map { ($0, 0) }
         var visited = Set<ObjectIdentifier>()
         var labels = Set<String>()
         while let (object, depth) = stack.popLast(), visited.count < 512 {
