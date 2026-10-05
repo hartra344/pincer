@@ -258,7 +258,7 @@ def main():
         # disables interaction only; the owned-command watchdog still bounds processing.
         command_environment.setdefault("SWIFT_BACKTRACE",
             "enable=yes,interactive=no,color=no,timeout=0s,threads=crashed,registers=none,"
-            "images=mentioned,limit=32,symbolicate=fast,sanitize=yes,output-to=stderr")
+            "images=all,limit=32,symbolicate=fast,sanitize=yes,output-to=stderr")
     child = subprocess.Popen(sys.argv[1:], start_new_session=True, env=command_environment)
     leader_identity = mac_process_identity(child.pid)
     identities = {}
