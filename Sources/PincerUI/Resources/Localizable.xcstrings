@@ -91,6 +91,16 @@
         }
       }
     },
+    "Low Power Mode is on, so iOS won't check until it's off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low Power Mode is on, so iOS won't check until it's off."
+          }
+        }
+      }
+    },
     "Small": {
       "localizations": {
         "en": {
