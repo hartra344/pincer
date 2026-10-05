@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "And 1 more chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And 1 more chat"
+          }
+        }
+      }
+    },
+    "And %lld more chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And %lld more chats"
+          }
+        }
+      }
+    },
     "%@ — Chat window": {
       "localizations": {
         "en": {

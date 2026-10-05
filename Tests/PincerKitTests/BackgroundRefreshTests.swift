@@ -171,7 +171,8 @@ struct BackgroundRefreshTests {
         let rows = (1...15).map { Self.row(Self.key($0), activity: Double(1000 + $0 * 10)) }
         let result = Self.plan(Self.snapshot(rows), cursor: Self.base)
         #expect(BackgroundRefreshPlanner.maxPerGateway == 10)
-        #expect(result.requests.count == 10)
+        #expect(result.requests.count == 11)
+        #expect(result.requests.filter { $0.identifier.hasPrefix("reply:") }.count == 10)
         let newestFirst = Set(result.requests.map(\.identifier))
         for n in 6...15 { #expect(newestFirst.contains("reply:\(Self.key(n)):\(1000 + n * 10)")) }
         #expect(result.cursor.activityMs == 1150)
@@ -186,7 +187,8 @@ struct BackgroundRefreshTests {
         let ids = result.requests.map(\.identifier)
         #expect(ids.filter { $0.hasPrefix("reply:") }.count == 10)
         #expect(ids.filter { $0.hasPrefix("approval:") }.count == 12)
-        #expect(result.requests.count == 25)
+        #expect(result.requests.count == 26)
+        #expect(ids.filter { $0.hasPrefix("refresh-summary:") }.count == 1)
         #expect(result.cursor.questionIds.count == 3)
     }
 
