@@ -10,3 +10,32 @@ import PincerKit
     lowPower = false; state.refresh()
     check(!state.showsPauseNote(delivery: .backgroundRefresh), "current power transition removes pause note")
 }
+
+@MainActor func runDemoBackgroundRefreshPowerChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        defaults.removePersistentDomain(forName: suite)
+    }
+    let gateway = app.add(.demo(), secret: nil)
+    gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
+    let ready = await waitFor("background power Demo settings", timeout: 25) {
+        gateway.state.isConnected && gateway.bootstrapped && !gateway.sessions.isEmpty
+    }
+    check(ready, "actual Demo app has a connected nonempty gateway"); guard ready else { return }
+    ClosedAppDelivery.set(.backgroundRefresh, defaults)
+    let preferences = defaults.dictionaryRepresentation()
+    var lowPower = false
+    let state = BackgroundRefreshPowerState(read: { lowPower })
+    check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)), "actual saved background selection has no note at normal power")
+    lowPower = true; state.refresh()
+    check(state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)), "actual saved background selection displays local low power explanation")
+    lowPower = false; state.refresh()
+    check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)) && defaults.dictionaryRepresentation() as NSDictionary == preferences as NSDictionary,
+          "local power transitions preserve actual Demo app notification preferences")
+    ClosedAppDelivery.set(.pushRelay, defaults)
+    lowPower = true; state.refresh()
+    check(!state.showsPauseNote(delivery: ClosedAppDelivery.current(defaults)), "actual saved push selection is not described as background refresh")
+    // The local power reader is an explicit device-input fixture, not a Demo Gateway field or an OS scheduling test.
+}
