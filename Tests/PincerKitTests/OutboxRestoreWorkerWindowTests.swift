@@ -4,11 +4,14 @@ import Testing
 @testable import PincerKit
 private final class RestoreWorkerHold: @unchecked Sendable {
     let release = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var expired = false
+    var didExpire: Bool { lock.withLock { expired } }
     let events = AsyncStream<Bool>.makeStream()
     func scan(onMain: Bool) {
         events.continuation.yield(!onMain)
         guard !onMain else { return }
-        _ = release.wait(timeout: .now() + 15)
+        if release.wait(timeout: .now() + 15) == .timedOut { lock.withLock { expired = true } }
     }
     func entered() async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
@@ -58,6 +61,7 @@ struct OutboxRestoreWorkerWindowTests {
             #expect(during.outcome == .loaded && during.outbox == initial)
             #expect(gateway.outbox.entries == [new])
             hold.release.signal(); await task.value
+            #expect(!hold.didExpire, "actual held worker was explicitly released")
             await OutboxStore.flushWrites(gatewayId: profile.id, root: root)
             let after = await OutboxStore.load(gatewayId: profile.id, root: root)
             var expected = initial; expected.enqueue(new)
