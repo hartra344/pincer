@@ -38,8 +38,15 @@ try {
   await context.close();
   const unavailable = await browser.newContext({ colorScheme: 'light' });
   await unavailable.addInitScript(() => {
-    Storage.prototype.getItem = () => { throw new Error('owned storage failure fixture'); };
-    Storage.prototype.setItem = () => { throw new Error('owned storage failure fixture'); };
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    Storage.prototype.getItem = function(key) {
+      if (key === 'starlight-theme') throw new Error('owned theme storage failure fixture');
+      return get.call(this, key);
+    };
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'starlight-theme') throw new Error('owned theme storage failure fixture');
+      return set.call(this, key, value);
+    };
   });
   const noStorage = await unavailable.newPage(), errors = [];
   noStorage.on('pageerror', error => errors.push(error.message));
