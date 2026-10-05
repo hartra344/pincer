@@ -36,6 +36,8 @@ package final class MessagePartExcerptCache {
 
 #if DEBUG
     /// One bounded observer for deterministic fixtures; production callers never wait for text.
+    package var activeTaskForTesting: Task<Void, Never>? { self.queue.activeTaskForTesting }
+    package var preparationHoldForTesting: (@Sendable () async -> Void)?
     package var preparationDidFinishForTesting: (@MainActor (MessagePartExcerptSource) -> Void)?
 #endif
 
@@ -62,8 +64,16 @@ package final class MessagePartExcerptCache {
         guard !self.inFlight.contains(source) else { return nil }
         self.inFlight.insert(source)
         let normalize = self.normalize
+        #if DEBUG
+        let hold = self.preparationHoldForTesting
+        #endif
         let admission = self.queue.submit(retainedBytes: source.retainedByteCount) {
-            await Task.detached(priority: .userInitiated) { normalize(source) }.value
+            await Task.detached(priority: .userInitiated) {
+                #if DEBUG
+                await hold?()
+                #endif
+                return normalize(source)
+            }.value
         } completion: { [weak self] result in
             guard let self else { return }
             self.inFlight.remove(source)

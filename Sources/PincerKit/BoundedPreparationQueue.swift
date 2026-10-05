@@ -28,6 +28,10 @@ package final class BoundedPreparationQueue<Output: Sendable> {
 
     package init() {}
 
+    #if DEBUG
+    package var activeTaskForTesting: Task<Void, Never>? { self.activeTask }
+    #endif
+
     package var activeCount: Int { self.activeTask == nil ? 0 : 1 }
     package var pendingCount: Int { self.pending.count }
     package var pendingBytes: Int { self.retainedPendingBytes }

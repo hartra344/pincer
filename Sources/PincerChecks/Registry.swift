@@ -1,4 +1,5 @@
 import Foundation
+import PincerKit
 
 // The suite registry: which check sections run in each mode, in order.
 // Adding a feature's checks = adding a `Section` line to the right suite below (a demo or
@@ -52,6 +53,16 @@ enum Suites {
     /// The offline sections. `skipIntentChecks` leaves out the slow Shortcuts & Siri section
     /// (CI's demo and live runs, since the plain run already covers it).
     static func unit(skipIntentChecks: Bool) -> [Section] {
+        #if DEBUG && os(macOS)
+        if CommandLine.arguments.contains("--cooperative-worker-gate-proof") {
+            return [Section(nil) {
+                let evidence = await runCooperativeWorkerGateProof()
+                guard let data = try? JSONEncoder().encode(evidence) else { exit(2) }
+                print(String(decoding: data, as: UTF8.self))
+                exit(evidence.passed ? 0 : 1)
+            }]
+        }
+        #endif
         var sections: [Section] = [
             Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
             Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
@@ -247,6 +258,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
             Section("Unit terminal completion") { await runUnitTerminalCompletionChecks() },
             Section("Unit diagnostic capture") { await runUnitDiagnosticCaptureChecks() },
+            Section("Cooperative worker gate") { await runCooperativeWorkerGateChecks() },
         ]
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
@@ -476,6 +488,7 @@ enum Suites {
         #endif
         sections.append(Section("Unit terminal completion infrastructure (Demo lane)") { await runUnitTerminalCompletionChecks() })
         sections.append(Section("Unit diagnostic capture infrastructure (Demo lane)") { await runUnitDiagnosticCaptureChecks() })
+        sections.append(Section("Cooperative worker gate infrastructure (Demo lane)") { await runCooperativeWorkerGateChecks() })
         return sections
     }
 
