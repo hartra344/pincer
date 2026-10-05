@@ -53,17 +53,46 @@ private final class FakeSpeaker: ReadAloudLocalSpeaking {
 }
 
 @MainActor
-private final class Harness {
-    let player = FakeClipPlayer()
-    let speaker = FakeSpeaker()
-    let scratch = ScratchDefaults()
-    let controller: ReadAloudController
+private final class HarnessRequestState {
     var speakCalls: [String] = []
     var speakDelay: Duration = .zero
     var speakError: GatewayError?
     var speakReply = #"{"audioBase64":"AAEC","provider":"openai","mimeType":"audio/wav","fileExtension":"wav"}"#
     var scopes = ["operator.write"]
     var methods: Set<String>? = nil
+}
+
+@MainActor
+private final class Harness {
+    let player = FakeClipPlayer()
+    let speaker = FakeSpeaker()
+    let scratch = ScratchDefaults()
+    let controller: ReadAloudController
+    private let requestState = HarnessRequestState()
+    var speakCalls: [String] {
+        get { self.requestState.speakCalls }
+        set { self.requestState.speakCalls = newValue }
+    }
+    var speakDelay: Duration {
+        get { self.requestState.speakDelay }
+        set { self.requestState.speakDelay = newValue }
+    }
+    var speakError: GatewayError? {
+        get { self.requestState.speakError }
+        set { self.requestState.speakError = newValue }
+    }
+    var speakReply: String {
+        get { self.requestState.speakReply }
+        set { self.requestState.speakReply = newValue }
+    }
+    var scopes: [String] {
+        get { self.requestState.scopes }
+        set { self.requestState.scopes = newValue }
+    }
+    var methods: Set<String>? {
+        get { self.requestState.methods }
+        set { self.requestState.methods = newValue }
+    }
 
     init(timeout: Duration = Duration.seconds(30)) {
         controller = ReadAloudController(clipPlayer: player, localSpeaker: speaker, defaults: scratch.defaults, gatewayTimeout: timeout)
@@ -74,13 +103,14 @@ private final class Harness {
     var gateway: GatewayVoiceModel!
 
     private func makeGateway() -> GatewayVoiceModel {
-        GatewayVoiceModel(methods: { [unowned self] in self.methods }, scopes: { [unowned self] in self.scopes },
-                          allowsWritesWithoutAdmin: false, request: { [unowned self] method, params in
+        let state = self.requestState
+        return GatewayVoiceModel(methods: { state.methods }, scopes: { state.scopes },
+                          allowsWritesWithoutAdmin: false, request: { method, params in
             guard method == "tts.speak" else { return [:] }
-            self.speakCalls.append(params["text"]?.text ?? "")
-            if self.speakDelay != .zero { try await Task.sleep(for: self.speakDelay) }
-            if let error = self.speakError { throw error }
-            return Fixtures.json(self.speakReply)
+            state.speakCalls.append(params["text"]?.text ?? "")
+            if state.speakDelay != .zero { try await Task.sleep(for: state.speakDelay) }
+            if let error = state.speakError { throw error }
+            return Fixtures.json(state.speakReply)
         })
     }
 }
