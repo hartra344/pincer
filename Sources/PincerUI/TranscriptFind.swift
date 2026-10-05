@@ -167,6 +167,7 @@ final class TranscriptFind {
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             guard !Task.isCancelled else { return }
             let result = await preparation.prepare(query: query, entries: entries, options: options)
+            guard result.status == .completed else { return }
             let matches = result.matches
             let rowIndex = result.rowIndex
             guard !Task.isCancelled, let self else { return }

@@ -4,29 +4,96 @@ import Foundation
 @MainActor
 package final class TranscriptFindPreparation {
     package struct Result: Sendable {
+        package enum Status: Sendable { case completed, superseded, canceled }
+        package let status: Status
+        /// Usable only for a completed request; terminal non-completions are explicit statuses.
         package let matches: [TranscriptSearch.Match]
         package let rowIndex: [String: Int]
+        fileprivate static func terminal(_ status: Status) -> Result {
+            Result(status: status, matches: [], rowIndex: [:])
+        }
     }
+    private struct Request {
+        let token: UUID
+        let query: String
+        let entries: [TranscriptEntry]
+        let options: TranscriptSearch.Options
+        let continuation: CheckedContinuation<Result, Never>
+        #if DEBUG
+        let probe: TranscriptFindWorkerProbe?
+        #endif
+    }
+    private var worker: Task<Void, Never>?
+    private var pending: Request?
     package init() {}
     #if DEBUG
     package var probe: TranscriptFindWorkerProbe?
+    package var activeTaskForChecks: Task<Void, Never>? { self.worker }
     #endif
     package func prepare(query: String, entries: [TranscriptEntry], options: TranscriptSearch.Options) async -> Result {
         #if DEBUG
-        let probe = self.probe
-        probe?.request()
-        probe?.reserveLease()
-        defer { probe?.releaseLease() }
+        self.probe?.request()
         #endif
-        return await Task.detached(priority: .userInitiated) {
+        guard !Task.isCancelled else { return .terminal(.canceled) }
+        let token = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                #if DEBUG
+                let request = Request(token: token, query: query, entries: entries, options: options,
+                                      continuation: continuation, probe: self.probe)
+                #else
+                let request = Request(token: token, query: query, entries: entries, options: options,
+                                      continuation: continuation)
+                #endif
+                if self.worker != nil {
+                    let replaced = self.pending
+                    self.pending = request
+                    replaced?.continuation.resume(returning: .terminal(.superseded))
+                } else {
+                    self.worker = Task { await self.run(request) }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelPending(token) }
+        }
+    }
+    private func cancelPending(_ token: UUID) {
+        guard self.pending?.token == token else { return }
+        let canceled = self.pending
+        self.pending = nil
+        canceled?.continuation.resume(returning: .terminal(.canceled))
+    }
+    private func run(_ first: Request) async {
+        var current = first
+        while true {
             #if DEBUG
-            let ordinal = probe?.enter()
-            defer { probe?.exit() }
-            if let ordinal { await probe?.hold(ordinal) }
+            let probe = current.probe
+            probe?.reserveLease()
             #endif
-            return Result(matches: TranscriptSearch.matches(query, in: entries, options: options),
-                          rowIndex: Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
-        }.value
+            let query = current.query
+            let entries = current.entries
+            let options = current.options
+            let result = await Task.detached(priority: .userInitiated) {
+                #if DEBUG
+                let ordinal = probe?.enter()
+                defer { probe?.exit() }
+                if let ordinal { await probe?.hold(ordinal) }
+                #endif
+                return Result(status: .completed, matches: TranscriptSearch.matches(query, in: entries, options: options),
+                              rowIndex: Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
+            }.value
+            #if DEBUG
+            probe?.releaseLease()
+            #endif
+            current.continuation.resume(returning: result)
+            // Capacity is reused only after the actual detached worker has returned.
+            guard let next = self.pending else {
+                self.worker = nil
+                return
+            }
+            self.pending = nil
+            current = next
+        }
     }
 }
 

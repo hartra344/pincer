@@ -229,7 +229,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
-        sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks() })
+        sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks(); await runTranscriptFindWorkerQueueChecks() })
         sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
         sections.append(Section("Bookmark persistence encoding") { await runBookmarkPersistenceEncodingChecks(); await runBookmarkPersistenceOrderingChecks() })
         sections.append(Section("Share target ownership") { await runShareTargetOwnershipChecks() })
