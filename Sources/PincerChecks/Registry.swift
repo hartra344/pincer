@@ -246,6 +246,7 @@ enum Suites {
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
             Section("Unit terminal completion") { await runUnitTerminalCompletionChecks() },
+            Section("Unit diagnostic capture") { await runUnitDiagnosticCaptureChecks() },
         ]
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
@@ -474,6 +475,7 @@ enum Suites {
         sections.append(Section("Palette creation selection ownership (demo)") { await runDemoPaletteCreateSelectionOwnershipChecks() })
         #endif
         sections.append(Section("Unit terminal completion infrastructure (Demo lane)") { await runUnitTerminalCompletionChecks() })
+        sections.append(Section("Unit diagnostic capture infrastructure (Demo lane)") { await runUnitDiagnosticCaptureChecks() })
         return sections
     }
 
