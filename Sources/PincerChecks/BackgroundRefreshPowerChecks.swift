@@ -1,4 +1,4 @@
-import PincerKit
+@testable import PincerKit
 
 @MainActor func runBackgroundRefreshPowerChecks() {
     var lowPower = false
