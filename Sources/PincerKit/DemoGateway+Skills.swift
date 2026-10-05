@@ -98,6 +98,14 @@ extension DemoGateway {
             guard let key = params["sessionKey"]?.text else {
                 throw Self.skillsInvalid("invalid tools.effective params: must have required property 'sessionKey'")
             }
+            if let value = params["agentId"] {
+                guard case .string(let raw) = value else {
+                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must be string")
+                }
+                guard !raw.isEmpty else {
+                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must NOT have fewer than 1 characters")
+                }
+            }
             guard self.hasSession(key) else { throw Self.skillsInvalid("unknown session key \"\(key)\"") }
             let sessionAgent = self.sessionAgentId(key)
             if let requested = params["agentId"]?.text, requested != sessionAgent {
