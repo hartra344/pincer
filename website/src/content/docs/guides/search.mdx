@@ -93,4 +93,5 @@ If that message is no longer in the chat, the newest match is selected instead. 
 
 The search index is stored next to the transcript cache and rebuilds itself when needed. See [Local cache](../local-cache/#search-index) and [Security & privacy](../../reference/security/#local-cache).
 
+Find runs one transcript matcher at a time and keeps only the latest waiting query. Replaced waiting queries cannot publish results; a running matcher finishes before its worker slot is reused.
 While Find refreshes after a transcript update, Next and Previous keep the match you selected. Inserted rows do not shift your selection to another message; if that match disappears, Find selects a nearby remaining match.
