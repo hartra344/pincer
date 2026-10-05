@@ -348,6 +348,9 @@ extension DemoGateway {
     private static func checkKeys(_ method: String, _ params: JSONValue, _ allowed: Set<String>) throws {
         guard let object = params.object else { return }
         if let extra = object.keys.sorted().first(where: { !allowed.contains($0) }) {
+            if method == "skills.detail" {
+                throw Self.skillsInvalid("invalid \(method) params: at root: unexpected property '\(extra)'")
+            }
             throw Self.skillsInvalid("invalid \(method) params: must NOT have additional properties (\(extra))")
         }
     }
