@@ -210,17 +210,17 @@ struct ImageMemoryBudgetTests {
         #expect(await eventually { loader.cached(ref) != nil })
     }
 
-    @Test func transcriptImagesAreDownsampled() async {
+    @Test func transcriptImagesAreDownsampled() async throws {
         let loader = ArtifactImageLoader(byteBudget: 500_000_000)
         let ref = Self.ref(Self.png(3000, 1500), tag: 1)
         loader.load(ref, sessionKey: "k")
         let ready = await eventually { loader.cached(ref) != nil }
-        Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: ready)
+        try Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: ready)
     }
 
-    private static func assertTranscriptThumbnail(loader: ArtifactImageLoader, ref: ImageRef, ready: Bool) {
+    private static func assertTranscriptThumbnail(loader: ArtifactImageLoader, ref: ImageRef, ready: Bool) throws {
         #expect(ready)
-        let image = loader.cached(ref)!
+        let image = try #require(loader.cached(ref))
         #expect(max(image.width, image.height) <= ArtifactImageLoader.transcriptMaxPixel)
         #expect(max(image.width, image.height) >= ArtifactImageLoader.transcriptMaxPixel - 2)
         #expect(loader.decodedBytes < 3000 * 1500 * 4 / 4)
@@ -243,13 +243,13 @@ struct ImageMemoryBudgetTests {
         }
         switch mode {
         case "ordinary":
-            await transcriptImagesAreDownsampled()
+            try await transcriptImagesAreDownsampled()
         case "missing":
             // A real empty loader has never admitted this real inline reference. No decoder
             // result is substituted; exercise the very same readiness/assertion boundary.
             let loader = ArtifactImageLoader(byteBudget: 500_000_000)
             let ref = Self.ref(Self.png(64, 32), tag: 1)
-            Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: false)
+            try Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: false)
         default:
             Issue.record("unsupported image readiness child mode")
             return
