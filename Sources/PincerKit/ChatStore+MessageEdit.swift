@@ -81,6 +81,7 @@ extension ChatStore {
     @discardableResult
     public func branch(from messageId: String) async -> String? {
         guard let gateway, let found = self.committedItem(messageId) else { return nil }
+        let selectionRevision = gateway.selectionIntentRevision
         do {
             let newKey: String
             var editorText: String?
@@ -110,7 +111,7 @@ extension ChatStore {
             await gateway.refreshSessions()
             let chat = gateway.chat(for: newKey)
             if let editorText, !editorText.isEmpty, chat.draft.isEmpty { chat.draft.text = editorText }
-            gateway.selectedKey = newKey
+            if gateway.selectionIntentRevision == selectionRevision { gateway.selectedKey = newKey }
             return newKey
         } catch {
             self.errorMessage = L("Couldn’t branch: \(error.localizedDescription)")
