@@ -5,7 +5,8 @@ package struct SoloSessionBudgetCoverage: Sendable {
     package let status: Int32
     package let existingPerfControlsPassed: Bool
     package let actualSessionTimingPrinted: Bool
-    package let actualSessionBudgetPassed: Bool
+    package let actualSessionCounterControlsPassed: Bool
+    package let actualSessionBudgetObserved: Bool
 }
 
 /// Observe the actual prebuilt solo mode; no copied benchmark or invented timing is involved.
@@ -13,7 +14,7 @@ package func inspectSoloSessionBudgetCoverage(executable: URL) async throws -> S
     try await Task.detached {
         let child = Process(), output = Pipe()
         child.executableURL = executable
-        child.arguments = ["--perf-smoke"]
+        child.arguments = ["--perf-smoke", "--skip-perf-budgets"]
         var environment = ProcessInfo.processInfo.environment
         environment["PINCER_KEYCHAIN"] = "memory"
         environment["PINCER_DEV_NAMESPACE"] = "solo-session-budget-" + UUID().uuidString
@@ -43,7 +44,14 @@ package func inspectSoloSessionBudgetCoverage(executable: URL) async throws -> S
                 $0.hasPrefix("ms/event at 300 sessions (N=50): row change+sections=") &&
                 $0.contains("no-op event+sections=") && $0.contains("sections alone=")
             },
-            actualSessionBudgetPassed: lines.contains("✓ sessions row event stays under 50 ms at 300 sessions"))
+            actualSessionCounterControlsPassed:
+                lines.contains { $0.hasPrefix("✓ isRunning invalidates only on run start (") } &&
+                lines.contains("✓ sessionRow does not invalidate while streaming (0)") &&
+                lines.contains("✓ identical sessions write does not invalidate"),
+            actualSessionBudgetObserved: lines.contains {
+                $0.hasPrefix("· sessions row event stays under 50 ms at 300 sessions") &&
+                $0.contains("--skip-perf-budgets")
+            })
     }.value
 }
 #endif

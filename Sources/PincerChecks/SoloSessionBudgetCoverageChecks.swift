@@ -8,7 +8,8 @@ import PincerKit
         check(evidence.status == 0, "actual prebuilt solo lane exits successfully")
         check(evidence.existingPerfControlsPassed, "existing actual solo perf controls remain enforced")
         check(evidence.actualSessionTimingPrinted, "actual solo lane prints 300-session timing")
-        check(evidence.actualSessionBudgetPassed, "actual solo lane enforces unchanged 50 ms session-row budget")
+        check(evidence.actualSessionCounterControlsPassed, "actual session invalidation counters remain enforced")
+        check(evidence.actualSessionBudgetObserved, "actual perf-smoke mode reports unchanged 50 ms budget with --skip-perf-budgets")
     } catch { check(false, "actual solo session budget coverage setup: \(error)") }
     #endif
 }

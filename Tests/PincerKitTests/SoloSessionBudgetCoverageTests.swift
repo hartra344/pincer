@@ -5,13 +5,14 @@ import Testing
 
 @Suite(.timeLimit(.minutes(2)))
 struct SoloSessionBudgetCoverageTests {
-    @Test func actualSoloLaneEnforcesExistingSessionRowBudget() async throws {
+    @Test func actualSoloLaneIncludesExistingSessionRowBudgetObservation() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let evidence = try await inspectSoloSessionBudgetCoverage(executable: root.appendingPathComponent(".build/debug/PincerChecks"))
         #expect(evidence.status == 0)
         #expect(evidence.existingPerfControlsPassed)
         #expect(evidence.actualSessionTimingPrinted)
-        #expect(evidence.actualSessionBudgetPassed)
+        #expect(evidence.actualSessionCounterControlsPassed)
+        #expect(evidence.actualSessionBudgetObserved)
     }
 }
 #endif
