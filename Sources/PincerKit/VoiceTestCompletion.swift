@@ -6,7 +6,8 @@ import Foundation
     package init() {}
     package func invalidate() { self.generation &+= 1 }
     package func run(model: GatewayVoiceModel, sample: String,
-                     publish: (TTSTestResult) -> Void, play: (TTSClip) -> Void) async {
+                     publish: (TTSTestResult) -> Void, finished: () -> Void = {}, play: (TTSClip) -> Void) async {
+        defer { finished() }
         self.generation &+= 1
         let owner = self.generation
         let outcome = await model.test(sample: sample)

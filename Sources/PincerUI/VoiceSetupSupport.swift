@@ -13,8 +13,7 @@ final class VoiceSetupController {
     var testPlaybackOverride: ((TTSClip) -> Void)?
     #endif
     func testVoice(model: GatewayVoiceModel, sample: String, finished: () -> Void = {}, publish: (TTSTestResult) -> Void) async {
-        defer { finished() }
-        await self.testCompletion.run(model: model, sample: sample, publish: publish) { clip in
+        await self.testCompletion.run(model: model, sample: sample, publish: publish, finished: finished) { clip in
             #if DEBUG
             if let override = self.testPlaybackOverride { override(clip); return }
             #endif
