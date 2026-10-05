@@ -120,7 +120,7 @@ enum Suites {
             Section("Plugin credential ownership") { await runPluginCredentialOwnershipChecks() },
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
-            Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks() },
+            Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks(); await runDemoSkillDetailErrorReferenceChecks() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
             Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },
             Section("Skills load admission") { await runSkillsLoadAdmissionChecks() },
