@@ -37,7 +37,7 @@ extension DemoGateway {
                 throw Self.skillsInvalid("invalid skills.detail params: version must be a non-empty string")
             }
             guard let entry = self.catalogEntry(ref) else {
-                throw GatewayError.rpc(code: "UNAVAILABLE", message: "ClawHub skill \"\(ref)\" not found", details: nil)
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: Self.missingSkillDetailMessage(ref), details: nil)
             }
             if entry["installOnly"]?.bool == true {
                 throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
@@ -72,6 +72,25 @@ extension DemoGateway {
     }
 
     // MARK: skills.install
+
+    /// Mirrors upstream encodeURIComponent(path slug) and the mock's canonical 404 body.
+    private static func missingSkillDetailMessage(_ reference: String) -> String {
+        var slug = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldMessage = "ClawHub skill \"\(reference)\" not found"
+        if slug.hasPrefix("@") {
+            let parts = slug.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return oldMessage }
+            let owner = parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard owner.range(of: "^[a-z0-9](?:[a-z0-9._-]{0,38}[a-z0-9])?$", options: .regularExpression) != nil else { return oldMessage }
+            slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // No existing Swift requested-reference validator is available; this narrow eligibility
+        // check follows upstream install-paths.ts and leaves invalid-reference behavior unchanged.
+        guard slug.range(of: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", options: [.regularExpression, .caseInsensitive]) != nil else { return oldMessage }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        let encoded = slug.addingPercentEncoding(withAllowedCharacters: allowed) ?? slug
+        return "ClawHub /api/v1/skills/\(encoded) failed (404): Skill not found"
+    }
 
     private func installSkill(_ params: JSONValue) throws -> JSONValue {
         let source = params["source"]?.text
