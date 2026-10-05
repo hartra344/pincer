@@ -54,8 +54,8 @@ import Foundation
     gate.release()
     let outcome = await sending.value
     await gateway.connection.setDemoResponseDelivery(nil)
-    if case .failed = outcome { check(false, "actual resend completes successfully") }
-    else { check(true, "actual resend completes successfully") }
+    if case .sent = outcome { check(true, "actual connected Demo resend completes as sent") }
+    else { check(false, "actual connected Demo resend completes as sent") }
     check(!chat.isSendingEdit && chat.draft.ownerID == owner && chat.draft.text == "new normal draft" && chat.draft.attachments == [attachment],
           "actual resend preserves the newly prepared normal draft")
 }

@@ -49,7 +49,8 @@ struct EditSendNormalDraftPreparationTests {
             let prepared = chat.draft.attachments
             gate.release()
             let outcome = await sending.value
-            if case .failed = outcome { Issue.record("actual resend must complete successfully") }
+            if case .sent = outcome { }
+            else { Issue.record("actual connected Demo resend must complete as sent") }
             #expect(!chat.isSendingEdit && chat.draft.ownerID == normalOwner && chat.draft.text == "new normal draft" && chat.draft.attachments == prepared)
             await gateway.connection.setDemoResponseDelivery(nil)
         } catch {
