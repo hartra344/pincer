@@ -677,9 +677,7 @@ struct CommandPaletteView: View {
             self.close()
             guard let gateway = self.app.gateways.first(where: { $0.id == gatewayId }) else { return }
             Task {
-                if let key = await gateway.createSession(agentId: agentId, label: nil) {
-                    self.app.open(Notifier.Target(gatewayId: gatewayId, sessionKey: key))
-                }
+                await self.app.createPaletteChat(gateway: gateway, agentId: agentId)
             }
         case let .selectGateway(id):
             self.close()
