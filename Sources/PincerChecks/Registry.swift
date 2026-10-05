@@ -238,6 +238,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Quick Capture prepared attachment") { await runQuickCapturePreparedAttachmentChecks() })
         sections.append(Section("Quick Capture send target ownership") { await runQuickCaptureSendTargetOwnershipChecks() })
         sections.append(Section("Quick Capture created target ownership") { await runQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks(); await runTranscriptFindWorkerQueueChecks() })
@@ -414,6 +415,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Quick Capture prepared attachment (demo)") { await runDemoQuickCapturePreparedAttachmentChecks() })
         sections.append(Section("Quick Capture send target ownership (demo)") { await runDemoQuickCaptureSendTargetOwnershipChecks() })
         sections.append(Section("Quick Capture created target ownership (demo)") { await runDemoQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission (demo)") { await runDemoTranscriptFindWorkerChecks() })

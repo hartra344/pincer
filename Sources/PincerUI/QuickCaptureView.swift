@@ -268,12 +268,7 @@ struct QuickCaptureView: View {
     }
 
     private var ingest: AttachmentIngest {
-        let model = self.model
-        return AttachmentIngest(
-            limits: model.gateway?.uploadLimits ?? UploadLimits(hello: nil),
-            limitsAreLastKnown: model.gateway?.uploadLimitsAreLastKnown ?? false,
-            add: { model.attachments.append($0) },
-            report: { self.attachmentError = $0 })
+        QuickCaptureAttachmentIngest.make(model: self.model, report: { self.attachmentError = $0 })
     }
 }
 #endif
