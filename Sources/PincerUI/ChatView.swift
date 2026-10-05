@@ -605,7 +605,8 @@ struct ChatChrome: ViewModifier {
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
             .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
-            .navigationTitle(self.showsCompactIdentity ? "" : (self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat")))
+            .navigationTitle(self.showsCompactIdentity ? "" : ChatWindowTitle.title(
+                self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"), isDetached: self.windowKey != nil))
             #if os(macOS)
             .navigationSubtitle(split ? "" : self.subtitle)
             #else
