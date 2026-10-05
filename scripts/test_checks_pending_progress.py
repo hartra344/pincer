@@ -39,6 +39,7 @@ if name == "swift":
         with open(root / "unit-gate", "r") as gate: gate.read()
     if os.environ.get("CHECKS_FIXTURE_UNIT_START_ONLY") != "1":
         print("✔ Test run with 1 test in 1 suite passed after 0.1 seconds.")
+    (root / "unit-owned.completed").touch()
     sys.exit(0)
 if name == "node":
     if any(x.endswith("checks-pending-progress.mjs") for x in sys.argv[1:]):
@@ -132,7 +133,8 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 if timeout_evidence.exists():
                     released = True  # Only the watchdog, not this fixture, released the held child.
             if interrupt:
-                process.terminate()  # Only the actual task-owned script, while its unit lane is held.
+                # The unreaped, running session leader pins this invocation's group identity.
+                if process.poll() is None: os.killpg(process.pid, signal.SIGTERM)
             elif not released:
                 with open(root / "unit-gate", "w") as gate: gate.write("release")
                 released = True
@@ -162,11 +164,12 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "heldUnitTimeoutRejected": not unit_timeout or (timeout_evidence.exists() and process.returncode == 1 and (root / "unit-owned.stopped").exists()),
                 "partialUnitRunRejected": not partial_unit_run or process.returncode == 1,
                 "startOnlyUnitRejected": not unit_start_only or process.returncode == 1,
+                "ownedUnitCleaned": (root / "unit-owned.stopped").exists() if interrupt else ((root / "unit-owned.stopped").exists() or (root / "unit-owned.completed").exists()),
                 "allMocksCleaned": len(list((root / "mocks").glob("*.stopped"))) == 6,
                 "progressReaderCleaned": not reader_alive,
                 "soloPerformanceHasNoReader": reader_count == 1 if helper.exists() else reader_count == 0,
             }
-            assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
+            assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "ownedUnitCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
             if unit_timeout: assertions.append("heldUnitTimeoutRejected")
             if partial_unit_run: assertions.append("partialUnitRunRejected")
             if unit_start_only: assertions.append("startOnlyUnitRejected")
@@ -193,18 +196,6 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 try: process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL); process.wait()
-            # Interruption can leave the owned held unit child alive; kill only this process group.
-            try: os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError: pass
-            owned_unit = root / "unit-owned.pid"
-            if owned_unit.exists():
-                try: os.killpg(int(owned_unit.read_text()), signal.SIGKILL)
-                except ProcessLookupError: pass
-            # Only task-owned fake processes are eligible for cleanup.
-            for file in (root / "mocks").glob("*.pid"):
-                if file.with_suffix(".stopped").exists(): continue
-                try: os.kill(int(file.read_text()), signal.SIGTERM)
-                except ProcessLookupError: pass
 
 
 def main():
