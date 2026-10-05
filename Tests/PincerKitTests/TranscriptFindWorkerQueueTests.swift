@@ -9,8 +9,12 @@ struct TranscriptFindWorkerQueueTests {
     func rows() -> [TranscriptEntry] {
         (0..<3).map { .user(ChatItem(id: "queue-\($0)", role: .user, blocks: [.text("needle ordinary message")], timestamp: Date(timeIntervalSince1970: 1))) }
     }
+    enum ReadinessFailure: Error { case deadline }
+    final class Completion { var finished = false }
     func wait(_ predicate: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(25))
         while !predicate() {
+            guard ContinuousClock.now < deadline else { throw ReadinessFailure.deadline }
             try Task.checkCancellation()
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -27,11 +31,17 @@ struct TranscriptFindWorkerQueueTests {
         var latest: Task<TranscriptFindPreparation.Result, Never>?
         do {
             try await self.wait { probe.snapshot.entered == 1 }
-            let middle = Task { await preparation.prepare(query: "ordinary", entries: rows, options: .init()) }
+            let middleCompletion = Completion()
+            let middle = Task {
+                let result = await preparation.prepare(query: "ordinary", entries: rows, options: .init())
+                middleCompletion.finished = true
+                return result
+            }
             second = middle
             try await self.wait { probe.snapshot.requested == 2 }
             let last = Task { await preparation.prepare(query: "message", entries: rows, options: .init()) }
             latest = last
+            try await self.wait { middleCompletion.finished }
             let replaced = await middle.value
             #expect(replaced.status == .superseded)
             #expect(probe.snapshot.entered == 1 && probe.snapshot.maximumLeases == 1)
@@ -61,12 +71,18 @@ struct TranscriptFindWorkerQueueTests {
         var latest: Task<TranscriptFindPreparation.Result, Never>?
         do {
             try await self.wait { probe.snapshot.entered == 1 }
-            let old = Task { await preparation.prepare(query: "ordinary", entries: rows, options: .init()) }
+            let oldCompletion = Completion()
+            let old = Task {
+                let result = await preparation.prepare(query: "ordinary", entries: rows, options: .init())
+                oldCompletion.finished = true
+                return result
+            }
             second = old
             try await self.wait { probe.snapshot.requested == 2 }
             old.cancel()
             let current = Task { await preparation.prepare(query: "message", entries: rows, options: .init()) }
             latest = current
+            try await self.wait { oldCompletion.finished }
             let canceled = await old.value
             #expect(canceled.status == .canceled || canceled.status == .superseded)
             try await self.wait { probe.snapshot.requested == 3 }
@@ -85,8 +101,12 @@ struct TranscriptFindWorkerQueueTests {
             throw error
         }
     }
-    func request(_ owner: TranscriptFindPreparation, query: String, rows: [TranscriptEntry]) -> Task<TranscriptFindPreparation.Result, Never> {
-        Task { await owner.prepare(query: query, entries: rows, options: .init()) }
+    func request(_ owner: TranscriptFindPreparation, query: String, rows: [TranscriptEntry], completion: Completion? = nil) -> Task<TranscriptFindPreparation.Result, Never> {
+        Task {
+            let result = await owner.prepare(query: query, entries: rows, options: .init())
+            completion?.finished = true
+            return result
+        }
     }
     @Test func canceledPendingAndReleasedExternalOwnerDrainAcceptedWork() async throws {
         var preparation: TranscriptFindPreparation? = TranscriptFindPreparation()
@@ -98,10 +118,13 @@ struct TranscriptFindWorkerQueueTests {
         var pending: Task<TranscriptFindPreparation.Result, Never>?
         do {
             try await self.wait { probe.snapshot.entered == 1 }
-            let last = self.request(try #require(preparation), query: "message", rows: rows)
+            let pendingCompletion = Completion()
+            let last = self.request(try #require(preparation), query: "message", rows: rows,
+                                    completion: pendingCompletion)
             pending = last
             try await self.wait { probe.snapshot.requested == 2 }
             last.cancel()
+            try await self.wait { pendingCompletion.finished }
             let canceled = await last.value
             #expect(canceled.status == .canceled)
             preparation = nil

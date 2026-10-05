@@ -24,6 +24,7 @@ package final class TranscriptFindPreparation {
         #endif
     }
     private var worker: Task<Void, Never>?
+    private var active: Request?
     private var pending: Request?
     package init() {}
     #if DEBUG
@@ -38,6 +39,10 @@ package final class TranscriptFindPreparation {
         let token = UUID()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume(returning: .terminal(.canceled))
+                    return
+                }
                 #if DEBUG
                 let request = Request(token: token, query: query, entries: entries, options: options,
                                       continuation: continuation, probe: self.probe)
@@ -50,7 +55,8 @@ package final class TranscriptFindPreparation {
                     self.pending = request
                     replaced?.continuation.resume(returning: .terminal(.superseded))
                 } else {
-                    self.worker = Task { await self.run(request) }
+                    self.active = request
+                    self.worker = Task { await self.run() }
                 }
             }
         } onCancel: {
@@ -63,9 +69,9 @@ package final class TranscriptFindPreparation {
         self.pending = nil
         canceled?.continuation.resume(returning: .terminal(.canceled))
     }
-    private func run(_ first: Request) async {
-        var current = first
-        while true {
+    private func run() async {
+        while let current = self.active {
+            self.active = nil
             #if DEBUG
             let probe = current.probe
             probe?.reserveLease()
@@ -92,7 +98,7 @@ package final class TranscriptFindPreparation {
                 return
             }
             self.pending = nil
-            current = next
+            self.active = next
         }
     }
 }

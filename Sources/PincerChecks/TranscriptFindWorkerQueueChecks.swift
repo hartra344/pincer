@@ -17,6 +17,9 @@ private actor FindQueueCheckGate {
 }
 
 @MainActor
+private final class FindQueueCompletion { var finished = false }
+
+@MainActor
 func runTranscriptFindWorkerQueueChecks() async {
     let entries: [TranscriptEntry] = (0..<3).map {
         .user(ChatItem(id: "queue-\($0)", role: .user, blocks: [.text("needle ordinary message")], timestamp: Date(timeIntervalSince1970: 1)))
@@ -29,7 +32,12 @@ func runTranscriptFindWorkerQueueChecks() async {
     let entered = await waitFor("Find queue first worker", timeout: 25) { probe.snapshot.entered == 1 }
     check(entered, "queue control holds an actual matcher")
     guard entered else { first.cancel(); await gate.release(); _ = await first.value; return }
-    let replaced = Task { await preparation.prepare(query: "ordinary", entries: entries, options: .init()) }
+    let replacedCompletion = FindQueueCompletion()
+    let replaced = Task {
+        let result = await preparation.prepare(query: "ordinary", entries: entries, options: .init())
+        replacedCompletion.finished = true
+        return result
+    }
     let admitted = await waitFor("Find queue second decision", timeout: 25) { probe.snapshot.requested == 2 }
     check(admitted, "second actual request is admitted while first worker remains held")
     guard admitted else {
@@ -38,6 +46,13 @@ func runTranscriptFindWorkerQueueChecks() async {
         return
     }
     let latest = Task { await preparation.prepare(query: "message", entries: entries, options: .init()) }
+    let finished = await waitFor("superseded Find completion", timeout: 25) { replacedCompletion.finished }
+    check(finished, "superseded request actually completes before reading its result")
+    guard finished else {
+        first.cancel(); replaced.cancel(); latest.cancel(); await gate.release()
+        _ = await first.value; _ = await replaced.value; _ = await latest.value
+        return
+    }
     let superseded = await replaced.value
     check(superseded.status == .superseded, "replaced pending request has an explicit non-success status")
     check(probe.snapshot.entered == 1 && probe.snapshot.maximumLeases == 1, "latest replacement does not create another worker")
