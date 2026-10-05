@@ -238,6 +238,7 @@ enum Suites {
         ]
         #if DEBUG
         sections.append(Section("Quick Capture send target ownership") { await runQuickCaptureSendTargetOwnershipChecks() })
+        sections.append(Section("Quick Capture created target ownership") { await runQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks(); await runTranscriptFindWorkerQueueChecks() })
         sections.append(Section("Palette search preparation") { await runPaletteSearchPreparationChecks(); await runPaletteSearchOwnershipChecks() })
         sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
@@ -412,6 +413,7 @@ enum Suites {
     ]
         #if DEBUG
         sections.append(Section("Quick Capture send target ownership (demo)") { await runDemoQuickCaptureSendTargetOwnershipChecks() })
+        sections.append(Section("Quick Capture created target ownership (demo)") { await runDemoQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission (demo)") { await runDemoTranscriptFindWorkerChecks() })
         sections.append(Section("Cache restore publication ownership (demo)") { await runDemoCacheRestorePublicationOwnershipChecks() })
         sections.append(Section("Palette search preparation (demo)") { await runDemoPaletteSearchPreparationChecks(); await runDemoPaletteSearchOwnershipChecks() })
