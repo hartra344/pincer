@@ -10,6 +10,7 @@ enum QuickCaptureAttachmentIngest {
         AttachmentIngest(limits: model.gateway?.uploadLimits ?? UploadLimits(hello: nil),
             limitsAreLastKnown: model.gateway?.uploadLimitsAreLastKnown ?? false,
             imageQueue: imageQueue,
+            reserve: { model.reserveAttachmentPreparation() },
             add: { model.attachments.append($0) }, report: report)
     }
 }

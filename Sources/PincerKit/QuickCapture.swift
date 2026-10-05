@@ -420,6 +420,19 @@ public final class QuickCaptureModel {
     public let app: AppModel
     public var text = ""
     public var attachments: [OutgoingAttachment] = []
+    public private(set) var pendingAttachmentPreparations = 0
+
+    /// Owns preparation admitted by this panel until its actual completion or queue rejection.
+    package func reserveAttachmentPreparation() -> (@MainActor @Sendable () -> Void)? {
+        guard !self.isSending else { return nil }
+        self.pendingAttachmentPreparations += 1
+        var finished = false
+        return { [self] in
+            guard !finished else { return }
+            finished = true
+            self.pendingAttachmentPreparations -= 1
+        }
+    }
     public var target: QuickCaptureTarget? {
         didSet { self.targetRevision &+= 1 }
     }
@@ -507,7 +520,7 @@ public final class QuickCaptureModel {
     }
 
     public var canSend: Bool {
-        self.hasContent && self.target != nil && self.gateway?.state.isConnected == true && !self.isSending
+        self.hasContent && self.target != nil && self.gateway?.state.isConnected == true && !self.isSending && self.pendingAttachmentPreparations == 0
     }
 
     // MARK: Picker
