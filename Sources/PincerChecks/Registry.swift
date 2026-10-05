@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
+            Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
@@ -123,6 +124,7 @@ enum Suites {
             Section(nil) { await checkSkillsTools() },
             Section("Demo skill status fields") { await runDemoSkillStatusFieldOfflineChecks(); await runDemoSkillStatusBoundaryChecks() },
             Section("Demo skill detail parameter error") { await runDemoSkillDetailParamErrorOfflineChecks() },
+            Section("Demo skill search fields") { await runDemoSkillSearchFieldValidationOfflineChecks(); await runDemoSkillSearchBoundaryChecks() },
             Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks(); await runDemoSkillDetailErrorReferenceChecks() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
             Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },
@@ -303,6 +305,7 @@ enum Suites {
     static var demoExtras: [Section] {
         var sections: [Section] = [
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
+        Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
@@ -375,6 +378,7 @@ enum Suites {
         Section("Agent file write authority (demo)") { await runDemoAgentFileWriteAuthorityChecks() },
         Section("Skill status fields (demo)") { await runDemoSkillStatusFieldChecks() },
         Section("Skill detail parameter error (demo)") { await runDemoSkillDetailParamErrorChecks() },
+        Section("Skill search fields (demo)") { await runDemoSkillSearchFieldValidationChecks() },
         Section("Skill detail error (demo)") { await runDemoSkillDetailErrorChecks() },
         Section("Skills feedback ownership (demo)") { await runDemoSkillsFeedbackOwnershipChecks() },
         Section("Numeric config bound validation (demo)") { await runDemoConfigBoundValidationSafetyChecks() },
@@ -462,6 +466,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog plugin validation (live)") { url, token in await runLiveToolsCatalogPluginValidationChecks(url: url, token: token) },
         LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
@@ -486,6 +491,7 @@ enum Suites {
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
         LiveSection("Skill status fields (live)") { url, token in await runLiveSkillStatusFieldChecks(url: url, token: token) },
         LiveSection("Skill detail parameter error (live)") { url, token in await runLiveSkillDetailParamErrorChecks(url: url, token: token) },
+        LiveSection("Skill search fields (live)") { url, token in await runLiveSkillSearchFieldValidationChecks(url: url, token: token) },
         LiveSection("Skill detail error (live)") { url, token in await runLiveSkillDetailErrorChecks(url: url, token: token) },
         LiveSection("MCP servers (live)") { url, token in await runLiveMCP(url: url, token: token) },
         LiveSection("MCP tool links (live)") { url, token in await runLiveMCPToolLinks(url: url, token: token) },
