@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 const { chromium } = createRequire(process.env.PINCER_PLAYWRIGHT_PACKAGE || import.meta.url)('playwright');
 const base = process.env.PINCER_THEME_CHECK_URL || 'http://127.0.0.1:4327/';
-const browser = await chromium.launch({ headless: true, executablePath: process.env.PINCER_THEME_BROWSER || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+const browser = await chromium.launch({ headless: true, ...(process.env.PINCER_THEME_BROWSER ? { executablePath: process.env.PINCER_THEME_BROWSER } : {}) });
 const results = {};
 try {
   const context = await browser.newContext({ colorScheme: 'dark' }), page = await context.newPage();
