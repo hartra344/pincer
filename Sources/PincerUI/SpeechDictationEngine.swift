@@ -16,7 +16,7 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
-    @ObservationIgnored private var lastText = ""
+    @ObservationIgnored private let delivery = DictationRecognitionDelivery()
     /// Mirrors the recognizer, so the button appears and disappears as availability changes.
     private var recognizerAvailable = false
 
@@ -118,20 +118,9 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
             throw DictationIssue.failed(L("Dictation couldn't use the microphone."))
         }
         self.request = request
-        self.lastText = ""
-        self.task = recognizer.recognitionTask(with: request, resultHandler: Self.handler { [weak self] outcome in
-            guard let self, self.task != nil else { return }
-            switch outcome {
-            case let .text(text, isFinal):
-                self.lastText = text
-                onPartial(text, isFinal)
-            case let .failure(issue):
-                onError(issue)
-            case .ignorable:
-                // The task ended without a usable result (nothing heard, or cancelled): wrap up quietly.
-                onPartial(self.lastText, true)
-            }
-        })
+        let deliver = self.delivery.begin(isActive: { [weak self] in self?.task != nil },
+                                          onPartial: onPartial, onError: onError)
+        self.task = recognizer.recognitionTask(with: request, resultHandler: Self.handler(deliver))
         self.observe(onPartial: onPartial)
     }
 
@@ -140,7 +129,7 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
         let finish: @Sendable () -> Void = { [weak self] in
             Task { @MainActor in
                 guard let self, self.task != nil else { return }
-                onPartial(self.lastText, true)
+                onPartial(self.delivery.lastText, true)
             }
         }
         var names: [(Notification.Name, AnyObject?)] = [(.AVAudioEngineConfigurationChange, self.audioEngine)]
@@ -159,15 +148,9 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
         return { buffer, _ in sink.append(buffer) }
     }
 
-    private enum Outcome: Sendable {
-        case text(String, isFinal: Bool)
-        case failure(DictationIssue)
-        case ignorable
-    }
-
-    nonisolated private static func handler(_ deliver: @escaping @MainActor @Sendable (Outcome) -> Void) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
+    nonisolated private static func handler(_ deliver: @escaping @MainActor @Sendable (DictationRecognitionOutcome) -> Void) -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
         { result, error in
-            let outcome: Outcome
+            let outcome: DictationRecognitionOutcome
             if let result {
                 outcome = .text(result.bestTranscription.formattedString, isFinal: result.isFinal)
             } else if let error {
