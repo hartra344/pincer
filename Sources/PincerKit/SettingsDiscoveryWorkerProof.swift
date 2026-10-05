@@ -2,10 +2,11 @@
 import Foundation
 import Darwin
 
-/// Replicates the existing SettingsDiscoveryGate's synchronous five-second condition wait.
-/// Entry and call count describe the actual discover callback, not the earlier async hold seam.
+/// Records the actual synchronous discovery before suspending its worker's completion.
+/// Explicit release retains ownership even if the worker is cancelled.
 private final class SettingsDiscoveryProofGate: @unchecked Sendable {
-    private let condition = NSCondition()
+    private let condition = NSLock()
+    private let suspension = ExplicitWorkerTestGate()
     private var released = false
     private var fallback = false
     private var expired = false
@@ -15,18 +16,24 @@ private final class SettingsDiscoveryProofGate: @unchecked Sendable {
     private var progressed = false
     var onEntry: (@Sendable () -> Void)?
     func discover(locale: String) -> DeviceSpeechCatalogSnapshot {
-        condition.lock()
-        calls += 1
-        onMain = Thread.isMainThread
-        if calls == 1 { priority = Task.currentPriority }
-        onEntry?()
-        if !Thread.isMainThread {
-            let deadline = Date().addingTimeInterval(5)
-            while !released && condition.wait(until: deadline) {}
-            if !released { expired = true }
+        condition.withLock {
+            calls += 1
+            onMain = Thread.isMainThread
+            if calls == 1 { priority = Task.currentPriority }
         }
-        condition.unlock()
         return Self.expected(locale)
+    }
+    func holdCompletion() async {
+        let expiryAction: @Sendable () -> Void = { self.expire() }
+        let expiry = DispatchWorkItem(block: expiryAction)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 5, execute: expiry)
+        defer { expiry.cancel() }
+        onEntry?()
+        await suspension.hold()
+    }
+    private func expire() {
+        condition.withLock { if !released { expired = true } }
+        open()
     }
     static func expected(_ locale: String) -> DeviceSpeechCatalogSnapshot {
         DeviceSpeechCatalogSnapshot(localeIdentifier: locale,
@@ -38,7 +45,7 @@ private final class SettingsDiscoveryProofGate: @unchecked Sendable {
             guard !released else { return }
             released = true
             self.fallback = fallback
-            condition.broadcast()
+            suspension.open()
         }
     }
     func continuationRan() {
@@ -97,6 +104,7 @@ package struct SettingsDiscoveryWorkerChildResult: Sendable {
     let fallback = DispatchWorkItem(block: fallbackAction)
     defer { fallback.cancel(); gate.open(); gate.onEntry = nil }
     if holdWorker {
+        catalog.discoveryCompletionHoldForTesting = { _ in await gate.holdCompletion() }
         gate.onEntry = {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

@@ -99,6 +99,7 @@ public final class DeviceSpeechCatalog {
     @ObservationIgnored private var pending: Request?
 
     #if DEBUG
+    @ObservationIgnored package var discoveryCompletionHoldForTesting: (@Sendable (String) async -> Void)?
     @ObservationIgnored package var discoveryHoldForTesting: (@Sendable (String) async -> Void)?
     package var actualDiscoveryTaskForTesting: Task<DeviceSpeechCatalogSnapshot, Never>? { self.inFlight }
     #endif
@@ -125,12 +126,19 @@ public final class DeviceSpeechCatalog {
         let discover = self.discover
         #if DEBUG
         let hold = self.discoveryHoldForTesting
+        let completionHold = self.discoveryCompletionHoldForTesting
         #endif
         let work = Task.detached(priority: .utility) {
             #if DEBUG
             await hold?(request.localeIdentifier)
             #endif
+            #if DEBUG
+            let discovered = discover(request.localeIdentifier)
+            await completionHold?(request.localeIdentifier)
+            return discovered
+            #else
             return discover(request.localeIdentifier)
+            #endif
         }
         self.inFlight = work
         Task { [weak self] in
