@@ -165,7 +165,7 @@ enum Suites {
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
             Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },
-            Section("Device voice region and quality") { await runDeviceSpeechVoiceLabelChecks() },
+            Section("Device voice region and quality") { await runDeviceSpeechVoiceLabelChecks(); await runDeviceSpeechVoiceLabelBoundsChecks() },
             Section("Device speech catalog") { await runDeviceSpeechCatalogChecks() },
             Section("Dictation target routing") { runDictationTargetChecks() },
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
