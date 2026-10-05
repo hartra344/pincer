@@ -165,7 +165,7 @@ A mode flag picks the mode, and each mode runs only its own suite: a mode flag d
 
 Add `--skip-intent-checks` to the plain run to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
 
-Add `--skip-perf-budgets` to any mode to report the offline perf smoke timings (message index build, query and append) without enforcing their budgets. Only clearly broken timings, such as a selective query over 1 second, still fail. Use it when other work shares the CPU. `--perf-smoke` runs only the perf smoke, with its budgets enforced.
+Add `--skip-perf-budgets` when other work shares the CPU. It reports relative message-index timings and the session-row 50 ms budget without enforcing them; invalidation counters and message-index absolute ceilings, such as a selective query over 1 second, remain enforced. `--perf-smoke` runs the message-index and actual 300-session invalidation benchmarks alone. Without the skip flag, the session-row event must stay below the unchanged 50 ms limit. The coverage child uses the skip flag to verify actual solo-lane membership without adding wall-clock enforcement to a parallel parent lane.
 
 Debug checks also enforce a deterministic sidebar work budget: a section build derives each eligible row's parent candidates at most once. This covers all organization modes and the built-in demo without relying on wall-clock timing or a persistent section cache.
 
@@ -202,7 +202,7 @@ CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar o
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
      - `PincerChecks --live-reconnect` (bootstrap races, overlapping reconnects and per-launch RPC counts) against its own mock
 
-     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
+     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets, including the same 50 ms session-row event limit at 300 sessions. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
 `.github/workflows/docs.yml` builds the website (`npm ci && npm run build` in `website/`) on pull requests and pushes to `main` that change it.
 
