@@ -26,7 +26,7 @@ struct MessagePartExcerptCacheTests {
         let calls = Mutex(0)
         let backgroundFlags = Mutex<[Bool]>([])
         let cache = MessagePartExcerptCache(entryLimit: 8, byteLimit: 4_096) { source in
-            let wasMain = Thread.isMainThread
+            let wasMain = workerTestIsMainThread()
             calls.withLock { $0 += 1 }
             backgroundFlags.withLock { $0.append(wasMain) }
             started.withLock { $0 = true }

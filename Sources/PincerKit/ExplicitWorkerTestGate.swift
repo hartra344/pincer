@@ -1,6 +1,9 @@
 #if DEBUG
 import Foundation
 
+/// Read the actual current thread synchronously at the calling probe boundary.
+package func workerTestIsMainThread() -> Bool { Thread.isMainThread }
+
 /// Fixture-only exactly-once signal. Cancellation never releases held worker work.
 private final class WorkerTestSignal: @unchecked Sendable {
     private let lock = NSLock()

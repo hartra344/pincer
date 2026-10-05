@@ -16,7 +16,7 @@ private final class PreviewPreparationGate: @unchecked Sendable {
     func probe() async {
         let hold = lock.withLock {
             calls += 1
-            wasMain = wasMain || Thread.isMainThread
+            wasMain = wasMain || workerTestIsMainThread()
             return calls == heldCall
         }
         if hold {

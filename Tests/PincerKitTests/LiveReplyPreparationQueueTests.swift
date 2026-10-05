@@ -298,7 +298,7 @@ private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
         let heldGate = self.lock.withLock { () -> ExplicitWorkerTestGate? in
             self.started.append(input.itemID)
             self.normalizedText.append((input.itemID, input.textBlocks.joined(separator: "\n\n")))
-            self.onMain.append(Thread.isMainThread)
+            self.onMain.append(workerTestIsMainThread())
             return self.blockedIDs.remove(input.itemID) != nil ? self.release : nil
         }
         if let heldGate { await heldGate.hold() }

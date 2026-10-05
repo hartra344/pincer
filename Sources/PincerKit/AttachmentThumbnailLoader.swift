@@ -180,7 +180,7 @@ public final class AttachmentThumbnailLoader {
         observer: (@Sendable (UUID, UUID, String, Int, Bool, CGImage?) -> Void)?
     ) async -> CGImage? {
         let image = await decoder(data, maxPixel)
-        observer?(attachmentID, previewIdentity, fileName, maxPixel, Thread.isMainThread, image)
+        observer?(attachmentID, previewIdentity, fileName, maxPixel, workerTestIsMainThread(), image)
         return image
     }
     #else

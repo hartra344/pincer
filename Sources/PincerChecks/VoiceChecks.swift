@@ -379,7 +379,13 @@ private func readAloudCallbackOptInCheck(_ chat: ChatStore) async {
     let normalized = Mutex<[(String, Bool)]>([])
     let previousQueue = chat.liveReplyPreparationQueue
     chat.liveReplyPreparationQueue = LiveReplyPreparationQueue(normalizer: { input in
-        normalized.withLock { $0.append((input.itemID, Thread.isMainThread)) }
+        normalized.withLock {
+            #if DEBUG
+            $0.append((input.itemID, workerTestIsMainThread()))
+            #else
+            $0.append((input.itemID, Thread.isMainThread))
+            #endif
+        }
         return SpeechText.isSpeakable(textBlocks: input.textBlocks, itemID: input.itemID)
     })
     defer {
