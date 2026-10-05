@@ -8,7 +8,11 @@ import UIKit
 @MainActor extension TranscriptUIKitHostedTests {
     @Test(.timeLimit(.minutes(2))) func backgroundRefreshNoteTracksActualPowerNotification() async throws {
         var lowPower = false
-        let power = BackgroundRefreshPowerState(read: { lowPower }), center = NotificationCenter()
+        var readsOnMain = true, reads = 0
+        let power = BackgroundRefreshPowerState(read: {
+            readsOnMain = readsOnMain && Thread.isMainThread; reads += 1
+            return lowPower
+        }), center = NotificationCenter()
         let controller = UIHostingController(rootView: Form {
             BackgroundRefreshPowerNote(delivery: .backgroundRefresh, power: power, center: center)
         })
@@ -18,14 +22,15 @@ import UIKit
         try #require(await eventually { controller.view.window != nil })
         #expect(!power.showsPauseNote(delivery: .backgroundRefresh))
         lowPower = true
-        center.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
+        await Task.detached { center.post(name: .NSProcessInfoPowerStateDidChange, object: nil) }.value
         try #require(await eventually { power.isLowPowerModeEnabled })
         #expect(power.showsPauseNote(delivery: .backgroundRefresh))
         #expect(!power.showsPauseNote(delivery: .pushRelay) && !power.showsPauseNote(delivery: .off))
         lowPower = false
-        center.post(name: .NSProcessInfoPowerStateDidChange, object: nil)
+        await Task.detached { center.post(name: .NSProcessInfoPowerStateDidChange, object: nil) }.value
         try #require(await eventually { !power.isLowPowerModeEnabled })
         #expect(!power.showsPauseNote(delivery: .backgroundRefresh))
+        #expect(readsOnMain && reads >= 3, "Actual power reader stays on Main after background notification delivery")
     }
 }
 #endif

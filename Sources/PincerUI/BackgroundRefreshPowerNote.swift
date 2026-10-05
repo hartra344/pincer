@@ -20,7 +20,7 @@ struct BackgroundRefreshPowerNote: View {
             }
         }
         .onAppear { self.power.refresh() }
-        .onReceive(self.center.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in self.power.refresh() }
+        .onReceive(self.center.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in self.power.refresh() }
     }
 }
 #endif
