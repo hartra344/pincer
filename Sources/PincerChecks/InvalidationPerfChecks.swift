@@ -70,7 +70,11 @@ func runInvalidationPerfChecks() {
     let sectionsMs = millis { _ = gateway.sections() }
     print(String(format: "  ms/event at %d sessions (N=%d): row change+sections=%.3f  no-op event+sections=%.3f  sections alone=%.3f",
                  rowCount, rounds, changedMs, noopMs, sectionsMs))
-    check(changedMs < 50, "sessions row event stays under 50 ms at 300 sessions")
+    if skipPerfBudgets {
+        print("  · sessions row event stays under 50 ms at 300 sessions (observed; --skip-perf-budgets)")
+    } else {
+        check(changedMs < 50, "sessions row event stays under 50 ms at 300 sessions")
+    }
 
     // An identical snapshot must not invalidate observers of `sessions`.
     var identical = 0

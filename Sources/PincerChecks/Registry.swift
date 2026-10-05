@@ -579,6 +579,7 @@ enum Suites {
 
     /// Budgets enforced; run it alone.
     static let perfSmoke: [Section] = [
+        Section("Invalidation perf") { runInvalidationPerfChecks() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
     ]
 }
