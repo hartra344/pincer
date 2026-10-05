@@ -326,6 +326,8 @@ extension ReadAloudControllerTests {
         weak var weakOwner = owner
         let controller = try #require(owner?.controller)
         let gateway = try #require(owner?.gateway)
+        let player = try #require(owner?.player)
+        let speaker = try #require(owner?.speaker)
         let long = String(repeating: "This is a sentence. ", count: 400)
         controller.start(messageId: "owned-lifetime", text: long, gateway: gateway)
         let task = try #require(controller.deviceVoiceTaskForTesting)
@@ -336,6 +338,7 @@ extension ReadAloudControllerTests {
         defer { controller.stop() }
         await task.value
         #expect(controller.phase == .idle)
+        #expect(player.played.count > 10 && speaker.spoken.isEmpty)
         if let owner {
             #expect(owner.speakCalls.count > 10 && owner.speakCalls.allSatisfy { $0.count <= SpeechChunker.limit })
             #expect(owner.speakCalls.joined(separator: " ").count == long.trimmingCharacters(in: .whitespaces).count)

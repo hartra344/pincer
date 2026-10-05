@@ -4,6 +4,7 @@
     do {
         let evidence = try await readAloudHarnessLifetimeProof()
         check(evidence.retainedPassed, "exact ordinary actual Harness child completes")
+        if !evidence.retainedPassed || !evidence.releasedPassed { print(evidence.diagnostics) }
         check(evidence.retainedPassed && evidence.releasedPassed, "released actual Harness child completes without abort")
     } catch { check(false, "owned Harness lifetime child setup succeeds") }
 }

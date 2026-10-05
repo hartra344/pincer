@@ -6,8 +6,8 @@ import Testing
 struct ReadAloudHarnessLifetimeProofTests {
     @Test func releasedActualHarnessDoesNotAbortItsQueuedControllerTask() async throws {
         let evidence = try await readAloudHarnessLifetimeProof()
-        try #require(evidence.retainedPassed, "exact selected ordinary child must complete")
-        #expect(evidence.releasedPassed, "released actual Harness child must finish normally, status \(evidence.releasedStatus)")
+        try #require(evidence.retainedPassed, "exact selected ordinary child must complete: \(evidence.diagnostics)")
+        #expect(evidence.releasedPassed, "released actual Harness child must finish normally, status \(evidence.releasedStatus): \(evidence.diagnostics)")
     }
 }
 #endif
