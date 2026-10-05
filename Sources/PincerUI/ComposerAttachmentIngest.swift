@@ -4,7 +4,7 @@ import PincerKit
 @MainActor
 enum ComposerAttachmentIngest {
     static func canAttach(chat: ChatStore, gateway: GatewayStore) -> Bool {
-        gateway.state.isConnected || gateway.canPersistAttachments(bytes: 0)
+        !(chat.isSendingEdit && chat.editTarget != nil) && (gateway.state.isConnected || gateway.canPersistAttachments(bytes: 0))
     }
 
     static func make(chat: ChatStore, gateway: GatewayStore,

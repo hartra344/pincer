@@ -162,6 +162,7 @@ struct Composer: View {
         .padding(.top, Theme.Spacing.sm)
         .padding(.bottom, Theme.Spacing.xl)
         .onDrop(of: [.fileURL, .image, .audiovisualContent, .pdf], isTargeted: self.$isTargeted) { providers in
+            guard self.canAttach else { return false }
             self.ingest(providers.map(PastedMedia.provider))
             return true
         }

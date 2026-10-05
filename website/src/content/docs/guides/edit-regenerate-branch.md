@@ -22,7 +22,7 @@ When you send, the chat rewinds to before that message and your edited text is s
 
 If you cancel or select another message while the rewind is pending, its late completion keeps your new draft and does not resend the old edit. A rewind already applied by the Gateway is not undone by Cancel.
 
-If the original message had images, they're kept and sent again with the edited text.
+If the original message had images, they're kept and sent again with the edited text. While the edit is being submitted, Attach is disabled and new drops into that edit are refused. Image preparation already owned by your saved normal draft continues, and that draft can accept attachments once it returns.
 
 ## Regenerate
 
