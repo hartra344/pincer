@@ -266,7 +266,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
             Section("Unit terminal completion") { await runUnitTerminalCompletionChecks() },
             Section("Unit diagnostic capture") { await runUnitDiagnosticCaptureChecks() },
-            Section("Unit abort evidence") { await runUnitAbortEvidenceChecks() },
+            Section("Unit abort evidence") { await runUnitAbortEvidenceChecks(); await runUnitNativeEvidenceChecks() },
             Section("Cooperative worker gate") { await runCooperativeWorkerGateChecks() },
             Section("Catalog worker gate") { await runCatalogWorkerGateChecks() },
             Section("Image probe terminal completion") { await runImageLoaderTerminalProofChecks() },
@@ -504,7 +504,7 @@ enum Suites {
         #endif
         sections.append(Section("Unit terminal completion infrastructure (Demo lane)") { await runUnitTerminalCompletionChecks() })
         sections.append(Section("Unit diagnostic capture infrastructure (Demo lane)") { await runUnitDiagnosticCaptureChecks() })
-        sections.append(Section("Unit abort evidence infrastructure (Demo lane)") { await runUnitAbortEvidenceChecks() })
+        sections.append(Section("Unit abort evidence infrastructure (Demo lane)") { await runUnitAbortEvidenceChecks(); await runUnitNativeEvidenceChecks() })
         sections.append(Section("Cooperative worker gate infrastructure (Demo lane)") { await runCooperativeWorkerGateChecks() })
         sections.append(Section("Catalog worker gate infrastructure (Demo lane)") { await runCatalogWorkerGateChecks() })
         sections.append(Section("Image probe terminal completion infrastructure (Demo lane)") { await runImageLoaderTerminalProofChecks() })

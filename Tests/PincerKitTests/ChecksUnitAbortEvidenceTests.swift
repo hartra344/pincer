@@ -11,5 +11,12 @@ struct ChecksUnitAbortEvidenceTests {
         let result = try await runUnitAbortEvidenceFixture(script: script)
         #expect(result.0 == 0, "Actual owned diagnostic subprocess controls: \(result.1)")
     }
+    @Test func ownedNativeIdentityAndParserSelectionAreStrict() async throws {
+        let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("scripts/test_checks_unit_native_evidence.py")
+        let result = try await runUnitAbortEvidenceFixture(script: script)
+        #expect(result.0 == 0, "Owned native identity and parser-only controls: \(result.1)")
+    }
+
 }
 #endif
