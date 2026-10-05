@@ -4,6 +4,7 @@ import Darwin
 
 package struct SoloSessionBudgetCoverage: Sendable {
     package let status: Int32
+    package let diagnostics: String
     package let existingPerfControlsPassed: Bool
     package let actualSessionTimingPrinted: Bool
     package let actualSessionCounterControlsPassed: Bool
@@ -69,7 +70,35 @@ private func inspectSoloSessionBudgetSynchronously(executable: URL) throws -> So
         "✓ perf smoke: append under the absolute ceiling",
         "✓ perf smoke: append rewrites ≤ 1/5 of the bytes and fewer files than the full save",
     ]
-    return SoloSessionBudgetCoverage(status: child.terminationStatus,
+    // Never forward arbitrary child output: retain canonical control labels and numeric
+    // observations only, bounded to 16 lines / 2 KiB. The source uses the protected shared writer.
+    var diagnosticLines = ["source: actual perf-smoke / protected shared transcript writer"]
+    let labels = controls.map { String($0.dropFirst(2)) }
+    for label in labels {
+        if lines.contains("✓ " + label) { diagnosticLines.append("PASS " + label) }
+        else if lines.contains(where: { $0.hasPrefix("✗ " + label + " (line") || $0 == "✗ " + label }) {
+            diagnosticLines.append("FAIL " + label)
+        } else { diagnosticLines.append("MISSING " + label) }
+    }
+    let numericPrefixes = [
+        "· perf smoke: 2 × 5k messages saved and indexed in",
+        "· perf smoke: selective query, median of 5:",
+        "· perf smoke: append to a 5k chat saved and indexed in",
+        "✗ cancelling one search doesn't interrupt another, larger index (",
+        "✓ cancelling one search doesn't interrupt another, larger index (",
+        "ms/event at 300 sessions (N=50): row change+sections=",
+    ]
+    let numberPattern = try NSRegularExpression(pattern: #"-?[0-9]+(?:\.[0-9]+)?"#)
+    for (index, prefix) in numericPrefixes.enumerated() {
+        guard let line = lines.first(where: { $0.hasPrefix(prefix) }) else { continue }
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        let numbers = numberPattern.matches(in: line, range: range).prefix(16).compactMap { match in
+            Range(match.range, in: line).map { String(line[$0]) }
+        }
+        diagnosticLines.append("observation[\(index)] numeric values: " + numbers.joined(separator: ","))
+    }
+    let diagnostics = String(diagnosticLines.prefix(16).joined(separator: "\n").prefix(2048))
+    return SoloSessionBudgetCoverage(status: child.terminationStatus, diagnostics: diagnostics,
         existingPerfControlsPassed: controls.allSatisfy { lines.contains($0) },
         actualSessionTimingPrinted: lines.contains {
             $0.hasPrefix("ms/event at 300 sessions (N=50): row change+sections=") &&
