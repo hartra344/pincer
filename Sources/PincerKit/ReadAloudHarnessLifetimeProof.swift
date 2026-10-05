@@ -46,6 +46,19 @@ package func readAloudHarnessLifetimeProof() async throws -> ReadAloudHarnessLif
         guard lookup.terminationStatus == 0 else { throw CocoaError(.executableNotLoadable) }
         let swift = URL(fileURLWithPath: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
         let helper = swift.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("libexec/swift/pm/swiftpm-testing-helper")
+        let platformLookup = Process(), platformPipe = Pipe()
+        platformLookup.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        platformLookup.arguments = ["--sdk", "macosx", "--show-sdk-platform-path"]
+        platformLookup.standardOutput = platformPipe; platformLookup.standardError = FileHandle.nullDevice
+        try platformLookup.run()
+        try finish(platformLookup, seconds: 5)
+        let platformData = platformPipe.fileHandleForReading.readDataToEndOfFile()
+        guard platformLookup.terminationStatus == 0 else { throw CocoaError(.executableNotLoadable) }
+        let platform = URL(fileURLWithPath: String(decoding: platformData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+        let frameworks = platform.appendingPathComponent("Developer/Library/Frameworks")
+        guard FileManager.default.fileExists(atPath: frameworks.appendingPathComponent("XCTest.framework").path) else {
+            throw CocoaError(.executableNotLoadable)
+        }
         let kit = root.appendingPathComponent(".build/debug/PincerKitTests.xctest/Contents/MacOS/PincerKitTests")
         let aggregate = root.appendingPathComponent(".build/debug/PincerPackageTests.xctest/Contents/MacOS/PincerPackageTests")
         let bundle = FileManager.default.isExecutableFile(atPath: kit.path) ? kit : aggregate
@@ -65,6 +78,8 @@ package func readAloudHarnessLifetimeProof() async throws -> ReadAloudHarnessLif
             process.arguments = ["--test-bundle-path", bundle.path, "--testing-library", "swift-testing", "--filter", "ReadAloudControllerTests/actualHarnessLifetimeChild"]
             process.currentDirectoryURL = root
             var env = ProcessInfo.processInfo.environment
+            let inheritedFrameworks = env["DYLD_FRAMEWORK_PATH"].flatMap { $0.isEmpty ? nil : $0 }
+            env["DYLD_FRAMEWORK_PATH"] = frameworks.path + (inheritedFrameworks.map { ":" + $0 } ?? "")
             env["PINCER_READ_ALOUD_LIFETIME_CHILD"] = mode
             env["PINCER_DEV_NAMESPACE"] = "lifetime-" + UUID().uuidString
             env["PINCER_KEYCHAIN"] = "memory"
