@@ -37,7 +37,7 @@ extension DemoGateway {
                 throw Self.skillsInvalid("invalid skills.detail params: version must be a non-empty string")
             }
             guard let entry = self.catalogEntry(ref) else {
-                throw GatewayError.rpc(code: "UNAVAILABLE", message: "ClawHub skill \"\(ref)\" not found", details: nil)
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: Self.missingSkillDetailMessage(ref), details: nil)
             }
             if entry["installOnly"]?.bool == true {
                 throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
@@ -72,6 +72,21 @@ extension DemoGateway {
     }
 
     // MARK: skills.install
+
+    /// Mirrors upstream encodeURIComponent(path slug) and the mock's canonical 404 body.
+    private static func missingSkillDetailMessage(_ reference: String) -> String {
+        var slug = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if slug.hasPrefix("@") {
+            let parts = slug.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+            if parts.count == 2, !parts[0].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !parts[1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        let encoded = slug.addingPercentEncoding(withAllowedCharacters: allowed) ?? slug
+        return "ClawHub /api/v1/skills/\(encoded) failed (404): Skill not found"
+    }
 
     private func installSkill(_ params: JSONValue) throws -> JSONValue {
         let source = params["source"]?.text
