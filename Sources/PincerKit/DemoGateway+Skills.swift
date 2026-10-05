@@ -59,6 +59,14 @@ extension DemoGateway {
             return try self.updateSkill(params)
         case "tools.catalog":
             try Self.checkKeys(method, params, ["agentId", "includePlugins"])
+            if let agentId = params["agentId"] {
+                guard case let .string(value) = agentId else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must be string")
+                }
+                guard !value.isEmpty else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must NOT have fewer than 1 characters")
+                }
+            }
             if let includePlugins = params["includePlugins"] {
                 guard case .bool = includePlugins else {
                     throw Self.skillsInvalid("invalid tools.catalog params: at /includePlugins: must be boolean")
