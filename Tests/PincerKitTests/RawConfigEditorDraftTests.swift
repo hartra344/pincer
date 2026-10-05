@@ -4,13 +4,28 @@ import Testing
 
 private final class RawValidationGate: @unchecked Sendable {
     let lock = NSLock()
-    let release = DispatchSemaphore(value: 0)
     private var entered = false
     var hasEntered: Bool { lock.lock(); defer { lock.unlock() }; return entered }
+    #if DEBUG
+    private let gate = ExplicitWorkerTestGate()
+    private func recordEntry() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let first = !entered; entered = true
+        return first
+    }
+    func observe() async {
+        if recordEntry() { await gate.hold() }
+    }
+    func waitUntilEntered() async -> Bool { await gate.waitUntilEntered(timeout: 10) }
+    func open() { gate.open() }
+    #else
+    let release = DispatchSemaphore(value: 0)
     func observe() {
         lock.lock(); let first = !entered; entered = true; lock.unlock()
         if first { _ = release.wait(timeout: .now() + 15) }
     }
+    func open() { release.signal() }
+    #endif
 }
 
 @MainActor @Suite("Raw config editor intent")
@@ -50,19 +65,40 @@ struct RawConfigEditorDraftTests {
         let draft = RawConfigEditorDraft()
         draft.updateSnapshot("{}")
         let gate = RawValidationGate()
+        #if DEBUG
+        draft.validationObserver = { await gate.observe() }
+        #else
         draft.validationObserver = { gate.observe() }
-        defer { gate.release.signal() }
+        #endif
+        defer { gate.open() }
         draft.edit("{valid:1}")
+        #if DEBUG
+        let oldValidation = draft.actualValidationTaskForTesting
+        do {
+            let entered = await gate.waitUntilEntered()
+            try Task.checkCancellation()
+            try #require(entered)
+        } catch {
+            gate.open()
+            await oldValidation?.value
+            await draft.waitForValidation()
+            throw error
+        }
+        #else
         let deadline = ContinuousClock.now + .seconds(10)
         while !gate.hasEntered {
             try Task.checkCancellation()
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
         }
+        #endif
         for value in 0..<100 { draft.edit("{value:\(value)}") }
         draft.edit("{broken")
         #expect(draft.validationPending && draft.validationError == nil)
-        gate.release.signal()
+        gate.open()
+        #if DEBUG
+        await oldValidation?.value
+        #endif
         await draft.waitForValidation()
         #expect(!draft.validationPending && draft.validationError != nil && draft.text == "{broken")
         draft.revert()
@@ -100,18 +136,39 @@ struct RawConfigEditorDraftTests {
         let draft = RawConfigEditorDraft()
         draft.updateSnapshot("{value:1}")
         let gate = RawValidationGate()
+        #if DEBUG
+        draft.validationObserver = { await gate.observe() }
+        #else
         draft.validationObserver = { gate.observe() }
-        defer { gate.release.signal() }
+        #endif
+        defer { gate.open() }
         draft.edit("{value:1}")
+        #if DEBUG
+        let oldValidation = draft.actualValidationTaskForTesting
+        do {
+            let entered = await gate.waitUntilEntered()
+            try Task.checkCancellation()
+            try #require(entered)
+        } catch {
+            gate.open()
+            await oldValidation?.value
+            await draft.waitForValidation()
+            throw error
+        }
+        #else
         let deadline = ContinuousClock.now + .seconds(10)
         while !gate.hasEntered {
             try Task.checkCancellation()
             try #require(ContinuousClock.now < deadline)
             await Task.yield()
         }
+        #endif
         draft.updateSnapshot("{value:2}")
         #expect(draft.validationPending && draft.beginSave() == nil)
-        gate.release.signal()
+        gate.open()
+        #if DEBUG
+        await oldValidation?.value
+        #endif
         await draft.waitForValidation()
         #expect(draft.isEdited && draft.text == "{value:1}" && draft.baseline == "{value:2}")
         #expect(!draft.validationPending && draft.validationError == nil)

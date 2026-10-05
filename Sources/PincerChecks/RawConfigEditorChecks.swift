@@ -16,6 +16,23 @@ private final class RawValidationGate: @unchecked Sendable {
         defer { self.condition.unlock() }
         return self.main
     }
+    #if DEBUG
+    private let gate = ExplicitWorkerTestGate()
+    private func recordEntry() -> (first: Bool, main: Bool) {
+        self.condition.lock()
+        defer { self.condition.unlock() }
+        let first = !self.started
+        self.started = true
+        self.main = Thread.isMainThread
+        return (first, self.main)
+    }
+    func hold() async {
+        let entry = self.recordEntry()
+        if entry.first && !entry.main { await self.gate.hold() }
+    }
+    func waitUntilEntered() async -> Bool { await self.gate.waitUntilEntered(timeout: 15) }
+    func release() { self.gate.open() }
+    #else
     func hold() {
         self.condition.lock()
         defer { self.condition.unlock() }
@@ -33,6 +50,7 @@ private final class RawValidationGate: @unchecked Sendable {
         self.condition.broadcast()
         self.condition.unlock()
     }
+    #endif
 }
 
 private final class RawValidationObservation: @unchecked Sendable {
@@ -124,15 +142,33 @@ func runRawConfigEditorChecks() async {
     defer { gate.release() }
     let changingBaseline = RawConfigEditorDraft()
     changingBaseline.updateSnapshot("{value: 1}")
+    #if DEBUG
+    changingBaseline.validationObserver = { await gate.hold() }
+    #else
     changingBaseline.validationObserver = { gate.hold() }
+    #endif
     changingBaseline.edit("{value: 2}")
-    guard await waitFor("actual pending raw baseline comparison", { gate.hasStarted }) else {
+    #if DEBUG
+    let oldValidation = changingBaseline.actualValidationTaskForTesting
+    let entered = await gate.waitUntilEntered()
+    #else
+    let entered = await waitFor("actual pending raw baseline comparison", { gate.hasStarted })
+    #endif
+    guard entered && !Task.isCancelled else {
+        gate.release()
+        #if DEBUG
+        await oldValidation?.value
+        #endif
+        await changingBaseline.waitForValidation()
         check(false, "the actual validator reaches its held worker boundary"); return
     }
     check(changingBaseline.validationPending && !gate.ranOnMain,
           "the current raw revision remains pending while its actual off-main worker is held")
     changingBaseline.updateSnapshot("{value: 2}")
     gate.release()
+    #if DEBUG
+    await oldValidation?.value
+    #endif
     await changingBaseline.waitForValidation()
     check(changingBaseline.text == "{value: 2}" && changingBaseline.baseline == "{value: 2}"
           && !changingBaseline.isEdited && !changingBaseline.validationPending,

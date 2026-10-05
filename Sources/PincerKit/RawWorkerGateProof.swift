@@ -6,18 +6,22 @@ import Darwin
 /// Explicit release owns the held worker even when its task is cancelled.
 private final class RawProofGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let suspension = DispatchSemaphore(value: 0)
+    private let suspension = ExplicitWorkerTestGate()
     private var priority: TaskPriority?
     private var calls = 0
     private var released = false
     private var fallback = false
     private var progressed = false
     var onEntry: (@Sendable () -> Void)?
-    func hold() {
+    func hold() async {
         let first = lock.withLock { () -> Bool in calls += 1; if calls == 1 { priority = Task.currentPriority }; return calls == 1 }
         guard first else { return }
         onEntry?()
-        if suspension.wait(timeout: .now() + 15) == .timedOut { lock.withLock { released = true; fallback = true } }
+        let expiryAction: @Sendable () -> Void = { self.open(expired: true) }
+        let expiry = DispatchWorkItem(block: expiryAction)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: expiry)
+        defer { expiry.cancel() }
+        await suspension.hold()
     }
     func open(expired: Bool = false) {
         let signal = lock.withLock { () -> Bool in
@@ -26,7 +30,7 @@ private final class RawProofGate: @unchecked Sendable {
             fallback = expired
             return true
         }
-        if signal { suspension.signal() }
+        if signal { suspension.open() }
     }
     func continuationRan() {
         lock.withLock { progressed = !fallback }
@@ -107,7 +111,7 @@ package struct RawWorkerChildResult: Sendable {
             }
         }
     }
-    draft.validationObserver = { gate.hold() }
+    draft.validationObserver = { await gate.hold() }
     draft.edit("{value:1}")
     DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: fallback)
     for await _ in signal.stream { break }

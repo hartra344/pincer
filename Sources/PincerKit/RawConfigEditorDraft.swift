@@ -24,7 +24,11 @@ package final class RawConfigEditorDraft {
         let baseline: String?
     }
     @ObservationIgnored private var pending: ValidationInput?
+    #if DEBUG
+    @ObservationIgnored package var validationObserver: (@Sendable () async -> Void)?
+    #else
     @ObservationIgnored package var validationObserver: (@Sendable () -> Void)?
+    #endif
     #if DEBUG
     package var actualValidationTaskForTesting: Task<Void, Never>? { active }
     #endif
@@ -96,7 +100,12 @@ package final class RawConfigEditorDraft {
         let observer = self.validationObserver
         self.active = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
-                (Self.parseError(input.text, observer: observer), input.baseline.map { input.text == $0 } ?? false)
+                #if DEBUG
+                await observer?()
+                return (Self.parseError(input.text), input.baseline.map { input.text == $0 } ?? false)
+                #else
+                return (Self.parseError(input.text, observer: observer), input.baseline.map { input.text == $0 } ?? false)
+                #endif
             }.value
             guard let self else { return }
             self.active = nil
