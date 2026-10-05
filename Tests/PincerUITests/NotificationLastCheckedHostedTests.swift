@@ -20,21 +20,31 @@ import UIKit
         let host = UIHostingController(rootView: NotificationLastCheckedValue(saved: saved))
         let window = UIWindow(windowScene: scene)
         window.rootViewController = host; window.makeKeyAndVisible()
-        defer { window.isHidden = true }
-        func labels(_ view: UIView) -> [String] {
-            var result = view.accessibilityLabel.map { [$0] } ?? []
-            for element in view.accessibilityElements ?? [] {
-                if let element = element as? UIAccessibilityElement, let label = element.accessibilityLabel { result.append(label) }
-                else if let child = element as? UIView { result += labels(child) }
+        defer { window.isHidden = true; window.rootViewController = nil }
+        func eligibleLabels() -> Set<String> {
+            var visited = Set<ObjectIdentifier>(), labels = Set<String>(), count = 0
+            func walk(_ object: NSObject, depth: Int) {
+                guard depth <= 32, count < 512, visited.insert(ObjectIdentifier(object)).inserted else { return }
+                count += 1
+                if let view = object as? UIView {
+                    if let label = view.accessibilityLabel { labels.insert(label) }
+                    for element in view.accessibilityElements ?? [] {
+                        if let object = element as? NSObject { walk(object, depth: depth + 1) }
+                    }
+                    for child in view.subviews { walk(child, depth: depth + 1) }
+                } else if let element = object as? UIAccessibilityElement, let label = element.accessibilityLabel {
+                    labels.insert(label)
+                }
             }
-            for child in view.subviews { result += labels(child) }
-            return result
+            walk(host.view, depth: 0)
+            return Set(labels.filter { $0.contains("Up to date") && $0 != "Up to date" })
         }
         var first: String?
         let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         while first == nil && ContinuousClock.now < deadline {
             try Task.checkCancellation()
-            first = labels(host.view).first { $0.contains("Up to date") && $0 != "Up to date" }
+            let eligible = eligibleLabels()
+            if eligible.count == 1 { first = eligible.first }
             try await Task.sleep(for: .milliseconds(100))
         }
         let initial = try #require(first, "Actual rendered accessibility label unavailable: app-host qualification blocker")
@@ -42,7 +52,8 @@ import UIKit
         let changeDeadline = ContinuousClock.now.advanced(by: .seconds(15))
         while !changed && ContinuousClock.now < changeDeadline {
             try Task.checkCancellation()
-            changed = labels(host.view).contains { $0.contains("Up to date") && $0 != initial }
+            let eligible = eligibleLabels()
+            changed = eligible.count == 1 && eligible.first != initial
             try await Task.sleep(for: .milliseconds(100))
         }
         #expect(changed, "Actual relative label must update while saved date, suffix and root view stay fixed")
