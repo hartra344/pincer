@@ -11,12 +11,17 @@ struct DemoSkillStatusBoundaryTests {
         let again = try await demo.handle("skills.status", ["agentId": "research"])
         #expect(again == report)
     }
-    @Test func rawWhitespaceAndUnknownIdsKeepExistingResolutionErrors() async throws {
+    @Test func rawWhitespaceDefaultsAndUnknownIdsKeepExistingResolution() async throws {
         let demo = DemoGateway()
+        let ordinary = try await demo.handle("skills.status", [:])
+        let skills = try #require(ordinary["skills"]?.array)
+        #expect(!skills.isEmpty && ordinary["agentId"]?.string == "main")
+        for field in ["agentId", "sessionKey"] {
+            let whitespace = try await demo.handle("skills.status", .object([field: " "]))
+            #expect(whitespace == ordinary)
+        }
         for (params, expected) in [
-            (JSONValue.object(["agentId": " "]), "unknown agent id \" \""),
-            (.object(["agentId": "missing-agent"]), "unknown agent id \"missing-agent\""),
-            (.object(["sessionKey": " "]), "Session not found."),
+            (JSONValue.object(["agentId": "missing-agent"]), "unknown agent id \"missing-agent\""),
             (.object(["sessionKey": "agent:main:missing"]), "Session not found."),
             (.object(["extra": true]), "invalid skills.status params: must NOT have additional properties (extra)"),
         ] {
