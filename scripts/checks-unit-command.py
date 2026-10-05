@@ -46,17 +46,23 @@ def owned_members(leader, records):
     return sorted(owned, key=priority)[:8]
 
 
-def sample_owned(group, directory):
+def sample_owned(group, directory, evidence=None):
     samples = []
+    details = evidence if evidence is not None else {}
+    details["sampleCandidates"] = []
+    details["sampleErrors"] = []
     if sys.platform != "darwin":
         return samples
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     try:
         records = process_snapshot(timeout=min(5, deadline - time.monotonic()))
         members = owned_members(group, records)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as error:
+        details["sampleErrors"].append({"stage": "snapshot", "error": type(error).__name__})
         return samples
     for pid in members:
+        identity = records.get(pid)
+        details["sampleCandidates"].append({"pid": pid, "parent": identity[0] if identity else None, "started": identity[1] if identity else None, "command": identity[2] if identity else None})
         try:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -64,6 +70,7 @@ def sample_owned(group, directory):
             # Recheck start identity AND current ancestry immediately before reading stacks.
             current = process_snapshot(timeout=min(5, remaining))
             if current.get(pid) != records.get(pid) or pid not in owned_members(group, current):
+                details["sampleErrors"].append({"pid": pid, "stage": "identity", "error": "ownershipChanged"})
                 continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -71,10 +78,13 @@ def sample_owned(group, directory):
             name = "unit-stack-" + str(pid) + ".txt"
             with (directory / (name + ".sampler.log")).open("wb") as output:
                 result = subprocess.run(["/usr/bin/sample", str(pid), "1", "1", "-file", str(directory / name)],
-                                        stdout=output, stderr=subprocess.STDOUT, timeout=min(5, remaining))
+                                        stdout=output, stderr=subprocess.STDOUT, timeout=remaining)
             if result.returncode == 0 and (directory / name).is_file():
                 samples.append(name)
-        except (OSError, subprocess.SubprocessError):
+            else:
+                details["sampleErrors"].append({"pid": pid, "stage": "sample", "returncode": result.returncode})
+        except (OSError, subprocess.SubprocessError) as error:
+            details["sampleErrors"].append({"pid": pid, "stage": "sample", "error": type(error).__name__})
             continue
     return samples
 
@@ -85,6 +95,7 @@ def main():
     child = subprocess.Popen(sys.argv[1:], start_new_session=True)
     forwarding = False
     watchdog_active = False
+    signal_errors = []
 
     def forward(signum, _frame):
         nonlocal forwarding
@@ -96,8 +107,8 @@ def main():
             if watchdog_active or (child.returncode is None and child.poll() is None):
                 try:
                     os.killpg(child.pid, signum)
-                except ProcessLookupError:
-                    pass
+                except OSError as error:
+                    signal_errors.append({"signal": signal.Signals(signum).name, "errno": error.errno})
         finally:
             forwarding = False
 
@@ -111,27 +122,34 @@ def main():
         except subprocess.TimeoutExpired:
             watchdog_active = True
             directory = Path(os.environ.get("CHECKS_LOG_DIR", "."))
-            evidence = {"timedOut": True, "ownedPid": child.pid, "ceilingSeconds": timeout, "samples": [], "nativeDescendantCleanupVerified": False}
+            evidence = {"timedOut": True, "ownedPid": child.pid, "ceilingSeconds": timeout, "samples": [], "nativeDescendantCleanupVerified": False, "signalErrors": signal_errors, "captureWindowSeconds": 30}
             try:
                 directory.mkdir(parents=True, exist_ok=True)
                 (directory / "unit-watchdog.json").write_text(json.dumps(evidence) + "\n")
-                evidence["samples"] = sample_owned(child.pid, directory)
+                evidence["samples"] = sample_owned(child.pid, directory, evidence)
                 (directory / "unit-watchdog.json").write_text(json.dumps(evidence) + "\n")
             except OSError:
                 pass
             finally:
-                # Signal BEFORE wait/reap: even a naturally exited leader still pins this group.
-                try:
-                    os.killpg(child.pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-                time.sleep(2)
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                # Both signals precede wait/reap; the unreaped owned leader pins its group.
+                for kind in (signal.SIGTERM, signal.SIGKILL):
+                    try:
+                        os.killpg(child.pid, kind)
+                    except OSError as error:
+                        signal_errors.append({"signal": kind.name, "errno": error.errno})
+                    if kind == signal.SIGTERM:
+                        time.sleep(2)
                 watchdog_active = False
-                child.wait(timeout=5)
+                try:
+                    evidence["ownedReturnCode"] = child.wait(timeout=5)
+                    evidence["ownedReaped"] = True
+                except (OSError, subprocess.SubprocessError) as error:
+                    evidence["ownedReaped"] = False
+                    evidence["reapError"] = type(error).__name__
+                try:
+                    (directory / "unit-watchdog.json").write_text(json.dumps(evidence) + "\n")
+                except OSError:
+                    pass
             print("Unit diagnostic ceiling exceeded; owned stack samples=" + str(len(evidence["samples"])), flush=True)
             return 1
     finally:
