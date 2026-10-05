@@ -29,6 +29,15 @@ struct BackgroundRefreshOverflowContentTests {
         let otherGateway = BackgroundRefreshTests.plan(snapshot, cursor: BackgroundRefreshTests.base, gatewayId: UUID())
         #expect(otherGateway.requests.last?.identifier != summary.identifier)
     }
+    @Test(arguments: [1, 2]) func summaryUsesExactSingularAndPlural(overflow: Int) throws {
+        let rows = (1...(10 + overflow)).map { BackgroundRefreshTests.row(BackgroundRefreshTests.key($0), activity: Double(2000 + $0)) }
+        let plan = BackgroundRefreshTests.plan(BackgroundRefreshTests.snapshot(rows), cursor: BackgroundRefreshTests.base)
+        let summaries = plan.requests.filter { $0.identifier.hasPrefix("refresh-summary:") }
+        #expect(summaries.count == 1)
+        let summary = try #require(summaries.first)
+        #expect(summary.content.body == (overflow == 1 ? "And 1 more chat" : "And 2 more chats"))
+        #expect(plan.requests.filter { $0.identifier.hasPrefix("reply:") }.count == 10)
+    }
     @Test func excludedRowsDoNotIncreaseTheOverflow() {
         var rows = (1...10).map { BackgroundRefreshTests.row(BackgroundRefreshTests.key($0), activity: Double(2000 + $0)) }
         rows += [BackgroundRefreshTests.row("agent:main:dashboard:read", activity: 3000, unread: false),

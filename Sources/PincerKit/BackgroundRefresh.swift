@@ -169,7 +169,7 @@ public enum BackgroundRefreshPlanner {
         if overflow > 0 {
             let content = UNMutableNotificationContent()
             content.title = gatewayName
-            content.body = L("And \(overflow) more chats")
+            content.body = overflow == 1 ? L("And 1 more chat") : L("And \(overflow) more chats")
             // An aggregate has no single chat destination or reply actions. Keep it silent.
             content.userInfo = ["gateway": gatewayId.uuidString]
             content.threadIdentifier = "\(gatewayId.uuidString)|background-summary"
