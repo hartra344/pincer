@@ -112,8 +112,10 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var loadingCommands: Set<String> = []
     /// Bumped on every connect, so catalogs from an earlier connection are refetched.
     @ObservationIgnored private(set) var connectionEpoch = 0
+    @ObservationIgnored package private(set) var selectionIntentRevision: UInt64 = 0
     public var selectedKey: String? {
         didSet {
+            self.selectionIntentRevision &+= 1
             guard oldValue != self.selectedKey else { return }
             self.splitPaneFocused = false
             if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
@@ -1212,6 +1214,7 @@ public final class GatewayStore: Identifiable {
 
     /// Creates a chat and, with `select`, opens it in the main window.
     public func createSession(agentId: String?, label: String?, category: String? = nil, select: Bool = true) async -> String? {
+        let selectionRevision = self.selectionIntentRevision
         var params: [String: JSONValue] = ["agentId": .string(agentId ?? self.defaultAgentId)]
         if let label = label?.nilIfEmpty { params["label"] = .string(label) }
         if let category = category?.nilIfEmpty { params["category"] = .string(category) }
@@ -1223,7 +1226,7 @@ public final class GatewayStore: Identifiable {
             } else {
                 await self.refreshSessions()
             }
-            if select { self.selectedKey = key }
+            if select, self.selectionIntentRevision == selectionRevision { self.selectedKey = key }
             return key
         } catch {
             self.lastError = error.localizedDescription
