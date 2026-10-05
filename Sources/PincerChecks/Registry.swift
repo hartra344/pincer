@@ -279,6 +279,9 @@ enum Suites {
             sections.insert(Section("Channel QR ownership") { await runChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
         #endif
+        #if DEBUG
+        sections.append(Section("Palette creation selection ownership") { await runPaletteCreateSelectionOwnershipChecks() })
+        #endif
         return sections
     }
 
@@ -458,6 +461,9 @@ enum Suites {
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
+        #endif
+        #if DEBUG
+        sections.append(Section("Palette creation selection ownership (demo)") { await runDemoPaletteCreateSelectionOwnershipChecks() })
         #endif
         return sections
     }

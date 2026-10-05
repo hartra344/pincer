@@ -40,8 +40,10 @@ public final class AppModel {
     /// The device ID for Settings, only after the app has loaded or created its shared identity.
     /// Reading this value never touches the Keychain.
     public private(set) var deviceIdForDisplay: String?
+    @ObservationIgnored package private(set) var gatewaySelectionIntentRevision: UInt64 = 0
     public var selectedGatewayId: UUID? {
         didSet {
+            self.gatewaySelectionIntentRevision &+= 1
             if oldValue != self.selectedGatewayId { self.cancelPendingExternalRoute() }
             // Shared so the Share extension starts on the same gateway.
             self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
