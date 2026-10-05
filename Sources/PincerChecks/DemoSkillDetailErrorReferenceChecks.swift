@@ -4,7 +4,7 @@ import Foundation
 @MainActor func runDemoSkillDetailErrorReferenceChecks() async {
     let demo = DemoGateway()
     for (reference, encoded) in [("@Missing-Owner/missing-detail", "missing-detail"),
-                                 ("missing detail", "missing%20detail"), ("missing-é", "missing-%C3%A9")] {
+                                 (" missing-detail ", "missing-detail"), ("missing-detail-2", "missing-detail-2")] {
         do {
             _ = try await demo.handle("skills.detail", ["slug": .string(reference)])
             check(false, "missing reference rejects detail read")

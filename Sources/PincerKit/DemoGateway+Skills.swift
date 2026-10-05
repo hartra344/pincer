@@ -76,13 +76,17 @@ extension DemoGateway {
     /// Mirrors upstream encodeURIComponent(path slug) and the mock's canonical 404 body.
     private static func missingSkillDetailMessage(_ reference: String) -> String {
         var slug = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldMessage = "ClawHub skill \"\(reference)\" not found"
         if slug.hasPrefix("@") {
             let parts = slug.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
-            if parts.count == 2, !parts[0].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !parts[1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            }
+            guard parts.count == 2 else { return oldMessage }
+            let owner = parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard owner.range(of: "^[a-z0-9](?:[a-z0-9._-]{0,38}[a-z0-9])?$", options: .regularExpression) != nil else { return oldMessage }
+            slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        // No existing Swift requested-reference validator is available; this narrow eligibility
+        // check follows upstream install-paths.ts and leaves invalid-reference behavior unchanged.
+        guard slug.range(of: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", options: [.regularExpression, .caseInsensitive]) != nil else { return oldMessage }
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
         let encoded = slug.addingPercentEncoding(withAllowedCharacters: allowed) ?? slug
         return "ClawHub /api/v1/skills/\(encoded) failed (404): Skill not found"

@@ -4,7 +4,7 @@ import Testing
 @MainActor
 struct DemoSkillDetailErrorReferenceTests {
     @Test(arguments: [("@Missing-Owner/missing-detail", "missing-detail"),
-                      ("missing detail", "missing%20detail"), ("missing-é", "missing-%C3%A9")])
+                      (" missing-detail ", "missing-detail"), ("missing-detail-2", "missing-detail-2")])
     func missingReferencesUseNormalizedEncodedPath(reference: String, encoded: String) async throws {
         do {
             _ = try await DemoGateway().handle("skills.detail", ["slug": .string(reference)])
