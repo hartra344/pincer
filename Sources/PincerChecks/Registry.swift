@@ -55,7 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
             Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
-            Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks() },
+            Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },

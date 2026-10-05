@@ -229,6 +229,11 @@ extension DemoGateway {
         }
         try Self.checkKeys("skills.update", params, ["skillKey", "enabled", "apiKey", "env"])
         guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
+        if let enabled = params["enabled"] {
+            guard case .bool = enabled else {
+                throw Self.skillsInvalid("invalid skills.update params: at /enabled: must be boolean")
+            }
+        }
         var config: [String: JSONValue] = [:]
         if let index = self.skillEntries.firstIndex(where: { $0["skillKey"]?.text == key }) {
             var entry = self.skillEntries[index]
