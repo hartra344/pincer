@@ -176,6 +176,12 @@ extension GatewayStore {
             return
         }
         let (saved, _) = await OutboxStore.load(gatewayId: self.id, root: self.outboxRoot)
+        #if DEBUG
+        await self.outboxRestoreReadDelivery?()
+        let fileScan = self.outboxRestoreFileScan
+        #else
+        let fileScan: (@Sendable (Bool) -> Void)? = nil
+        #endif
         // Saving starts only now, so what's composed while the file is read doesn't overwrite it.
         self.outboxRestored = true
         guard var saved, !saved.isEmpty else {
@@ -186,7 +192,7 @@ extension GatewayStore {
         saved.recoverAfterLaunch()
         // An entry whose attachment files are gone can't be sent: it fails (non-retryable, so it
         // stays put with Delete) instead of vanishing.
-        for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot) {
+        for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot, observer: fileScan) {
             let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
             saved.markFailed(id: entry.id, kind: .rejected(message), message: message)
         }

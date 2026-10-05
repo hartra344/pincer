@@ -283,6 +283,9 @@ enum Suites {
         #if DEBUG
         sections.append(Section("Palette creation selection ownership") { await runPaletteCreateSelectionOwnershipChecks() })
         #endif
+        #if DEBUG
+        sections.append(Section("Outbox restore attachment file work") { await runOutboxRestoreFileWorkChecks() })
+        #endif
         return sections
     }
 
@@ -476,7 +479,8 @@ enum Suites {
     ]
 
     /// Against a (mock) Gateway, second half.
-    static let liveExtras: [LiveSection] = [
+    static var liveExtras: [LiveSection] {
+        var sections: [LiveSection] = [
         LiveSection("Skill enabled validation (live)") { url, token in await runLiveSkillEnabledValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog plugin validation (live)") { url, token in await runLiveToolsCatalogPluginValidationChecks(url: url, token: token) },
@@ -513,7 +517,12 @@ enum Suites {
         LiveSection("Background refresh (live)") { url, token in await runBackgroundRefreshLive(url: url, token: token) },
         // Last: it pairs a fresh device identity.
         LiveSection("First-run wizard (live)") { url, token in await runLiveFirstRun(url: url, token: token) },
-    ]
+        ]
+        #if DEBUG
+        sections.insert(LiveSection("Outbox restore attachment file work (live)") { url, token in await runLiveOutboxRestoreFileWorkChecks(url: url, token: token) }, at: sections.count - 1)
+        #endif
+        return sections
+    }
 
     /// Reconnect and bootstrap behaviour (#202); needs a fresh mock.
     static let liveReconnect: [LiveSection] = [

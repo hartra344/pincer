@@ -180,6 +180,10 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var outboxEligibleHeads: [String: String]?
     /// The task `start()` reads the saved outbox in; tests await it instead of polling `outboxRestored`.
     @ObservationIgnored var outboxLoadTask: Task<Void, Never>?
+    #if DEBUG
+    @ObservationIgnored package var outboxRestoreReadDelivery: (@Sendable () async -> Void)?
+    @ObservationIgnored package var outboxRestoreFileScan: (@Sendable (Bool) -> Void)?
+    #endif
 
     /// The Gateway's last-known upload policy (from its latest hello, saved across launches).
     public internal(set) var lastUploadPolicy: UploadPolicy?

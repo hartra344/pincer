@@ -48,6 +48,11 @@ public enum OutboxAttachmentStore {
 
     /// Whether every attachment file of the entry is on disk (once pending writes have landed).
     public static func filesExist(for entry: OutboxEntry, gatewayId: UUID, root: URL? = OutboxStore.root) -> Bool {
+        self.filesExist(for: entry, gatewayId: gatewayId, root: root, observer: nil)
+    }
+
+    static func filesExist(for entry: OutboxEntry, gatewayId: UUID, root: URL?, observer: (@Sendable (Bool) -> Void)?) -> Bool {
+        observer?(Thread.isMainThread)
         self.drain(gatewayId: gatewayId, root: root)
         return entry.attachments.allSatisfy { ref in
             self.fileURL(gatewayId: gatewayId, entryId: entry.id, attachmentId: ref.id, root: root)
