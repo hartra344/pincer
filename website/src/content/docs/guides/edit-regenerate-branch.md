@@ -7,7 +7,7 @@ Right-click (macOS) or long-press (iOS) a message in the transcript to see these
 
 ## Branch from Here
 
-On any message, **Branch from Here** opens a new chat forked at that point. The original chat is untouched.
+On any message, **Branch from Here** opens a new chat forked at that point. The original chat is untouched. If you select another chat while the fork is being created, that selection stays; the new branch is still created.
 
 - On one of your messages, the new chat starts just before it and your message text is put back in the new chat's composer, ready to send or change.
 - On an assistant reply, the new chat continues right after that reply with an empty composer.
