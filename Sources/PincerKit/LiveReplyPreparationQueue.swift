@@ -66,7 +66,11 @@ package final class LiveReplyPreparationQueue {
     nonisolated package static let retainedByteLimit = 8 * 1024 * 1024
     nonisolated package static let messageTextByteLimit = 256 * 1024
 
+    #if DEBUG
+    package typealias Normalizer = @Sendable (LiveReplyPreparationInput) async -> Bool
+    #else
     package typealias Normalizer = @Sendable (LiveReplyPreparationInput) -> Bool
+    #endif
     package typealias Completion = @MainActor @Sendable (LiveReplyPreparationToken, Bool) -> Void
 
     package static let shared = LiveReplyPreparationQueue()
@@ -264,7 +268,13 @@ package final class LiveReplyPreparationQueue {
     }
 
     nonisolated private static func normalize(_ input: LiveReplyPreparationInput, using normalizer: @escaping Normalizer) async -> Bool {
-        await Task.detached(priority: .userInitiated) { normalizer(input) }.value
+        await Task.detached(priority: .userInitiated) {
+            #if DEBUG
+            return await normalizer(input)
+            #else
+            return normalizer(input)
+            #endif
+        }.value
     }
 
     nonisolated private static func normalize(_ input: LiveReplyPreparationInput,
@@ -275,7 +285,11 @@ package final class LiveReplyPreparationQueue {
             if input.itemID == previousInput.itemID, input.textBlocks == previousInput.textBlocks {
                 return previousResult
             }
+            #if DEBUG
+            return await normalizer(input)
+            #else
             return normalizer(input)
+            #endif
         }.value
     }
 }

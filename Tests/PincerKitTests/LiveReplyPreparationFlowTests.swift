@@ -8,13 +8,14 @@ struct LiveReplyPreparationFlowTests {
     private let profile = GatewayProfile(name: "Live reply tests", url: "ws://127.0.0.1:1", authMode: .none)
     private let sessionKey = "agent:research:main"
 
+#if DEBUG
     @Test func finalWaitsForEarlierPreparationsAndSelectsLastSpeakableReply() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gate = LiveReplyPreparationNormalizerGate()
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 4, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 4, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -38,7 +39,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.map(\.id) == ["last-answer"],
                 "FIFO preparation retains the latest speakable reply across a code-only message")
     }
+#endif
 
+#if DEBUG
     @Test func latestAcceptedSameIDUpdateWinsOverInterveningReply() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -46,7 +49,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [updatingID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -62,7 +65,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.first?.plainText == "A was updated after B.",
                 "latest accepted-event sequence wins even though A retains its original queue position")
     }
+#endif
 
+#if DEBUG
     @Test func sameIDUpdateAfterSuccessfulFinalStaysInsideExistingBarrier() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -70,7 +75,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [updatingID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -91,7 +96,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(chat.liveReplyFinalBarrierSequence == nil && chat.liveReplyFinalBarrierRemaining == 0,
                 "completion of the replaced worker membership must drain, not strand, the barrier")
     }
+#endif
 
+#if DEBUG
     @Test func newReplyAcceptedAfterSuccessDoesNotExtendExistingBarrier() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -99,7 +106,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -117,7 +124,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.first?.plainText == "A belongs to the successful run.")
         #expect(chat.liveReplyFinalBarrierSequence == nil && chat.liveReplyFinalBarrierRemaining == 0)
     }
+#endif
 
+#if DEBUG
     @Test func cappedReplyRecoveryReplacesHeldPreparationWithFullProse() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -125,7 +134,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [messageID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -147,7 +156,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(!recorder.items.contains { $0.plainText.contains("Capped preview") })
         #expect(chat.liveReplyFinalBarrierSequence == nil && chat.liveReplyFinalBarrierRemaining == 0)
     }
+#endif
 
+#if DEBUG
     @Test func cappedReplyRecoveryToCodeOnlyCannotPublishOldProse() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -155,7 +166,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [messageID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -174,6 +185,7 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.isEmpty, "stale speakability for the truncated prose cannot survive a code-only restore")
         #expect(chat.liveReplyCandidate == nil && chat.awaitingFinalReply)
     }
+#endif
 
     @Test func unrelatedCappedHistoryRestoreCannotReplacePreparedLiveCandidate() async {
         let scratch = ScratchDefaults()
@@ -241,6 +253,7 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.map(\.id) == [preparedID], "the unchanged prepared candidate is delivered once")
     }
 
+#if DEBUG
     @Test func identicalHistoryRefreshPreservesHeldNewerReplyOrdering() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -248,7 +261,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
         let preparedID = "prior-candidate-before-held-refresh"
@@ -271,7 +284,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.map(\.id) == [heldID],
                 "after an identical refresh the successful barrier delivers the newest speakable reply once")
     }
+#endif
 
+#if DEBUG
     @Test func staleSameIDPreparationCannotSpeakAfterAuthoritativeHistoryReplacement() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -279,7 +294,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [staleID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -305,7 +320,9 @@ struct LiveReplyPreparationFlowTests {
                 "the empty successful barrier speaks later fresh prose exactly once, not the stale replacement")
         #expect(!chat.awaitingFinalReply)
     }
+#endif
 
+#if DEBUG
     @Test func callbackRemovalInvalidatesHeldPreparation() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -313,7 +330,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -331,7 +348,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
         #expect(recorder.items.map(\.id) == ["fresh-after-reinstall"])
     }
+#endif
 
+#if DEBUG
     @Test func replacingCallbackDoesNotTransferHeldReplyToNewHandler() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -339,7 +358,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let previousHandler = ReplyRecorder()
         let replacementHandler = ReplyRecorder()
         chat.onFinalAssistantReply = { previousHandler.items.append($0) }
@@ -363,7 +382,9 @@ struct LiveReplyPreparationFlowTests {
         })
         #expect(previousHandler.items.isEmpty && replacementHandler.items.map(\.id) == ["fresh-handler-reply"])
     }
+#endif
 
+#if DEBUG
     @Test func userMessageAndFailedRunDropHeldPreparations() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -372,7 +393,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [userInterruptedID, failedID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -393,7 +414,9 @@ struct LiveReplyPreparationFlowTests {
         #expect(recorder.items.isEmpty && chat.liveReplyCandidate == nil,
                 "a user turn or failed run invalidates held speech work")
     }
+#endif
 
+#if DEBUG
     @Test func budgetOverflowSuppressesOnlyCurrentRunAndTranscriptStillCommits() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
@@ -401,7 +424,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 0, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            pendingItemLimit: 0, retainedByteLimit: 2_048, normalizer: { await gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -422,6 +445,7 @@ struct LiveReplyPreparationFlowTests {
         #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
         #expect(recorder.items.map(\.id) == ["recovered-reply"])
     }
+#endif
 
     @Test func oversizedInputSuppressesReadAloudWithoutDroppingAcceptedMessage() async {
         let scratch = ScratchDefaults()
@@ -475,12 +499,12 @@ struct LiveReplyPreparationFlowTests {
     }
 }
 
+#if DEBUG
 private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
     private let lock = NSLock()
     private var blockedIDs: Set<String>
     private var didRelease = false
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+    private var release = ExplicitWorkerTestGate()
 
     init(blockedIDs: Set<String> = []) { self.blockedIDs = blockedIDs }
 
@@ -488,36 +512,30 @@ private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
         self.lock.withLock {
             self.blockedIDs.insert(id)
             self.didRelease = false
+            self.release = ExplicitWorkerTestGate()
         }
     }
 
-    func normalize(_ input: LiveReplyPreparationInput) -> Bool {
-        let shouldBlock = self.lock.withLock { self.blockedIDs.remove(input.itemID) != nil }
-        if shouldBlock {
-            self.entered.signal()
-            self.waitSynchronouslyForRelease()
+    func normalize(_ input: LiveReplyPreparationInput) async -> Bool {
+        let heldGate = self.lock.withLock {
+            self.blockedIDs.remove(input.itemID) != nil ? self.release : nil
         }
+        if let heldGate { await heldGate.hold() }
         return SpeechText.isSpeakable(textBlocks: input.textBlocks, itemID: input.itemID)
     }
 
     func waitUntilEntered() async -> Bool {
-        await Task.detached(priority: .utility) { self.waitSynchronouslyUntilEntered() }.value
-    }
-
-    private func waitSynchronouslyUntilEntered() -> Bool {
-        self.entered.wait(timeout: .now() + 3) == .success
-    }
-
-    private func waitSynchronouslyForRelease() {
-        self.release.wait()
+        let release = self.lock.withLock { self.release }
+        return await release.waitUntilEntered()
     }
 
     func releaseBlockedWork() {
-        let shouldSignal = self.lock.withLock { () -> Bool in
-            guard !self.didRelease else { return false }
+        let release = self.lock.withLock { () -> ExplicitWorkerTestGate? in
+            guard !self.didRelease else { return nil }
             self.didRelease = true
-            return true
+            return self.release
         }
-        if shouldSignal { self.release.signal() }
+        release?.open()
     }
 }
+#endif

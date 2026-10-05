@@ -19,9 +19,10 @@ struct MessagePartExcerptCacheTests {
         #expect(!first.normalizedExcerpt().contains("FIRST-TAIL"))
     }
 
+#if DEBUG
     @Test func cacheCoalescesDuplicateKeysAndNormalizesOffMain() async {
         let started = Mutex(false)
-        let release = DispatchSemaphore(value: 0)
+        let release = ExplicitWorkerTestGate()
         let calls = Mutex(0)
         let backgroundFlags = Mutex<[Bool]>([])
         let cache = MessagePartExcerptCache(entryLimit: 8, byteLimit: 4_096) { source in
@@ -29,10 +30,10 @@ struct MessagePartExcerptCacheTests {
             calls.withLock { $0 += 1 }
             backgroundFlags.withLock { $0.append(wasMain) }
             started.withLock { $0 = true }
-            release.wait()
+            await release.hold()
             return source.normalizedExcerpt()
         }
-        defer { release.signal() }
+        defer { release.open() }
         let source = MessagePartExcerptSource("A useful opening paragraph.")
 
         #expect(cache.excerpt(for: source) == nil)
@@ -40,13 +41,14 @@ struct MessagePartExcerptCacheTests {
         #expect(await eventually { started.withLock { $0 } })
         #expect(cache.activeCount == 1 && cache.pendingCount == 0)
         #expect(cache.inFlightKeyCount == 1 && calls.withLock { $0 } == 1)
-        release.signal()
+        release.open()
 
         let ready = await eventually { cache.excerpt(for: source) != nil }
         #expect(ready)
         #expect(cache.excerpt(for: source)?.hasPrefix("A useful opening") == true)
         #expect(backgroundFlags.withLock { $0 } == [false])
     }
+#endif
 
     @Test func changedOpeningUsesItsOwnCachedExcerpt() async {
         let cache = MessagePartExcerptCache(entryLimit: 4, byteLimit: 2_048)
@@ -83,19 +85,20 @@ struct MessagePartExcerptCacheTests {
         #expect(cache.cachedByteCount <= 512)
     }
 
+#if DEBUG
     @Test func cacheBoundsEntriesBytesAndPendingPreparation() async {
         let started = Mutex(false)
-        let release = DispatchSemaphore(value: 0)
+        let release = ExplicitWorkerTestGate()
         let cache = MessagePartExcerptCache(entryLimit: 2, byteLimit: 512) { source in
             let first = started.withLock { value in
                 let first = !value
                 value = true
                 return first
             }
-            if first { release.wait() }
+            if first { await release.hold() }
             return source.normalizedExcerpt()
         }
-        defer { release.signal() }
+        defer { release.open() }
 
         let sources = (0..<34).map { MessagePartExcerptSource("Part \($0): distinct opening words") }
         _ = cache.excerpt(for: sources[0])
@@ -108,11 +111,12 @@ struct MessagePartExcerptCacheTests {
         _ = cache.excerpt(for: sources[33])
         #expect(cache.pendingCount == 32 && cache.inFlightKeyCount == 33)
 
-        release.signal()
+        release.open()
         let drained = await eventually(timeout: .seconds(5)) { cache.activeCount == 0 && cache.pendingCount == 0 }
         #expect(drained)
         #expect(cache.cachedCount > 0)
         #expect(cache.cachedCount <= 2)
         #expect(cache.cachedByteCount <= 512)
     }
+#endif
 }

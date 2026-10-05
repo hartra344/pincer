@@ -1,11 +1,11 @@
 #if DEBUG && os(macOS)
 import Foundation
 
-/// Fixture-only gate deliberately retains the captured synchronous blocking pattern in neutral.
+/// Fixture-only suspension gate; the qualified neutral used the captured blocking pattern.
 /// Explicit release owns the held worker even when its task is cancelled.
 private final class CooperativeProofGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let semaphore = DispatchSemaphore(value: 0)
+    private let suspension = ExplicitWorkerTestGate()
     private var released = false
     private var fallback = false
     private var progressed = false
@@ -19,9 +19,8 @@ private final class CooperativeProofGate: @unchecked Sendable {
     }
     func hold() async {
         entered.yield(())
-        waitSynchronouslyForRelease()
+        await suspension.hold()
     }
-    private func waitSynchronouslyForRelease() { semaphore.wait() }
     func open(expired: Bool = false) {
         let signal = lock.withLock { () -> Bool in
             guard !released else { return false }
@@ -29,7 +28,7 @@ private final class CooperativeProofGate: @unchecked Sendable {
             fallback = expired
             return true
         }
-        if signal { semaphore.signal() }
+        if signal { suspension.open() }
     }
     func continuationRan() {
         lock.withLock { progressed = !fallback }

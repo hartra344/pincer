@@ -175,7 +175,11 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var outboxPreviewGeneration = 0
     @ObservationIgnored var legacyLocationProjectionTokens: [String: UUID] = [:]
     @ObservationIgnored var legacyLocationProjectionWorkerCount = 0
+    #if DEBUG
+    @ObservationIgnored var outboxImagePreviewProbe: (@Sendable () async -> Void)?
+    #else
     @ObservationIgnored var outboxImagePreviewProbe: (@Sendable () -> Void)?
+    #endif
     @ObservationIgnored var hasPendingLive = false
     /// How many leading `entries` come from committed items; the rest is the live tail. `nil` until
     /// `entries` has been rebuilt from `items`, so the next rebuild rebuilds the committed part too.

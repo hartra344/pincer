@@ -25,7 +25,11 @@ package final class MessagePartExcerptCache {
     nonisolated package static let entryLimit = 512
     nonisolated package static let byteLimit = 128 * 1024
 
+    #if DEBUG
+    package typealias Normalizer = @Sendable (MessagePartExcerptSource) async -> String
+    #else
     package typealias Normalizer = @Sendable (MessagePartExcerptSource) -> String
+    #endif
 
     package static let shared = MessagePartExcerptCache()
 
@@ -72,7 +76,11 @@ package final class MessagePartExcerptCache {
                 #if DEBUG
                 await hold?()
                 #endif
+                #if DEBUG
+                return await normalize(source)
+                #else
                 return normalize(source)
+                #endif
             }.value
         } completion: { [weak self] result in
             guard let self else { return }

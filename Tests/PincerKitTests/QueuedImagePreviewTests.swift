@@ -2,29 +2,29 @@ import Foundation
 import Testing
 @testable import PincerKit
 
+#if DEBUG
 private final class PreviewPreparationGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+    private let release = ExplicitWorkerTestGate()
     private let heldCall: Int
     private var calls = 0
     private var wasMain = false
     init(heldCall: Int = 1) { self.heldCall = heldCall }
     var ranOnMain: Bool { lock.withLock { wasMain } }
-    func waitForEntry() -> Bool { entered.wait(timeout: .now() + 3) == .success }
-    func open() { release.signal() }
-    func probe() {
+    func waitForEntry() async -> Bool { await release.waitUntilEntered() }
+    func open() { release.open() }
+    func probe() async {
         let hold = lock.withLock {
             calls += 1
             wasMain = wasMain || Thread.isMainThread
             return calls == heldCall
         }
         if hold {
-            entered.signal()
-            if !Thread.isMainThread { release.wait() }
+            await release.hold()
         }
     }
 }
+#endif
 
 @MainActor
 @Suite("Queued image preview")
@@ -201,6 +201,7 @@ struct QueuedImagePreviewTests {
         #expect(chat.outboxImagePreviews.retainedBytes == 0, "the outbox preview releases its source after transcript commit")
     }
 
+#if DEBUG
     @Test(arguments: [false, true])
     func cancelledPreviewCannotApplyAfterStopOrDeletion(deleteEntry: Bool) async {
         let (gateway, chat) = restoredRow(state: .queued)
@@ -209,7 +210,7 @@ struct QueuedImagePreviewTests {
         defer { gate.open() }
         chat.outboxImagePreviewProbe = gate.probe
         let task = chat.outboxPreviewTask
-        let entered = await Task.detached { gate.waitForEntry() }.value
+        let entered = await gate.waitForEntry()
         #expect(entered)
         #expect(!gate.ranOnMain, "reading and decoding previews cannot occupy the transcript's main actor")
         if deleteEntry {
@@ -224,6 +225,7 @@ struct QueuedImagePreviewTests {
         #expect(chat.outboxPreviewTask == nil)
         if deleteEntry { #expect(chat.items.isEmpty) }
     }
+#endif
 
     @Test func acceptedPendingPreviewIsEvictedWithinTheSharedRowBudget() async throws {
         let (gateway, chat) = restoredRow(state: .queued)
@@ -260,6 +262,7 @@ struct QueuedImagePreviewTests {
         #expect(rowBytes > 0 && rowBytes <= budget)
     }
 
+#if DEBUG
     @Test func transientPreviewSourcesStayWithinTwoBudgetsDuringBatchEviction() async throws {
         let (gateway, chat) = restoredRow(state: .queued)
         defer { gateway.stop(); scratch.remove() }
@@ -284,7 +287,7 @@ struct QueuedImagePreviewTests {
             return entry
         }
         gateway.outbox = Outbox(entries: [original] + additions)
-        let entered = await Task.detached { gate.waitForEntry() }.value
+        let entered = await gate.waitForEntry()
         #expect(entered)
         let rowBytes = chat.items.flatMap(\.blocks).reduce(0) { sum, block in
             if case let .image(image) = block { return sum + (image.base64?.utf8.count ?? 0) }
@@ -301,4 +304,5 @@ struct QueuedImagePreviewTests {
         }
         #expect(settledRowBytes <= budget)
     }
+#endif
 }

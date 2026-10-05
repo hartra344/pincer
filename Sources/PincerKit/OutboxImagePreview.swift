@@ -134,6 +134,51 @@ actor OutboxImagePreviewWorker {
     static let shared = OutboxImagePreviewWorker()
     static let maxEncodedBytes = 192 * 1024
 
+    #if DEBUG
+    // DEBUG async overrides preserve the original shared actor's non-reentrant serialization.
+    private var testLeaseHeld = false
+    private var testLeaseWaiters: [CheckedContinuation<Void, Never>] = []
+    var pendingTestLeaseCount: Int { testLeaseWaiters.count }
+    private func acquireTestLease() async {
+        if !testLeaseHeld { testLeaseHeld = true; return }
+        await withCheckedContinuation { testLeaseWaiters.append($0) }
+    }
+    private func releaseTestLease() {
+        if testLeaseWaiters.isEmpty { testLeaseHeld = false }
+        else { testLeaseWaiters.removeFirst().resume() }
+    }
+
+    func prepare(
+        _ attachment: OutgoingAttachment,
+        probe: (@Sendable () async -> Void)?) async -> (image: ImageRef, encodedBytes: Int)?
+    {
+        await acquireTestLease()
+        defer { releaseTestLease() }
+        guard !Task.isCancelled, attachment.isImage else { return nil }
+        await probe?()
+        guard !Task.isCancelled else { return nil }
+        return Self.thumbnail(attachment.data, fileName: attachment.fileName, mimeType: attachment.mimeType)
+    }
+
+    func preparePersisted(
+        entryId: String,
+        attachment: OutboxAttachmentRef,
+        gatewayId: UUID,
+        root: URL?,
+        probe: (@Sendable () async -> Void)?) async -> (image: ImageRef, encodedBytes: Int)?
+    {
+        await acquireTestLease()
+        defer { releaseTestLease() }
+        guard !Task.isCancelled else { return nil }
+        await probe?()
+        guard !Task.isCancelled,
+              let source = OutboxAttachmentStore.readImageAttachment(
+                  entryId: entryId, attachment: attachment, gatewayId: gatewayId, root: root)
+        else { return nil }
+        return Self.thumbnail(source.data, fileName: source.fileName, mimeType: source.mimeType)
+    }
+
+    #else
     func prepare(
         _ attachment: OutgoingAttachment,
         probe: (@Sendable () -> Void)?) -> (image: ImageRef, encodedBytes: Int)?
@@ -159,6 +204,8 @@ actor OutboxImagePreviewWorker {
         else { return nil }
         return Self.thumbnail(source.data, fileName: source.fileName, mimeType: source.mimeType)
     }
+
+    #endif
 
     private static func thumbnail(_ data: Data, fileName: String, mimeType: String) -> (image: ImageRef, encodedBytes: Int)? {
         guard !Task.isCancelled, data.count <= GatewayMediaClient.explicitMaxBytes else { return nil }

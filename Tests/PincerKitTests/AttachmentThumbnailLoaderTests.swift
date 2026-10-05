@@ -44,12 +44,13 @@ struct AttachmentThumbnailLoaderTests {
         #expect(loader.decodedBytes <= 36_000)
     }
 
+#if DEBUG
     @Test @MainActor func pendingQueueIsBoundedAndReleasedWorkEventuallyCompletes() async {
         let data = await Task.detached(priority: .utility) { Self.png(width: 160, height: 80) }.value
         let gate = DecodeGate()
         let loader = AttachmentThumbnailLoader(byteBudget: 1_000_000, pendingLimit: 1, pendingByteLimit: data.count,
                                                decoder: { bytes, maxPixel in
-            gate.decode(bytes, maxPixel: maxPixel)
+            await gate.decode(bytes, maxPixel: maxPixel)
         })
         let active = OutgoingAttachment(fileName: "active.png", mimeType: "image/png", data: data)
         let cancelled = OutgoingAttachment(fileName: "cancelled.png", mimeType: "image/png", data: data)
@@ -79,12 +80,14 @@ struct AttachmentThumbnailLoaderTests {
         #expect(loader.pendingDataBytes == 0)
         #expect(gate.decodeCount == 2)
     }
+#endif
 
+#if DEBUG
     @Test @MainActor func identicalVisibleOwnersShareDecodeAndCancelledActiveSlotWaitsForDecoderExit() async {
         let data = await Task.detached(priority: .utility) { Self.png(width: 160, height: 80) }.value
         let gate = DecodeGate()
         let loader = AttachmentThumbnailLoader(byteBudget: 1_000_000, decoder: { bytes, maxPixel in
-            gate.decode(bytes, maxPixel: maxPixel)
+            await gate.decode(bytes, maxPixel: maxPixel)
         })
         let attachment = OutgoingAttachment(fileName: "shared.png", mimeType: "image/png", data: data)
         let owners = (0..<AttachmentThumbnailLoader.maximumOwnersPerWork).map { _ in UUID() }
@@ -115,13 +118,15 @@ struct AttachmentThumbnailLoaderTests {
                  "an abandoned decode cannot populate the preview cache")
         #expect(gate.decodeCount == 1, "coalesced owners invoke the decoder once")
     }
+#endif
 
+#if DEBUG
     @Test @MainActor func rejectedRequestCanRetryAfterQueuePressureClears() async {
         let data = await Task.detached(priority: .utility) { Self.png(width: 160, height: 80) }.value
         let gate = DecodeGate()
         let loader = AttachmentThumbnailLoader(byteBudget: 1_000_000, pendingLimit: 1, pendingByteLimit: data.count,
                                                decoder: { bytes, maxPixel in
-            gate.decode(bytes, maxPixel: maxPixel)
+            await gate.decode(bytes, maxPixel: maxPixel)
         })
         let first = OutgoingAttachment(fileName: "pressure-active.png", mimeType: "image/png", data: data)
         let second = OutgoingAttachment(fileName: "pressure-pending.png", mimeType: "image/png", data: data)
@@ -146,6 +151,7 @@ struct AttachmentThumbnailLoaderTests {
         #expect(gate.decodeCount == 3)
         #expect(loader.pendingDataBytes == 0)
     }
+#endif
 
     @MainActor private func waitForCache(_ loader: AttachmentThumbnailLoader,
                                         attachment: OutgoingAttachment, maxPixel: Int) async -> Bool {
@@ -170,33 +176,29 @@ struct AttachmentThumbnailLoaderTests {
     }
 }
 
+#if DEBUG
 private final class DecodeGate: @unchecked Sendable {
     private let lock = NSLock()
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+    private let release = ExplicitWorkerTestGate()
     private var calls = 0
 
     var decodeCount: Int { self.lock.withLock { self.calls } }
 
-    func decode(_ data: Data, maxPixel: Int) -> CGImage? {
+    func decode(_ data: Data, maxPixel: Int) async -> CGImage? {
         let shouldBlock = self.lock.withLock { () -> Bool in
             self.calls += 1
             return self.calls == 1
         }
         if shouldBlock {
-            self.entered.signal()
-            self.release.wait()
+            await self.release.hold()
         }
         return ImageCodec.decode(data, maxPixel: maxPixel)
     }
 
     func waitUntilStarted() async -> Bool {
-        await Task.detached(priority: .utility) { self.waitSynchronouslyUntilStarted() }.value
+        await self.release.waitUntilEntered(timeout: 2)
     }
 
-    private func waitSynchronouslyUntilStarted() -> Bool {
-        self.entered.wait(timeout: .now() + 2) == .success
-    }
-
-    func releaseFirst() { self.release.signal() }
+    func releaseFirst() { self.release.open() }
 }
+#endif

@@ -16,7 +16,12 @@ public final class AttachmentThumbnailLoader {
     public private(set) var revision: UInt64 = 0
 
     @ObservationIgnored private var cache: DecodedImageCache
-    @ObservationIgnored private let decoder: @Sendable (Data, Int) -> CGImage?
+    #if DEBUG
+    typealias Decoder = @Sendable (Data, Int) async -> CGImage?
+    #else
+    typealias Decoder = @Sendable (Data, Int) -> CGImage?
+    #endif
+    @ObservationIgnored private let decoder: Decoder
     @ObservationIgnored private let pendingLimit: Int
     @ObservationIgnored private let pendingByteLimit: Int
     @ObservationIgnored private var pending: [Work] = []
@@ -54,7 +59,7 @@ public final class AttachmentThumbnailLoader {
         byteBudget: Int = AttachmentThumbnailLoader.byteBudget,
         pendingLimit: Int = 8,
         pendingByteLimit: Int = 16 * 1024 * 1024,
-        decoder: @escaping @Sendable (Data, Int) -> CGImage? = { data, maxPixel in
+        decoder: @escaping Decoder = { data, maxPixel in
             ImageCodec.decode(data, maxPixel: maxPixel)
         }
     ) {
@@ -153,7 +158,7 @@ public final class AttachmentThumbnailLoader {
         Task { [weak self, work] in
             let image = await Task.detached(priority: .utility) {
                 #if DEBUG
-                Self.decode(work.data, maxPixel: work.key.maxPixel, attachmentID: work.attachmentID,
+                await Self.decode(work.data, maxPixel: work.key.maxPixel, attachmentID: work.attachmentID,
                             previewIdentity: work.key.previewIdentity, fileName: work.fileName,
                             decoder: decoder, observer: observer)
                 #else
@@ -171,15 +176,15 @@ public final class AttachmentThumbnailLoader {
         attachmentID: UUID,
         previewIdentity: UUID,
         fileName: String,
-        decoder: @Sendable (Data, Int) -> CGImage?,
+        decoder: Decoder,
         observer: (@Sendable (UUID, UUID, String, Int, Bool, CGImage?) -> Void)?
-    ) -> CGImage? {
-        let image = decoder(data, maxPixel)
+    ) async -> CGImage? {
+        let image = await decoder(data, maxPixel)
         observer?(attachmentID, previewIdentity, fileName, maxPixel, Thread.isMainThread, image)
         return image
     }
     #else
-    private nonisolated static func decode(_ data: Data, maxPixel: Int, decoder: @Sendable (Data, Int) -> CGImage?) -> CGImage? {
+    private nonisolated static func decode(_ data: Data, maxPixel: Int, decoder: Decoder) -> CGImage? {
         decoder(data, maxPixel)
     }
     #endif

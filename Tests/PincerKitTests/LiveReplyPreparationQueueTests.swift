@@ -5,13 +5,14 @@ import Testing
 @MainActor
 @Suite("Live reply preparation queue", .serialized)
 struct LiveReplyPreparationQueueTests {
+#if DEBUG
     @Test func queuedTextIsNormalizedOffMainAndDrainsInArrivalOrder() async {
         let owner = UUID()
         let blockedID = "live-reply-first-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [blockedID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 512,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let first = self.input(owner: owner, generation: 1, sequence: 1, id: blockedID,
                                text: "First spoken reply.")
@@ -40,14 +41,16 @@ struct LiveReplyPreparationQueueTests {
                 "a later code-only message doesn't erase an earlier speakable candidate")
         #expect(gate.mainThreadFlags == [false, false, false], "every admitted normalization ran off-main")
     }
+#endif
 
+#if DEBUG
     @Test func invalidatedPendingWorkIsDroppedButTheActiveSlotWaitsForWorkerExit() async {
         let owner = UUID()
         let activeID = "live-reply-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 512,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: 8, sequence: 1, id: activeID, text: "Active.")
         let obsolete = self.input(owner: owner, generation: 8, sequence: 2, id: "obsolete", text: "Old pending.")
@@ -73,7 +76,9 @@ struct LiveReplyPreparationQueueTests {
         #expect(completed.values.map(\.0.itemID) == [activeID, "replacement"],
                 "canceled pending work has no completion and the active slot is reused only after exit")
     }
+#endif
 
+#if DEBUG
     @Test func inputAndRetainedByteBudgetsRejectWithoutStartingMoreWork() async {
         let owner = UUID()
         let activeID = "live-reply-byte-active-\(UUID().uuidString)"
@@ -83,7 +88,7 @@ struct LiveReplyPreparationQueueTests {
         let pending = self.input(owner: owner, generation: 1, sequence: 2, id: "pending", text: "de")
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 4,
                                               retainedByteLimit: active.retainedBytes + pending.retainedBytes,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         #expect(queue.submit(active) { completed.append($0, $1) } == .started)
         #expect(await gate.waitUntilEntered())
@@ -102,14 +107,16 @@ struct LiveReplyPreparationQueueTests {
         #expect(drained)
         #expect(completed.values.map(\.0.itemID) == [activeID, "pending"])
     }
+#endif
 
+#if DEBUG
     @Test func replacingPendingWorkKeepsItsFIFOPositionAndUsesLatestSnapshot() async {
         let owner = UUID()
         let activeID = "replace-pending-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: 1, sequence: 1, id: activeID, text: "Active.")
         let pending = self.input(owner: owner, generation: 1, sequence: 2, id: "pending-target", text: "```swift\nlet x = 1\n```")
@@ -132,14 +139,16 @@ struct LiveReplyPreparationQueueTests {
         #expect(gate.normalizedTexts.map(\.1) == ["Active.", "Replacement prose.", "Later FIFO reply."],
                 "the replaced code-only snapshot never reaches normalization")
     }
+#endif
 
+#if DEBUG
     @Test func identicalActiveRefreshNormalizesOnceButPublishesLatestToken() async {
         let owner = UUID()
         let activeID = "replace-active-identical-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let original = self.input(owner: owner, generation: 4, sequence: 1, id: activeID, text: "Same source.")
         let refreshed = self.input(owner: owner, generation: 4, sequence: 2, id: activeID, text: "Same source.")
@@ -154,14 +163,16 @@ struct LiveReplyPreparationQueueTests {
         #expect(completed.values.map(\.0.sequence) == [2], "the unchanged result is associated with the latest event token")
         #expect(gate.normalizedTexts.map(\.1) == ["Same source."], "identical text is not normalized twice")
     }
+#endif
 
+#if DEBUG
     @Test func repeatedActiveRefreshKeepsOnlyLatestSnapshotAndNoStaleCompletion() async {
         let owner = UUID()
         let activeID = "replace-active-latest-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let original = self.input(owner: owner, generation: 5, sequence: 1, id: activeID, text: "Old source.")
         let intermediate = self.input(owner: owner, generation: 5, sequence: 2, id: activeID, text: "Superseded source.")
@@ -181,7 +192,9 @@ struct LiveReplyPreparationQueueTests {
         #expect(gate.normalizedTexts.map(\.1) == ["Old source.", "Latest source."],
                 "the middle replacement is discarded before a new normalization stage")
     }
+#endif
 
+#if DEBUG
     @Test func cancellingActiveReplacementReleasesOnlyReplacementBudget() async {
         let owner = UUID()
         let generation: UInt64 = 6
@@ -189,7 +202,7 @@ struct LiveReplyPreparationQueueTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: generation, sequence: 1, id: activeID, text: "Active.")
         let replacement = self.input(owner: owner, generation: generation, sequence: 2, id: activeID, text: "Canceled replacement.")
@@ -211,14 +224,16 @@ struct LiveReplyPreparationQueueTests {
         #expect(gate.normalizedTexts.map(\.1) == ["Active.", "Next run."],
                 "the canceled replacement never reaches the normalizer")
     }
+#endif
 
+#if DEBUG
     @Test func candidateRevalidationReturnsToItsOriginalFIFOOrder() async {
         let owner = UUID()
         let activeID = "revalidate-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
         let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+                                              normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let candidate = self.input(owner: owner, generation: 7, sequence: 1, id: "old-candidate", text: "Original candidate.")
         #expect(queue.submit(candidate) { completed.append($0, $1) } == .started)
@@ -241,6 +256,7 @@ struct LiveReplyPreparationQueueTests {
                 "candidate revalidation is inserted at its original queue order")
         #expect(gate.normalizedTexts.map(\.1) == ["Original candidate.", "Active.", "Refreshed candidate.", "Later queued item."])
     }
+#endif
 
     private func input(owner: UUID, generation: UInt64, sequence: UInt64, revision: UInt64? = nil, id: String, text: String)
         -> LiveReplyPreparationInput
@@ -262,11 +278,11 @@ struct LiveReplyPreparationQueueTests {
     }
 }
 
+#if DEBUG
 private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
     private let lock = NSLock()
     private var blockedIDs: Set<String>
-    private let entered = DispatchSemaphore(value: 0)
-    private let release = DispatchSemaphore(value: 0)
+    private var release = ExplicitWorkerTestGate()
     private var started: [String] = []
     private var normalizedText: [(String, String)] = []
     private var onMain: [Bool] = []
@@ -278,38 +294,29 @@ private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
     var normalizedTexts: [(String, String)] { self.lock.withLock { self.normalizedText } }
     var mainThreadFlags: [Bool] { self.lock.withLock { self.onMain } }
 
-    func normalize(_ input: LiveReplyPreparationInput) -> Bool {
-        let shouldBlock = self.lock.withLock { () -> Bool in
+    func normalize(_ input: LiveReplyPreparationInput) async -> Bool {
+        let heldGate = self.lock.withLock { () -> ExplicitWorkerTestGate? in
             self.started.append(input.itemID)
             self.normalizedText.append((input.itemID, input.textBlocks.joined(separator: "\n\n")))
             self.onMain.append(Thread.isMainThread)
-            return self.blockedIDs.remove(input.itemID) != nil
+            return self.blockedIDs.remove(input.itemID) != nil ? self.release : nil
         }
-        if shouldBlock {
-            self.entered.signal()
-            self.waitSynchronouslyForRelease()
-        }
+        if let heldGate { await heldGate.hold() }
         return SpeechText.isSpeakable(textBlocks: input.textBlocks, itemID: input.itemID)
     }
 
     func waitUntilEntered() async -> Bool {
-        await Task.detached(priority: .utility) { self.waitSynchronouslyUntilEntered() }.value
-    }
-
-    private func waitSynchronouslyUntilEntered() -> Bool {
-        self.entered.wait(timeout: .now() + 3) == .success
-    }
-
-    private func waitSynchronouslyForRelease() {
-        self.release.wait()
+        let release = self.lock.withLock { self.release }
+        return await release.waitUntilEntered()
     }
 
     func releaseBlockedWork() {
-        let shouldSignal = self.lock.withLock { () -> Bool in
-            guard !self.didRelease else { return false }
+        let release = self.lock.withLock { () -> ExplicitWorkerTestGate? in
+            guard !self.didRelease else { return nil }
             self.didRelease = true
-            return true
+            return self.release
         }
-        if shouldSignal { self.release.signal() }
+        release?.open()
     }
 }
+#endif
