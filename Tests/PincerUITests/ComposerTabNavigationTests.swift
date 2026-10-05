@@ -115,7 +115,7 @@ struct ComposerTabNavigationTests {
         let characters = modifiers.contains(.shift) ? "\u{19}" : "\t"
         guard let event = NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: "\t",
+            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters,
             isARepeat: false, keyCode: 48
         ) else { Issue.record("could not create Tab event"); return }
         NSApp.sendEvent(event)
