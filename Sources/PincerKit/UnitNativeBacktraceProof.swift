@@ -70,6 +70,11 @@ package func unitNativeBacktraceProof() async throws -> UnitNativeBacktraceEvide
         guard FileManager.default.fileExists(atPath: libraries.appendingPathComponent("libXCTestSwiftSupport.dylib").path) else {
             throw CocoaError(.executableNotLoadable)
         }
+        let pathEntries = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":")
+        guard let python = pathEntries.map({ URL(fileURLWithPath: String($0)).appendingPathComponent("python3") })
+            .first(where: { $0.path.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0.path) }) else {
+            throw CocoaError(.executableNotLoadable)
+        }
         func child(_ mode: String) throws -> (Int32, Bool, String, Bool) {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-backtrace-" + UUID().uuidString)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -79,8 +84,8 @@ package func unitNativeBacktraceProof() async throws -> UnitNativeBacktraceEvide
             let handle = try FileHandle(forWritingTo: output)
             defer { try? handle.close() }
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["python3", root.appendingPathComponent("scripts/checks-unit-command.py").path, helper.path, "--test-bundle-path", bundle.path, "--testing-library", "swift-testing", "--filter", "UnitNativeBacktraceProofTests/actualOwnedSwiftCrashChild"]
+            process.executableURL = python
+            process.arguments = [root.appendingPathComponent("scripts/checks-unit-command.py").path, helper.path, "--test-bundle-path", bundle.path, "--testing-library", "swift-testing", "--filter", "UnitNativeBacktraceProofTests/actualOwnedSwiftCrashChild"]
             process.currentDirectoryURL = root
             var env = ProcessInfo.processInfo.environment
             let inheritedFrameworks = env["DYLD_FRAMEWORK_PATH"].flatMap { $0.isEmpty ? nil : $0 }
