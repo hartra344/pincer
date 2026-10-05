@@ -13,13 +13,16 @@ import UIKit
             readsOnMain = readsOnMain && Thread.isMainThread; reads += 1
             return lowPower
         }), center = NotificationCenter()
+        let scratch = ScratchDefaults()
+        let app = AppModel(defaults: scratch.defaults)
+        defer { for gateway in app.gateways { app.remove(gateway.id) }; scratch.remove() }
         let controller = UIHostingController(rootView: Form {
-            BackgroundRefreshPowerNote(delivery: .backgroundRefresh, power: power, center: center)
-        })
+            NotificationSettingsSection(power: power, powerNotifications: center, initialDelivery: .backgroundRefresh)
+        }.environment(app))
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
         window.rootViewController = controller; window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil }
-        try #require(await eventually { controller.view.window != nil })
+        try #require(await eventually { controller.view.window != nil && reads >= 2 })
         #expect(!power.showsPauseNote(delivery: .backgroundRefresh))
         lowPower = true
         await Task.detached { center.post(name: .NSProcessInfoPowerStateDidChange, object: nil) }.value
