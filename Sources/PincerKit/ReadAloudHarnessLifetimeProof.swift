@@ -65,6 +65,10 @@ package func readAloudHarnessLifetimeProof() async throws -> ReadAloudHarnessLif
         guard FileManager.default.isExecutableFile(atPath: helper.path), FileManager.default.isExecutableFile(atPath: bundle.path) else {
             throw CocoaError(.executableNotLoadable)
         }
+        let libraries = platform.appendingPathComponent("Developer/usr/lib")
+        guard FileManager.default.fileExists(atPath: libraries.appendingPathComponent("libXCTestSwiftSupport.dylib").path) else {
+            throw CocoaError(.executableNotLoadable)
+        }
         func child(_ mode: String) throws -> (Int32, Bool, String) {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-lifetime-" + UUID().uuidString)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -80,6 +84,8 @@ package func readAloudHarnessLifetimeProof() async throws -> ReadAloudHarnessLif
             var env = ProcessInfo.processInfo.environment
             let inheritedFrameworks = env["DYLD_FRAMEWORK_PATH"].flatMap { $0.isEmpty ? nil : $0 }
             env["DYLD_FRAMEWORK_PATH"] = frameworks.path + (inheritedFrameworks.map { ":" + $0 } ?? "")
+            let inheritedLibraries = env["DYLD_LIBRARY_PATH"].flatMap { $0.isEmpty ? nil : $0 }
+            env["DYLD_LIBRARY_PATH"] = libraries.path + (inheritedLibraries.map { ":" + $0 } ?? "")
             env["PINCER_READ_ALOUD_LIFETIME_CHILD"] = mode
             env["PINCER_DEV_NAMESPACE"] = "lifetime-" + UUID().uuidString
             env["PINCER_KEYCHAIN"] = "memory"
