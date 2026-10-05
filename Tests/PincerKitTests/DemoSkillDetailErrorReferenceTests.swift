@@ -14,4 +14,15 @@ struct DemoSkillDetailErrorReferenceTests {
             #expect(message == "ClawHub /api/v1/skills/\(encoded) failed (404): Skill not found")
         }
     }
+    @Test(arguments: ["missing detail", "missing-é", "@invalid!/missing-detail"])
+    func invalidReferenceKeepsExistingDemoBehavior(reference: String) async throws {
+        do {
+            _ = try await DemoGateway().handle("skills.detail", ["slug": .string(reference)])
+            Issue.record("Missing invalid reference must fail")
+        } catch let GatewayError.rpc(code, message, _) {
+            #expect(code == "UNAVAILABLE")
+            #expect(message == "ClawHub skill \"\(reference)\" not found")
+        }
+    }
+
 }
