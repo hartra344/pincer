@@ -390,6 +390,7 @@ enum Suites {
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Chat window notification visibility (demo)") { await runDemoChatWindowNotificationVisibility() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
+        Section("Background refresh power note (demo)") { await runDemoBackgroundRefreshPowerChecks() },
         Section("Dictation recognition delivery (demo)") { await runDemoDictationRecognitionDeliveryChecks() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
