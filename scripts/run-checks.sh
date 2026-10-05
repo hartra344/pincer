@@ -136,10 +136,12 @@ report() {
         if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
         # An AppKit interaction can stop the async main run loop and end the unit process with
         # exit 0 before Testing completes. Exit status alone is not terminal test evidence.
-        local unit_completion=""
+        local unit_completion="" unit_started=0 unit_finished=0
         if [ "$name" = unit-tests ]; then
-            unit_completion=$(grep -E '^[✓✔] Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed after [0-9.]+ seconds\.$' "$LOGS/$name.log" | tail -n 1)
-            if [ -z "$unit_completion" ]; then result=FAILED; status=1; fi
+            unit_started=$(grep -cE '^◇ Test run started\.$' "$LOGS/$name.log")
+            unit_completion=$(grep -E '^[✓✔] Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed after [0-9.]+ seconds\.$' "$LOGS/$name.log" || true)
+            unit_finished=$(grep -cE '^[✓✔] Test run with [1-9][0-9]* tests? in [1-9][0-9]* suites? passed after [0-9.]+ seconds\.$' "$LOGS/$name.log")
+            if [ "$unit_started" -eq 0 ] || [ "$unit_started" -ne "$unit_finished" ]; then result=FAILED; status=1; fi
         fi
         seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
         echo "::group::$name ($result)"
@@ -147,10 +149,12 @@ report() {
         echo "::endgroup::"
         if [ "$name" = unit-tests ]; then
             echo "::group::Unit terminal completion evidence"
+            echo "Framework runs started=$unit_started completed=$unit_finished"
             if [ -n "$unit_completion" ]; then
                 printf '%s\n' "$unit_completion"
-            else
-                echo "MISSING: final Swift Testing completion summary; unit lane rejected"
+            fi
+            if [ "$unit_started" -eq 0 ] || [ "$unit_started" -ne "$unit_finished" ]; then
+                echo "MISSING: positive terminal completion for every started Swift Testing run; unit lane rejected"
             fi
             echo "::endgroup::"
         fi
