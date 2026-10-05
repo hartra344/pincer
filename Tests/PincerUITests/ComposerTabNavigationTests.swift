@@ -110,9 +110,12 @@ struct ComposerTabNavigationTests {
     }
 
     private static func sendTab(_ window: NSWindow, modifiers: NSEvent.ModifierFlags) {
+        // A native Shift-Tab carries NSBackTabCharacter, so AppKit dispatches insertBacktab
+        // without relying on the application's globally queued currentEvent.
+        let characters = modifiers.contains(.shift) ? "\u{19}" : "\t"
         guard let event = NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters,
             isARepeat: false, keyCode: 48
         ) else { Issue.record("could not create Tab event"); return }
         NSApp.sendEvent(event)
