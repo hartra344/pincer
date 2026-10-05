@@ -38,6 +38,8 @@ The composer works like the main [composer](../composer/):
 
 Sending to a chat you picked adds your message to it. Sending to **New Chat with *agent*** creates the chat first. Either way, Pincer's main window stays on the chat it was showing.
 
+Both **Send** and **Send and open the chat in Pincer** need a live Gateway connection. If the connection drops, Quick Capture keeps your draft and shows an error; it does not queue the message in the [Offline outbox](../offline-outbox/).
+
 If the send fails, the panel stays open with your text and shows the error, so you can try again. After a failed send to a new chat, the next try goes to the chat that was already created, so you don't get a duplicate.
 
 Closing the panel without sending keeps your draft until the next time you open it. Drafts aren't kept after you quit Pincer.
