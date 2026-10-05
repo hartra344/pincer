@@ -176,14 +176,16 @@ code {
 	min-height: 2.5rem;
 	padding: 0 var(--space-4);
 }
-#theme-toggle .moon {
-	display: none;
-}
-:root[data-theme='light'] #theme-toggle .sun {
-	display: none;
-}
-:root[data-theme='light'] #theme-toggle .moon {
-	display: block;
+#theme-select {
+	min-height: 2.5rem;
+	max-width: 5.5rem;
+	padding: 0 var(--space-2);
+	color: var(--pc-text);
+	background: var(--pc-bg);
+	border: 1px solid currentColor;
+	border-radius: var(--radius-s);
+	font: inherit;
+	cursor: pointer;
 }
 
 /* Hero */
@@ -762,4 +764,11 @@ pre .p {
 	.btn {
 		transition: none;
 	}
+}
+
+@media (max-width: 479px) {
+	.keyshelf nav { gap: 0; }
+	.keyshelf nav > a:not(.btn) { padding: 0 var(--space-1); }
+	.keyshelf .install { padding: 0 var(--space-2); }
+	#theme-select { padding: 0 var(--space-1); }
 }

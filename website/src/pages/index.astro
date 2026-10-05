@@ -374,23 +374,28 @@ const facts = [
 
 		<script>
 			const root = document.documentElement;
-			const toggle = document.getElementById('theme-toggle');
-			const sync = () => {
-				const light = root.dataset.theme === 'light';
-				toggle?.setAttribute('aria-label', `Switch to ${light ? 'dark' : 'light'} theme`);
+			const select = document.getElementById('theme-select') as HTMLSelectElement | null;
+			const system = matchMedia('(prefers-color-scheme: light)');
+			let preference = 'auto';
+			try {
+				const stored = localStorage.getItem('starlight-theme');
+				if (stored === 'light' || stored === 'dark') preference = stored;
+			} catch {}
+			const apply = () => {
+				root.dataset.theme = preference === 'auto' ? (system.matches ? 'light' : 'dark') : preference;
 			};
-			if (toggle) {
-				toggle.hidden = false;
-				sync();
-				toggle.addEventListener('click', () => {
-					const next = root.dataset.theme === 'light' ? 'dark' : 'light';
-					root.dataset.theme = next;
+			if (select) {
+				select.value = preference;
+				select.hidden = false;
+				select.addEventListener('change', () => {
+					preference = select.value;
+					apply();
 					try {
-						localStorage.setItem('starlight-theme', next);
+						localStorage.setItem('starlight-theme', preference === 'auto' ? '' : preference);
 					} catch {}
-					sync();
 				});
 			}
+			system.addEventListener('change', () => { if (preference === 'auto') apply(); });
 
 			const strip = document.querySelector<HTMLElement>('.line-index');
 			const links = [...document.querySelectorAll<HTMLAnchorElement>('.line-index a')];
