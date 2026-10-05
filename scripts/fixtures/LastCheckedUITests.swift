@@ -2,7 +2,7 @@ import XCTest
 
 final class LastCheckedUITests: XCTestCase {
     @MainActor
-    func testActualFixedSavedTimestampChangesRenderedLabel() throws {
+    func testActualFixedSavedTimestampChangesRenderedLabel() async throws {
         let app = XCUIApplication()
         defer { app.terminate() }
         app.launch()
@@ -16,13 +16,21 @@ final class LastCheckedUITests: XCTestCase {
             XCTFail("The actual baseline must include both timestamp and result suffix")
             return
         }
-        let predicate = NSPredicate { _, _ in
-            value.count == 1 && !value.element.label.isEmpty
-                && value.element.label.contains("Up to date") && value.element.label != "Up to date"
-                && value.element.label != initial
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(15))
+        var changed = false
+        while clock.now < deadline {
+            try Task.checkCancellation()
+            if value.count == 1 {
+                let current = value.element.label
+                if !current.isEmpty, current.contains("Up to date"), current != "Up to date", current != initial {
+                    changed = true
+                    break
+                }
+            }
+            try await Task.sleep(for: .milliseconds(100))
         }
-        let changed = expectation(for: predicate, evaluatedWith: nil)
-        wait(for: [changed], timeout: 15)
+        XCTAssertTrue(changed, "The actual fixed-input timestamp must change within 15 seconds")
         guard value.count == 1 else {
             XCTFail("Exactly one actual value must remain after qualification")
             return
