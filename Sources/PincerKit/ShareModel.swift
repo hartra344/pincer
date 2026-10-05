@@ -72,6 +72,7 @@ public final class ShareModel {
     @ObservationIgnored private let connectionFactory: @MainActor (GatewayProfile, DeviceIdentity) -> ShareConnection
     #if DEBUG
     package var actualPumpTask: Task<Void, Never>? { pumpTask }
+    package var actualAttachmentPreparationTaskForTesting: Task<Void, Never>? { attachmentPreparationTask }
     #endif
     @ObservationIgnored private var attachmentPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var attachmentPreparationGeneration = 0
