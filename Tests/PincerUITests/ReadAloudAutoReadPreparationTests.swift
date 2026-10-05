@@ -554,4 +554,90 @@ struct ReadAloudAutoReadPreparationTests {
                 "a stale source never reaches the speech preparer")
         #expect(fixture.speaker.spokenTexts.isEmpty)
     }
+
+    @Test func acceptedCallbackAdmissionIsAsynchronousBeforeActualUIPreparation() async throws {
+        let id = "async-admission-\(UUID().uuidString)"
+        SpeechText.resetSpeakabilityDebugStats(tracking: id)
+        defer { SpeechText.unregisterSpeakabilityDebugStats(tracking: id) }
+        let fixture = AutoReadFixture(sessionKey: "agent:probe:async-admission", heldIDs: [id])
+        defer { fixture.cleanup() }
+        fixture.install()
+        let installed = try #require(fixture.chat.onFinalAssistantReply)
+        var delivered: [ChatItem] = []
+        fixture.chat.onFinalAssistantReply = { item in delivered.append(item); installed(item) }
+        fixture.deliver(id: id, text: "The actual accepted callback is prepared asynchronously.")
+        #expect(delivered.count == 1, "neutral reproduction of the old synchronous callback premise")
+        let entered = await self.waitForStart(id, fixture: fixture)
+        #require(entered)
+        #expect(delivered.map(\.id) == [id])
+        let stats = SpeechText.speakabilityDebugStats(for: id)
+        #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations >= 1)
+        await fixture.preparation.release(id)
+        let finished = await self.waitForFinish(id, fixture: fixture)
+        #expect(finished)
+        let spoken = await eventually { fixture.speaker.spokenTexts == ["The actual accepted callback is prepared asynchronously."] }
+        #expect(spoken)
+    }
+
+    @Test func coalescingAfterActualCallbackAdmissionsPreservesLatestReply() async throws {
+        let first = "admitted-first-\(UUID().uuidString)"
+        let middle = "admitted-middle-\(UUID().uuidString)"
+        let latest = "admitted-latest-\(UUID().uuidString)"
+        let fixture = AutoReadFixture(sessionKey: "agent:probe:admitted-coalescing", heldIDs: [first, latest])
+        defer { fixture.cleanup() }
+        fixture.install()
+        let installed = try #require(fixture.chat.onFinalAssistantReply)
+        var admissions: [String] = []
+        fixture.chat.onFinalAssistantReply = { item in admissions.append(item.id); installed(item) }
+        fixture.deliver(id: first, text: "First reply.")
+        let firstEntered = await self.waitForStart(first, fixture: fixture)
+        #require(firstEntered)
+        fixture.deliver(id: middle, text: "Intermediate reply.")
+        let middleAdmitted = await eventually { admissions.contains(middle) }
+        #require(middleAdmitted)
+        fixture.deliver(id: latest, text: "Latest reply.")
+        let latestAdmitted = await eventually { admissions == [first, middle, latest] }
+        #require(latestAdmitted)
+        let held = await fixture.preparation.snapshot
+        #expect(held.startedIDs == [first] && held.maximumActiveWorkers == 1)
+        await fixture.preparation.release(first)
+        let latestEntered = await self.waitForStart(latest, fixture: fixture)
+        #require(latestEntered)
+        await fixture.preparation.release(latest)
+        let finished = await self.waitForFinish(latest, fixture: fixture)
+        #expect(finished)
+        let spoken = await eventually { fixture.speaker.spokenTexts == ["Latest reply."] }
+        #expect(spoken)
+        let drained = await fixture.preparation.snapshot
+        #expect(drained.startedIDs == [first, latest] && drained.maximumActiveWorkers == 1)
+    }
+
+
+    @Test(arguments: [false, true])
+    func existingRowEditAndNewSuccessfulRunHaveDistinctAutoReadIntent(newSuccessfulRun: Bool) async throws {
+        let id = "edit-intent-\(UUID().uuidString)"
+        let fixture = AutoReadFixture(sessionKey: "agent:probe:edit-intent", heldIDs: [id])
+        defer { fixture.cleanup() }
+        fixture.install()
+        fixture.deliver(id: id, text: "Original body.")
+        let entered = await self.waitForStart(id, fixture: fixture)
+        #require(entered)
+        fixture.chat.handleSessionMessage([
+            "message": ["role": "assistant", "content": [["type": "text", "text": "Updated body."]],
+                        "__openclaw": ["id": .string(id)]]])
+        #require(fixture.chat.message(withId: id)?.plainText == "Updated body.")
+        let normalized = await eventually { fixture.chat.liveReplyPreparationQueue.isIdle }
+        #require(normalized)
+        if newSuccessfulRun { fixture.chat.noteRunSucceeded("actual-new-success-\(UUID().uuidString)") }
+        await fixture.preparation.release(id)
+        let idle = await self.waitForAutoReadIdle(fixture)
+        #require(idle)
+        if newSuccessfulRun {
+            let spoken = await eventually { fixture.speaker.spokenTexts == ["Updated body."] }
+            #expect(spoken, "a genuinely new successful run may read its updated reply")
+        } else {
+            #expect(fixture.speaker.spokenTexts.isEmpty, "editing the existing row invalidates its captured body without a new successful-run intent")
+        }
+    }
+
 }

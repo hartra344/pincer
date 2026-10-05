@@ -54,6 +54,14 @@ enum Suites {
     /// (CI's demo and live runs, since the plain run already covers it).
     static func unit(skipIntentChecks: Bool) -> [Section] {
         #if DEBUG && os(macOS)
+        if CommandLine.arguments.contains("--catalog-worker-gate-proof") {
+            return [Section(nil) {
+                let evidence = await runCatalogWorkerGateProof()
+                guard let data = try? JSONEncoder().encode(evidence) else { exit(2) }
+                print(String(decoding: data, as: UTF8.self))
+                exit(evidence.passed ? 0 : 1)
+            }]
+        }
         if CommandLine.arguments.contains("--cooperative-worker-gate-proof") {
             return [Section(nil) {
                 let evidence = await runCooperativeWorkerGateProof()
@@ -259,6 +267,9 @@ enum Suites {
             Section("Unit terminal completion") { await runUnitTerminalCompletionChecks() },
             Section("Unit diagnostic capture") { await runUnitDiagnosticCaptureChecks() },
             Section("Cooperative worker gate") { await runCooperativeWorkerGateChecks() },
+            Section("Catalog worker gate") { await runCatalogWorkerGateChecks() },
+            Section("Image probe terminal completion") { await runImageLoaderTerminalProofChecks() },
+            Section("Auto-read callback ordering") { await runAutoReadCallbackOrderingChecks() },
         ]
         #if DEBUG && os(macOS)
         sections.append(Section("Solo session budget coverage") { await runSoloSessionBudgetCoverageChecks() })
@@ -493,6 +504,9 @@ enum Suites {
         sections.append(Section("Unit terminal completion infrastructure (Demo lane)") { await runUnitTerminalCompletionChecks() })
         sections.append(Section("Unit diagnostic capture infrastructure (Demo lane)") { await runUnitDiagnosticCaptureChecks() })
         sections.append(Section("Cooperative worker gate infrastructure (Demo lane)") { await runCooperativeWorkerGateChecks() })
+        sections.append(Section("Catalog worker gate infrastructure (Demo lane)") { await runCatalogWorkerGateChecks() })
+        sections.append(Section("Image probe terminal completion infrastructure (Demo lane)") { await runImageLoaderTerminalProofChecks() })
+        sections.append(Section("Auto-read callback ordering infrastructure (Demo lane)") { await runAutoReadCallbackOrderingChecks() })
         #if DEBUG && os(macOS)
         sections.append(Section("Solo session budget coverage infrastructure (Demo lane)") { await runSoloSessionBudgetCoverageChecks() })
         sections.append(Section("Read Aloud harness lifetime infrastructure (Demo lane)") { await runReadAloudHarnessLifetimeProofChecks() })

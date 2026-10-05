@@ -98,6 +98,10 @@ public final class DeviceSpeechCatalog {
     @ObservationIgnored private var inFlight: Task<DeviceSpeechCatalogSnapshot, Never>?
     @ObservationIgnored private var pending: Request?
 
+    #if DEBUG
+    package var actualDiscoveryTaskForTesting: Task<DeviceSpeechCatalogSnapshot, Never>? { self.inFlight }
+    #endif
+
     public init(discover: @escaping @Sendable (String) -> DeviceSpeechCatalogSnapshot) {
         self.discover = discover
     }

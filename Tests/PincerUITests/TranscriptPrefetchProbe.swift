@@ -233,7 +233,13 @@ struct ImageRSSProbe {
         let rssBefore = ProbeMeter.footprintMiB()
         let start = ProbeMeter.wall()
         for ref in refs { loader.load(ref, sessionKey: "agent:probe:main") }
-        _ = await eventually(timeout: .seconds(90)) { loader.images.count + loader.failures.count >= refs.count || loader.failures.count == refs.count }
+        _ = await eventually(timeout: .seconds(90)) {
+            #if DEBUG
+            imageRSSPreparationIsComplete(loader, admittedCount: refs.count)
+            #else
+            loader.images.count + loader.failures.count >= refs.count || loader.failures.count == refs.count
+            #endif
+        }
         // Loaders that evict never reach `count`; let in-flight work drain.
         try? await Task.sleep(for: .seconds(1))
         let wall = ProbeMeter.wall() - start
