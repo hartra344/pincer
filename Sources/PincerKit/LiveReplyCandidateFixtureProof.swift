@@ -166,7 +166,10 @@ package func liveReplyCandidateFixtureProof() async throws -> LiveReplyCandidate
             let normalFailure = process.terminationReason == .exit && process.terminationStatus == 1 && own
                 && metadata?["ownedReturnCode"] as? Int == 1 && failedRuns == 1 && complete && readinessIssue && actualHeldDrain
             let qualified = ordinary ? passed && complete && prerequisites : prerequisites && (trapped || normalFailure)
-            return (process.terminationStatus, ordinary ? qualified : qualified && normalFailure, String(text.suffix(16_384)), qualified)
+            let exitMetadata = metadata.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+            let diagnostic = String(text.prefix(8_192)) + "\n[bounded middle omitted]\n" + String(text.suffix(8_192))
+                + "\nPINCER_LIVE_CANDIDATE_EXIT=" + String(decoding: exitMetadata ?? Data(), as: UTF8.self)
+            return (process.terminationStatus, ordinary ? qualified : qualified && normalFailure, diagnostic, qualified)
         }
         let ordinary = try child("ordinary")
         guard ordinary.1 else { return LiveReplyCandidateFixtureEvidence(ordinaryPassed: false, heldQualified: false, heldCompletedAsFailedTest: false, ordinaryStatus: ordinary.0, heldStatus: -1, diagnostics: ordinary.2) }
