@@ -142,7 +142,34 @@ report() {
     done
     stop_progress
 }
+# Keep critical restoration proof visible even when large lane groups are truncated by the host.
+# The isolated runner harness has no application sources; real repository runs require this proof.
+report_outbox_evidence() {
+    local evidence_status=0 pattern label log
+    echo "::group::Outbox restoration terminal evidence"
+    while IFS='|' read -r log pattern label; do
+        if grep -Eq "$pattern" "$LOGS/$log.log"; then
+            echo "PASS: $label"
+        else
+            echo "MISSING: $label"
+            evidence_status=1
+        fi
+    done <<'EVIDENCE'
+unit-tests|[✓✔] Test compositionCannotPersistOverSavedQueueWhileActualWorkerIsHeld\(\) passed|actual worker-window unit completed
+unit-tests|[✓✔] Suite "Outbox persistence" passed|legacy outbox persistence suite completed
+unit-tests|[✓✔] Suite "Outbox across a store replacement" passed|legacy outbox relaunch suite completed
+unit-tests|[✓✔] Suite "Outbox attachment persistence" passed|legacy attachment persistence suite completed
+self-checks|^[[:space:]]*✓ held worker preserves full persisted queue$|held worker preserves full persisted queue
+self-checks|^[[:space:]]*✓ completed worker persists exact restored and new queue$|completed worker persists exact restored and new queue
+self-checks|^[[:space:]]*✓ completed worker publishes exact merged queue$|completed worker publishes exact merged queue
+EVIDENCE
+    echo "::endgroup::"
+    return "$evidence_status"
+}
 report 0
+if [ -f Tests/PincerKitTests/OutboxRestoreWorkerWindowTests.swift ]; then
+    report_outbox_evidence || status=1
+fi
 # The perf smoke budgets are wall-clock, so they only mean something with the CPU to themselves.
 # Likewise the unit tests' perf budgets: the parallel lane above only holds them to a generous
 # ceiling (`PerfBudget` in Tests/PincerKitTests/Support.swift); this solo run enforces them.
