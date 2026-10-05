@@ -275,6 +275,7 @@ enum Suites {
         #if DEBUG && os(macOS)
         sections.append(Section("Solo session budget coverage") { await runSoloSessionBudgetCoverageChecks() })
         sections.append(Section("Read Aloud harness lifetime") { await runReadAloudHarnessLifetimeProofChecks() })
+        sections.append(Section("Native Swift backtrace") { await runUnitNativeBacktraceProofChecks() })
         #endif
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
@@ -512,6 +513,7 @@ enum Suites {
         #if DEBUG && os(macOS)
         sections.append(Section("Solo session budget coverage infrastructure (Demo lane)") { await runSoloSessionBudgetCoverageChecks() })
         sections.append(Section("Read Aloud harness lifetime infrastructure (Demo lane)") { await runReadAloudHarnessLifetimeProofChecks() })
+        sections.append(Section("Native Swift backtrace infrastructure (Demo lane)") { await runUnitNativeBacktraceProofChecks() })
         #endif
         return sections
     }
