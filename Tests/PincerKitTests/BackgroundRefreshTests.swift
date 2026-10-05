@@ -187,7 +187,8 @@ struct BackgroundRefreshTests {
         let ids = result.requests.map(\.identifier)
         #expect(ids.filter { $0.hasPrefix("reply:") }.count == 10)
         #expect(ids.filter { $0.hasPrefix("approval:") }.count == 12)
-        #expect(result.requests.count == 25)
+        #expect(result.requests.count == 26)
+        #expect(ids.filter { $0.hasPrefix("refresh-summary:") }.count == 1)
         #expect(result.cursor.questionIds.count == 3)
     }
 
