@@ -284,7 +284,7 @@ struct Composer: View {
         self.attachments.isEmpty || self.gateway.canPersistAttachments(bytes: self.attachments.reduce(0) { $0 + $1.data.count })
     }
 
-    private var canAttach: Bool { self.gateway.state.isConnected || self.gateway.canPersistAttachments(bytes: 0) }
+    private var canAttach: Bool { ComposerAttachmentIngest.canAttach(chat: self.chat, gateway: self.gateway) }
 
     private static var offlineHint: String { L("Offline — messages send when you reconnect") }
     private static var attachmentsNeedConnection: String { L("Attachments need a connection") }
@@ -495,16 +495,7 @@ struct Composer: View {
     // MARK: Attachments
 
     private var attachmentIngest: AttachmentIngest {
-        let ownerID = self.chat.draft.ownerID
-        return AttachmentIngest(
-            limits: self.gateway.uploadLimits,
-            limitsAreLastKnown: self.gateway.uploadLimitsAreLastKnown,
-            reserve: { [weak chat = self.chat] in
-                guard let token = chat?.beginAttachmentPreparation(ownerID: ownerID) else { return nil }
-                return { [weak chat] in chat?.finishAttachmentPreparation(token) }
-            },
-            add: { [weak chat = self.chat] in chat?.appendPreparedAttachment($0, ownerID: ownerID) },
-            report: { [weak chat = self.chat] in chat?.reportAttachmentPreparationError($0, ownerID: ownerID) })
+        ComposerAttachmentIngest.make(chat: self.chat, gateway: self.gateway)
     }
 
     private func ingest(_ items: [PastedMedia]) {
