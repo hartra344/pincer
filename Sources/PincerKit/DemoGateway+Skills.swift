@@ -20,6 +20,16 @@ extension DemoGateway {
         switch method {
         case "skills.status":
             try Self.checkKeys(method, params, ["agentId", "sessionKey"])
+            for field in ["agentId", "sessionKey"] {
+                if let raw = params[field] {
+                    guard case let .string(value) = raw else {
+                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must be string")
+                    }
+                    guard !value.isEmpty else {
+                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must NOT have fewer than 1 characters")
+                    }
+                }
+            }
             let agentId = try self.skillsAgentId(params)
             if let key = params["sessionKey"]?.text, !self.hasSession(key) {
                 throw Self.skillsInvalid("Session not found.")

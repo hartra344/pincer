@@ -120,7 +120,7 @@ enum Suites {
             Section("Plugin credential ownership") { await runPluginCredentialOwnershipChecks() },
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
-            Section("Demo skill status fields") { await runDemoSkillStatusFieldOfflineChecks() },
+            Section("Demo skill status fields") { await runDemoSkillStatusFieldOfflineChecks(); await runDemoSkillStatusBoundaryChecks() },
             Section("Demo skill detail parameter error") { await runDemoSkillDetailParamErrorOfflineChecks() },
             Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks(); await runDemoSkillDetailErrorReferenceChecks() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
