@@ -294,6 +294,7 @@ enum Suites {
         sections.append(Section("Native Swift backtrace") { await runUnitNativeBacktraceProofChecks() })
         sections.append(Section("Share worker gate") { await runShareWorkerGateChecks() })
         sections.append(Section("Raw config worker gate") { await runRawWorkerGateChecks() })
+        sections.append(Section("Image readiness failure") { await runImageReadinessFailureProofChecks() })
         #endif
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
@@ -534,6 +535,7 @@ enum Suites {
         sections.append(Section("Native Swift backtrace infrastructure (Demo lane)") { await runUnitNativeBacktraceProofChecks() })
         sections.append(Section("Share worker gate infrastructure (Demo lane)") { await runShareWorkerGateChecks() })
         sections.append(Section("Raw config worker gate infrastructure (Demo lane)") { await runRawWorkerGateChecks() })
+        sections.append(Section("Image readiness failure infrastructure (Demo lane)") { await runImageReadinessFailureProofChecks() })
         #endif
         return sections
     }

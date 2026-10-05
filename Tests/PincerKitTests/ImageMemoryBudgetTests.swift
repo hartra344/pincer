@@ -2,6 +2,9 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import Testing
+#if os(macOS)
+import Darwin
+#endif
 @testable import PincerKit
 
 /// Byte-budgeted image cache (#198): LRU by decoded bytes, downsampling, memory pressure, size caps,
@@ -211,12 +214,48 @@ struct ImageMemoryBudgetTests {
         let loader = ArtifactImageLoader(byteBudget: 500_000_000)
         let ref = Self.ref(Self.png(3000, 1500), tag: 1)
         loader.load(ref, sessionKey: "k")
-        #expect(await eventually { loader.cached(ref) != nil })
+        let ready = await eventually { loader.cached(ref) != nil }
+        Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: ready)
+    }
+
+    private static func assertTranscriptThumbnail(loader: ArtifactImageLoader, ref: ImageRef, ready: Bool) {
+        #expect(ready)
         let image = loader.cached(ref)!
         #expect(max(image.width, image.height) <= ArtifactImageLoader.transcriptMaxPixel)
         #expect(max(image.width, image.height) >= ArtifactImageLoader.transcriptMaxPixel - 2)
         #expect(loader.decodedBytes < 3000 * 1500 * 4 / 4)
     }
+
+    #if DEBUG && os(macOS)
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["PINCER_IMAGE_READINESS_CHILD"] != nil),
+          .timeLimit(.minutes(2)))
+    func actualThumbnailReadinessChild() async throws {
+        let mode = ProcessInfo.processInfo.environment["PINCER_IMAGE_READINESS_CHILD"]
+        try #require(mode == "ordinary" || mode == "missing")
+        var coreLimit = rlimit(rlim_cur: 0, rlim_max: 0)
+        let coreDisabled = Darwin.setrlimit(RLIMIT_CORE, &coreLimit)
+        try #require(coreDisabled == 0)
+        print("PINCER_IMAGE_READINESS_CHILD_PID=\(ProcessInfo.processInfo.processIdentifier)")
+        fflush(stdout)
+        defer {
+            print("PINCER_IMAGE_READINESS_CHILD_COMPLETE=\(mode ?? "")")
+            fflush(stdout)
+        }
+        switch mode {
+        case "ordinary":
+            await transcriptImagesAreDownsampled()
+        case "missing":
+            // A real empty loader has never admitted this real inline reference. No decoder
+            // result is substituted; exercise the very same readiness/assertion boundary.
+            let loader = ArtifactImageLoader(byteBudget: 500_000_000)
+            let ref = Self.ref(Self.png(64, 32), tag: 1)
+            Self.assertTranscriptThumbnail(loader: loader, ref: ref, ready: false)
+        default:
+            Issue.record("unsupported image readiness child mode")
+            return
+        }
+    }
+    #endif
 
     @Test func smallImagesAreNotUpscaled() async {
         let loader = ArtifactImageLoader()
