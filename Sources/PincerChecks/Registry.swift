@@ -260,6 +260,10 @@ enum Suites {
             Section("Unit diagnostic capture") { await runUnitDiagnosticCaptureChecks() },
             Section("Cooperative worker gate") { await runCooperativeWorkerGateChecks() },
         ]
+        #if DEBUG && os(macOS)
+        sections.append(Section("Solo session budget coverage") { await runSoloSessionBudgetCoverageChecks() })
+        sections.append(Section("Read Aloud harness lifetime") { await runReadAloudHarnessLifetimeProofChecks() })
+        #endif
         #if DEBUG
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
         sections.append(Section("Branch selection ownership") { await runBranchSelectionOwnershipChecks() })
@@ -489,6 +493,10 @@ enum Suites {
         sections.append(Section("Unit terminal completion infrastructure (Demo lane)") { await runUnitTerminalCompletionChecks() })
         sections.append(Section("Unit diagnostic capture infrastructure (Demo lane)") { await runUnitDiagnosticCaptureChecks() })
         sections.append(Section("Cooperative worker gate infrastructure (Demo lane)") { await runCooperativeWorkerGateChecks() })
+        #if DEBUG && os(macOS)
+        sections.append(Section("Solo session budget coverage infrastructure (Demo lane)") { await runSoloSessionBudgetCoverageChecks() })
+        sections.append(Section("Read Aloud harness lifetime infrastructure (Demo lane)") { await runReadAloudHarnessLifetimeProofChecks() })
+        #endif
         return sections
     }
 
