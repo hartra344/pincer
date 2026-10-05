@@ -1,5 +1,8 @@
 import Foundation
 import Testing
+#if os(macOS)
+import Darwin
+#endif
 @testable import PincerKit
 
 @MainActor
@@ -227,7 +230,11 @@ struct LiveReplyPreparationQueueTests {
 #endif
 
 #if DEBUG
-    @Test func candidateRevalidationReturnsToItsOriginalFIFOOrder() async {
+    @Test func candidateRevalidationReturnsToItsOriginalFIFOOrder() async throws {
+        _ = try await candidateRevalidationFixture()
+    }
+
+    private func candidateRevalidationFixture() async throws -> Bool {
         let owner = UUID()
         let activeID = "revalidate-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
@@ -236,9 +243,7 @@ struct LiveReplyPreparationQueueTests {
                                               normalizer: { await gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let candidate = self.input(owner: owner, generation: 7, sequence: 1, id: "old-candidate", text: "Original candidate.")
-        #expect(queue.submit(candidate) { completed.append($0, $1) } == .started)
-        #expect(await eventually { queue.isIdle && completed.values.count == 1 })
-        let candidateOrder = completed.values[0].0.queueOrder
+        let candidateOrder = try await initialCandidateOrder(candidate, queue: queue, completed: completed)
 
         let active = self.input(owner: owner, generation: 7, sequence: 2, id: activeID, text: "Active.")
         let later = self.input(owner: owner, generation: 7, sequence: 3, id: "later", text: "Later queued item.")
@@ -255,8 +260,147 @@ struct LiveReplyPreparationQueueTests {
         #expect(completed.values.map(\.0.queueOrder) == [candidateOrder, candidateOrder + 1, candidateOrder, candidateOrder + 2],
                 "candidate revalidation is inserted at its original queue order")
         #expect(gate.normalizedTexts.map(\.1) == ["Original candidate.", "Active.", "Refreshed candidate.", "Later queued item."])
+        return queue.isIdle && completed.values.map(\.0.queueOrder) == [candidateOrder, candidateOrder + 1, candidateOrder, candidateOrder + 2]
+            && gate.normalizedTexts.map(\.1) == ["Original candidate.", "Active.", "Refreshed candidate.", "Later queued item."]
     }
 #endif
+
+    #if DEBUG
+    /// Neutral shared boundary: the original readiness expectation is followed by the
+    /// original unchecked index. The child observes actual state without changing it.
+    @inline(never) private func initialCandidateOrder(
+        _ candidate: LiveReplyPreparationInput, queue: LiveReplyPreparationQueue,
+        completed: LiveReplyCompletionRecorder,
+        afterSubmit: (@MainActor () async throws -> Void)? = nil,
+        beforeIndex: (@MainActor (Bool) async throws -> Void)? = nil
+    ) async throws -> UInt64 {
+        #expect(queue.submit(candidate) { completed.append($0, $1) } == .started)
+        try await afterSubmit?()
+        let ready = await eventually { queue.isIdle && completed.values.count == 1 }
+        #expect(ready, "original candidate readiness before queue-order index")
+        try await beforeIndex?(ready)
+        return completed.values[0].0.queueOrder
+    }
+    #endif
+
+    #if DEBUG && os(macOS)
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["PINCER_LIVE_CANDIDATE_CHILD"] != nil),
+          .timeLimit(.minutes(2)))
+    func actualCandidateReadinessChild() async throws {
+        let mode = ProcessInfo.processInfo.environment["PINCER_LIVE_CANDIDATE_CHILD"]
+        try #require(mode == "ordinary" || mode == "held")
+        var core = rlimit(rlim_cur: 0, rlim_max: 0)
+        let coreResult = Darwin.setrlimit(RLIMIT_CORE, &core)
+        try #require(coreResult == 0)
+        print("PINCER_LIVE_CANDIDATE_CHILD_PID=\(ProcessInfo.processInfo.processIdentifier)")
+        fflush(stdout)
+        defer { print("PINCER_LIVE_CANDIDATE_CHILD_COMPLETE=\(mode ?? "")"); fflush(stdout) }
+        let owner = UUID()
+        let id = "candidate-readiness-" + UUID().uuidString
+        let text = "Actual candidate speaks this ordinary sentence."
+        let candidate = input(owner: owner, generation: 7, sequence: 1, id: id, text: text)
+        let gate = LiveReplyPreparationNormalizerGate(blockedIDs: mode == "held" ? [id] : [])
+        let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 2_048,
+                                              normalizer: { await gate.normalize($0) })
+        let completed = LiveReplyCompletionRecorder()
+        var actualTask: Task<Void, Never>?
+        let safetyState = LiveCandidateSafety()
+        let safetyAction: @Sendable () -> Void = {
+            safetyState.expire()
+            gate.releaseBlockedWork()
+        }
+        let safety = DispatchWorkItem(block: safetyAction)
+        if mode == "held" { DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 8, execute: safety) }
+        defer { safety.cancel(); gate.releaseBlockedWork() }
+        var held = false
+        let order = try await initialCandidateOrder(candidate, queue: queue, completed: completed,
+            afterSubmit: {
+                actualTask = queue.actualPreparationTaskForTesting
+                if mode == "held" {
+                    let entered = await gate.waitUntilEntered()
+                    held = entered && gate.workerIsHeld && actualTask != nil && queue.activeCount == 1
+                        && queue.pendingCount == 0 && queue.retainedByteCount == candidate.retainedBytes
+                        && gate.startedIDs == [id] && gate.mainThreadFlags == [false] && completed.values.isEmpty
+                    if !held {
+                        await self.releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: actualTask)
+                        try #require(held, "actual held candidate ownership prerequisite")
+                    }
+                }
+            }, beforeIndex: { ready in
+                guard mode == "held" else { return }
+                let prerequisites = held && !ready && gate.workerIsHeld && actualTask != nil
+                    && queue.activeCount == 1 && queue.pendingCount == 0
+                    && queue.retainedByteCount == candidate.retainedBytes && completed.values.isEmpty
+                    && gate.startedIDs == [id] && gate.mainThreadFlags == [false] && !safetyState.expired
+                if !prerequisites {
+                    await self.releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: actualTask)
+                    try #require(prerequisites, "actual candidate readiness failure prerequisites")
+                }
+                try self.emitCandidate(["mode": "held", "prerequisites": prerequisites,
+                    "heldActualWorker": held && gate.workerIsHeld, "actualTaskCaptured": actualTask != nil,
+                    "offMain": gate.mainThreadFlags == [false], "activeCount": queue.activeCount,
+                    "pendingCount": queue.pendingCount, "retainedBytes": queue.retainedByteCount,
+                    "expectedRetainedBytes": candidate.retainedBytes, "completionCount": completed.values.count,
+                    "readiness": ready, "safetyDidNotExpire": !safetyState.expired,
+                    "ownerID": candidate.ownerID.uuidString, "generation": candidate.generation,
+                    "sequence": candidate.sequence, "itemID": candidate.itemID])
+            })
+        // Neutral held mode reaches the unchecked index only after the evidence above.
+        await actualTask?.value
+        let ordinary = actualTask != nil && queue.isIdle && queue.retainedByteCount == 0
+            && completed.values.count == 1 && completed.values.first?.0.ownerID == owner
+            && completed.values.first?.0.generation == 7 && completed.values.first?.0.sequence == 1
+            && completed.values.first?.0.itemID == id && completed.values.first?.0.queueOrder == order
+            && completed.values.first?.1 == true && gate.normalizedTexts.map(\.1) == [text]
+            && gate.mainThreadFlags == [false]
+        let fifo = try await candidateRevalidationFixture()
+        let cleanup = try await candidateExplicitReleaseControl()
+        try emitCandidate(["mode": "ordinary", "prerequisites": ordinary && fifo && cleanup,
+            "ordinaryPassed": ordinary && fifo, "cleanupControlPassed": cleanup])
+        try #require(ordinary && fifo && cleanup, "actual ordinary candidate/FIFO output and explicit cleanup control")
+    }
+
+    private func releaseAndDrainCandidate(queue: LiveReplyPreparationQueue,
+                                         gate: LiveReplyPreparationNormalizerGate,
+                                         actualTask: Task<Void, Never>?) async {
+        gate.releaseBlockedWork()
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !queue.isIdle && ContinuousClock.now < deadline {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.001) { continuation.resume() }
+            }
+        }
+        guard queue.isIdle else {
+            print("PINCER_LIVE_CANDIDATE_SETUP_DRAIN_FAILED")
+            fflush(stdout)
+            Darwin._exit(2)
+        }
+        await actualTask?.value
+    }
+
+    private func candidateExplicitReleaseControl() async throws -> Bool {
+        let owner = UUID(), id = "cleanup-candidate-" + UUID().uuidString
+        let candidate = input(owner: owner, generation: 7, sequence: 1, id: id, text: "Cleanup candidate.")
+        let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [id])
+        let queue = LiveReplyPreparationQueue(normalizer: { await gate.normalize($0) })
+        let completed = LiveReplyCompletionRecorder()
+        let admitted = queue.submit(candidate) { completed.append($0, $1) } == .started
+        let task = queue.actualPreparationTaskForTesting
+        let entered = await gate.waitUntilEntered()
+        let held = admitted && entered && task != nil && gate.workerIsHeld && queue.activeCount == 1
+            && completed.values.isEmpty && gate.mainThreadFlags == [false]
+        await releaseAndDrainCandidate(queue: queue, gate: gate, actualTask: task)
+        return held && queue.isIdle && queue.retainedByteCount == 0 && completed.values.count == 1
+            && completed.values.first?.0.ownerID == owner && completed.values.first?.0.itemID == id
+            && completed.values.first?.1 == true && gate.normalizedTexts.map(\.1) == ["Cleanup candidate."]
+    }
+
+    private func emitCandidate(_ fields: [String: Any]) throws {
+        let data = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
+        print("PINCER_LIVE_CANDIDATE_CHILD_EVIDENCE=" + String(decoding: data, as: UTF8.self))
+        fflush(stdout)
+    }
+    #endif
 
     private func input(owner: UUID, generation: UInt64, sequence: UInt64, revision: UInt64? = nil, id: String, text: String)
         -> LiveReplyPreparationInput
@@ -288,6 +432,8 @@ private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
     private var onMain: [Bool] = []
     private var didRelease = false
 
+    var workerIsHeld: Bool { self.lock.withLock { !self.didRelease && !self.started.isEmpty } }
+
     init(blockedIDs: Set<String>) { self.blockedIDs = blockedIDs }
 
     var startedIDs: [String] { self.lock.withLock { self.started } }
@@ -318,5 +464,14 @@ private final class LiveReplyPreparationNormalizerGate: @unchecked Sendable {
         }
         release?.open()
     }
+}
+#endif
+
+#if DEBUG && os(macOS)
+private final class LiveCandidateSafety: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didExpire = false
+    func expire() { lock.withLock { didExpire = true } }
+    var expired: Bool { lock.withLock { didExpire } }
 }
 #endif

@@ -98,6 +98,9 @@ package final class LiveReplyPreparationQueue {
     private var pending: [Work] = []
     private var active: ActiveWork?
     private var activeTask: Task<Void, Never>?
+    #if DEBUG
+    package var actualPreparationTaskForTesting: Task<Void, Never>? { self.activeTask }
+    #endif
     private var nextQueueOrder: UInt64 = 0
     private var retainedBytes = 0
 
