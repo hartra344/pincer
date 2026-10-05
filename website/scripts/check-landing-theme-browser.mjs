@@ -20,7 +20,12 @@ try {
   }
   await explicit('dark');
   results.explicitDark = await page.evaluate(() => localStorage.getItem('starlight-theme') === 'dark');
+  await page.evaluate(() => {
+    window.__themeMediaChanged = false;
+    matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { window.__themeMediaChanged = true; }, { once: true });
+  });
   await page.emulateMedia({ colorScheme: 'light' });
+  await page.waitForFunction(() => window.__themeMediaChanged === true);
   results.explicitUnaffectedBySystem = await page.evaluate(() => document.documentElement.dataset.theme === 'dark');
   await explicit('light');
   results.explicitLight = await page.evaluate(() => localStorage.getItem('starlight-theme') === 'light');
