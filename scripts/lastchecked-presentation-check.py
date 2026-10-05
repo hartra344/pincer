@@ -72,6 +72,8 @@ spec = json.loads(r'''{
       "dependencies": [{"package": "Pincer", "product": "PincerUI"}, {"package": "Pincer", "product": "PincerKit"}],
       "settings": {
         "base": {
+          "SWIFT_PACKAGE_NAME": "Pincer",
+          "OTHER_SWIFT_FLAGS": "$(inherited) -package-name Pincer",
           "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
           "INFOPLIST_KEY_UILaunchScreen_Generation": "YES"
         }
