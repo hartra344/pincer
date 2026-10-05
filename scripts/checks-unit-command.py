@@ -252,7 +252,14 @@ def main():
         return 2
     started = datetime.now(timezone.utc).isoformat()
     launched_at = time.monotonic()
-    child = subprocess.Popen(sys.argv[1:], start_new_session=True)
+    command_environment = os.environ.copy()
+    if sys.platform == "darwin":
+        # Swift 6.3 docs/Backtracing.rst: noninteractive crash diagnostics. timeout=0s
+        # disables interaction only; the owned-command watchdog still bounds processing.
+        command_environment.setdefault("SWIFT_BACKTRACE",
+            "enable=yes,interactive=no,color=no,timeout=0s,threads=crashed,registers=none,"
+            "images=mentioned,limit=32,symbolicate=fast,sanitize=yes,output-to=stderr")
+    child = subprocess.Popen(sys.argv[1:], start_new_session=True, env=command_environment)
     leader_identity = mac_process_identity(child.pid)
     identities = {}
     if leader_identity is not None:
