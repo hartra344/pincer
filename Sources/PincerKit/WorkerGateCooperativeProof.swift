@@ -53,7 +53,8 @@ package struct CooperativeWorkerGateEvidence: Codable, Sendable {
 /// One real cache worker and one same-QoS continuation, not a pool saturation loop.
 @MainActor package func runCooperativeWorkerGateProof() async -> CooperativeWorkerGateEvidence {
     let gate = CooperativeProofGate()
-    let fallback = DispatchWorkItem { gate.open(expired: true) }
+    let fallbackAction: @Sendable () -> Void = { gate.open(expired: true) }
+    let fallback = DispatchWorkItem(block: fallbackAction)
     DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 3, execute: fallback)
     defer { fallback.cancel(); gate.open() }
     let cache = MessagePartExcerptCache()
