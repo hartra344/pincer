@@ -568,7 +568,7 @@ struct ReadAloudAutoReadPreparationTests {
         fixture.deliver(id: id, text: "The actual accepted callback is prepared asynchronously.")
         #expect(delivered.count == 1, "neutral reproduction of the old synchronous callback premise")
         let entered = await self.waitForStart(id, fixture: fixture)
-        #require(entered)
+        try #require(entered)
         #expect(delivered.map(\.id) == [id])
         let stats = SpeechText.speakabilityDebugStats(for: id)
         #expect(stats.mainThreadNormalizations == 0 && stats.offMainNormalizations >= 1)
@@ -591,18 +591,18 @@ struct ReadAloudAutoReadPreparationTests {
         fixture.chat.onFinalAssistantReply = { item in admissions.append(item.id); installed(item) }
         fixture.deliver(id: first, text: "First reply.")
         let firstEntered = await self.waitForStart(first, fixture: fixture)
-        #require(firstEntered)
+        try #require(firstEntered)
         fixture.deliver(id: middle, text: "Intermediate reply.")
         let middleAdmitted = await eventually { admissions.contains(middle) }
-        #require(middleAdmitted)
+        try #require(middleAdmitted)
         fixture.deliver(id: latest, text: "Latest reply.")
         let latestAdmitted = await eventually { admissions == [first, middle, latest] }
-        #require(latestAdmitted)
+        try #require(latestAdmitted)
         let held = await fixture.preparation.snapshot
         #expect(held.startedIDs == [first] && held.maximumActiveWorkers == 1)
         await fixture.preparation.release(first)
         let latestEntered = await self.waitForStart(latest, fixture: fixture)
-        #require(latestEntered)
+        try #require(latestEntered)
         await fixture.preparation.release(latest)
         let finished = await self.waitForFinish(latest, fixture: fixture)
         #expect(finished)
@@ -621,17 +621,17 @@ struct ReadAloudAutoReadPreparationTests {
         fixture.install()
         fixture.deliver(id: id, text: "Original body.")
         let entered = await self.waitForStart(id, fixture: fixture)
-        #require(entered)
+        try #require(entered)
         fixture.chat.handleSessionMessage([
             "message": ["role": "assistant", "content": [["type": "text", "text": "Updated body."]],
                         "__openclaw": ["id": .string(id)]]])
-        #require(fixture.chat.message(withId: id)?.plainText == "Updated body.")
+        try #require(fixture.chat.message(withId: id)?.plainText == "Updated body.")
         let normalized = await eventually { fixture.chat.liveReplyPreparationQueue.isIdle }
-        #require(normalized)
+        try #require(normalized)
         if newSuccessfulRun { fixture.chat.noteRunSucceeded("actual-new-success-\(UUID().uuidString)") }
         await fixture.preparation.release(id)
         let idle = await self.waitForAutoReadIdle(fixture)
-        #require(idle)
+        try #require(idle)
         if newSuccessfulRun {
             let spoken = await eventually { fixture.speaker.spokenTexts == ["Updated body."] }
             #expect(spoken, "a genuinely new successful run may read its updated reply")
