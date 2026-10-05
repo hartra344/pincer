@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 @MainActor func runDemoToolsCatalogCompatibilityChecks() async {
     let demo = DemoGateway()
