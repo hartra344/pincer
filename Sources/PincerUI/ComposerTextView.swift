@@ -602,7 +602,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerUITextView, context: Context) -> CGSize? {
         let width = proposal.width ?? uiView.frame.width
-        let lineHeight = (uiView.font ?? .preferredFont(forTextStyle: .body)).lineHeight
+        let lineHeight = context.coordinator.lineHeight(for: uiView.font ?? .preferredFont(forTextStyle: .body))
         let height = context.coordinator.heights.height(
             for: uiView.text ?? "", lineHeight: lineHeight, width: width, maxLines: self.maxLines
         ) { width in
@@ -617,6 +617,8 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         var focusRequest: Int
         var caretSerial: Int?
         let heights = ComposerHeightCache()
+        private var lineHeightFont: UIFont?
+        private var cachedLineHeight: CGFloat = 0
 
         init(_ parent: PlatformComposerTextView) {
             self.parent = parent
@@ -629,6 +631,18 @@ private struct PlatformComposerTextView: UIViewRepresentable {
             guard let request, request.serial != self.caretSerial else { return nil }
             self.caretSerial = request.serial
             return min(max(request.offset, 0), length)
+        }
+
+        /// One laid-out line, which UITextView makes taller than `UIFont.lineHeight`; the empty
+        /// field and the line cap use it so they match the measured text heights.
+        func lineHeight(for font: UIFont) -> CGFloat {
+            if font != self.lineHeightFont {
+                self.lineHeightFont = font
+                self.cachedLineHeight = ceil(NSAttributedString(string: "X", attributes: [.font: font]).boundingRect(
+                    with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height)
+            }
+            return self.cachedLineHeight
         }
 
         func textViewDidChange(_ textView: UITextView) {
