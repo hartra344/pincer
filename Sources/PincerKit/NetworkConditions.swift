@@ -20,7 +20,7 @@ public final class NetworkConditions {
     public func start() {
         guard self.monitor == nil, !self.overridden else { return }
         let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self] path in
+        monitor.pathUpdateHandler = { @Sendable [weak self] path in
             let expensive = path.isExpensive, constrained = path.isConstrained
             Task { @MainActor [weak self] in
                 guard let self, !self.overridden else { return }

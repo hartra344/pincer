@@ -202,7 +202,9 @@ public enum BackgroundRefreshPlanner {
 @MainActor
 public final class BackgroundRefresh {
     public static let taskIdentifier = "chat.pincer.refresh"
-    public static let defaultBudget: TimeInterval = 25
+    /// Well inside the ~30 s iOS gives a refresh, counted from launch: with unreachable gateways a
+    /// run that used the full window hit the expiration handler and crashed (#930).
+    public static let defaultBudget: TimeInterval = 20
     public static let interval: TimeInterval = 15 * 60
 
     public struct Report: Equatable, Sendable {
