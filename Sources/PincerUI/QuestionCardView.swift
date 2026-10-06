@@ -330,13 +330,8 @@ struct PendingQuestionCard: View {
         TimelineView(.periodic(from: .now, by: 5)) { context in
             let pending = self.gateway.pendingQuestions(for: self.chat.sessionKey, at: context.date)
             if let prompt = pending.first {
-                if prompt.kind == .secureForm {
-                    SecureFormCardView(prompt: prompt, queued: pending.count - 1)
-                        .id(prompt.id)
-                } else {
-                    QuestionCardView(prompt: prompt, queued: pending.count - 1)
-                        .id(prompt.id)
-                }
+                QuestionCardView(prompt: prompt, queued: pending.count - 1)
+                    .id(prompt.id)
             } else if self.gateway.hello != nil, !self.gateway.canAnswerQuestions, self.isAskingUser {
                 QuestionAccessHint(requestId: self.gateway.hello?.scopeUpgradeRequestId)
             }

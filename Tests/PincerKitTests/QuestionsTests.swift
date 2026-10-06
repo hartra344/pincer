@@ -4,120 +4,69 @@ import Testing
 
 @Suite("Questions")
 struct QuestionsTests {
-    @Test func decodesSecureFormPrompt() {
-        let prompt = QuestionPrompt(Fixtures.json(#"""
-        {
-          "id": "ask_secure",
-          "kind": "secure_form",
-          "requestId": "secure_req_123",
-          "origin": "mail.google.com",
-          "fields": [
-            {"fieldId": "identifier", "role": "username"},
-            {"fieldId": "password", "role": "password"},
-            {"fieldId": "otp", "role": "otp"},
-            {"fieldId": "recovery", "role": "email"},
-            {"fieldId": "custom", "role": "federated-id"}
-          ],
-          "agentId": "main",
-          "sessionKey": "agent:main:main",
-          "runId": "run_123",
-          "expiresAtMs": 1700000000000,
-          "status": "pending"
-        }
+    /// The record upstream's `secrets` tool sends through `question.request` (secrets-tool.ts).
+    static let secretRecord = #"""
+    {
+      "id": "ask_secret",
+      "questions": [{
+        "questionId": "secret_value",
+        "header": "API key",
+        "question": "Provide the secret for STRIPE_API_KEY.",
+        "options": [],
+        "presentation": "form",
+        "isSecret": true,
+        "secretStore": {"name": "STRIPE_API_KEY", "kind": "secret", "allowedHosts": ["api.stripe.com"]}
+      }],
+      "sessionKey": "agent:main:main",
+      "createdAtMs": 1760000000000,
+      "expiresAtMs": 1760000900000,
+      "status": "pending"
+    }
+    """#
+
+    @Test func decodesSecretStoreQuestion() throws {
+        let prompt = try #require(QuestionPrompt(Fixtures.json(Self.secretRecord)))
+        let question = try #require(prompt.questions.first)
+        #expect(question.isSecret)
+        #expect(question.secretStoreName == "STRIPE_API_KEY")
+        #expect(question.allowsFreeText)
+        #expect(prompt.promptText == "Provide the secret for STRIPE_API_KEY.")
+    }
+
+    /// #924: upstream has no `kind: "secure_form"`; a record without questions isn't a prompt, even with a `requestId`.
+    @Test func ignoresInventedSecureFormRecords() {
+        let invented = QuestionPrompt(Fixtures.json(#"""
+        {"id": "ask_secure", "kind": "secure_form", "requestId": "secure_req_123", "origin": "mail.google.com",
+         "fields": [{"fieldId": "password", "role": "password"}], "status": "pending"}
         """#))
-
-        #expect(prompt?.id == "ask_secure")
-        #expect(prompt?.kind == .secureForm)
-        #expect(prompt?.questions.isEmpty == true)
-        #expect(prompt?.promptText == "Secure sign-in for mail.google.com")
-        #expect(prompt?.expiresAt == Date(timeIntervalSince1970: 1_700_000_000))
-
-        let secureForm = prompt?.secureForm
-        #expect(secureForm?.requestId == "secure_req_123")
-        #expect(secureForm?.origin == "mail.google.com")
-        #expect(secureForm?.fields.map(\.fieldId) == ["identifier", "password", "otp", "recovery", "custom"])
-        #expect(secureForm?.fields.map(\.role) == [.username, .password, .otp, .email, .other("federated-id")])
+        #expect(invented == nil)
+        let bareRequestId = QuestionPrompt(Fixtures.json(#"{"id": "ask_x", "requestId": "r1", "status": "pending"}"#))
+        #expect(bareRequestId == nil)
     }
 
-    @Test func encodesSecureFormAnswers() throws {
-        let prompt = QuestionPrompt(Fixtures.json(#"""
-        {
-          "id": "ask_secure",
-          "kind": "secure_form",
-          "requestId": "secure_req_123",
-          "origin": "mail.google.com",
-          "fields": [
-            {"fieldId": "identifier", "role": "username"},
-            {"fieldId": "password", "role": "password"},
-            {"fieldId": "otp", "role": "otp"}
-          ],
-          "status": "pending"
-        }
-        """#))!
-        let secureForm = try #require(prompt.secureForm)
-        var draft = SecureFormDraft()
-        draft.setText("user@example.com", for: secureForm.fields[0])
-        draft.setText("correct horse battery staple", for: secureForm.fields[1])
-        #expect(draft.answers(for: prompt) == nil)
-        draft.setText("123456", for: secureForm.fields[2])
-
-        #expect(draft.answers(for: prompt) == [
-            "identifier": "user@example.com",
-            "password": "correct horse battery staple",
-            "otp": "123456",
-        ])
-        #expect(draft.resolvePayload(for: prompt) == [
-            "id": "ask_secure",
-            "answers": [
-                "requestId": "secure_req_123",
-                "answers": [
-                    "identifier": "user@example.com",
-                    "password": "correct horse battery staple",
-                    "otp": "123456",
-                ],
-            ],
-        ])
-        #expect(prompt.cancelPayload == ["id": "ask_secure", "cancel": true])
+    @Test func secretAnswerIsSentExactlyAsTyped() throws {
+        let prompt = try #require(QuestionPrompt(Fixtures.json(Self.secretRecord)))
+        var draft = QuestionDraft()
+        draft.setText(" sk_test_123 \n", for: prompt.questions[0])
+        #expect(draft.answers(for: prompt) == ["secret_value": [" sk_test_123 \n"]])
     }
 
-    @Test func expiryUsesExpiresAtForSecureForm() {
-        let prompt = QuestionPrompt(Fixtures.json(#"""
-        {
-          "id": "ask_secure",
-          "kind": "secure_form",
-          "requestId": "secure_req_123",
-          "origin": "mail.google.com",
-          "fields": [{"fieldId": "password", "role": "password"}],
-          "expiresAtMs": 2000,
-          "status": "pending"
+    /// Like upstream, the demo writes a store-bound answer to `secrets.store` and only the `"stored"` marker goes on.
+    @Test func demoStoresSecretAnswersAndFansOutOnlyTheMarker() async throws {
+        let demo = DemoGateway()
+        await demo.publishQuestion("ask_secret", Fixtures.json(Self.secretRecord))
+        do {
+            _ = try await demo.handle("question.resolve", ["id": "ask_secret", "answers": ["answers": ["secret_value": ["a", "b"]]]])
+            Issue.record("two values were accepted for a store-bound question")
+        } catch GatewayError.rpc(_, _, let details) {
+            #expect(details?["reason"]?.string == "QUESTION_INVALID_ANSWER")
         }
-        """#))!
-        #expect(!prompt.isExpired(at: Date(timeIntervalSince1970: 1.999)))
-        #expect(prompt.isExpired(at: Date(timeIntervalSince1970: 2.0)))
-    }
-
-    @Test func secureFormOriginOnlyComesFromTopLevelPayload() throws {
-        let prompt = try #require(QuestionPrompt(Fixtures.json(#"""
-        {
-          "id": "ask_secure",
-          "kind": "secure_form",
-          "requestId": "secure_req_123",
-          "origin": "mail.google.com",
-          "fields": [
-            {"fieldId": "identifier", "role": "username", "origin": "evil.example"}
-          ],
-          "status": "pending"
-        }
-        """#)))
-        let secureForm = try #require(prompt.secureForm)
-        #expect(secureForm.origin == "mail.google.com")
-        #expect(secureForm.fields.count == 1)
-
-        let payload = try #require(secureForm.answersPayload(["identifier": "user@example.com"]))
-        let text = try String(decoding: payload.encoded(), as: UTF8.self)
-        #expect(text.contains(#""requestId":"secure_req_123""#))
-        #expect(!text.contains("mail.google.com"))
-        #expect(!text.contains("evil.example"))
-        #expect(!text.contains(#""origin""#))
+        let result = try await demo.handle("question.resolve",
+                                           ["id": "ask_secret", "answers": ["answers": ["secret_value": [" sk_test_123 "]]]])
+        #expect(result == ["status": "answered", "answers": ["answers": ["secret_value": ["stored"]]]])
+        #expect(await demo.voice.secrets["STRIPE_API_KEY"]?.value == " sk_test_123 ")
+        #expect(await demo.voice.secrets["STRIPE_API_KEY"]?.allowedHosts == ["api.stripe.com"])
+        let record = try #require(await demo.questions["ask_secret"])
+        #expect(!String(decoding: try record.encoded(), as: UTF8.self).contains("sk_test_123"))
     }
 }
