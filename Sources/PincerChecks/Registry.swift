@@ -83,7 +83,7 @@ enum Suites {
             Section("Rewind history ownership") { await runRewindHistoryOwnershipChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
-            Section("Latest measurement worker") { await runLatestMeasurementChecks() },
+            Section("Composer sizing") { runComposerSizingChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
