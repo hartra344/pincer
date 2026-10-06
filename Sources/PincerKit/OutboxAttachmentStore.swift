@@ -97,9 +97,9 @@ public enum OutboxAttachmentStore {
         guard let dir = self.directory(gatewayId: gatewayId, entryId: entryId, root: root) else { return false }
         self.enqueue(gatewayId: gatewayId, root: root) {
             do {
-                try self.createDirectory(dir)
+                try OutboxStore.createDirectory(dir)
                 for attachment in attachments {
-                    try attachment.data.write(to: dir.appending(path: attachment.id.uuidString), options: .atomic)
+                    try attachment.data.write(to: dir.appending(path: attachment.id.uuidString), options: OutboxStore.writeOptions)
                 }
             } catch {
                 OutboxStore.logger.error("Couldn't write outbox attachments: \(error.localizedDescription, privacy: .public)")
@@ -163,14 +163,5 @@ public enum OutboxAttachmentStore {
         defer { self.running.unlock() }
         let work = self.pendingLock.withLock { self.pending.removeValue(forKey: key) ?? [] }
         for item in work { item() }
-    }
-
-    private static func createDirectory(_ url: URL) throws {
-        var attributes: [FileAttributeKey: Any] = [:]
-        #if os(iOS)
-        // Not `complete`: a send after the device locks (background reconnect) must still read them.
-        attributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
-        #endif
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: attributes.isEmpty ? nil : attributes)
     }
 }
