@@ -38,16 +38,6 @@ if let index = CommandLine.arguments.firstIndex(of: "--avatar-snapshots") {
 // (token dev-token, MOCK_PAIRING=auto), saves a PNG of the window at each step, removes the gateway it
 // added and quits. For reviewing the wizard; see FirstRunTour.
 #if DEBUG
-if CommandLine.arguments.contains("--composer-sizing-probe") {
-    // This probe needs AppKit's layout loop, not an activated app scene or a foreground window.
-    NSApplication.shared.setActivationPolicy(.accessory)
-    Task { @MainActor in
-        exit(await ComposerSizingProbe.run())
-    }
-    NSApplication.shared.run()
-    exit(2)
-}
-
 if let index = CommandLine.arguments.firstIndex(of: "--first-run-screens") {
     let rest = CommandLine.arguments.dropFirst(index + 1)
     let path = rest.first ?? "first-run-screens"

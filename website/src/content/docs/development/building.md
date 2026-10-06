@@ -72,17 +72,10 @@ Live automatic Read Aloud checks speakability on one shared background worker, w
 
 Composer and Quick Capture share one attachment-preparation FIFO: one item is active, with up to 32 pending descriptors and 32 MiB of pending in-memory data. Image codec work runs off-main; the UIKit fallback that turns a pasteboard `UIImage` into PNG data still runs before that queue. `AttachmentPreparationTests` checks the real ingest path and codec executor, while the demo check exercises queue budgets and a small PNG round trip.
 
-Composer autosizing measures the full draft off the main thread, keeping one active measurement and one replaceable pending request. While a compatible measurement is pending, the native editor retains its previous height; width, font and line-cap changes request a new measurement. The hosted tests check the actual native editor height, including long drafts, wrapping and trailing newlines:
+Composer autosizing measures the draft on the main thread, in the same layout pass as the edit or width change, so a newline, a wrap, a paste, a restored draft, a window resize or a rotation never shows a clipped or one-line frame first. macOS lays the text out with a TextKit 1 layout manager configured like the field; iOS asks the live `UITextView` for its fitting size. Heights are cached per width for the current text, so SwiftUI's repeated size proposals cost a lookup. Drafts over 20,000 UTF-16 units skip layout and take the full 12-line height, which is exact at any real composer width. The hosted tests check the native editor height after one layout pass on macOS and iOS, plus a main-thread budget for a 4,000-character draft:
 
 ```sh
-swift test --filter 'LatestMeasurementWorkerTests|ComposerSizingDiagnosticTests'
-```
-
-A Debug-only macOS probe exercises the same editor with a seeded Demo Gateway chat. It prints measurement counts, elapsed nanoseconds, main-thread counts and native height for 32 KiB and 128 KiB drafts. A successful run reports `main_count: 0` and matching native and measured heights. It uses a non-key window and verifies geometry, rather than foreground keyboard interaction:
-
-```sh
-PINCER_DEV_NAMESPACE=composer-sizing PINCER_KEYCHAIN=memory PINCER_DRAFTS_DIR=off \
-  swift run PincerMacDev --composer-sizing-probe
+swift test --filter 'ComposerSizing|ComposerSynchronousSizing'
 ```
 
 CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. The hosted UIKit suite also resizes a native transcript from 390 to 600 points and back, checking measured row widths, row tops, collection content geometry, and the reader’s anchored row and screen position. Synthetic and seeded Demo transcripts verify that status-bar scroll-to-top is disabled and its delegate rejects the request without changing position, while manual browsing still moves the reader’s anchor. These native checks do not simulate a physical status-bar tap. To run those rendering suites locally:
