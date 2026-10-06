@@ -246,8 +246,11 @@ final class ComposerTextMeasurer {
             self.container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         }
         self.layoutManager.ensureLayout(for: self.container)
+        let used = self.layoutManager.usedRect(for: self.container)
         // usedRect leaves out the empty line after a trailing newline; the extra fragment covers it.
-        return self.layoutManager.usedRect(for: self.container).union(self.layoutManager.extraLineFragmentUsedRect).height
+        // Without one the rect is garbage (negative y), so it must not be unioned.
+        guard self.layoutManager.extraLineFragmentTextContainer != nil else { return used.height }
+        return used.union(self.layoutManager.extraLineFragmentUsedRect).height
     }
 }
 

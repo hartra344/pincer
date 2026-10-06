@@ -46,8 +46,8 @@ private final class SizingRig {
     init(text: String = "") {
         self.fixture.text = text
         self.host = NSHostingView(rootView: ComposerSizingHost(fixture: self.fixture))
-        self.host.frame = NSRect(x: 0, y: 0, width: 420, height: 700)
-        self.window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 420, height: 700),
+        self.host.frame = NSRect(x: 0, y: 0, width: 700, height: 700)
+        self.window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 700),
                                styleMask: [.titled], backing: .buffered, defer: false)
         self.window.isReleasedWhenClosed = false
         self.window.contentView = self.host
@@ -146,6 +146,26 @@ struct ComposerSynchronousSizingAppKitTests {
         rig.fixture.width = 360
         rig.layout()
         #expect(abs(rig.height - SizingRig.wrapped(wrapSentence, width: 360)) <= 1)
+    }
+
+    /// With no trailing newline there is no extra line fragment, so a wide single line must stay one line.
+    @Test func wideSingleLineStaysOneLine() throws {
+        let rig = SizingRig()
+        rig.fixture.width = 608
+        try settle(rig)
+        let line = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over"
+        for count in [66, 70, line.count] {
+            rig.fixture.text = String(line.prefix(count))
+            rig.layout()
+            #expect(abs(rig.height - SizingRig.lines(1)) <= 1, "\(count) chars: height \(rig.height)")
+        }
+        let three = repeated(String(line.prefix(77)), count: 3)
+        rig.fixture.text = three
+        rig.layout()
+        #expect(abs(rig.height - SizingRig.lines(3)) <= 1, "three lines: height \(rig.height)")
+        rig.fixture.text = three + "\n"
+        rig.layout()
+        #expect(abs(rig.height - SizingRig.lines(4)) <= 1, "trailing newline: height \(rig.height)")
     }
 
     @Test func clearingReturnsToOneLine() throws {
