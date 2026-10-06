@@ -223,7 +223,12 @@ private final class SizingRig {
     }
 
     static let font = UIFont.preferredFont(forTextStyle: .body)
-    static var lineHeight: CGFloat { font.lineHeight }
+    /// The laid-out height of one line, as the composer's floor and cap use it.
+    static var lineHeight: CGFloat {
+        ceil(NSAttributedString(string: "X", attributes: [.font: font])
+            .boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+                          options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).height)
+    }
     /// Vertical text-container insets of the live view, which the iOS height includes.
     var verticalInsets: CGFloat {
         guard let native else { return 0 }
@@ -285,6 +290,30 @@ struct ComposerSynchronousSizingUIKitTests {
         rig.fixture.text = repeated("pasted line", count: 40)
         rig.layout()
         #expect(abs(rig.height - rig.lines(sizingMaxLines)) <= 1, "height \(rig.height)")
+    }
+
+    @Test func firstCharacterKeepsTheEmptyHeight() throws {
+        let rig = SizingRig()
+        try settle(rig)
+        let empty = rig.height
+        #expect(abs(empty - SizingRig.lineHeight) <= 1, "empty height \(empty)")
+        rig.fixture.text = "a"
+        rig.layout()
+        #expect(rig.height == empty, "empty \(empty) -> one character \(rig.height)")
+    }
+
+    @Test func twelveLinesFitUnclippedAndThirteenCap() throws {
+        let rig = SizingRig()
+        try settle(rig)
+        let cap = ComposerSizing.cap(lineHeight: SizingRig.lineHeight, maxLines: sizingMaxLines)
+        let laidOut = rig.wrapped(Array(repeating: "x", count: 12).joined(separator: "\n"), width: 10_000)
+        #expect(abs(laidOut - cap) <= 1, "12 laid-out lines \(laidOut) vs cap \(cap)")
+        rig.fixture.text = repeated("x", count: 12)
+        rig.layout()
+        #expect(abs(rig.height - cap) <= 1 && rig.height >= laidOut - 0.01, "12 lines: height \(rig.height), laid out \(laidOut), cap \(cap)")
+        rig.fixture.text = repeated("x", count: 13)
+        rig.layout()
+        #expect(abs(rig.height - cap) <= 1, "13 lines: height \(rig.height), cap \(cap)")
     }
 
     @Test func pathologicalPasteCapsImmediately() throws {
