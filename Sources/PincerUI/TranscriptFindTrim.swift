@@ -24,6 +24,14 @@ final class TranscriptFindTrim {
         self.trimIfReady()
     }
 
+    /// Its chat stopped being shown with Find open (#571): trim it back like a closed Find would.
+    func retire() {
+        guard self.findOpen else { return }
+        self.findOpen = false
+        self.pending = true
+        self.trimIfReady()
+    }
+
     func bottomAnchorChanged(_ atBottom: Bool, chat: ChatStore) {
         self.chat = chat
         self.atBottom = atBottom
