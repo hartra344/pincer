@@ -46,6 +46,7 @@ Send a message and watch the reply stream in. A few words trigger special behavi
 | `approve once-only` | The same, but without **Always allow**, like a command the gateway won't allow for good. |
 | `approve later` | The reply finishes first, then an approval arrives a few seconds later. On a Mac, switch to another app or lock the screen and answer it from the notification. |
 | `ask` | The agent asks a question with a card of choices. Pick one, type your own answer, or skip it. |
+| `secret` | The agent asks for a Stripe API key with a secret question. Your answer is hidden as you type and goes to the demo's secret store; the chat only shows that it was stored. |
 | `plan` | A progress card above the composer ticks through three steps. |
 | `long` | The agent streams a long, multi-page reply with a heading, lists, a code block, a table and a quote. |
 | `/compact` | Compacts the chat's context and shows the divider, with the token count before and after. |
