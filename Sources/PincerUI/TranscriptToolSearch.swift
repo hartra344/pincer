@@ -22,6 +22,8 @@ final class ToolCardSearchStore {
     func state(for toolId: String) -> State { self.states[toolId] ?? State() }
 
     func set(_ state: State, for toolId: String) { self.states[toolId] = state }
+
+    var isEmpty: Bool { self.states.isEmpty }
 }
 
 /// Matches of the card-search query while a card is laid out: counts them across the card's

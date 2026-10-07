@@ -176,14 +176,14 @@ final class TranscriptListController {
 
     /// Keeps the outgoing chat's measured heights and drops those of chats that left residency.
     private func stashHeights() {
-        if let chat = self.context.chat {
+        if let chat = self.context.chat, self.context.disclosure.isPristine {
             var entries: [String: (row: TranscriptRow, height: TranscriptRowHeight)] = [:]
             for (id, height) in self.heights where height.measured {
                 if let row = self.index[id] { entries[id] = (self.rows[row], height) }
             }
             if !entries.isEmpty {
                 self.heightCache.store(TranscriptHeightSnapshot(
-                    chat: chat, disclosure: self.context.disclosure, agent: self.context.agent,
+                    chat: chat, agent: self.context.agent,
                     settings: self.renderer.currentSettings, entries: entries), for: self.context.sessionKey)
                 self.heightCacheStats.snapshots += 1
             }
@@ -195,7 +195,7 @@ final class TranscriptListController {
     private func restoreHeights(for newRows: [TranscriptRow]) {
         guard let snapshot = self.heightCache.take(self.context.sessionKey) else { return }
         guard snapshot.chat != nil, snapshot.chat === self.context.chat,
-              snapshot.disclosure === self.context.disclosure, snapshot.agent == self.context.agent,
+              self.context.disclosure.isPristine, snapshot.agent == self.context.agent,
               snapshot.settings == self.renderer.currentSettings else {
             self.heightCacheStats.rejected += newRows.count
             Self.rejectedHeightsTotal += newRows.count

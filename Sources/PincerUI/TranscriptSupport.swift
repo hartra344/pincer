@@ -43,6 +43,10 @@ final class TranscriptDisclosure {
         self.expanded[id] ?? value
     }
 
+    /// Whether every block and card is at its default, so heights measured with this disclosure
+    /// hold for a fresh one (#934).
+    var isPristine: Bool { self.expanded.isEmpty && self.toolSearch.isEmpty }
+
     func set(_ id: String, expanded: Bool) {
         self.expanded[id] = expanded
     }

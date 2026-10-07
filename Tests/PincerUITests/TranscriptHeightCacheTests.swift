@@ -188,4 +188,43 @@ struct TranscriptHeightCacheTests {
         }
         #expect(controller.heightCache.peek(rig.a.sessionKey) == nil)
     }
+
+    /// The same chat with a new `TranscriptDisclosure`, as `ChatView` makes on every revisit (#571).
+    private func fresh(_ context: TranscriptContext) -> TranscriptContext {
+        TranscriptContext(gateway: context.gateway, disclosure: TranscriptDisclosure(), agent: context.agent,
+                          sessionKey: context.sessionKey, previewImage: { _ in }, saveFile: { _, _ in }, chat: context.chat)
+    }
+
+    @Test func revisitWithAFreshDisclosureRestoresHeights() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let rig = self.rig(scratch)
+        let controller = rig.controller
+        let rows = Fake.rows(0..<5)
+        _ = controller.accept(rows, contextChanged: false)
+        self.measureAll(controller)
+        let before = controller.heights
+
+        rig.switchTo(rig.b, rows: Fake.rows(10..<12))
+        rig.switchTo(self.fresh(rig.a), rows: rows)
+        #expect(controller.heights == before)
+        #expect(controller.heightCacheStats.restored == 5 && controller.heightCacheStats.rejected == 0)
+    }
+
+    @Test func expandedCardsKeepNoHeights() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let rig = self.rig(scratch)
+        let controller = rig.controller
+        let rows = Fake.rows(0..<4)
+        _ = controller.accept(rows, contextChanged: false)
+        self.measureAll(controller)
+        rig.a.disclosure.set("tool:t1", expanded: true)
+        #expect(!rig.a.disclosure.isPristine)
+
+        rig.switchTo(rig.b, rows: Fake.rows(10..<12))
+        #expect(controller.heightCache.peek(rig.a.sessionKey) == nil)
+        rig.switchTo(self.fresh(rig.a), rows: rows)
+        #expect(controller.heights.isEmpty)
+    }
 }
