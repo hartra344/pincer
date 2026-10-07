@@ -168,7 +168,7 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
 
 `--menu-bar on|off` sets the menu bar item for the run, and `--demo` saves only the built-in demo gateway, so it connects at launch. By default the script runs a copy of the app under its own bundle id with an in-memory Keychain, and it restores that bundle's defaults afterwards, so your own settings and gateways aren't touched. Run `scripts/check-launch-cpu.sh --help` for the other options.
 
-CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar on and the demo gateway and again with the menu bar off, against a release build of `main`. The nightly run is skipped when `main` has no commits from the last day. The workflow also runs on pull requests that change the check or `scripts/bundle-mac.sh`, and from **Actions → Launch CPU → Run workflow**.
+Every pull request runs it in the **Launch CPU** step of `tests.yml`, against the debug `PincerMacDev` that job already built, with the menu bar off, on, and on with the demo gateway. That step fails only above 50% average CPU, which catches runaway update loops like #119 (near 100%) without flaking on shared runners. CI also runs it every night (`.github/workflows/launch-cpu.yml`) at the default 5% threshold, with the menu bar on and the demo gateway and again with the menu bar off, against a release build of `main`. The nightly run is skipped when `main` has no commits from the last day. The workflow also runs on pull requests that change the check or `scripts/bundle-mac.sh`, and from **Actions → Launch CPU → Run workflow**.
 
 ## Continuous integration
 

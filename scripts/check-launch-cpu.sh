@@ -48,8 +48,12 @@ case "$MENU_BAR" in on|true|1) MENU_BAR=true ;; off|false|0) MENU_BAR=false ;; *
 if [ -f "$APP" ] && [ -x "$APP" ]; then
   WRAPPED="build/Pincer CPU Check Binary.app"
   rm -rf "$WRAPPED"
-  mkdir -p "$WRAPPED/Contents/MacOS"
+  mkdir -p "$WRAPPED/Contents/MacOS" "$WRAPPED/Contents/Resources"
   cp "$APP" "$WRAPPED/Contents/MacOS/Pincer"
+  # SwiftPM resource bundles (PincerUI's String Catalog); `Bundle.module` looks in Contents/Resources.
+  for bundle in "$(dirname "$APP")"/*.bundle; do
+    [ -e "$bundle" ] && cp -R "$bundle" "$WRAPPED/Contents/Resources/"
+  done
   cat > "$WRAPPED/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
