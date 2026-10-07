@@ -221,6 +221,8 @@ With **Push relay**, check the status next to each gateway:
 | **Not connected** | Open the gateway in Pincer, so it can subscribe. |
 | An error message | Usually the phone can't reach the relay. Open `https://…/healthz` in Safari on the phone. It should show `{"ok":true}`. |
 
+If pushes arrive but the badge doesn't update, update the relay. See [Catching up](../../guides/push-notifications/#catching-up).
+
 ## The agent is waiting for my answer, but there's no card
 
 Answering questions needs the `operator.questions` scope. Devices paired before Pincer asked for it need the gateway to approve a scope upgrade. The chat shows the request to approve. On the gateway host, run:

@@ -175,8 +175,21 @@ If a push can't be decrypted, for example because you removed the gateway, iOS s
 
 Once push is working for a gateway, you won't get the same notification twice:
 
-- while Pincer is in the background, it stops posting its own notifications for that gateway and leaves it to push;
+- while Pincer is in the background, it stops posting its own notifications for that gateway and leaves it to push, except when [catching up](#catching-up) on what the gateway didn't push;
 - while Pincer is open and connected to that gateway, pushes from it are hidden.
+
+### Catching up
+
+When a push arrives, iOS also wakes Pincer briefly so it can catch up, the same way [background refresh](#background-refresh) does:
+
+- the app icon's badge updates to show your unread chats;
+- replies, approvals and questions the gateway didn't push get their own notification, with the message preview.
+
+Anything already pushed, by this push or one still in Notification Center, isn't notified again.
+
+iOS decides whether to wake Pincer, and may skip it to save battery. It doesn't wake Pincer after you swipe it away in the app switcher, until you open it again. The pushes themselves still arrive either way.
+
+Catching up needs an up-to-date relay. To update it, pull the latest Pincer repo on the relay machine and run `./install-service.sh` again. An older relay still delivers pushes, but doesn't wake Pincer.
 
 ### Managing the relay
 
