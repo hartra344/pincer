@@ -13,6 +13,20 @@ struct NotificationSettingsSection: View {
     @State private var refreshTick = 0
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PushRegistrar.relayKey) private var pushRelay = ""
+    #if os(iOS)
+    @State private var power: BackgroundRefreshPowerState
+    private let powerNotifications: NotificationCenter
+    private let initialDelivery: ClosedAppDelivery?
+    init(power: BackgroundRefreshPowerState? = nil, powerNotifications: NotificationCenter = .default,
+         initialDelivery: ClosedAppDelivery? = nil, initialNotifications: Bool = true) {
+        self._notifications = State(initialValue: initialNotifications)
+        self._power = State(initialValue: power ?? BackgroundRefreshPowerState())
+        self.powerNotifications = powerNotifications
+        self.initialDelivery = initialDelivery
+        self._delivery = State(initialValue: initialDelivery ?? ClosedAppDelivery.current())
+    }
+    #endif
+
 
     var body: some View {
         SwiftUI.Section {
@@ -41,6 +55,7 @@ struct NotificationSettingsSection: View {
                     }
                 }
                 if self.delivery == .backgroundRefresh {
+                    BackgroundRefreshPowerNote(delivery: self.delivery, power: self.power)
                     let _ = self.refreshTick
                 let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
                     let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
@@ -83,9 +98,19 @@ struct NotificationSettingsSection: View {
         .onChange(of: self.scenePhase) { _, phase in
             if phase == .active { self.refreshTick += 1 }
         }
+        #if os(iOS)
+        .onReceive(self.powerNotifications.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in self.power.refresh() }
+        #endif
         .onAppear {
+            #if os(iOS)
+            self.power.refresh()
+            #endif
             self.notifications = self.app.notifier.enabled
+            #if os(iOS)
+            self.delivery = self.initialDelivery ?? ClosedAppDelivery.current()
+            #else
             self.delivery = ClosedAppDelivery.current()
+            #endif
         }
     }
 

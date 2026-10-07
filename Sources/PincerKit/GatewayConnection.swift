@@ -264,10 +264,22 @@ public actor GatewayConnection {
     /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
     var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
 
+#if DEBUG
+    /// Owned diagnostics can hold delivery after the real Demo handler has computed its result.
+    private var demoResponseDelivery: (@Sendable (String) async -> Void)?
+    package func setDemoResponseDelivery(_ delivery: (@Sendable (String) async -> Void)?) {
+        self.demoResponseDelivery = delivery
+    }
+#endif
+
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
         if let demo = self.demo {
             guard self.hello != nil else { throw GatewayError.notConnected }
-            return try await demo.handle(method, params)
+            let result = try await demo.handle(method, params)
+#if DEBUG
+            if let delivery = self.demoResponseDelivery { await delivery(method) }
+#endif
+            return result
         }
         guard self.hello != nil, let task = self.task else { throw GatewayError.notConnected }
         guard DebugLog.enabled, !DebugLog.quietMethods.contains(method) else {

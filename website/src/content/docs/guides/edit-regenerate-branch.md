@@ -7,7 +7,7 @@ Right-click (macOS) or long-press (iOS) a message in the transcript to see these
 
 ## Branch from Here
 
-On any message, **Branch from Here** opens a new chat forked at that point. The original chat is untouched.
+On any message, **Branch from Here** opens a new chat forked at that point. The original chat is untouched. If you select another chat while the fork is being created, that selection stays; the new branch is still created.
 
 - On one of your messages, the new chat starts just before it and your message text is put back in the new chat's composer, ready to send or change.
 - On an assistant reply, the new chat continues right after that reply with an empty composer.
@@ -22,7 +22,7 @@ When you send, the chat rewinds to before that message and your edited text is s
 
 If you cancel or select another message while the rewind is pending, its late completion keeps your new draft and does not resend the old edit. A rewind already applied by the Gateway is not undone by Cancel.
 
-If the original message had images, they're kept and sent again with the edited text.
+If the original message had images, they're kept and sent again with the edited text. While the edit is being submitted, Attach is disabled and new drops into that edit are refused. Image preparation already owned by your saved normal draft continues, and that draft can accept attachments once it returns.
 
 ## Regenerate
 

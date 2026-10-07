@@ -7,12 +7,14 @@ public struct DeviceSpeechVoice: Sendable, Equatable, Identifiable {
     public let name: String
     public let language: String
     public let quality: Int
+    public let displayLabel: String
 
-    public init(id: String, name: String, language: String, quality: Int) {
+    public init(id: String, name: String, language: String, quality: Int, displayLabel: String? = nil) {
         self.id = id
         self.name = name
         self.language = language
         self.quality = quality
+        self.displayLabel = displayLabel ?? name
     }
 }
 
@@ -33,6 +35,7 @@ public struct DeviceSpeechCatalogSnapshot: Sendable, Equatable {
     public static let maximumIdentifierBytes = 256
     public static let maximumNameBytes = 256
     public static let maximumLanguageBytes = 96
+    public static let maximumDisplayLabelBytes = 512
     public static let maximumSnapshotBytes = 160 * 1024
 
     public let localeIdentifier: String
@@ -41,11 +44,23 @@ public struct DeviceSpeechCatalogSnapshot: Sendable, Equatable {
 
     public init(localeIdentifier: String, voices: [DeviceSpeechVoice], dictationSupport: DeviceDictationSupport?) {
         self.localeIdentifier = Self.bounded(localeIdentifier, maximumBytes: Self.maximumLanguageBytes)
-        self.voices = voices.lazy.filter {
-            !$0.id.isEmpty && $0.id.utf8.count <= Self.maximumIdentifierBytes
-                && $0.name.utf8.count <= Self.maximumNameBytes
-                && $0.language.utf8.count <= Self.maximumLanguageBytes
-        }.prefix(Self.maximumVoiceCount).map { $0 }
+        var retained: [DeviceSpeechVoice] = []
+        var bytes = self.localeIdentifier.utf8.count
+        if let dictationSupport, dictationSupport.language.utf8.count <= Self.maximumLanguageBytes {
+            bytes += dictationSupport.language.utf8.count
+        }
+        for voice in voices {
+            guard retained.count < Self.maximumVoiceCount else { break }
+            guard !voice.id.isEmpty, voice.id.utf8.count <= Self.maximumIdentifierBytes,
+                  voice.name.utf8.count <= Self.maximumNameBytes,
+                  voice.language.utf8.count <= Self.maximumLanguageBytes,
+                  voice.displayLabel.utf8.count <= Self.maximumDisplayLabelBytes else { continue }
+            let cost = voice.id.utf8.count + voice.name.utf8.count + voice.language.utf8.count + voice.displayLabel.utf8.count
+            guard bytes + cost <= Self.maximumSnapshotBytes else { break }
+            retained.append(voice)
+            bytes += cost
+        }
+        self.voices = retained
         if let dictationSupport,
            dictationSupport.language.utf8.count <= Self.maximumLanguageBytes
         {

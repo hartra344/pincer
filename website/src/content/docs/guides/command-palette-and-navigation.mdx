@@ -8,6 +8,8 @@ import palette from '../../../assets/screenshots/command-palette.png';
 
 The command palette finds any chat on any gateway and runs common commands, without leaving the keyboard. Back and Forward retrace the chats you've visited, like a browser.
 
+If you choose another chat or gateway while **New Chat** is creating a session, the new chat remains available without replacing your newer selection.
+
 On iPhone and iPad, tapping the status bar above the chat does not jump the conversation to the top. Scroll through the transcript or open a message from search, a bookmark or a link to move to it.
 
 <DocScreenshot src={palette} focus={{ x: 615, y: 245, width: 1125, height: 250 }} alt="Command palette matching jptr to Japan trip." caption="Search the synthetic demo chats from the keyboard." platformNote="On iOS, the command palette requires a hardware keyboard." />
@@ -110,3 +112,5 @@ See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the full list.
 Every chat has a `pincer://` link. Choose **Copy Link to Chat** from a chat's **⋯** menu, then open the link from anywhere to jump back to that chat. Handoff moves the chat you're reading between your Mac and iPhone. Links, notifications, the menu bar, message search, the **Open Chat** Shortcuts action and Handoff all open chats the same way, and chats you open from them are added to Back and Forward. See [Deep links & Handoff](../deep-links-and-handoff/).
 
 Deleting an automation keeps it removed even if an earlier refresh finishes afterward. A subsequent refresh loads the current jobs from the Gateway.
+
+Palette matches are prepared in the background as you type. While a newer query is being prepared, the last finished rows can remain visible, but Return and row actions wait for the current query and inventory. Closing the palette prevents pending matches from replacing its results.

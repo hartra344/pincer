@@ -11,7 +11,14 @@ import SwiftUI
 @MainActor public enum ChatSwitchProbe {
     /// With `url`, runs against that Gateway (token `token`) instead of the demo, e.g. the mock
     /// Gateway with `MOCK_DELAY_METHODS=chat.history=1500` to show whether a switch waits on the network.
-    public static func run(url: String? = nil, token: String = "dev-token", rounds: Int = 6, maxChats: Int = Int(ProcessInfo.processInfo.environment["PINCER_SWITCH_CHATS"] ?? "") ?? 2, budget: Double = 0.15) async -> Int32 {
+    public static func run(url: String? = nil, token: String = "dev-token", rounds: Int = 6, maxChats: Int = Int(ProcessInfo.processInfo.environment["PINCER_SWITCH_CHATS"] ?? "") ?? 2, budget: Double? = nil) async -> Int32 {
+        let env = ProcessInfo.processInfo.environment
+        // `PINCER_SWITCH_BUDGET_MS`: per-chat median ceiling. `PINCER_SWITCH_OVERALL_MS`: optional
+        // ceiling on the median of every timed switch, the steadiest figure on a noisy machine (#571).
+        // `PINCER_SWITCH_STALL_MS`: optional ceiling on the longest stall.
+        let budget = budget ?? (env["PINCER_SWITCH_BUDGET_MS"].flatMap(Double.init) ?? 150) / 1000
+        let overallBudget = env["PINCER_SWITCH_OVERALL_MS"].flatMap(Double.init).map { $0 / 1000 }
+        let stallBudget = env["PINCER_SWITCH_STALL_MS"].flatMap(Double.init).map { $0 / 1000 }
         let app = AppModel.shared
         if ProcessInfo.processInfo.environment["PINCER_SWITCH_MENU_BAR"] == "1" { MenuBarSettings().setEnabled(true) }
         var added: UUID?
@@ -71,10 +78,24 @@ import SwiftUI
                          title, median * 1000, (sorted.last ?? 0) * 1000, values.count))
             if median > budget { failures += 1 }
         }
-        print(String(format: "Chat switch probe: longest main-thread stall %.0f ms", (hangs.max() ?? 0) * 1000))
+        let all = times.values.flatMap { $0 }.sorted()
+        let longestStall = hangs.max() ?? 0
+        let overall = all.isEmpty ? 0 : all[all.count / 2]
+        let p90 = all.isEmpty ? 0 : all[min(all.count - 1, all.count * 9 / 10)]
+        print(String(format: "Chat switch probe: overall median %.0f ms, p90 %.0f ms, max %.0f ms over %d switches",
+                     overall * 1000, p90 * 1000, (all.last ?? 0) * 1000, all.count))
+        if let overallBudget, overall > overallBudget {
+            failures += 1
+            print(String(format: "Chat switch probe: overall median over the %.0f ms budget", overallBudget * 1000))
+        }
+        print(String(format: "Chat switch probe: longest main-thread stall %.0f ms", longestStall * 1000))
+        if let stallBudget, longestStall > stallBudget {
+            failures += 1
+            print(String(format: "Chat switch probe: stall over the %.0f ms budget", stallBudget * 1000))
+        }
         print(failures == 0
             ? String(format: "Chat switch probe: OK, warm switches under %.0f ms", budget * 1000)
-            : String(format: "Chat switch probe: FAIL, %d chats over the %.0f ms budget", failures, budget * 1000))
+            : String(format: "Chat switch probe: FAIL, %d checks over budget (median %.0f ms)", failures, budget * 1000))
         return failures == 0 ? 0 : 1
     }
 
@@ -102,9 +123,20 @@ import SwiftUI
         return (elapsed, hang)
     }
 
+    /// The transcript table the last check found. While it's still on screen only it is checked, so
+    /// the probe doesn't walk the whole view tree on the main thread every poll and time itself (#571).
+    private static weak var transcriptTable: NSTableView?
+
     private static func isShown(_ key: String, in window: NSWindow) -> Bool {
         guard let content = window.contentView else { return false }
-        for table in self.tables(in: content) {
+        let candidates: [NSTableView]
+        if let cached = self.transcriptTable, cached.window === window, !cached.isHiddenOrHasHiddenAncestor {
+            candidates = [cached]
+        } else {
+            candidates = self.tables(in: content).filter { $0.delegate is TranscriptList.Coordinator }
+            self.transcriptTable = candidates.first
+        }
+        for table in candidates {
             guard let coordinator = table.delegate as? TranscriptList.Coordinator,
                   coordinator.controller.context.sessionKey == key, table.numberOfRows > 0 else { continue }
             let visible = table.rows(in: table.visibleRect)

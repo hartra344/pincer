@@ -86,6 +86,9 @@ public final class ReadAloudController {
     @ObservationIgnored var gatewayTimer: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
+    #if DEBUG
+    package var deviceVoiceTaskForTesting: Task<Void, Never>? { self.task }
+    #endif
     @ObservationIgnored private var nowPlayingTitle: String?
     @ObservationIgnored private var systemIntegration: ReadAloudSystemIntegrating?
 
@@ -299,7 +302,7 @@ public final class ReadAloudController {
         let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
         let rate = self.deviceRate
         self.task = Task { [weak self] in
-            guard let self else { return }
+            guard let self, generation == self.generation, !Task.isCancelled else { return }
             self.lastSource = .device
             self.phase = .speaking("test")
             _ = await self.deviceSpeaker().speak(sample, voice: voice, rate: rate)

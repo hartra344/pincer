@@ -19,6 +19,8 @@ On macOS you don't need any of this. Mac notifications arrive while Pincer is ru
 
 ## Background refresh
 
+In Settings → Notifications, Background refresh shows a note while Low Power Mode is on. The note updates when the power mode changes; it does not change your notification preferences.
+
 No server, no Apple Developer key. Turn it on and Pincer does the rest:
 
 1. iOS wakes Pincer now and then, even when it's closed.
@@ -37,7 +39,7 @@ If you need notifications right away, use a [push relay](#push-relay).
 
 ### What you're notified about
 
-- **Replies** to your chats that finished and are unread. You get up to 10 per gateway per check, the newest first.
+- **Replies** to your chats that finished and are unread. You get up to 10 per gateway per check, the newest first. If more chats have replies, one silent summary reports how many remain. The summary does not open an individual chat; those chats stay unread in the chat list.
 - **Approvals** that are still waiting.
 - **Questions** an agent is waiting on you to answer.
 

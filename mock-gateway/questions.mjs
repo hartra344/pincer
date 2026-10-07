@@ -1,5 +1,6 @@
 import { rowModel } from './catalog.mjs';
 import { runDelay } from './chat.mjs';
+import { writeSecret } from './secrets.mjs';
 import { broadcastSessionMessage } from './session-list.mjs';
 import { broadcast, clone, makeMessage, nowMs, sendErr, sendRes, shortId, textBlock, toolCallBlock } from './util.mjs';
 
@@ -74,21 +75,24 @@ export async function simulateQuestion(state, run, sessionKey, row) {
   return record.status === 'answered' ? `You picked: ${picked.join(', ')}.` : 'Okay, skipping that.';
 }
 
-// Asks for sensitive form fields the Gateway will fill itself, never echoing the answers back.
-export async function simulateSecureFormQuestion(state, run, sessionKey, row) {
+// Requests an API key like upstream's `secrets` tool: one isSecret question bound to the secret store.
+// Answering writes the value to secrets.store; only the "stored" marker reaches the record, events and transcript.
+export async function simulateSecretQuestion(state, run, sessionKey, row) {
   const toolCallId = shortId('call_');
-  const args = { fields: [{ role: 'username' }, { role: 'password' }, { role: 'otp' }] };
-  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'start', name: 'requestSecureInput', toolCallId, args } });
+  const name = 'STRIPE_API_KEY';
+  const reason = "Needed to reconcile this month's Stripe payouts.";
+  const args = { action: 'request', name, allowedHosts: ['api.stripe.com'], reason };
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'start', name: 'secrets', toolCallId, args } });
   const record = {
     id: shortId('ask_'),
-    kind: 'secure_form',
-    requestId: shortId('secure_'),
-    origin: 'mail.google.com',
-    fields: [
-      { fieldId: 'identifier', role: 'username' },
-      { fieldId: 'password', role: 'password' },
-      { fieldId: 'otp', role: 'otp' },
-    ],
+    questions: [{
+      questionId: 'secret_value',
+      header: 'API key',
+      question: `Provide the secret for ${name}.`,
+      options: [],
+      isSecret: true,
+      secretStore: { name, kind: 'secret', allowedHosts: ['api.stripe.com'], reason },
+    }],
     agentId: row.agentId,
     sessionKey,
     runId: run.runId,
@@ -102,28 +106,20 @@ export async function simulateSecureFormQuestion(state, run, sessionKey, row) {
     settleQuestion(state, record, 'cancelled');
     return null;
   }
-  const output = record.status === 'answered'
-    ? `Secure form completed for ${record.origin}.`
-    : `Secure form ${record.status === 'expired' ? 'expired before the operator answered' : 'was declined by the operator'}.`;
-  broadcast(state, 'agent', {
-    runId: run.runId,
-    sessionKey,
-    seq: ++run.seq,
-    stream: 'tool',
-    data: { phase: 'result', name: 'requestSecureInput', toolCallId, isError: false, result: output },
-  });
+  const stored = record.status === 'answered';
+  const output = stored
+    ? `Stored; value hidden. Use the returned ref for config SecretRefs.\n\n${JSON.stringify({ status: 'stored', name, kind: 'secret', ref: { source: 'store', provider: 'default', id: name } })}`
+    : `No credential arrived; proceed with best judgment.\n\n${JSON.stringify({ status: 'no_answer' })}`;
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'result', name: 'secrets', toolCallId, isError: false, result: output } });
   const transcript = state.transcripts.get(sessionKey);
-  const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'requestSecureInput', args)], { openclaw: { runId: run.runId }, model: rowModel(row) });
-  const toolResult = makeMessage('toolResult', [textBlock(output)], {
-    openclaw: { runId: run.runId },
-    extra: { toolCallId, toolName: 'requestSecureInput', isError: false },
-  });
+  const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'secrets', args)], { openclaw: { runId: run.runId }, model: rowModel(row) });
+  const toolResult = makeMessage('toolResult', [textBlock(output)], { openclaw: { runId: run.runId }, extra: { toolCallId, toolName: 'secrets', isError: false } });
   transcript.push(toolMsg, toolResult);
   broadcastSessionMessage(state, sessionKey, toolMsg, transcript.length - 1);
   broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
-  if (record.status === 'answered') return `I filled the verified sign-in fields for ${record.origin}. Review the page and submit it there if everything looks right.`;
-  if (record.status === 'expired') return `No problem — the secure sign-in request for ${record.origin} expired before anything was filled.`;
-  return `Okay, I left the ${record.origin} sign-in form untouched.`;
+  return stored
+    ? `Thanks — ${name} is in the Gateway's secret store. I'll reference it by name and never see the value.`
+    : "No problem, I'll skip the Stripe reconciliation for now.";
 }
 
 export const QUESTION_METHODS = new Set(['question.list', 'question.resolve']);
@@ -142,15 +138,14 @@ function resolveAskUserAnswer(record, params) {
   return { answers };
 }
 
-function resolveSecureFormAnswer(record, params) {
-  const payload = params.answers;
-  const answers = payload?.answers;
-  const complete = payload?.requestId === record.requestId
-    && answers
-    && record.fields.every((field) => typeof answers[field.fieldId] === 'string' && answers[field.fieldId].length > 0);
-  if (!complete) return null;
-  const picked = Object.fromEntries(record.fields.map((field) => [field.fieldId, answers[field.fieldId]]));
-  return { requestId: record.requestId, answers: picked };
+// Upstream writes a store-bound answer to the secret store and fans out only { [questionId]: ["stored"] }.
+function resolveSecretStoreAnswer(state, record, params) {
+  const question = record.questions[0];
+  const values = params.answers?.answers?.[question.questionId];
+  if (!Array.isArray(values) || values.length !== 1 || typeof values[0] !== 'string' || !values[0]) return null;
+  const { name, kind = 'secret', allowedHosts = [] } = question.secretStore;
+  writeSecret(state, name, { kind, value: values[0], allowedHosts });
+  return { answers: { [question.questionId]: ['stored'] } };
 }
 
 function dispatch(state, conn, msg) {
@@ -174,8 +169,8 @@ function dispatch(state, conn, msg) {
         settleQuestion(state, record, 'cancelled');
         return sendRes(conn, id, { status: 'cancelled' });
       }
-      const answers = record.kind === 'secure_form'
-        ? resolveSecureFormAnswer(record, params)
+      const answers = record.questions[0]?.secretStore
+        ? resolveSecretStoreAnswer(state, record, params)
         : resolveAskUserAnswer(record, params);
       if (!answers) {
         return sendErr(conn, id, 'INVALID_REQUEST', 'every question needs an answer', { reason: 'QUESTION_INVALID_ANSWER' });

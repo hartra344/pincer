@@ -243,7 +243,7 @@ extension DemoGateway {
         guard action == "react", channel == "discord", let emoji = inner["emoji"]?.text, inner["messageId"]?.text != nil else {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unsupported message action \(action) on \(channel)", details: nil)
         }
-        self.recordedActions.append(params)
+        self.recordAction(params)
         let result: JSONValue = inner["remove"]?.bool == true
             ? ["ok": true, "removed": .string(emoji)] : ["ok": true, "added": .string(emoji)]
         self.actionResults[idempotencyKey] = result

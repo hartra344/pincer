@@ -166,12 +166,27 @@ public enum OutboxStore {
             return
         }
         do {
-            try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Self.createDirectory(url.deletingLastPathComponent())
             let data = try OutboxStore.encoder.encode(Envelope(version: OutboxStore.currentVersion, outbox: outbox))
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            try data.write(to: url, options: Self.writeOptions)
         } catch {
             OutboxStore.logger.error("Couldn't write outbox \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Outbox files (JSON with message text and send-time location, attachment bytes) are
+    /// encrypted at rest on iOS. Not `complete`: a send or retry after the device locks (background
+    /// reconnect, a Share-extension hand-off) must still rewrite the file, or a sent entry and its
+    /// location snapshot would linger on disk.
+    static let writeOptions: Data.WritingOptions = [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
+    static let protection = FileProtectionType.completeUntilFirstUserAuthentication
+
+    static func createDirectory(_ url: URL) throws {
+        var attributes: [FileAttributeKey: Any]?
+        #if os(iOS)
+        attributes = [.protectionKey: Self.protection]
+        #endif
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: attributes)
     }
 
     private static func moveAside(_ url: URL, suffix: String) {

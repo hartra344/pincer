@@ -67,7 +67,7 @@ public enum UsageFormat {
     public static func percent(_ used: Double) -> String {
         guard used.isFinite else { return "0%" }
         if used > 100 { return "100%+" }
-        return "\(Int(max(0, used).rounded()))%"
+        return "\(Int(saturating: max(0, used)) ?? 0)%"
     }
 
     /// 0…1 for a gauge.
@@ -105,7 +105,7 @@ public enum UsageFormat {
 
     /// `2h 14m`, `45m`, `<1m`, `3d 4h`.
     public static func shortDuration(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
+        let total = Int(saturating: seconds, rounding: .towardZero) ?? 0
         let days = total / 86400
         let hours = (total % 86400) / 3600
         let minutes = (total % 3600) / 60

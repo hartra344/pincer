@@ -20,6 +20,16 @@ extension DemoGateway {
         switch method {
         case "skills.status":
             try Self.checkKeys(method, params, ["agentId", "sessionKey"])
+            for field in ["agentId", "sessionKey"] {
+                if let raw = params[field] {
+                    guard case let .string(value) = raw else {
+                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must be string")
+                    }
+                    guard !value.isEmpty else {
+                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must NOT have fewer than 1 characters")
+                    }
+                }
+            }
             let agentId = try self.skillsAgentId(params)
             if let key = params["sessionKey"]?.text, !self.hasSession(key) {
                 throw Self.skillsInvalid("Session not found.")
@@ -28,6 +38,21 @@ extension DemoGateway {
                     "agentId": .string(agentId), "skills": .array(self.skillEntries.map(Self.publicSkill))]
         case "skills.search":
             try Self.checkKeys(method, params, ["query", "limit"])
+            if let query = params["query"] {
+                guard case let .string(value) = query else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /query: must be string")
+                }
+                guard !value.isEmpty else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /query: must NOT have fewer than 1 characters")
+                }
+            }
+            if let limit = params["limit"] {
+                guard case let .number(value) = limit, value.isFinite, value.rounded() == value else {
+                    throw Self.skillsInvalid("invalid skills.search params: at /limit: must be integer")
+                }
+                guard value >= 1 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be >= 1") }
+                guard value <= 100 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be <= 100") }
+            }
             return ["results": .array(self.searchClawHub(params["query"]?.text, limit: params["limit"]?.int ?? 20))]
         case "skills.detail":
             try Self.checkKeys(method, params, ["slug", "version"])
@@ -37,7 +62,7 @@ extension DemoGateway {
                 throw Self.skillsInvalid("invalid skills.detail params: version must be a non-empty string")
             }
             guard let entry = self.catalogEntry(ref) else {
-                throw GatewayError.rpc(code: "UNAVAILABLE", message: "ClawHub skill \"\(ref)\" not found", details: nil)
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: Self.missingSkillDetailMessage(ref), details: nil)
             }
             if entry["installOnly"]?.bool == true {
                 throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
@@ -49,6 +74,19 @@ extension DemoGateway {
             return try self.updateSkill(params)
         case "tools.catalog":
             try Self.checkKeys(method, params, ["agentId", "includePlugins"])
+            if let agentId = params["agentId"] {
+                guard case let .string(value) = agentId else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must be string")
+                }
+                guard !value.isEmpty else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must NOT have fewer than 1 characters")
+                }
+            }
+            if let includePlugins = params["includePlugins"] {
+                guard case .bool = includePlugins else {
+                    throw Self.skillsInvalid("invalid tools.catalog params: at /includePlugins: must be boolean")
+                }
+            }
             let agentId = try self.skillsAgentId(params)
             var catalog = Self.seedToolCatalog(agentId: agentId)
             if params["includePlugins"]?.bool == false, let groups = catalog["groups"]?.array {
@@ -59,6 +97,14 @@ extension DemoGateway {
             try Self.checkKeys(method, params, ["agentId", "sessionKey"])
             guard let key = params["sessionKey"]?.text else {
                 throw Self.skillsInvalid("invalid tools.effective params: must have required property 'sessionKey'")
+            }
+            if let value = params["agentId"] {
+                guard case .string(let raw) = value else {
+                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must be string")
+                }
+                guard !raw.isEmpty else {
+                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must NOT have fewer than 1 characters")
+                }
             }
             guard self.hasSession(key) else { throw Self.skillsInvalid("unknown session key \"\(key)\"") }
             let sessionAgent = self.sessionAgentId(key)
@@ -72,6 +118,25 @@ extension DemoGateway {
     }
 
     // MARK: skills.install
+
+    /// Mirrors upstream encodeURIComponent(path slug) and the mock's canonical 404 body.
+    private static func missingSkillDetailMessage(_ reference: String) -> String {
+        var slug = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        let oldMessage = "ClawHub skill \"\(reference)\" not found"
+        if slug.hasPrefix("@") {
+            let parts = slug.dropFirst().split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return oldMessage }
+            let owner = parts[0].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard owner.range(of: "^[a-z0-9](?:[a-z0-9._-]{0,38}[a-z0-9])?$", options: .regularExpression) != nil else { return oldMessage }
+            slug = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // No existing Swift requested-reference validator is available; this narrow eligibility
+        // check follows upstream install-paths.ts and leaves invalid-reference behavior unchanged.
+        guard slug.range(of: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", options: [.regularExpression, .caseInsensitive]) != nil else { return oldMessage }
+        let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        let encoded = slug.addingPercentEncoding(withAllowedCharacters: allowed) ?? slug
+        return "ClawHub /api/v1/skills/\(encoded) failed (404): Skill not found"
+    }
 
     private func installSkill(_ params: JSONValue) throws -> JSONValue {
         let source = params["source"]?.text
@@ -172,6 +237,14 @@ extension DemoGateway {
         }
         try Self.checkKeys("skills.update", params, ["skillKey", "enabled", "apiKey", "env"])
         guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
+        if let enabled = params["enabled"] {
+            guard case .bool = enabled else {
+                throw Self.skillsInvalid("invalid skills.update params: at /enabled: must be boolean")
+            }
+        }
+        if let apiKey = params["apiKey"], apiKey.string == nil {
+            throw Self.skillsInvalid("invalid skills.update params: at /apiKey: must be string")
+        }
         var config: [String: JSONValue] = [:]
         if let index = self.skillEntries.firstIndex(where: { $0["skillKey"]?.text == key }) {
             var entry = self.skillEntries[index]
@@ -329,6 +402,9 @@ extension DemoGateway {
     private static func checkKeys(_ method: String, _ params: JSONValue, _ allowed: Set<String>) throws {
         guard let object = params.object else { return }
         if let extra = object.keys.sorted().first(where: { !allowed.contains($0) }) {
+            if method == "skills.detail" {
+                throw Self.skillsInvalid("invalid \(method) params: at root: unexpected property '\(extra)'")
+            }
             throw Self.skillsInvalid("invalid \(method) params: must NOT have additional properties (\(extra))")
         }
     }

@@ -168,3 +168,5 @@ On compact iPhone layouts, a centered animated companion sits above the chat-nam
 Selected photos and files stay with the draft where you picked them, even if you switch chats while they are being prepared. The composer shows **Preparing attachments…** and waits to enable Send until that draft’s preparation finishes. Typing remains available. If you edit an earlier message, media selected for your normal draft stays with that saved draft and returns when you cancel the edit. Replacing a draft discards its pending preparation results; they never appear in the replacement draft.
 
 Send waits briefly for dictation’s final words. Cancelling an edit, replacing its draft, or leaving that composer cancels the pending send; the restored normal draft stays unsent.
+
+When dictation is canceled and restarted, a delayed callback from the previous recognition cannot replace the new recognition's words. This also protects the current final result when recognition ends without additional text.

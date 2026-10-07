@@ -158,13 +158,26 @@ public enum BackgroundRefreshPlanner {
         let replies = snapshot.sessions
             .filter { $0.activityMs > cursor.activityMs && $0.isUnread && !$0.hasActiveRun && filter.notifies($0) }
             .sorted { $0.activityMs > $1.activityMs }
-        return (requests + replies.prefix(self.maxPerGateway).map { row in
+        requests += replies.prefix(self.maxPerGateway).map { row in
             Notifier.replyContent(
                 id: ActivityNotificationIdentity.make(key: row.key, activityMs: row.activityMs),
                 title: Notifier.replyTitle(rowTitle: row.title, agent: snapshot.agent(row.agentId)),
                 body: Notifier.clip(row.preview ?? "New activity"),
                 target: Notifier.Target(gatewayId: gatewayId, sessionKey: row.key))
-        }, next)
+        }
+        let overflow = replies.count - self.maxPerGateway
+        if overflow > 0 {
+            let content = UNMutableNotificationContent()
+            content.title = gatewayName
+            content.body = overflow == 1 ? L("And 1 more chat") : L("And \(overflow) more chats")
+            // An aggregate has no single chat destination or reply actions. Keep it silent.
+            content.userInfo = ["gateway": gatewayId.uuidString]
+            content.threadIdentifier = "\(gatewayId.uuidString)|background-summary"
+            let activity = ActivityNotificationIdentity.make(key: gatewayId.uuidString, activityMs: next.activityMs)
+            requests.append(UNNotificationRequest(identifier: "refresh-summary:\(activity):\(overflow)",
+                content: content, trigger: nil))
+        }
+        return (requests, next)
     }
 
     /// The baseline: everything currently there counts as already seen.
@@ -189,7 +202,9 @@ public enum BackgroundRefreshPlanner {
 @MainActor
 public final class BackgroundRefresh {
     public static let taskIdentifier = "chat.pincer.refresh"
-    public static let defaultBudget: TimeInterval = 25
+    /// Well inside the ~30 s iOS gives a refresh, counted from launch: with unreachable gateways a
+    /// run that used the full window hit the expiration handler and crashed (#930).
+    public static let defaultBudget: TimeInterval = 20
     public static let interval: TimeInterval = 15 * 60
 
     public struct Report: Equatable, Sendable {

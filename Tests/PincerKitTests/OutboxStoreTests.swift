@@ -203,3 +203,55 @@ struct OutboxStoreTests {
         #expect(!temp.exists(try self.file(temp)), "a removed Gateway's outbox isn't written back")
     }
 }
+
+/// #927: queued messages keep their exact location snapshot on disk only while they're queued,
+/// in files that are protected at rest yet writable after the device locks.
+@Suite("Outbox location at rest")
+struct OutboxLocationAtRestTests {
+    let gateway = UUID()
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func snapshot() throws -> LocationContextSnapshot {
+        try #require(LocationContextSnapshot.prepare(
+            LocationFix(latitude: 47.606209, longitude: -122.332069, accuracyMeters: 12, timestamp: self.now), now: self.now))
+    }
+
+    @Test func snapshotLeavesDiskWhenSentOrDiscarded() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let url = try #require(OutboxStore.file(gatewayId: self.gateway, root: temp.url))
+        func onDisk() -> String { (try? String(contentsOf: url, encoding: .utf8)) ?? "" }
+        var box = Outbox()
+        box.enqueue(OutboxEntry(id: "loc", sessionKey: "agent:main:main", text: "where", locationContext: try self.snapshot(), createdAt: self.now))
+        box.enqueue(OutboxEntry(id: "other", sessionKey: "agent:main:main", text: "next", createdAt: self.now))
+        await OutboxStore.save(box, gatewayId: self.gateway, root: temp.url)
+        #expect(onDisk().contains("47.606209"))
+        let restored = await OutboxStore.load(gatewayId: self.gateway, root: temp.url).outbox
+        #expect(restored?.entry(id: "loc")?.locationContext == (try self.snapshot()), "precise location survives relaunch (#662)")
+
+        box.markSending(id: "loc")
+        box.markSent(id: "loc")
+        await OutboxStore.save(box, gatewayId: self.gateway, root: temp.url)
+        #expect(onDisk().contains("next"))
+        #expect(!onDisk().contains("47.606209") && !onDisk().contains("122.332069"))
+
+        box.enqueue(OutboxEntry(id: "loc2", sessionKey: "agent:main:main", text: "again", locationContext: try self.snapshot(), createdAt: self.now))
+        box.markFailed(id: "loc2", kind: .rejected("bad"))
+        await OutboxStore.save(box, gatewayId: self.gateway, root: temp.url)
+        #expect(onDisk().contains("47.606209"))
+        box.delete(id: "loc2")
+        await OutboxStore.save(box, gatewayId: self.gateway, root: temp.url)
+        #expect(!onDisk().contains("47.606209"), "deleting a failed message drops its snapshot")
+
+        OutboxStore.remove(gatewayId: self.gateway, root: temp.url)
+        #expect(!FileManager.default.fileExists(atPath: url.path(percentEncoded: false)))
+    }
+
+    @Test func filesUseUntilFirstUnlockProtection() {
+        #expect(OutboxStore.writeOptions.contains(.atomic))
+        #expect(OutboxStore.writeOptions.contains(.completeFileProtectionUntilFirstUserAuthentication))
+        #expect(!OutboxStore.writeOptions.contains(.completeFileProtection),
+                "complete protection blocks rewriting the outbox after the device locks, stranding sent snapshots")
+        #expect(OutboxStore.protection == .completeUntilFirstUserAuthentication)
+    }
+}
