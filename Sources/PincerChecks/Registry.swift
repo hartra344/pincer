@@ -182,6 +182,7 @@ enum Suites {
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
             Section("Background refresh job expiry") { await runBackgroundRefreshJobChecks(); await runBackgroundRefreshDownGatewayChecks() },
             Section("Silent push refresh") { await runSilentPushRefreshChecks() },
+            Section("Silent push refresh runs") { await runSilentPushRefreshRunsChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
             Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },

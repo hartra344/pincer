@@ -56,13 +56,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate {
         nonisolated(unsafe) let handler = completionHandler
         let active = application.applicationState == .active
         MainHop.run {
-            guard SilentPushRefresh.shouldHandle(userInfo, appIsActive: active) else {
-                handler(.noData)
-                return
-            }
-            let id = UUID()
-            let run = SilentPushRefresh(userInfo: userInfo) { result in
-                SilentPushRuns.finish(id)
+            SilentPushRefreshRuns.shared.handle(userInfo, appIsActive: active) { result in
                 let mapped: UIBackgroundFetchResult = switch result {
                 case .newData: .newData
                 case .noData: .noData
@@ -70,22 +64,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate {
                 }
                 handler(mapped)
             }
-            SilentPushRuns.active[id] = run
-            run.start()
         }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NSLog("[Pincer] APNs registration failed: %@", error.localizedDescription)
     }
-}
-
-/// Keeps in-flight silent-push refreshes alive until they complete.
-@MainActor
-private enum SilentPushRuns {
-    static var active: [UUID: SilentPushRefresh] = [:]
-
-    static func finish(_ id: UUID) { self.active[id] = nil }
 }
 
 /// A `beginBackgroundTask` that ends once, when the work is done or the system's time runs out.
