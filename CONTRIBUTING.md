@@ -31,10 +31,11 @@ Pincer is laid out so parallel branches rarely touch the same file. Add new work
 
 Switching chats must not remove or re-add a window toolbar item. When one is rebuilt, macOS redraws every toolbar button and the sidebar's Organize and New Chat buttons flash (#84, #262).
 
-- A per-chat `.id` never goes on a full-size detail view or on the root view of a `ToolbarItem`. Put it inside a stable container (a `ZStack` with a fixed or full-size frame), as `GatewayDetail` in `RootView.swift` and `ChatHeaderAvatar` do.
-- The chat's title, subtitle and toolbar items live in `ChatChrome`, outside the per-chat `.id`.
+- A per-chat `.id` never goes on a full-size detail view or on the root view of a `ToolbarItem`. Put it inside a stable container (a `ZStack` with a fixed or full-size frame), as `ChatHeaderAvatar` does.
+- The main window's `ChatView` has no per-chat `.id` at all (#571): it and its transcript table are kept across switches and only the chat swaps. Per-chat UI state goes in `ChatViewState` (held by `ChatScoped`), not in a view's `@State`, so it still starts over for each chat. A change handler that must ignore a switch compares `PerChat` values.
+- The chat's title, subtitle and toolbar items live in `ChatChrome`, outside the chat view.
 - CI runs `PincerMacDev --toolbar-stability-check`, which fails if a chat switch rebuilds a toolbar item. Run it locally with `PINCER_DEV_NAMESPACE=toolbar-check PINCER_KEYCHAIN=memory swift run PincerMacDev --toolbar-stability-check` (it opens a window for a few seconds).
-- `PincerMacDev --chat-switch-probe [ws://url [token]]` times chat switches from a sidebar click to the new chat's rows on screen, in the demo (default) or against a Gateway, and fails when a chat's median switch exceeds 150 ms (#563). `PINCER_SWITCH_CHATS=N` cycles through N chats. Run it on a release build (`swift build -c release --product PincerMacDev`) with `PINCER_DEV_NAMESPACE=switch-probe PINCER_KEYCHAIN=memory`; it opens a window for about half a minute.
+- `PincerMacDev --chat-switch-probe [ws://url [token]]` times chat switches from a sidebar click to the new chat's rows on screen, in the demo (default) or against a Gateway, and fails when a chat's median switch exceeds 150 ms (#563; `PINCER_SWITCH_BUDGET_MS` changes it). `PINCER_SWITCH_CHATS=N` cycles through N chats. `PINCER_SWITCH_OVERALL_MS` and `PINCER_SWITCH_STALL_MS` also cap the median of all timed switches and the longest stall. The release target is an overall median of 50 ms (#571); CI reports a debug build's timings and fails only past 500 ms; the hosted reuse test and the selection-defaults test are the structural guards. Run it on a release build (`swift build -c release --product PincerMacDev`) with `PINCER_DEV_NAMESPACE=switch-probe PINCER_KEYCHAIN=memory`; it opens a window for about half a minute.
 
 ## Running checks
 

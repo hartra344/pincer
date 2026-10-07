@@ -782,7 +782,7 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func constants() {
         #expect(BackgroundRefresh.taskIdentifier == "chat.pincer.refresh")
-        #expect(BackgroundRefresh.defaultBudget == 25)
+        #expect(BackgroundRefresh.defaultBudget == 20)
         #expect(BackgroundRefresh.interval == 15 * 60)
     }
 }
