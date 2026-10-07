@@ -68,6 +68,38 @@ private final class Log {
 
 private final class Token: Sendable {}
 
+/// Workers that block on a per-id latch and record whether their task was cancelled meanwhile.
+private final class CancelProbe: Sendable {
+    private let state = Mutex<(started: [Int], cancelled: Set<Int>)>(([], []))
+    private let latches = Mutex<[Int: Latch]>([:])
+
+    private func latch(_ id: Int) -> Latch {
+        latches.withLock { d in
+            if let l = d[id] { return l }
+            let l = Latch()
+            d[id] = l
+            return l
+        }
+    }
+
+    var started: [Int] { state.withLock { $0.started } }
+    func wasCancelled(_ id: Int) -> Bool { state.withLock { $0.cancelled.contains(id) } }
+
+    func work(_ id: Int) -> @Sendable () async -> Int {
+        { [self] in
+            await withTaskCancellationHandler {
+                state.withLock { $0.started.append(id) }
+                await latch(id).wait()
+                return id
+            } onCancel: {
+                state.withLock { _ = $0.cancelled.insert(id) }
+            }
+        }
+    }
+
+    func release(_ id: Int) async { await latch(id).open() }
+}
+
 @MainActor
 @Suite("Latest-wins preparer", .serialized)
 struct LatestWinsPreparerTests {
@@ -175,7 +207,7 @@ struct LatestWinsPreparerTests {
         await w.release(1)
         await drain(p)
         #expect(w.started == [1])
-        #expect(log.calls(1) == [1])
+        #expect(log.calls(1) == [nil], "the cancelled pending request had already superseded the active one")
     }
 
     @Test func cancellationWhileActiveReturnsNilAfterWorkerExitsAndNextRequestRuns() async {
@@ -265,7 +297,7 @@ struct LatestWinsPreparerTests {
         #expect(log.calls(4) == [4])
     }
 
-    @Test func deallocatedPreparerCompletesNil() async {
+    @Test func ownerReleasingPreparerStillCompletesActiveRequest() async {
         let w = Workers(), log = Log()
         var p: LatestWinsPreparer<Int>? = LatestWinsPreparer<Int>()
         _ = submit(p!, w, log, 1)
@@ -273,7 +305,100 @@ struct LatestWinsPreparerTests {
         p = nil
         await w.release(1)
         #expect(await eventually { log.calls(1).count == 1 })
-        #expect(log.calls(1) == [nil])
+        #expect(log.calls(1) == [1], "the worker keeps the preparer alive, so the current request still delivers")
+    }
+
+    @Test func ownerReleasingPreparerStillRunsPendingAndFinishedSeesActiveOutput() async {
+        let w = Workers(), log = Log()
+        var seen: [Int] = []
+        var p: LatestWinsPreparer<Int>? = LatestWinsPreparer<Int>()
+        _ = submit(p!, w, log, 1, finished: { seen.append($0) })
+        _ = submit(p!, w, log, 2, finished: { seen.append($0) })
+        #expect(await eventually { w.started == [1] })
+        p = nil
+        await w.release(1)
+        #expect(await eventually { w.started == [1, 2] }, "the pending request still runs")
+        await w.release(2)
+        #expect(await eventually { log.calls(2).count == 1 })
+        #expect(await eventually { log.calls(1).count == 1 })
+        #expect(seen == [1, 2], "finished still sees the superseded active output")
+        #expect(log.calls(1) == [nil] && log.calls(2) == [2])
+    }
+
+    @Test func reentrantSubmitFromDisplacedCompletionDeliversNewestAndEveryRequestCompletesOnce() async {
+        let p = LatestWinsPreparer<Int>(), w = Workers(), log = Log()
+        _ = submit(p, w, log, 1)
+        _ = p.submit(work: w.work(2)) { value in
+            log.results.append((2, value))
+            // Submitting from the displaced request's completion must win over request 3.
+            _ = self.submit(p, w, log, 4)
+        }
+        _ = submit(p, w, log, 3)
+        #expect(log.calls(2) == [nil])
+        #expect(p.pendingCount == 1, "the re-entrant request replaced request 3")
+        #expect(log.calls(3) == [nil], "request 3 was displaced by the re-entrant submit")
+        await w.release(1)
+        #expect(await eventually { w.started == [1, 4] })
+        await w.release(4)
+        await drain(p)
+        #expect(log.calls(4) == [4], "the newest request delivers")
+        #expect(!w.started.contains(3))
+        for id in 1...4 { #expect(log.calls(id).count == 1, "request \(id)") }
+    }
+
+    @Test func cancelsSupersededWorkCancelsActiveWorkerButKeepsLease() async {
+        let p = LatestWinsPreparer<Int>(cancelsSupersededWork: true), log = Log()
+        let probe = CancelProbe()
+        _ = p.submit(work: probe.work(1)) { log.results.append((1, $0)) }
+        #expect(await eventually { probe.started == [1] })
+        #expect(!probe.wasCancelled(1))
+        _ = p.submit(work: probe.work(2)) { log.results.append((2, $0)) }
+        #expect(await eventually { probe.wasCancelled(1) }, "superseding cancels the active worker")
+        #expect(p.activeCount == 1, "the lease is held until the worker exits")
+        #expect(probe.started == [1])
+        await probe.release(1)
+        #expect(await eventually { probe.started == [1, 2] })
+        #expect(!probe.wasCancelled(2))
+        await probe.release(2)
+        await p.waitForIdle()
+        #expect(log.calls(1) == [nil] && log.calls(2) == [2])
+    }
+
+    @Test func cancelsSupersededWorkOnInvalidateAndCancel() async {
+        let p = LatestWinsPreparer<Int>(cancelsSupersededWork: true), log = Log()
+        let probe = CancelProbe()
+        _ = p.submit(work: probe.work(1)) { log.results.append((1, $0)) }
+        #expect(await eventually { probe.started == [1] })
+        p.invalidate()
+        #expect(await eventually { probe.wasCancelled(1) })
+        #expect(p.activeCount == 1)
+        await probe.release(1)
+        await p.waitForIdle()
+        #expect(log.calls(1) == [nil] && p.activeCount == 0)
+
+        let t2 = p.submit(work: probe.work(2)) { log.results.append((2, $0)) }
+        #expect(await eventually { probe.started == [1, 2] })
+        p.cancel(t2)
+        #expect(await eventually { probe.wasCancelled(2) })
+        #expect(p.activeCount == 1)
+        await probe.release(2)
+        await p.waitForIdle()
+        #expect(log.calls(2) == [nil])
+    }
+
+    @Test func defaultPreparerNeverCancelsWorkers() async {
+        let p = LatestWinsPreparer<Int>(), log = Log()
+        let probe = CancelProbe()
+        let t1 = p.submit(work: probe.work(1)) { log.results.append((1, $0)) }
+        #expect(await eventually { probe.started == [1] })
+        _ = p.submit(work: probe.work(2)) { log.results.append((2, $0)) }
+        p.cancel(t1)
+        p.invalidate()
+        await probe.release(1)
+        await p.waitForIdle()
+        #expect(!probe.wasCancelled(1), "the worker ran to completion uncancelled")
+        #expect(probe.started == [1])
+        #expect(log.calls(1) == [nil] && log.calls(2) == [nil])
     }
 
     @Test func replacedPendingRequestReleasesItsInput() async {

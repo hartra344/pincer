@@ -13,6 +13,8 @@ public struct ToolsInspectorSearchResult: Sendable {
 @MainActor @Observable
 public final class ToolsInspectorSearchPreparation {
     public private(set) var result: ToolsInspectorSearchResult?
+    /// Bumped whenever `result` is cleared, so an output resumed after the clear is not republished.
+    @ObservationIgnored private var epoch = 0
     @ObservationIgnored private let preparer = LatestWinsPreparer<ToolsInspectorSearchResult>()
     #if DEBUG
     @ObservationIgnored package var probe: ToolsInspectorSearchProbe?
@@ -28,12 +30,14 @@ public final class ToolsInspectorSearchPreparation {
     }
     public func invalidate() {
         result = nil
+        epoch &+= 1
         preparer.invalidate()
     }
     public func prepare(_ inspection: ToolsInspection, filter: ToolFilter, query: String,
                         server: String? = nil, owner: UUID, sourceRevision: Int) async -> ToolsInspectorSearchResult? {
         guard !Task.isCancelled else { return nil }
-        if result?.sourceRevision != sourceRevision { result = nil }
+        if result?.sourceRevision != sourceRevision { result = nil; epoch &+= 1 }
+        let epoch = self.epoch
         // A superseded query's cancellation keeps the last finished same-source display.
         let output = await preparer.prepare(start: {
             #if DEBUG
@@ -60,7 +64,7 @@ public final class ToolsInspectorSearchPreparation {
                 return output
             }
         })
-        if let output { result = output }
+        if let output, epoch == self.epoch { result = output }
         return output
     }
 }
