@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// A persisted attachment of an unsent message. The bytes live in `OutboxAttachmentStore`, not in
 /// the outbox JSON.
@@ -47,13 +48,29 @@ public enum OutboxAttachmentStore {
     }
 
     /// Whether every attachment file of the entry is on disk (once pending writes have landed).
-    public static func filesExist(for entry: OutboxEntry, gatewayId: UUID, root: URL? = OutboxStore.root) -> Bool {
-        self.drain(gatewayId: gatewayId, root: root)
-        return entry.attachments.allSatisfy { ref in
-            self.fileURL(gatewayId: gatewayId, entryId: entry.id, attachmentId: ref.id, root: root)
-                .map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
-        }
+    /// Existence is file metadata, so this answers correctly while the device is locked too.
+    public static func filesExist(for entry: OutboxEntry, gatewayId: UUID, root: URL? = OutboxStore.root) async -> Bool {
+        await self.entriesMissingFiles([entry], gatewayId: gatewayId, root: root).isEmpty
     }
+
+    /// The ids of the entries with an attachment file missing, checked off the main thread once
+    /// pending writes have landed.
+    static func entriesMissingFiles(_ entries: [OutboxEntry], gatewayId: UUID, root: URL?) async -> Set<String> {
+        let entries = entries.filter { !$0.attachments.isEmpty }
+        guard !entries.isEmpty else { return [] }
+        return await Task.detached(priority: .userInitiated) {
+            self.drain(gatewayId: gatewayId, root: root)
+            let files = FileManager.default
+            return Set(entries.filter { entry in
+                !entry.attachments.allSatisfy { ref in
+                    self.fileURL(gatewayId: gatewayId, entryId: entry.id, attachmentId: ref.id, root: root)
+                        .map { files.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+                }
+            }.map(\.id))
+        }.value
+    }
+
+
 
     /// Reads the entry's attachment bytes, or nil when any file is missing.
     public static func read(entry: OutboxEntry, gatewayId: UUID, root: URL? = OutboxStore.root) async -> [OutgoingAttachment]? {
@@ -149,6 +166,9 @@ public enum OutboxAttachmentStore {
     private static let pendingLock = NSLock()
     nonisolated(unsafe) private static var pending: [URL: [@Sendable () -> Void]] = [:]
     private static let running = NSLock()
+    /// Gateways whose attachment file work ever ran on the main thread; tests and checks assert
+    /// that restoring and sending never adds theirs (#915). Quitting (`saveNow`) does, on purpose.
+    static let mainThreadFileWork = Mutex<Set<UUID>>([])
 
     private static func enqueue(gatewayId: UUID, root: URL?, _ work: @escaping @Sendable () -> Void) {
         guard let key = self.gatewayDirectory(gatewayId: gatewayId, root: root) else { return }
@@ -159,6 +179,7 @@ public enum OutboxAttachmentStore {
     /// Runs the file work still pending for this Gateway, in order, on the calling thread.
     static func drain(gatewayId: UUID, root: URL?) {
         guard let key = self.gatewayDirectory(gatewayId: gatewayId, root: root) else { return }
+        if Thread.isMainThread { self.mainThreadFileWork.withLock { _ = $0.insert(gatewayId) } }
         self.running.lock()
         defer { self.running.unlock() }
         let work = self.pendingLock.withLock { self.pending.removeValue(forKey: key) ?? [] }
