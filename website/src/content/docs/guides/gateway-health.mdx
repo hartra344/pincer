@@ -60,7 +60,7 @@ A dismissed issue moves to the collapsed **Dismissed (N)** section. It doesn't c
 
 | Issue | Comes back when |
 | --- | --- |
-| Channel account | its state changes (not running, not connected, error). A new error message alone doesn't bring it back. |
+| Channel account | its state changes (not running, not connected, error), or it stops or loses its connection again, even if no device running Pincer saw it recover. A new error message alone doesn't bring it back. |
 | Plugin failed to load | the error text changes |
 | Failed deliveries | the count goes up. The same or a lower count stays hidden. |
 | Heartbeat failed | the reason changes |
@@ -103,7 +103,7 @@ When a setting you saved needs a restart, Gateway Settings says "Saved. Restart 
 
 - Health and restart have been tested against the [demo](../../getting-started/try-the-demo/) and the [mock gateway](../../development/mock-gateway/) only, not a real gateway restart.
 - **Restart Now Anyway** asks the gateway to skip waiting for active work. How quickly a real gateway restarts after that is up to the gateway.
-- If a dismissed issue clears up and happens again while no device running Pincer is connected, it stays dismissed, unless it also changed (for example, more failed deliveries).
+- If a dismissed issue clears up and happens again while no device running Pincer is connected, it stays dismissed, unless it also changed (for example, more failed deliveries). Channel accounts that stop or lose their connection again are the exception, since the gateway records when that happened. A channel account dismissed with an older version of Pincer doesn't get this until it clears up once or you dismiss it again.
 - Pincer can't retry or clear failed deliveries yet, since the gateway has no method for it.
 - If the gateway shuts down without saying it will come back (for example `openclaw gateway stop`), Pincer treats it as a stop, not a restart, and shows its usual reconnecting status.
 
