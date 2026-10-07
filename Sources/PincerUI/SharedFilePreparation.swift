@@ -5,14 +5,14 @@ import PincerKit
 /// One active iOS staging request plus one replaceable latest request, scoped to its chat view.
 @MainActor final class SharedFilePreparation {
     private let staging: ExportFileStaging
-    private let preparer = LatestWinsPreparer<SharedFile?>()
+    private let preparer = LatestWinsPreparer<SharedFile?>(cancelsSupersededWork: true)
     private var discards: [Task<Void, Never>] = []
     init(staging: ExportFileStaging? = nil) { self.staging = staging ?? ExportFileStaging() }
 
     func request(name: String, data: Data, publish: @escaping @MainActor (SharedFile?) -> Void) {
         let staging = self.staging
         var written: SharedFile?
-        // The staging write is not cancelled when superseded; a stale result is discarded when it lands.
+        // A superseded staging write is cancelled; anything it still wrote is discarded when it lands.
         preparer.submit(work: { await SharedFile.write(name: name, data: data, staging: staging) },
                         finished: { written = $0 },
                         completion: { [weak self] result in
