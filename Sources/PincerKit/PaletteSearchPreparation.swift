@@ -93,24 +93,6 @@ package struct PaletteEnvironmentKey: Equatable, Sendable {
 
 /// Per presentation: one finished display, one active worker lease, and one latest COW input.
 @MainActor @Observable package final class PaletteSearchCoordinator {
-    private final class Cancellation: Sendable {
-        private let flag = Mutex(false)
-        var isCanceled: Bool { flag.withLock { $0 } }
-        func cancel() { flag.withLock { $0 = true } }
-    }
-    private struct Job: Sendable {
-        let ticket: UUID, owner: UUID
-        let revision: UInt64
-        let environment: PaletteEnvironmentKey
-        let items: [PaletteItem], bookmarks: [PaletteItem]
-        let query: String, page: PaletteSearchPreparation.Page
-        let gatewaySelected: Bool, shortcut: String?
-        let cancellation: Cancellation
-        let completion: @MainActor @Sendable (Bool) -> Void
-        #if DEBUG
-        let probe: PaletteSearchProbe?
-        #endif
-    }
     package struct Finished {
         package let items: [PaletteItem]
         package let owner: UUID
@@ -120,22 +102,19 @@ package struct PaletteEnvironmentKey: Equatable, Sendable {
     package private(set) var result: Finished?
     package private(set) var refreshRevision: UInt64 = 0
     @ObservationIgnored package let source = PaletteSourceRevision()
-    @ObservationIgnored private var current: UUID?
-    @ObservationIgnored private var active: UUID?
-    @ObservationIgnored private var pending: Job?
+    @ObservationIgnored private let preparer = LatestWinsPreparer<[PaletteItem]>()
     @ObservationIgnored package private(set) var isPresenting = false
     #if DEBUG
     @ObservationIgnored package var didPrepare: (@Sendable () async -> Void)?
-    @ObservationIgnored package private(set) var actualWorkerTask: Task<Void, Never>?
-    package var activeCount: Int { active == nil ? 0 : 1 }
-    package var pendingCount: Int { pending == nil ? 0 : 1 }
+    package var actualWorkerTask: Task<Void, Never>? { preparer.workerTask }
+    package var activeCount: Int { preparer.activeCount }
+    package var pendingCount: Int { preparer.pendingCount }
     #endif
     package init() {}
     package func appear() { if !isPresenting { source.invalidate(); isPresenting = true } }
     package func invalidate(clearDisplay: Bool = false) {
-        source.invalidate(); current = nil
+        source.invalidate(); preparer.invalidate()
         if clearDisplay { result = nil }
-        let old = pending; pending = nil; old?.completion(false)
     }
     package func disappear() { isPresenting = false; invalidate(clearDisplay: true) }
     package func refreshSource(ifCurrent revision: UInt64) {
@@ -146,70 +125,39 @@ package struct PaletteEnvironmentKey: Equatable, Sendable {
         guard isPresenting, let result else { return false }
         return result.owner == owner && source.owns(result.revision) && (environment == nil || environment == result.environment)
     }
-    private func cancel(_ ticket: UUID) {
-        if pending?.ticket == ticket { let old = pending; pending = nil; old?.completion(false) }
-        if current == ticket { current = nil }
-    }
     package func prepare(_ items: [PaletteItem], bookmarks: [PaletteItem], query: String,
                          page: PaletteSearchPreparation.Page, gatewaySelected: Bool, shortcut: String?,
                          owner: UUID, revision: UInt64, environment: PaletteEnvironmentKey = .init()) async -> Bool {
         guard !Task.isCancelled, isPresenting, source.owns(revision) else { return false }
-        let ticket = UUID(), cancellation = Cancellation()
         #if DEBUG
         let probe = PaletteSearchDiagnostics.probe
         #endif
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                guard !Task.isCancelled, source.owns(revision), isPresenting else { continuation.resume(returning: false); return }
-                current = ticket
+        // `accept` runs only for the current, uncancelled request, so it is where the display is committed.
+        var output: [PaletteItem]?
+        return await preparer.prepare(
+            accept: { [self] in
+                guard isPresenting, source.owns(revision), let items = output else { return false }
+                result = Finished(items: items, owner: owner, revision: revision, environment: environment)
+                return true
+            },
+            start: { [self] in
                 #if DEBUG
-                let job = Job(ticket: ticket, owner: owner, revision: revision, environment: environment, items: items, bookmarks: bookmarks,
-                    query: query, page: page, gatewaySelected: gatewaySelected, shortcut: shortcut,
-                    cancellation: cancellation, completion: { continuation.resume(returning: $0) }, probe: probe)
-                #else
-                let job = Job(ticket: ticket, owner: owner, revision: revision, environment: environment, items: items, bookmarks: bookmarks,
-                    query: query, page: page, gatewaySelected: gatewaySelected, shortcut: shortcut,
-                    cancellation: cancellation, completion: { continuation.resume(returning: $0) })
-                #endif
-                if active != nil { let old = pending; pending = job; old?.completion(false) }
-                else { start(job) }
-            }
-        } onCancel: {
-            cancellation.cancel()
-            Task { @MainActor [weak self] in self?.cancel(ticket) }
-        }
-    }
-    private func start(_ job: Job) {
-        active = job.ticket
-        #if DEBUG
-        let hook = didPrepare
-        #endif
-        let task = Task {
-            let output = await Task.detached(priority: .userInitiated) {
-                #if DEBUG
-                let value = PaletteSearchDiagnostics.$probe.withValue(job.probe) {
-                    PaletteSearchPreparation.results(job.items, bookmarks: job.bookmarks, query: job.query,
-                        page: job.page, gatewaySelected: job.gatewaySelected, shortcut: job.shortcut)
+                let hook = didPrepare
+                return {
+                    let value = PaletteSearchDiagnostics.$probe.withValue(probe) {
+                        PaletteSearchPreparation.results(items, bookmarks: bookmarks, query: query,
+                            page: page, gatewaySelected: gatewaySelected, shortcut: shortcut)
+                    }
+                    await hook?()
+                    return value
                 }
-                await hook?()
-                return value
                 #else
-                return PaletteSearchPreparation.results(job.items, bookmarks: job.bookmarks, query: job.query,
-                    page: job.page, gatewaySelected: job.gatewaySelected, shortcut: job.shortcut)
+                return {
+                    PaletteSearchPreparation.results(items, bookmarks: bookmarks, query: query,
+                        page: page, gatewaySelected: gatewaySelected, shortcut: shortcut)
+                }
                 #endif
-            }.value
-            let accepted = isPresenting && current == job.ticket && source.owns(job.revision) && !job.cancellation.isCanceled
-            active = nil
-            #if DEBUG
-            actualWorkerTask = nil
-            #endif
-            if accepted { result = Finished(items: output, owner: job.owner, revision: job.revision, environment: job.environment) }
-            let next = pending; pending = nil
-            if let next { start(next) }
-            job.completion(accepted)
-        }
-        #if DEBUG
-        actualWorkerTask = task
-        #endif
+            },
+            finished: { output = $0 }) != nil
     }
 }

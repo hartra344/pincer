@@ -404,11 +404,8 @@ public enum TranscriptCache {
                     // The file is there, so this isn't a content problem: keep it.
                     return (nil, .unavailable("unreadable: \(error.localizedDescription)"))
                 }
-                if let peek = try? JSONDecoder().decode(VersionPeek.self, from: data),
-                   Self.manifestVersions.contains(peek.version),
-                   let manifest = try? JSONDecoder().decode(Manifest.self, from: data)
-                {
-                    let current = peek.version == Snapshot.currentVersion
+                if let manifest = Self.decodeManifest(data, url: url) {
+                    let current = manifest.version == Snapshot.currentVersion
                     var range: Range<Int>?
                     // An older manifest is read whole, so it's saved back whole at the current version.
                     if let newest, current {
@@ -425,7 +422,7 @@ public enum TranscriptCache {
                         guard current else {
                             var snapshot = snapshot
                             snapshot.version = Snapshot.currentVersion
-                            Self.logger.notice("Migrated cached transcript \(url.lastPathComponent, privacy: .private) from v\(peek.version) to v\(Snapshot.currentVersion)")
+                            Self.logger.notice("Migrated cached transcript \(url.lastPathComponent, privacy: .private) from v\(manifest.version) to v\(Snapshot.currentVersion)")
                             // Written back behind the writer's queue; the chat being opened doesn't wait for it.
                             if !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) {
                                 Task.detached(priority: .utility) {
@@ -434,7 +431,7 @@ public enum TranscriptCache {
                                     await legacyManifestMigrationWriteObserver?(.finished)
                                 }
                             }
-                            return (snapshot, .migrated(from: peek.version))
+                            return (snapshot, .migrated(from: manifest.version))
                         }
                         var layout = layout
                         layout.manifestDate = manifestDate
@@ -689,9 +686,7 @@ public enum TranscriptCache {
                     guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else { return ([], false, .missing) }
                     return ([], false, .unavailable("unreadable: \(error.localizedDescription)"))
                 }
-                guard let peek = try? JSONDecoder().decode(VersionPeek.self, from: data), peek.version == Snapshot.currentVersion,
-                      let manifest = try? JSONDecoder().decode(Manifest.self, from: data)
-                else {
+                guard let manifest = Self.decodeManifest(data, url: url), manifest.version == Snapshot.currentVersion else {
                     // An older single file: read (and migrate) it whole.
                     let (snapshot, outcome) = await Self.read(url, gatewayId: gatewayId, root: root, priority: .userInitiated)
                     guard let snapshot, let index = snapshot.items.firstIndex(where: { $0.id == itemId }) else {
