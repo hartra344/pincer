@@ -167,8 +167,19 @@ jobs:
             -only-testing:PincerUITests/ScrollToBottomTests \
             -only-testing:PincerUITests/StreamingRenderingTests \
             -only-testing:PincerUITests/InlineMathOffMainTests \
-            -only-testing:PincerUITests/SVGRasterizerTests \
             -only-testing:PincerUITests/ComposerSynchronousSizingUIKitTests \
+            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
+      # WebKit SVG rendering waits on the main actor and a cold WebContent process; alongside the hosted
+      # UIKit suites above it starved for minutes (#643). Run it on its own, reusing the same build.
+      - name: Test SVG rasterization on iOS
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building \
+            -scheme PincerUITests-iOS \
+            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
+            -derivedDataPath .build/xcode-ios \
+            -only-testing:PincerUITests/SVGRasterizerTests \
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
   swift:
