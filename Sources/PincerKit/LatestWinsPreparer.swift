@@ -32,14 +32,21 @@ package final class LatestWinsPreparer<Output: Sendable> {
         let cancellation: Cancellation
     }
 
+    private let cancelsSupersededWork: Bool
     private var current: Ticket?
     private var active: Ticket?
+    private var activeWorker: Task<Output, Never>?
     private var pending: Job?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
     /// The task awaiting the active worker; tests use it to observe the worker's real lifetime.
     package private(set) var workerTask: Task<Void, Never>?
 
-    package init() {}
+    /// - Parameter cancelsSupersededWork: cancel the active worker's task as soon as its request
+    ///   can no longer deliver (superseded, invalidated or cancelled), for work that checks
+    ///   `Task.isCancelled` to stop early. The worker still holds the lease until it exits.
+    package init(cancelsSupersededWork: Bool = false) {
+        self.cancelsSupersededWork = cancelsSupersededWork
+    }
 
     package var activeCount: Int { self.active == nil ? 0 : 1 }
     package var pendingCount: Int { self.pending == nil ? 0 : 1 }
@@ -109,13 +116,17 @@ package final class LatestWinsPreparer<Output: Sendable> {
     /// the active worker keeps its lease until it exits, then delivers `nil`.
     package func invalidate() {
         self.current = nil
+        self.cancelActiveWorkIfSuperseded()
         self.dropPending()
     }
 
     /// Finishes `ticket` with `nil` if it hasn't delivered yet.
     package func cancel(_ ticket: Ticket) {
+        if self.current == ticket {
+            self.current = nil
+            self.cancelActiveWorkIfSuperseded()
+        }
         if self.pending?.ticket == ticket { self.dropPending() }
-        if self.current == ticket { self.current = nil }
     }
 
     /// Returns once no worker is active and nothing is pending.
@@ -127,8 +138,12 @@ package final class LatestWinsPreparer<Output: Sendable> {
     private func enqueue(_ job: Job) -> Ticket {
         self.current = job.ticket
         if self.active != nil {
-            self.dropPending()
+            self.cancelActiveWorkIfSuperseded()
+            // Install the new request before completing the displaced one, so a completion that
+            // submits again replaces this request rather than being overwritten by it.
+            let displaced = self.pending
             self.pending = job
+            displaced?.completion(nil)
         } else {
             self.start(job)
         }
@@ -142,16 +157,24 @@ package final class LatestWinsPreparer<Output: Sendable> {
         self.resumeIdleWaitersIfIdle()
     }
 
+    private func cancelActiveWorkIfSuperseded() {
+        guard self.cancelsSupersededWork, self.active != nil, self.active != self.current else { return }
+        self.activeWorker?.cancel()
+    }
+
     private func start(_ job: Job) {
         self.active = job.ticket
         let work = job.start()
         let worker = Task.detached(priority: job.priority) { await work() }
-        self.workerTask = Task { [weak self] in
+        self.activeWorker = worker
+        // Holds the preparer until the worker exits, so the pending request still runs and every
+        // request completes exactly once even if the owner lets go of the preparer meanwhile.
+        self.workerTask = Task { [self] in
             let output = await worker.value
-            guard let self else { job.completion(nil); return }
             job.finished?(output)
             let accepted = self.current == job.ticket && !job.cancellation.isCanceled && job.accept()
             self.active = nil
+            self.activeWorker = nil
             self.workerTask = nil
             if let next = self.pending {
                 self.pending = nil
