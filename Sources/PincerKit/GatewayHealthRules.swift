@@ -31,8 +31,25 @@ public enum GatewayHealthRules {
                 }
                 return current <= dismissed
             }
-            return fingerprint == issue.fingerprint
+            if fingerprint == issue.fingerprint { return true }
+            // A dismissal stored before occurrence markers existed still hides the same issue.
+            return !fingerprint.contains(Self.markerKey) && fingerprint == Self.baseFingerprint(issue.fingerprint)
         }
+    }
+
+    private static let markerKey = ";at="
+
+    private static func baseFingerprint(_ fingerprint: String) -> String {
+        fingerprint.range(of: markerKey).map { String(fingerprint[..<$0.lowerBound]) } ?? fingerprint
+    }
+
+    /// The Gateway timestamp that tells one occurrence of a channel problem from the next: when it
+    /// stopped (`lastStopAt`), or when it was last connected (`lastConnectedAt`) for a lost connection.
+    /// Errors carry no timestamp, so they get none.
+    private static func occurrenceMarker(_ account: GatewayChannelAccountHealth) -> String {
+        let at: Date? = account.running == false ? account.lastStopAt : account.connected == false ? account.lastConnectedAt : nil
+        guard let at else { return "" }
+        return "\(markerKey)\(Int64(at.timeIntervalSince1970 * 1000))"
     }
 
     private static func pressureCounts(_ fingerprint: String) -> [Int]? {
@@ -80,7 +97,7 @@ public enum GatewayHealthRules {
                         : account.connected == false ? "\(who) isn't connected" : "\(who) reported an error"
                     let state = account.running == false ? "not-running" : account.connected == false ? "not-connected" : "error"
                     issues.append(.init(id: "channel:\(channel.id):\(account.accountId)", kind: .channel, title: title,
-                                        detail: account.lastError, fingerprint: "state=\(state)"))
+                                        detail: account.lastError, fingerprint: "state=\(state)\(Self.occurrenceMarker(account))"))
                 }
             }
             for plugin in health.pluginErrors {

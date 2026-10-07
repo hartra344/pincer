@@ -564,3 +564,4 @@ enum Suites {
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
     ]
 }
+            Section("Health recurrence") { runHealthRecurrenceChecks() },
