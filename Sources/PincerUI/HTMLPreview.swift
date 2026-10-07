@@ -136,6 +136,7 @@ struct HTMLPreviewWebView: NSViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.allowsBackForwardNavigationGestures = false
         view.allowsMagnification = true
+        view.allowsLinkPreview = false
         view.setAccessibilityLabel(L("HTML Preview"))
         context.coordinator.load(self.html, in: view)
         return view

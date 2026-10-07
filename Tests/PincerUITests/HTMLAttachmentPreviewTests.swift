@@ -53,3 +53,29 @@ struct HTMLAttachmentPreviewTests {
         #expect(!svgPart.canExpand)
     }
 }
+
+@MainActor
+@Suite("HTML preview lockdown")
+struct HTMLPreviewLockdownTests {
+    @Test func webViewIsScriptlessAndEphemeral() {
+        let configuration = HTMLPreview.configuration()
+        #expect(!configuration.defaultWebpagePreferences.allowsContentJavaScript)
+        #expect(!configuration.preferences.javaScriptCanOpenWindowsAutomatically)
+        #expect(!configuration.websiteDataStore.isPersistent)
+    }
+
+    @Test func policyPrecedesUntrustedMarkup() {
+        let page = HTMLPreview.document(#"<!DOCTYPE html><img src="https://example.com/x.png">"#)
+        #expect(page.hasPrefix(#"<meta http-equiv="Content-Security-Policy""#))
+        #expect(HTMLPreview.contentSecurityPolicy.hasPrefix("default-src 'none'"))
+        #expect(HTMLPreview.blockRules.contains("^(https?|wss?|ftp|file|blob)://"))
+    }
+
+    @Test func attachmentSourceIsBounded() {
+        #expect(HTMLAttachmentSource.decode(Data("<p>hi</p>\r\n".utf8)) == "<p>hi</p>\n")
+        #expect(HTMLAttachmentSource.decode(Data(" \n\t".utf8)) == nil)
+        #expect(HTMLAttachmentSource.decode(Data([0x3C, 0x00, 0x3E])) == nil)
+        #expect(HTMLAttachmentSource.decode(Data([0xFF, 0xFE, 0x3C])) == nil)
+        #expect(HTMLAttachmentSource.decode(Data(repeating: 0x20, count: HTMLAttachmentSource.maxBytes) + Data("x".utf8)) == nil)
+    }
+}

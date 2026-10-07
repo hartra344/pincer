@@ -835,11 +835,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     func previewHTML(_ file: FileRef) async -> Bool {
         let context = self.context
         guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
-        let html = await Task.detached(priority: .userInitiated) { () -> String? in
-            if data.prefix(8192).contains(0) { return nil }
-            return String(data: data, encoding: .utf8).map { $0.replacingOccurrences(of: "\r\n", with: "\n") }
-        }.value
-        guard let html, !html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let html = await Task.detached(priority: .userInitiated) { HTMLAttachmentSource.decode(data) }.value
+        guard let html else { return false }
         context.previewHTML(html)
         return true
     }
