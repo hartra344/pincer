@@ -9,8 +9,10 @@ import UserNotifications
 public final class SilentPushRefresh {
     public enum Result: Sendable, Equatable { case newData, noData, failed }
 
-    /// Hard stop: iOS gives a content-available wake ~30 s.
-    public static let deadline: TimeInterval = 25
+    /// Hard stop: iOS gives a content-available wake ~30 s, cold launch included.
+    public static let deadline: TimeInterval = 20
+    /// The refresh's own budget, so it normally finishes before the watchdog.
+    public static let budget: TimeInterval = 17
 
     @MainActor
     private final class State {
@@ -38,7 +40,7 @@ public final class SilentPushRefresh {
     public init(
         userInfo: [AnyHashable: Any],
         refresh: BackgroundRefresh = BackgroundRefresh(),
-        budget: TimeInterval = BackgroundRefresh.defaultBudget,
+        budget: TimeInterval = SilentPushRefresh.budget,
         deadline: TimeInterval = SilentPushRefresh.deadline,
         keys: (UUID) -> WebPushKeys? = PushKeyStore.keys(for:),
         timer: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) },
