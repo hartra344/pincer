@@ -3,8 +3,15 @@ import Synchronization
 
 /// v8 storage: `<digest>.json` is a small manifest naming segment files in `<digest>.segments/`.
 extension TranscriptCache {
-    struct VersionPeek: Decodable {
-        let version: Int
+    /// Counts manifest JSON parses so a test can prove a read decodes once.
+    static let manifestDecodeCount = Atomic<Int>(0)
+
+    /// One parse: `Manifest` carries `version`, so a manifest of a supported version needs no separate peek.
+    static func decodeManifest(_ data: Data) -> Manifest? {
+        manifestDecodeCount.add(1, ordering: .relaxed)
+        guard let manifest = try? JSONDecoder().decode(Manifest.self, from: data),
+              manifestVersions.contains(manifest.version) else { return nil }
+        return manifest
     }
 
     struct SegmentRef: Codable, Equatable {
@@ -457,10 +464,7 @@ extension TranscriptCache.Writer {
         } catch {
             return fileManager.fileExists(atPath: url.path(percentEncoded: false)) ? Cache.SaveResult() : nil
         }
-        guard let peek = try? JSONDecoder().decode(Cache.VersionPeek.self, from: storedData),
-              Cache.manifestVersions.contains(peek.version),
-              let decoded = try? JSONDecoder().decode(Cache.Manifest.self, from: storedData)
-        else { return nil }
+        guard let decoded = Cache.decodeManifest(storedData) else { return nil }
         stored = decoded
         let items = snapshot.items
         guard let first = items.first else {

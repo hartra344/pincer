@@ -67,6 +67,7 @@ enum Suites {
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
             Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
+            Section("Latest-wins preparer") { await runLatestWinsPreparerChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
