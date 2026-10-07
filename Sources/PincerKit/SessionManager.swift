@@ -148,10 +148,8 @@ public enum SessionManager {
     }
 
     private static func boundedDurationSeconds(_ seconds: TimeInterval) -> Int {
-        guard seconds.isFinite, seconds > 0 else { return 0 }
-        // Double(Int.max) rounds upward on 64-bit platforms; branch before conversion.
-        guard seconds < Double(Int.max) else { return Int.max }
-        return Int(seconds.rounded(.down))
+        guard seconds > 0 else { return 0 }
+        return Int(saturating: seconds, rounding: .down) ?? 0
     }
 
     /// "Archived 3 sessions", "Deleted 1 session; 2 failed".

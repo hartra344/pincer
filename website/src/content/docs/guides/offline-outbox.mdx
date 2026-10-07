@@ -108,6 +108,8 @@ The outbox is saved on your device, so queued and failed messages survive quitti
 | macOS | `~/Library/Application Support/Pincer/Outbox/<gateway>.json` (inside the app's sandbox container for the Xcode-built app) |
 | iOS and iPadOS | `Library/Application Support/Pincer/Outbox/<gateway>.json` in Pincer's app container |
 
+The file holds each unsent message's text and, if [location context](../composer/#location-context) was on when you sent it, the exact location captured then. That location is removed from the file as soon as the message is sent or you delete it. On iPhone and iPad the outbox and its attachments are encrypted by data protection and can't be read until you first unlock the device after it restarts; after that, Pincer can still update the file while the device is locked, so a message sent in the background doesn't leave its location behind.
+
 Each file records its format version. A file that's damaged, or that was written by a newer Pincer (for example after going back to an earlier build), is set aside next to it (`<gateway>.corrupt.json` or `<gateway>.v<version>.json`) instead of being overwritten, and logged under subsystem `chat.pincer`, category `Outbox`, without any message content.
 
 To keep the outbox in memory only, so it lasts until you quit Pincer, set `PINCER_OUTBOX_DIR=off`. Messages with attachments then need a connection again. To use another folder, set it to a path.

@@ -204,8 +204,7 @@ public struct CronRun: Identifiable, Equatable, Sendable {
     }
     private static func timestampIdentity(_ value: Double) -> String {
         // Preserve legacy truncating IDs when representable; schema timestamps have no Int ceiling.
-        if let integer = Int(exactly: value.rounded(.towardZero)) { return String(integer) }
-        return String(value)
+        value.integerString(rounding: .towardZero) ?? String(value)
     }
 }
 
