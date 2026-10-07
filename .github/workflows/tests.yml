@@ -214,10 +214,13 @@ jobs:
       # Unit tests and every check run side by side, each live run against its own mock.
       # Below the job's limit, so a hung lane still leaves its logs for the upload step.
       - name: Unit tests and checks
-        timeout-minutes: 22
+        timeout-minutes: 11
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
-        run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
+        run: |
+          mkdir -p "$CHECKS_LOG_DIR"
+          ( sleep 540; for p in $(pgrep -f 'swiftpm-testing-helper|PincerPackageTests'); do sample "$p" 3 -file "$CHECKS_LOG_DIR/sample-$p.txt" || true; ps -o pid,etime,command -p "$p" >> "$CHECKS_LOG_DIR/ps.txt"; done ) &
+          scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
