@@ -750,9 +750,11 @@ public final class GatewayStore: Identifiable {
         let keys = self.sessions.values.filter { !$0.isSubagent }.map(\.key)
         let index = self.messageIndex
         self.reconcileTask = Task.detached(priority: .utility) { [weak self] in
-            await index.reconcile(sessionKeys: keys) { status in
+            // One main-actor hop per interval rather than per chat; ready/unavailable always go through.
+            let throttle = ProgressThrottle<MessageIndex.Status> { status in
                 await MainActor.run { self?.messageIndexProgress = status }
             }
+            await index.reconcile(sessionKeys: keys) { status in await throttle.submit(status) }
         }
     }
 

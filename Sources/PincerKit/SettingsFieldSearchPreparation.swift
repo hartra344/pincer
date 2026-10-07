@@ -18,13 +18,13 @@ package final class SettingsFieldSearchPreparation {
         let beforeWork: (@Sendable () -> Void)?
         #endif
     }
-    private struct Index: Sendable {
+    fileprivate struct Index: Sendable {
         let source: GatewaySettingsModel.FieldSearchSourceRevision
         let fields: [ConfigField]
         let haystacks: [String]
         let bytes: Int
     }
-    private struct Output: Sendable {
+    fileprivate struct Output: Sendable {
         let fields: [ConfigField]
         let cache: Index?
     }
@@ -33,6 +33,7 @@ package final class SettingsFieldSearchPreparation {
         fileprivate var result: [ConfigField]?
         fileprivate var finished = false
         fileprivate var waiter: CheckedContinuation<Void, Never>?
+        fileprivate var job: LatestWinsPreparer<Output>.Ticket?
         init(token: UUID) { self.token = token }
         fileprivate func finish(_ fields: [ConfigField]?) {
             guard !self.finished else { return }
@@ -45,36 +46,14 @@ package final class SettingsFieldSearchPreparation {
             }
         }
     }
-    // Main installs storage before admission; only the worker consumes/clears it once active.
-    // Completion retains no schema/config/query after the worker has finished.
-    private final class WorkStorage: @unchecked Sendable {
-        var input: Input?
-        var cache: Index?
-        init(_ input: Input) { self.input = input }
-        func prepare() -> Output {
-            guard let input else { preconditionFailure("search input already consumed") }
-            let output = SettingsFieldSearchPreparation.prepare(input, cached: self.cache?.source == input.source ? self.cache : nil)
-            self.input = nil
-            self.cache = nil
-            return output
-        }
-    }
-    private struct Job {
-        let token: UUID
-        let storage: WorkStorage
-        let ticket: Ticket
-    }
     private struct Active {
         let cachedCount: Int
         let cachedBytes: Int
     }
     private var cache: Index?
     private var active: Active?
-    private var pending: Job?
-    private var worker: Task<Void, Never>?
-    #if DEBUG
-    private var idleWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
-    #endif
+    private var latestToken: UUID?
+    private let preparer = LatestWinsPreparer<Output>()
     package func cachedFields(for source: GatewaySettingsModel.FieldSearchSourceRevision) -> [ConfigField] {
         self.cache?.source == source ? self.cache?.fields ?? [] : []
     }
@@ -86,15 +65,26 @@ package final class SettingsFieldSearchPreparation {
         package let pendingToken: UUID?
     }
     package var budgetSnapshot: BudgetSnapshot {
-        BudgetSnapshot(activeCount: self.active == nil ? 0 : 1, pendingCount: self.pending == nil ? 0 : 1,
+        BudgetSnapshot(activeCount: self.preparer.activeCount, pendingCount: self.preparer.pendingCount,
                        cachedCount: self.cache?.fields.count ?? self.active?.cachedCount ?? 0,
-                       cachedBytes: self.cache?.bytes ?? self.active?.cachedBytes ?? 0, pendingToken: self.pending?.token)
+                       cachedBytes: self.cache?.bytes ?? self.active?.cachedBytes ?? 0,
+                       pendingToken: self.preparer.pendingCount == 0 ? nil : self.latestToken)
     }
     package func enqueue(_ input: Input) -> Ticket {
         let ticket = Ticket(token: input.token)
-        self.pending?.ticket.finish(nil)
-        self.pending = Job(token: input.token, storage: WorkStorage(input), ticket: ticket)
-        self.start()
+        self.latestToken = input.token
+        ticket.job = self.preparer.submit(start: { [self] in
+            // The worker owns the prior cache reference, including disposal on a source miss.
+            let cached = self.cache
+            self.active = Active(cachedCount: cached?.fields.count ?? 0, cachedBytes: cached?.bytes ?? 0)
+            self.cache = nil
+            return { Self.prepare(input, cached: cached?.source == input.source ? cached : nil) }
+        }, finished: { [self] output in
+            // Even a superseded or cancelled worker hands its index back and finishes its own ticket.
+            self.cache = output.cache
+            self.active = nil
+            ticket.finish(output.fields)
+        }, completion: { ticket.finish($0?.fields) })
         return ticket
     }
     package func wait(_ ticket: Ticket) async -> [ConfigField]? {
@@ -111,33 +101,8 @@ package final class SettingsFieldSearchPreparation {
     }
     private func cancel(_ ticket: Ticket) {
         ticket.finish(nil)
-        if self.pending?.ticket === ticket { self.pending = nil }
         // Active ownership stays occupied until the real worker exits, even if its waiter cancels.
-    }
-    private func start() {
-        guard self.active == nil, let job = self.pending else { return }
-        self.pending = nil
-        let storage = job.storage
-        storage.cache = self.cache
-        self.active = Active(cachedCount: self.cache?.fields.count ?? 0, cachedBytes: self.cache?.bytes ?? 0)
-        // The worker now owns the prior cache reference, including disposal on a source miss.
-        self.cache = nil
-        let preparation = Task.detached(priority: .userInitiated) { storage.prepare() }
-        let ticket = job.ticket
-        self.worker = Task { [weak self] in
-            let output = await preparation.value
-            guard let self else { ticket.finish(nil); return }
-            self.cache = output.cache
-            ticket.finish(output.fields)
-            self.active = nil; self.worker = nil
-            self.start()
-            #if DEBUG
-            if self.active == nil && self.pending == nil {
-                let waiters = self.idleWaiters; self.idleWaiters.removeAll()
-                for waiter in waiters.values { waiter.resume() }
-            }
-            #endif
-        }
+        if let job = ticket.job { self.preparer.cancel(job) }
     }
     private nonisolated static func prepare(_ input: Input, cached: Index?) -> Output {
         #if DEBUG
@@ -195,16 +160,8 @@ package final class SettingsFieldSearchPreparation {
     }
     #if DEBUG
     package func drain() async {
-        guard self.active != nil || self.pending != nil, !Task.isCancelled else { return }
-        let id = UUID()
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if Task.isCancelled || (self.active == nil && self.pending == nil) { continuation.resume() }
-                else { self.idleWaiters[id] = continuation }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in self?.idleWaiters.removeValue(forKey: id)?.resume() }
-        }
+        guard !self.preparer.isIdle, !Task.isCancelled else { return }
+        await self.preparer.waitForIdle()
     }
     #endif
 }

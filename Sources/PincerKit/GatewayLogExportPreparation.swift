@@ -32,76 +32,61 @@ package final class GatewayLogExportProbe: @unchecked Sendable {
 
 @MainActor
 public final class GatewayLogExportPreparation {
-    private struct Request {
-        let id: UUID
-        let entries: [GatewayLogEntry]
-        let name: String
-        let publish: @MainActor (GatewayLogExport) -> Void
-    }
-    private var current: UUID?
-    private var active: Task<Void, Never>?
-    private var pending: Request?
+    private let preparer = LatestWinsPreparer<GatewayLogExport>()
     #if DEBUG
     package var probe: GatewayLogExportProbe?
     /// Holds actual completed preparation, without substituting a prepared result.
     package var afterPreparation: (@Sendable () async -> Void)?
-    package var pendingCount: Int { self.pending == nil ? 0 : 1 }
-    package var activeCount: Int { self.active == nil ? 0 : 1 }
+    package var pendingCount: Int { self.preparer.pendingCount }
+    package var activeCount: Int { self.preparer.activeCount }
     #endif
     public init() {}
 
     /// UI admission retains one active source and at most one replaceable latest source.
+    /// A displaced pending request is dropped silently.
     public func request(_ entries: [GatewayLogEntry], gatewayName: String,
                         publish: @escaping @MainActor (GatewayLogExport) -> Void) {
-        let request = Request(id: UUID(), entries: entries, name: gatewayName, publish: publish)
-        self.current = request.id
-        if self.active != nil { self.pending = request }
-        else { self.start(request) }
+        self.preparer.submit(start: { self.worker(entries, gatewayName: gatewayName, date: Date(), timeZone: .current) },
+                             completion: { if let output = $0 { publish(output) } })
     }
 
     /// Disappearance invalidates publication. The active lease stays owned until its worker exits.
     public func cancel() {
-        self.current = nil
-        self.pending = nil
-    }
-
-    private func start(_ request: Request) {
-        self.active = Task {
-            let output = await self.prepare(request.entries, gatewayName: request.name)
-            if self.current == request.id { request.publish(output) }
-            self.active = nil
-            if let pending = self.pending {
-                self.pending = nil
-                self.start(pending)
-            }
-        }
+        self.preparer.invalidate()
     }
 
     package func waitForIdle() async {
-        while let active = self.active { await active.value }
+        await self.preparer.waitForIdle()
     }
 
     /// The exact worker used by admitted Gateway Logs Export requests.
     public func prepare(_ entries: [GatewayLogEntry], gatewayName: String,
                         date: Date = Date(), timeZone: TimeZone = .current) async -> GatewayLogExport {
+        await self.worker(entries, gatewayName: gatewayName, date: date, timeZone: timeZone)()
+    }
+
+    private func worker(_ entries: [GatewayLogEntry], gatewayName: String,
+                        date: Date, timeZone: TimeZone) -> @Sendable () async -> GatewayLogExport {
         #if DEBUG
         let probe = self.probe
         let afterPreparation = self.afterPreparation
         #endif
-        return await Task.detached(priority: .userInitiated) {
-            #if DEBUG
-            probe?.record(encoding: false)
-            #endif
-            let raw = GatewayLogs.rawText(entries)
-            #if DEBUG
-            probe?.record(encoding: true)
-            #endif
-            let data = Data(raw.utf8)
-            let output = GatewayLogExport(name: GatewayLogs.exportFilename(gatewayName: gatewayName, date: date, timeZone: timeZone), data: data)
-            #if DEBUG
-            await afterPreparation?()
-            #endif
-            return output
-        }.value
+        return {
+            await Task.detached(priority: .userInitiated) {
+                #if DEBUG
+                probe?.record(encoding: false)
+                #endif
+                let raw = GatewayLogs.rawText(entries)
+                #if DEBUG
+                probe?.record(encoding: true)
+                #endif
+                let data = Data(raw.utf8)
+                let output = GatewayLogExport(name: GatewayLogs.exportFilename(gatewayName: gatewayName, date: date, timeZone: timeZone), data: data)
+                #if DEBUG
+                await afterPreparation?()
+                #endif
+                return output
+            }.value
+        }
     }
 }

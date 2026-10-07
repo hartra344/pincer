@@ -18,21 +18,11 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
     public enum Style: Sendable { case formatted, raw }
     #if DEBUG
     package var probe: GatewayLogCopyProbe?
-    #endif
-    #if DEBUG
-    package private(set) var workerTask: Task<Void, Never>?
-    package var requestID: UUID { current }
+    package var workerTask: Task<Void, Never>? { preparer.workerTask }
+    package private(set) var requestID = UUID()
     package var didPrepare: (@Sendable () async -> Void)?
     #endif
-    private struct Job {
-        let id: UUID
-        let entries: [GatewayLogEntry]
-        let style: Style
-        let completion: @MainActor (String?) -> Void
-    }
-    private var current = UUID()
-    private var active: UUID?
-    private var pending: Job?
+    private let preparer = LatestWinsPreparer<String>()
     public init() {}
 
     public func prepare(_ entries: [GatewayLogEntry], style: Style) async -> String {
@@ -48,29 +38,22 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
     }
 
     public func invalidate() {
-        current = UUID()
-        let displaced = pending; pending = nil
-        displaced?.completion(nil)
+        #if DEBUG
+        requestID = UUID()
+        #endif
+        preparer.invalidate()
     }
 
     private func enqueue(_ entries: [GatewayLogEntry], style: Style,
                          completion: @escaping @MainActor (String?) -> Void) {
-        let id = UUID(); current = id
-        let job = Job(id: id, entries: entries, style: style, completion: completion)
-        if active != nil {
-            let displaced = pending; pending = job
-            displaced?.completion(nil)
-        } else { start(job) }
-    }
-
-    private func start(_ job: Job) {
-        active = job.id
         #if DEBUG
-        let probe = self.probe, didPrepare = self.didPrepare
+        requestID = UUID()
         #endif
-        let entries = job.entries, style = job.style
-        let running = Task {
-            let text = await Task.detached(priority: .userInitiated) {
+        preparer.submit(start: {
+            #if DEBUG
+            let probe = self.probe, didPrepare = self.didPrepare
+            #endif
+            return {
                 #if DEBUG
                 probe?.record()
                 #endif
@@ -82,19 +65,7 @@ package final class GatewayLogCopyProbe: @unchecked Sendable {
                 await didPrepare?()
                 #endif
                 return text
-            }.value
-            guard active == job.id else { return }
-            let accepted = current == job.id
-            active = nil
-            #if DEBUG
-            workerTask = nil
-            #endif
-            let next = pending; pending = nil
-            if let next { start(next) }
-            job.completion(accepted ? text : nil)
-        }
-        #if DEBUG
-        workerTask = running
-        #endif
+            }
+        }, completion: completion)
     }
 }

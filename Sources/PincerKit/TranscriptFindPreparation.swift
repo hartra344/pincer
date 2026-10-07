@@ -13,73 +13,24 @@ package final class TranscriptFindPreparation {
             Result(status: status, matches: [], rowIndex: [:])
         }
     }
-    private struct Request {
-        let token: UUID
-        let query: String
-        let entries: [TranscriptEntry]
-        let options: TranscriptSearch.Options
-        let continuation: CheckedContinuation<Result, Never>
-        #if DEBUG
-        let probe: TranscriptFindWorkerProbe?
-        #endif
-    }
-    private var worker: Task<Void, Never>?
-    private var active: Request?
-    private var pending: Request?
+    private let preparer = LatestWinsPreparer<Result>()
     package init() {}
     #if DEBUG
     package var probe: TranscriptFindWorkerProbe?
-    package var activeTaskForChecks: Task<Void, Never>? { self.worker }
+    package var activeTaskForChecks: Task<Void, Never>? { self.preparer.workerTask }
     #endif
     package func prepare(query: String, entries: [TranscriptEntry], options: TranscriptSearch.Options) async -> Result {
         #if DEBUG
         self.probe?.request()
+        let probe = self.probe
         #endif
-        guard !Task.isCancelled else { return .terminal(.canceled) }
-        let token = UUID()
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                guard !Task.isCancelled else {
-                    continuation.resume(returning: .terminal(.canceled))
-                    return
-                }
-                #if DEBUG
-                let request = Request(token: token, query: query, entries: entries, options: options,
-                                      continuation: continuation, probe: self.probe)
-                #else
-                let request = Request(token: token, query: query, entries: entries, options: options,
-                                      continuation: continuation)
-                #endif
-                if self.worker != nil {
-                    let replaced = self.pending
-                    self.pending = request
-                    replaced?.continuation.resume(returning: .terminal(.superseded))
-                } else {
-                    self.active = request
-                    self.worker = Task { await self.run() }
-                }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in self?.cancelPending(token) }
-        }
-    }
-    private func cancelPending(_ token: UUID) {
-        guard self.pending?.token == token else { return }
-        let canceled = self.pending
-        self.pending = nil
-        canceled?.continuation.resume(returning: .terminal(.canceled))
-    }
-    private func run() async {
-        while let current = self.active {
-            self.active = nil
+        // An active request that was cancelled or superseded still finishes as `.completed`.
+        var finishedResult: Result?
+        let output = await self.preparer.prepare(start: {
             #if DEBUG
-            let probe = current.probe
             probe?.reserveLease()
             #endif
-            let query = current.query
-            let entries = current.entries
-            let options = current.options
-            let result = await Task.detached(priority: .userInitiated) {
+            return {
                 #if DEBUG
                 let ordinal = probe?.enter()
                 defer { probe?.exit() }
@@ -87,19 +38,15 @@ package final class TranscriptFindPreparation {
                 #endif
                 return Result(status: .completed, matches: TranscriptSearch.matches(query, in: entries, options: options),
                               rowIndex: Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
-            }.value
+            }
+        }, finished: { result in
             #if DEBUG
             probe?.releaseLease()
             #endif
-            current.continuation.resume(returning: result)
-            // Capacity is reused only after the actual detached worker has returned.
-            guard let next = self.pending else {
-                self.worker = nil
-                return
-            }
-            self.pending = nil
-            self.active = next
-        }
+            finishedResult = result
+        })
+        if let result = output ?? finishedResult { return result }
+        return .terminal(Task.isCancelled ? .canceled : .superseded)
     }
 }
 
