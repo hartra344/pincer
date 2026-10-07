@@ -175,7 +175,7 @@ enum Suites {
             Section("Chat window command target") { runChatWindowCommandTargetChecks(); runChatWindowCommandAvailabilityChecks() },
             Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks(); runBackgroundRefreshOverflowContentChecks() },
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
-            Section("Background refresh job expiry") { await runBackgroundRefreshJobChecks() },
+            Section("Background refresh job expiry") { await runBackgroundRefreshJobChecks(); await runBackgroundRefreshDownGatewayChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
             Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },
