@@ -9,6 +9,7 @@ public struct PushMessage: Equatable, Sendable {
     public enum Kind: Equatable, Sendable {
         case chat
         case approval(id: String, pending: Bool)
+        case question(id: String)
         case other
     }
 
@@ -33,7 +34,12 @@ public struct PushMessage: Equatable, Sendable {
         self.sessionKey = route.sessionKey
         switch route.approvalId {
         case let id?: self.kind = .approval(id: id, pending: !self.title.hasSuffix("approval updated"))
-        case nil: self.kind = route.sessionKey == nil ? .other : .chat
+        case nil:
+            if route.sessionKey == nil, let id = Self.questionId(Self.pathSegments(object["url"] as? String ?? "")) {
+                self.kind = .question(id: id)
+            } else {
+                self.kind = route.sessionKey == nil ? .other : .chat
+            }
         }
     }
 
@@ -65,16 +71,28 @@ public struct PushMessage: Equatable, Sendable {
         var info = ["gateway": self.gatewayId.uuidString, "push": "1"]
         if let sessionKey { info["session"] = sessionKey }
         if case let .approval(id, _) = self.kind { info["approval"] = id }
+        if case let .question(id) = self.kind { info["question"] = id }
         return info
+    }
+
+    private static func pathSegments(_ url: String) -> [String] {
+        var path = url.split(separator: "#", maxSplits: 1).first.map(String.init) ?? ""
+        path = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? ""
+        if let parsed = URL(string: path), parsed.scheme != nil { path = parsed.path }
+        return path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
+    }
+
+    /// The question id of an `ask/<id>` path, as the Gateway sends for `question.requested`.
+    private static func questionId(_ segments: [String]) -> String? {
+        guard let index = segments.lastIndex(of: "ask"), index + 1 < segments.count, !segments[index + 1].isEmpty
+        else { return nil }
+        return segments[index + 1]
     }
 
     /// Parses Control UI paths: `chat/<agent>[/~key/<rest>|/<a>/<b>…]` and `approve/<id>`.
     /// A `#gatewayUrl=…` fragment and an absolute base are ignored.
     public static func route(_ url: String) -> (sessionKey: String?, approvalId: String?) {
-        var path = url.split(separator: "#", maxSplits: 1).first.map(String.init) ?? ""
-        path = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? ""
-        if let parsed = URL(string: path), parsed.scheme != nil { path = parsed.path }
-        let segments = path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
+        let segments = self.pathSegments(url)
         if let index = segments.lastIndex(of: "approve"), index + 1 < segments.count {
             return (nil, segments[index + 1])
         }

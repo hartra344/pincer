@@ -9,10 +9,13 @@ public struct PushedTargets: Sendable, Equatable {
     public var sessions: Set<String>
     /// `"<GATEWAY-UUID>|<approvalId>"`
     public var approvals: Set<String>
+    /// `"<GATEWAY-UUID>|<questionId>"`
+    public var questions: Set<String>
 
-    public init(sessions: Set<String> = [], approvals: Set<String> = []) {
+    public init(sessions: Set<String> = [], approvals: Set<String> = [], questions: Set<String> = []) {
         self.sessions = sessions
         self.approvals = approvals
+        self.questions = questions
     }
 
     public init(userInfos: [[AnyHashable: Any]]) {
@@ -21,6 +24,9 @@ public struct PushedTargets: Sendable, Equatable {
             guard let gateway = (info["gateway"] as? String).flatMap(UUID.init(uuidString:))?.uuidString else { continue }
             if let approval = info["approval"] as? String, !approval.isEmpty {
                 targets.approvals.insert("\(gateway)|\(approval)")
+            }
+            if let question = info["question"] as? String, !question.isEmpty {
+                targets.questions.insert("\(gateway)|\(question)")
             }
             if let session = info["session"] as? String, !session.isEmpty {
                 targets.sessions.insert("\(gateway)|\(session)")
@@ -34,6 +40,7 @@ public struct PushedTargets: Sendable, Equatable {
         var targets = PushedTargets()
         switch message.kind {
         case let .approval(id, _): targets.approvals.insert("\(gateway)|\(id)")
+        case let .question(id): targets.questions.insert("\(gateway)|\(id)")
         case .chat: if let key = message.sessionKey { targets.sessions.insert("\(gateway)|\(key)") }
         case .other: break
         }
@@ -41,7 +48,9 @@ public struct PushedTargets: Sendable, Equatable {
     }
 
     public func union(_ other: PushedTargets) -> PushedTargets {
-        PushedTargets(sessions: self.sessions.union(other.sessions), approvals: self.approvals.union(other.approvals))
+        PushedTargets(
+            sessions: self.sessions.union(other.sessions), approvals: self.approvals.union(other.approvals),
+            questions: self.questions.union(other.questions))
     }
 
     public func covers(_ request: UNNotificationRequest) -> Bool {
@@ -50,7 +59,9 @@ public struct PushedTargets: Sendable, Equatable {
         if let approval = info["approval"] as? String, !approval.isEmpty {
             return self.approvals.contains("\(gateway)|\(approval)")
         }
-        if request.identifier.hasPrefix("question:") { return false }
+        if request.identifier.hasPrefix("question:") {
+            return self.questions.contains("\(gateway)|\(request.identifier.dropFirst("question:".count))")
+        }
         guard let session = info["session"] as? String, !session.isEmpty else { return false }
         return self.sessions.contains("\(gateway)|\(session)")
     }
