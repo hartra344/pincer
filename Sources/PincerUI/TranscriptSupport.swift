@@ -117,6 +117,8 @@ protocol TranscriptRowActions: AnyObject {
     func open(_ url: URL)
     func loadImage(_ ref: ImageRef)
     func loadFilePreview(_ file: FileRef)
+    /// Downloads HTML/SVG and opens it in the sandboxed preview; false when it couldn't be loaded as text.
+    func previewHTML(_ file: FileRef) async -> Bool
     /// Downloads the file and offers to save it; false when it couldn't be downloaded.
     func saveFile(_ file: FileRef) async -> Bool
     /// Downloads the file and shows it in Quick Look; false when it couldn't be downloaded.
@@ -827,6 +829,15 @@ final class TranscriptRenderer: TranscriptRowActions {
         let context = self.context
         guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
         context.saveFile(file, data)
+        return true
+    }
+
+    func previewHTML(_ file: FileRef) async -> Bool {
+        let context = self.context
+        guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
+        let html = await Task.detached(priority: .userInitiated) { HTMLAttachmentSource.decode(data) }.value
+        guard let html else { return false }
+        context.previewHTML(html)
         return true
     }
 

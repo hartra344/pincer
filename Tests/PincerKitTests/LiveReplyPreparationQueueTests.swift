@@ -10,8 +10,7 @@ struct LiveReplyPreparationQueueTests {
         let blockedID = "live-reply-first-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [blockedID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 512,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let first = self.input(owner: owner, generation: 1, sequence: 1, id: blockedID,
                                text: "First spoken reply.")
@@ -25,20 +24,21 @@ struct LiveReplyPreparationQueueTests {
         #expect(queue.submit(codeOnly) { completed.append($0, $1) } == .queued)
         #expect(queue.submit(last) { completed.append($0, $1) } == .queued)
         #expect(queue.activeCount == 1 && queue.pendingCount == 2)
-        #expect(queue.submit(self.input(owner: owner, generation: 1, sequence: 4, id: "overflow",
-                                        text: "Never queued.")) { completed.append($0, $1) } == .rejectedPendingCount)
-        #expect(queue.pendingCount == 2, "overflow leaves earlier queued work intact")
+        #expect(queue.submit(self.input(owner: owner, generation: 1, sequence: 4, id: "fourth",
+                                        text: "Fourth reply.")) { completed.append($0, $1) } == .queued,
+                "there is no global pending count limit")
+        #expect(queue.pendingCount == 3)
         #expect(gate.mainThreadFlags == [false], "the blocked normalizer is already off-main")
 
         gate.releaseBlockedWork()
         let drained = await eventually {
-            queue.isIdle && completed.values.map(\.0.sequence) == [1, 2, 3]
+            queue.isIdle && completed.values.map(\.0.sequence) == [1, 2, 3, 4]
         }
         #expect(drained)
-        #expect(completed.values.map(\.0.sequence) == [1, 2, 3])
-        #expect(completed.values.map(\.1) == [true, false, true],
+        #expect(completed.values.map(\.0.sequence) == [1, 2, 3, 4])
+        #expect(completed.values.map(\.1) == [true, false, true, true],
                 "a later code-only message doesn't erase an earlier speakable candidate")
-        #expect(gate.mainThreadFlags == [false, false, false], "every admitted normalization ran off-main")
+        #expect(gate.mainThreadFlags == [false, false, false, false], "every admitted normalization ran off-main")
     }
 
     @Test func invalidatedPendingWorkIsDroppedButTheActiveSlotWaitsForWorkerExit() async {
@@ -46,8 +46,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "live-reply-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 512,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: 8, sequence: 1, id: activeID, text: "Active.")
         let obsolete = self.input(owner: owner, generation: 8, sequence: 2, id: "obsolete", text: "Old pending.")
@@ -74,33 +73,74 @@ struct LiveReplyPreparationQueueTests {
                 "canceled pending work has no completion and the active slot is reused only after exit")
     }
 
-    @Test func inputAndRetainedByteBudgetsRejectWithoutStartingMoreWork() async {
-        let owner = UUID()
-        let activeID = "live-reply-byte-active-\(UUID().uuidString)"
+    @Test func manyOwnersAreAllQueuedAndCompleteWithoutGlobalRejection() async {
+        let activeID = "many-owners-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let active = self.input(owner: owner, generation: 1, sequence: 1, id: activeID, text: "abc")
-        let pending = self.input(owner: owner, generation: 1, sequence: 2, id: "pending", text: "de")
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 4,
-                                              retainedByteLimit: active.retainedBytes + pending.retainedBytes,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
-        #expect(queue.submit(active) { completed.append($0, $1) } == .started)
+        let first = self.input(owner: UUID(), generation: 1, sequence: 1, id: activeID, text: "Active.")
+        #expect(queue.submit(first) { completed.append($0, $1) } == .started)
         #expect(await gate.waitUntilEntered())
 
-        #expect(queue.submit(pending) { completed.append($0, $1) } == .queued)
-        let overBudget = self.input(owner: owner, generation: 1, sequence: 3, id: "too-many-bytes", text: "fghij")
-        #expect(queue.submit(overBudget) { completed.append($0, $1) } == .rejectedPendingBytes)
-        let singleTooLarge = self.input(owner: owner, generation: 1, sequence: 4, id: "too-large-message",
-                                        text: String(repeating: "x", count: LiveReplyPreparationQueue.messageTextByteLimit + 1))
-        #expect(queue.submit(singleTooLarge) { completed.append($0, $1) } == .rejectedPendingBytes)
-        #expect(queue.pendingCount == 1 && queue.pendingBytes == pending.retainedBytes)
-        #expect(gate.startedIDs == [activeID], "rejected inputs don't reach the worker")
+        let chats = 40
+        for index in 0..<chats {
+            let input = self.input(owner: UUID(), generation: 1, sequence: 1, id: "chat-\(index)", text: "Reply \(index).")
+            #expect(queue.submit(input) { completed.append($0, $1) } == .queued, "chat \(index) is never rejected")
+        }
+        #expect(queue.pendingCount == chats)
 
         gate.releaseBlockedWork()
-        let drained = await eventually { queue.isIdle && completed.values.count == 2 }
-        #expect(drained)
-        #expect(completed.values.map(\.0.itemID) == [activeID, "pending"])
+        #expect(await eventually(timeout: .seconds(10)) { queue.isIdle && completed.values.count == chats + 1 })
+        #expect(completed.values.map(\.0.itemID) == [activeID] + (0..<chats).map { "chat-\($0)" })
+        #expect(completed.values.allSatisfy { $0.1 })
+    }
+
+    @Test func perOwnerByteBudgetStripsOnlyThatOwnersOldestPendingText() async {
+        let busy = UUID(), other = UUID()
+        let activeID = "per-owner-active-\(UUID().uuidString)"
+        let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
+        defer { gate.releaseBlockedWork() }
+        // The queue floors the budget just above one maximum-size message.
+        let limit = LiveReplyPreparationQueue.messageTextByteLimit + 1024
+        let queue = LiveReplyPreparationQueue(perOwnerByteLimit: limit, normalizer: { gate.normalize($0) })
+        let completed = LiveReplyCompletionRecorder()
+        let big = String(repeating: "word ", count: 20_000)
+
+        #expect(queue.submit(self.input(owner: UUID(), generation: 1, sequence: 1, id: activeID, text: "Active.")) {
+            completed.append($0, $1)
+        } == .started)
+        #expect(await gate.waitUntilEntered())
+        let otherInput = self.input(owner: other, generation: 1, sequence: 1, id: "other", text: big)
+        #expect(queue.submit(otherInput) { completed.append($0, $1) } == .queued)
+        var busyInputs: [LiveReplyPreparationInput] = []
+        for (index, id) in ["old-1", "old-2", "old-3"].enumerated() {
+            let input = self.input(owner: busy, generation: 1, sequence: UInt64(index + 1), id: id, text: big)
+            busyInputs.append(input)
+            #expect(queue.submit(input) { completed.append($0, $1) } == .queued)
+        }
+        #expect(queue.pendingCount == 4, "stripped items stay in the FIFO")
+        #expect(queue.pendingBytes == otherInput.retainedBytes + busyInputs[1].retainedBytes + busyInputs[2].retainedBytes,
+                "only the busy owner's oldest pending text was released")
+
+        gate.releaseBlockedWork()
+        #expect(await eventually { queue.isIdle && completed.values.count == 5 })
+        let results = Dictionary(uniqueKeysWithValues: completed.values.map { ($0.0.itemID, $0.1) })
+        #expect(results["old-1"] == false, "the oldest pending text is dropped and completes false")
+        #expect(results["old-3"] == true, "the newest item is never stripped")
+        #expect(results["other"] == true, "other owners are unaffected")
+        #expect(!gate.startedIDs.contains("old-1"), "stripped text never reaches the normalizer")
+        #expect(completed.values.map(\.0.itemID) == [activeID, "other", "old-1", "old-2", "old-3"])
+    }
+
+    @Test func oversizedSingleMessageIsStillRejected() async {
+        let queue = LiveReplyPreparationQueue()
+        let tooLarge = self.input(owner: UUID(), generation: 1, sequence: 1, id: "too-large-message",
+                                  text: String(repeating: "x", count: LiveReplyPreparationQueue.messageTextByteLimit + 1))
+        #expect(queue.submit(tooLarge) { _, _ in } == .rejectedPendingBytes)
+        #expect(!queue.replace(tooLarge))
+        #expect(queue.isIdle)
+        #expect(LiveReplyPreparationQueue.perOwnerByteLimit >= 2 * LiveReplyPreparationQueue.messageTextByteLimit)
     }
 
     @Test func replacingPendingWorkKeepsItsFIFOPositionAndUsesLatestSnapshot() async {
@@ -108,8 +148,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "replace-pending-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: 1, sequence: 1, id: activeID, text: "Active.")
         let pending = self.input(owner: owner, generation: 1, sequence: 2, id: "pending-target", text: "```swift\nlet x = 1\n```")
@@ -138,8 +177,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "replace-active-identical-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let original = self.input(owner: owner, generation: 4, sequence: 1, id: activeID, text: "Same source.")
         let refreshed = self.input(owner: owner, generation: 4, sequence: 2, id: activeID, text: "Same source.")
@@ -160,8 +198,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "replace-active-latest-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let original = self.input(owner: owner, generation: 5, sequence: 1, id: activeID, text: "Old source.")
         let intermediate = self.input(owner: owner, generation: 5, sequence: 2, id: activeID, text: "Superseded source.")
@@ -188,8 +225,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "cancel-active-replacement-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 2, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let active = self.input(owner: owner, generation: generation, sequence: 1, id: activeID, text: "Active.")
         let replacement = self.input(owner: owner, generation: generation, sequence: 2, id: activeID, text: "Canceled replacement.")
@@ -217,8 +253,7 @@ struct LiveReplyPreparationQueueTests {
         let activeID = "revalidate-active-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [activeID])
         defer { gate.releaseBlockedWork() }
-        let queue = LiveReplyPreparationQueue(pendingItemLimit: 3, retainedByteLimit: 2_048,
-                                              normalizer: { gate.normalize($0) })
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
         let completed = LiveReplyCompletionRecorder()
         let candidate = self.input(owner: owner, generation: 7, sequence: 1, id: "old-candidate", text: "Original candidate.")
         #expect(queue.submit(candidate) { completed.append($0, $1) } == .started)

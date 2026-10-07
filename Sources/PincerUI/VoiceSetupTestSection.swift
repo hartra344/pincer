@@ -39,12 +39,9 @@ struct VoiceSetupTestSection: View {
     private func tap() {
         if self.playing { self.setup.stop(); return }
         self.testing = true
-        Task {
-            let outcome = await self.model.test(sample: L("Hi, this is your Gateway voice."))
+        self.setup.startTestVoice(model: self.model, sample: L("Hi, this is your Gateway voice."), finished: { self.testing = false }) { outcome in
             self.result = outcome
-            self.testing = false
             AccessibilityNotification.Announcement(self.announcement(outcome)).post()
-            if let clip = outcome.clip { self.setup.play(clip) }
         }
     }
 

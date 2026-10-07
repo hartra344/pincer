@@ -8,6 +8,21 @@ import SwiftUI
 @MainActor @Observable
 final class VoiceSetupController {
     private let operations = VoiceSetupOperationTracker()
+    private let testCompletion = VoiceTestCompletion()
+    #if DEBUG
+    var testPlaybackOverride: ((TTSClip) -> Void)?
+    #endif
+    @discardableResult
+    func startTestVoice(model: GatewayVoiceModel, sample: String, finished: @escaping () -> Void = {},
+                        publish: @escaping (TTSTestResult) -> Void) -> Task<Void, Never> {
+        self.testCompletion.start(model: model, sample: sample, publish: publish, finished: finished) { clip in
+            #if DEBUG
+            if let override = self.testPlaybackOverride { override(clip); return }
+            #endif
+            self.play(clip)
+        }
+    }
+
     var busy: Bool { self.operations.busy }
     var notice: String?
     var error: String?
@@ -85,6 +100,7 @@ final class VoiceSetupController {
     static let testId = "test-voice"
 
     func stop() {
+        self.testCompletion.invalidate()
         self.playbackOwnership.invalidate()
         self.avPlayer?.pause()
         self.avPlayer = nil

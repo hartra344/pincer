@@ -40,10 +40,18 @@ extension ChatStore {
         guard self.ownsAttachmentDraft(ownerID) else { return }
         self.attachmentPreparationErrors[ownerID] = message
     }
+    /// Cancels every draft's outstanding preparation when the chat itself goes away.
+    func cancelAttachmentPreparations() {
+        for owner in Set(self.attachmentPreparationTokens.values) { PreparationOwnerCancellation.cancel(owner: owner) }
+        self.attachmentPreparationTokens.removeAll()
+    }
     func pruneAttachmentPreparations() {
         let active = self.draft.ownerID
         let saved = self.editTarget?.savedDraft.ownerID
+        let retired = Set(self.attachmentPreparationTokens.values.filter { $0 != active && $0 != saved })
         self.attachmentPreparationTokens = self.attachmentPreparationTokens.filter { $0.value == active || $0.value == saved }
+        // A replaced or closed draft's queued preparation would only be discarded; free its slot now.
+        for owner in retired { PreparationOwnerCancellation.cancel(owner: owner) }
         self.attachmentPreparationErrors = self.attachmentPreparationErrors.filter { $0.key == active || $0.key == saved }
     }
 }

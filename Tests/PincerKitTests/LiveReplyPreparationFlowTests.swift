@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import PincerKit
 
@@ -14,7 +15,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate()
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 4, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -46,7 +47,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [updatingID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -70,7 +71,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [updatingID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -99,7 +100,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -125,7 +126,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [messageID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -155,7 +156,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [messageID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -248,7 +249,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
         let preparedID = "prior-candidate-before-held-refresh"
@@ -279,7 +280,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [staleID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -313,7 +314,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -339,7 +340,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 2, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let previousHandler = ReplyRecorder()
         let replacementHandler = ReplyRecorder()
         chat.onFinalAssistantReply = { previousHandler.items.append($0) }
@@ -372,7 +373,7 @@ struct LiveReplyPreparationFlowTests {
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [userInterruptedID, failedID])
         defer { gate.releaseBlockedWork() }
         let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 3, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+            normalizer: { gate.normalize($0) }))
         let recorder = ReplyRecorder()
         chat.onFinalAssistantReply = { recorder.items.append($0) }
 
@@ -394,33 +395,67 @@ struct LiveReplyPreparationFlowTests {
                 "a user turn or failed run invalidates held speech work")
     }
 
-    @Test func budgetOverflowSuppressesOnlyCurrentRunAndTranscriptStillCommits() async {
+    @Test func manyChatsAllDeliverTheirFinalReplyWithoutSuppression() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let heldID = "overflow-active-\(UUID().uuidString)"
+        let heldChatKey = "agent:held:main"
+        let heldID = "many-chats-held-\(UUID().uuidString)"
         let gate = LiveReplyPreparationNormalizerGate(blockedIDs: [heldID])
         defer { gate.releaseBlockedWork() }
-        let chat = self.makeChat(defaults: scratch.defaults, queue: LiveReplyPreparationQueue(
-            pendingItemLimit: 0, retainedByteLimit: 2_048, normalizer: { gate.normalize($0) }))
+        let queue = LiveReplyPreparationQueue(normalizer: { gate.normalize($0) })
+        let gateway = GatewayStore(profile: self.profile, defaults: scratch.defaults, identity: Fixtures.identity())
         let recorder = ReplyRecorder()
-        chat.onFinalAssistantReply = { recorder.items.append($0) }
 
-        self.sendAssistant(chat, id: heldID, blocks: ["The active item remains bounded."])
+        func attach(_ key: String) -> ChatStore {
+            let chat = gateway.chat(for: key)
+            chat.liveReplyPreparationQueue = queue
+            chat.onFinalAssistantReply = { recorder.items.append($0) }
+            return chat
+        }
+        func send(_ chat: ChatStore, id: String, text: String) {
+            chat.handleSessionMessage(["message": self.payload(role: "assistant", id: id, blocks: [text])])
+        }
+        func finish(_ chat: ChatStore, key: String, run: String) {
+            chat.handleChat(["runId": .string(run), "sessionKey": .string(key), "state": "final"])
+        }
+
+        let held = attach(heldChatKey)
+        send(held, id: heldID, text: "The held reply.")
         #expect(await gate.waitUntilEntered())
-        self.sendAssistant(chat, id: "overflowed", blocks: ["This accepted item exceeds pending capacity."])
-        #expect(chat.items.contains { $0.id == "overflowed" }, "queue pressure never blocks transcript delivery")
-        #expect(chat.liveReplyGenerationSuppressed)
-        self.finish(chat, runID: "overflowed-run")
-        gate.releaseBlockedWork()
-        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle })
-        #expect(recorder.items.isEmpty, "overflow suppresses auto-read for the affected run")
 
-        chat.handleChat(["runId": "recovered-run", "sessionKey": .string(self.sessionKey), "state": "status", "phase": "thinking"])
-        #expect(!chat.liveReplyGenerationSuppressed)
-        self.sendAssistant(chat, id: "recovered-reply", blocks: ["A later run can be prepared."])
-        self.finish(chat, runID: "recovered-run")
-        #expect(await eventually { chat.liveReplyPreparationQueue.isIdle && recorder.items.count == 1 })
-        #expect(recorder.items.map(\.id) == ["recovered-reply"])
+        let count = 40
+        let keys = (0..<count).map { "agent:chat\($0):main" }
+        let chats = keys.map { attach($0) }
+        for (index, chat) in chats.enumerated() {
+            send(chat, id: "reply-\(index)", text: "Reply number \(index).")
+            #expect(!chat.liveReplyGenerationSuppressed, "chat \(index) isn't suppressed by other chats' queued work")
+            finish(chat, key: keys[index], run: "run-\(index)")
+        }
+        finish(held, key: heldChatKey, run: "held-run")
+        #expect(queue.pendingCount == count)
+
+        gate.releaseBlockedWork()
+        #expect(await eventually(timeout: .seconds(10)) { queue.isIdle && recorder.items.count == count + 1 })
+        let delivered = recorder.items.map(\.id)
+        #expect(Set(delivered) == Set((0..<count).map { "reply-\($0)" } + [heldID]))
+        #expect(delivered.count == Set(delivered).count, "every final reply is delivered exactly once")
+        #expect(chats.allSatisfy { !$0.liveReplyGenerationSuppressed } && !held.liveReplyGenerationSuppressed)
+    }
+
+    @Test func withoutFinalReplyCallbackTheQueueIsNeverTouched() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let normalized = Mutex<Int>(0)
+        let queue = LiveReplyPreparationQueue(normalizer: { _ in normalized.withLock { $0 += 1 }; return true })
+        let chat = self.makeChat(defaults: scratch.defaults, queue: queue)
+        #expect(chat.onFinalAssistantReply == nil)
+
+        self.sendAssistant(chat, id: "no-callback", blocks: ["A reply nobody will speak."])
+        self.finish(chat, runID: "no-callback-run")
+        #expect(chat.items.contains { $0.id == "no-callback" })
+        #expect(queue.isIdle && queue.retainedByteCount == 0)
+        for _ in 0..<5 { await Task.yield() }
+        #expect(normalized.withLock { $0 } == 0, "the normalizer never runs without an opted-in callback")
     }
 
     @Test func oversizedInputSuppressesReadAloudWithoutDroppingAcceptedMessage() async {

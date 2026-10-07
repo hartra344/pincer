@@ -68,6 +68,7 @@ enum Suites {
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
             Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
+            Section("HTML attachment preview bounds") { runHTMLAttachmentSourceChecks() },
             Section("Latest-wins preparer") { await runLatestWinsPreparerChecks() },
             Section("Progress throttle") { await runProgressThrottleChecks() },
             Section("Transcript cache single manifest decode") { await runTranscriptCacheDecodeChecks() },
@@ -76,6 +77,7 @@ enum Suites {
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
             Section("Voice settings value bounds") { runVoiceSettingsValueBoundsChecks() },
+            Section("Read Aloud many-chat delivery") { await runReadAloudManyChatsChecks() },
             Section("Voice playback ownership") { runVoicePlaybackOwnershipChecks() },
             Section("Voice test feedback ownership") { await runVoiceTestFeedbackOwnershipChecks() },
             Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },
@@ -177,6 +179,7 @@ enum Suites {
             Section("Selected helper sidebar visibility") { runSidebarSelectedHelperChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
+            Section("Last checked saved status") { runBackgroundRefreshLastCheckChecks() },
             Section("Chat window command target") { runChatWindowCommandTargetChecks(); runChatWindowCommandAvailabilityChecks() },
             Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks(); runBackgroundRefreshOverflowContentChecks() },
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
@@ -257,6 +260,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Voice test stop") { await runVoiceTestStopChecks() })
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
         sections.append(Section("Branch selection ownership") { await runBranchSelectionOwnershipChecks() })
         sections.append(Section("Quick Capture prepared attachment") { await runQuickCapturePreparedAttachmentChecks() })
@@ -441,6 +445,7 @@ enum Suites {
         Section("Background refresh power note (demo)") { await runDemoBackgroundRefreshPowerChecks() },
         Section("Device voice region and quality (demo)") { await runDemoDeviceSpeechVoiceLabelChecks() },
         Section("Dictation recognition delivery (demo)") { await runDemoDictationRecognitionDeliveryChecks() },
+        Section("Last checked saved status (demo)") { await runDemoBackgroundRefreshLastCheckChecks() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
@@ -448,6 +453,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Voice test stop (demo)") { await runVoiceTestStopChecks() })
         sections.append(Section("Device voice stop intent (demo)") { await runDemoDeviceVoiceStopChecks() })
         sections.append(Section("Branch selection ownership (demo)") { await runDemoBranchSelectionOwnershipChecks() })
         sections.append(Section("Quick Capture prepared attachment (demo)") { await runDemoQuickCapturePreparedAttachmentChecks() })

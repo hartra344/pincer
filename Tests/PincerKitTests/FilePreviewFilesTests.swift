@@ -35,6 +35,52 @@ import Testing
         #expect(!FilePreviewFiles.isPreviewable(FileRef(name: "a.pdf", mimeType: "application/pdf")))
     }
 
+    @Test func requestedFormatsAreCoveredForChatPreview() {
+        let markdown = FileRef(name: "notes.md", artifactId: "a1", mimeType: "text/markdown")
+        #expect(markdown.isText)
+        #expect(!FilePreviewFiles.isPreviewable(markdown), "markdown expands inline as text")
+
+        let html = FileRef(name: "report.html", artifactId: "a2", mimeType: "text/html")
+        #expect(html.isText)
+        #expect(!FilePreviewFiles.isPreviewable(html), "HTML expands inline as text")
+
+        let docx = FileRef(
+            name: "brief.docx", artifactId: "a3",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        #expect(!docx.isText)
+        #expect(FilePreviewFiles.isPreviewable(docx), "DOCX opens in Quick Look")
+
+        let pdf = FileRef(name: "spec.pdf", artifactId: "a4", mimeType: "application/pdf")
+        #expect(!pdf.isText)
+        #expect(FilePreviewFiles.isPreviewable(pdf), "PDF opens in Quick Look")
+    }
+
+    @Test func addsDocxExtensionFromMimeType() {
+        let file = FilePreviewFiles.fileName(
+            "brief",
+            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        #expect(file == "brief.docx")
+    }
+
+    @Test func addsPopularOfficeExtensionsFromMimeTypes() {
+        #expect(FilePreviewFiles.fileName("slides", mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+            == "slides.pptx")
+        #expect(FilePreviewFiles.fileName("budget", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            == "budget.xlsx")
+        #expect(FilePreviewFiles.fileName("archive", mimeType: "application/zip") == "archive.zip")
+    }
+
+    @Test func popularDocumentTypesUseQuickLookPath() {
+        #expect(FilePreviewFiles.isPreviewable(FileRef(
+            name: "deck.pptx", artifactId: "p1",
+            mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation")))
+        #expect(FilePreviewFiles.isPreviewable(FileRef(
+            name: "sheet.xlsx", artifactId: "p2",
+            mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")))
+        #expect(FilePreviewFiles.isPreviewable(FileRef(
+            name: "archive.zip", artifactId: "p3", mimeType: "application/zip")))
+    }
+
     @Test func demoPDFIsAPDF() {
         let pdf = DemoGateway.richRenderingPDF()
         #expect(pdf.count > 500)

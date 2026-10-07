@@ -57,15 +57,9 @@ struct NotificationSettingsSection: View {
                 if self.delivery == .backgroundRefresh {
                     BackgroundRefreshPowerNote(delivery: self.delivery, power: self.power)
                     let _ = self.refreshTick
-                let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
-                    let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
+                    let saved = BackgroundRefreshLastCheck()
                     LabeledContent("Last checked") {
-                        if let lastRun {
-                            let when = lastRun.formatted(.relative(presentation: .named))
-                            Text(lastResult.isEmpty ? when : "\(when) · \(lastResult)")
-                        } else {
-                            Text("Not yet")
-                        }
+                        NotificationLastCheckedValue(saved: saved)
                     }
                     switch UIApplication.shared.backgroundRefreshStatus {
                 case .denied:
