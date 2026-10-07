@@ -13,6 +13,7 @@ enum ComposerAttachmentIngest {
         return AttachmentIngest(limits: gateway.uploadLimits,
             limitsAreLastKnown: gateway.uploadLimitsAreLastKnown,
             imageQueue: imageQueue,
+            owner: ownerID,
             reserve: { [weak chat] in
                 guard let token = chat?.beginAttachmentPreparation(ownerID: ownerID) else { return nil }
                 return { [weak chat] in chat?.finishAttachmentPreparation(token) }

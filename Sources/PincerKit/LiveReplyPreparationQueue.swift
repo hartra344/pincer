@@ -58,13 +58,14 @@ package struct LiveReplyPreparationToken: Sendable {
     }
 }
 
-/// A single serial worker shared by chats. Overflow is reported to the owning ChatStore, which
-/// suppresses that live-reply generation instead of doing text work on Main or dropping one row.
+/// A single serial worker shared by chats. It never turns work away for being busy: each chat's
+/// pending text is bounded by `perOwnerByteLimit`, and past it the chat's oldest pending items lose
+/// their text (they complete as not speakable) so its newest reply is always prepared.
 @MainActor
 package final class LiveReplyPreparationQueue {
-    nonisolated package static let pendingItemLimit = 32
-    nonisolated package static let retainedByteLimit = 8 * 1024 * 1024
     nonisolated package static let messageTextByteLimit = 256 * 1024
+    /// Room for the newest reply plus an earlier fallback (a reply ending in code, say).
+    nonisolated package static let perOwnerByteLimit = 4 * messageTextByteLimit
 
     package typealias Normalizer = @Sendable (LiveReplyPreparationInput) -> Bool
     package typealias Completion = @MainActor @Sendable (LiveReplyPreparationToken, Bool) -> Void
@@ -75,6 +76,17 @@ package final class LiveReplyPreparationQueue {
         var input: LiveReplyPreparationInput
         let queueOrder: UInt64
         let completion: Completion
+        /// Superseded by newer replies from the same chat; completes as not speakable.
+        var textDropped = false
+
+        mutating func dropText() {
+            let old = self.input
+            self.input = LiveReplyPreparationInput(
+                ownerID: old.ownerID, generation: old.generation, sequence: old.sequence, revision: old.revision,
+                itemID: old.itemID, transcriptID: old.transcriptID, fallbackIndex: old.fallbackIndex,
+                textBlocks: [], textByteCount: 0, retainedBytes: 0)
+            self.textDropped = true
+        }
 
         var token: LiveReplyPreparationToken { LiveReplyPreparationToken(self.input, queueOrder: self.queueOrder) }
     }
@@ -88,8 +100,7 @@ package final class LiveReplyPreparationQueue {
         init(_ work: Work) { self.current = work }
     }
 
-    private let pendingItemLimit: Int
-    private let retainedByteLimit: Int
+    private let perOwnerByteLimit: Int
     private let normalizer: Normalizer
     private var pending: [Work] = []
     private var active: ActiveWork?
@@ -97,11 +108,10 @@ package final class LiveReplyPreparationQueue {
     private var nextQueueOrder: UInt64 = 0
     private var retainedBytes = 0
 
-    package init(pendingItemLimit: Int = LiveReplyPreparationQueue.pendingItemLimit,
-                 retainedByteLimit: Int = LiveReplyPreparationQueue.retainedByteLimit,
+    package init(perOwnerByteLimit: Int = LiveReplyPreparationQueue.perOwnerByteLimit,
                  normalizer: @escaping Normalizer = { SpeechText.isSpeakable(textBlocks: $0.textBlocks, itemID: $0.itemID) }) {
-        self.pendingItemLimit = max(0, pendingItemLimit)
-        self.retainedByteLimit = max(0, retainedByteLimit)
+        // The newest reply must always fit, whatever else the chat has pending.
+        self.perOwnerByteLimit = max(perOwnerByteLimit, Self.messageTextByteLimit + 1024)
         self.normalizer = normalizer
     }
 
@@ -129,25 +139,20 @@ package final class LiveReplyPreparationQueue {
         return result
     }
 
+    /// Only an oversized message is refused (`.rejectedPendingBytes`); queue pressure never is.
     @discardableResult
     package func submit(_ input: LiveReplyPreparationInput,
                         completion: @escaping Completion) -> PreparationAdmission {
-        guard self.isWithinMessageLimit(input), input.retainedBytes <= self.retainedByteLimit else {
-            return .rejectedPendingBytes
-        }
-        guard self.retainedBytes <= self.retainedByteLimit - input.retainedBytes else {
-            return .rejectedPendingBytes
-        }
+        guard self.isWithinMessageLimit(input) else { return .rejectedPendingBytes }
         self.nextQueueOrder &+= 1
         let work = Work(input: input, queueOrder: self.nextQueueOrder, completion: completion)
+        self.retainedBytes += input.retainedBytes
         if self.active == nil {
-            self.retainedBytes += input.retainedBytes
             self.start(work)
             return .started
         }
-        guard self.pending.count < self.pendingItemLimit else { return .rejectedPendingCount }
         self.pending.append(work)
-        self.retainedBytes += input.retainedBytes
+        self.enforceOwnerBudget(input.ownerID, protecting: work.queueOrder)
         return .queued
     }
 
@@ -158,22 +163,18 @@ package final class LiveReplyPreparationQueue {
     package func replace(_ input: LiveReplyPreparationInput) -> Bool {
         guard self.isWithinMessageLimit(input) else { return false }
         if let index = self.pending.firstIndex(where: { self.matches($0, input) }) {
-            let oldBytes = self.pending[index].input.retainedBytes
-            let newTotal = self.retainedBytes - oldBytes + input.retainedBytes
-            guard newTotal <= self.retainedByteLimit else { return false }
+            self.retainedBytes += input.retainedBytes - self.pending[index].input.retainedBytes
             self.pending[index].input = input
-            self.retainedBytes = newTotal
+            self.pending[index].textDropped = false
+            self.enforceOwnerBudget(input.ownerID, protecting: self.pending[index].queueOrder)
             return true
         }
         guard let active = self.active,
               self.matches(active.current, input) || active.stage.map({ self.matches($0, input) }) == true
         else { return false }
-        let oldBytes = active.replacement?.input.retainedBytes ?? 0
-        let newTotal = self.retainedBytes - oldBytes + input.retainedBytes
-        guard newTotal <= self.retainedByteLimit else { return false }
+        self.retainedBytes += input.retainedBytes - (active.replacement?.input.retainedBytes ?? 0)
         let base = active.replacement ?? active.stage ?? active.current
         active.replacement = Work(input: input, queueOrder: base.queueOrder, completion: base.completion)
-        self.retainedBytes = newTotal
         return true
     }
 
@@ -183,20 +184,16 @@ package final class LiveReplyPreparationQueue {
     @discardableResult
     package func submitRevalidation(_ input: LiveReplyPreparationInput, queueOrder: UInt64,
                                    completion: @escaping Completion) -> PreparationAdmission {
-        guard self.isWithinMessageLimit(input), input.retainedBytes <= self.retainedByteLimit,
-              self.retainedBytes <= self.retainedByteLimit - input.retainedBytes else {
-            return .rejectedPendingBytes
-        }
+        guard self.isWithinMessageLimit(input) else { return .rejectedPendingBytes }
+        self.retainedBytes += input.retainedBytes
         guard self.active != nil else {
-            self.retainedBytes += input.retainedBytes
             self.start(Work(input: input, queueOrder: queueOrder, completion: completion))
             return .started
         }
-        guard self.pending.count < self.pendingItemLimit else { return .rejectedPendingCount }
         let work = Work(input: input, queueOrder: queueOrder, completion: completion)
         let insertion = self.pending.firstIndex(where: { $0.queueOrder > queueOrder }) ?? self.pending.endIndex
         self.pending.insert(work, at: insertion)
-        self.retainedBytes += input.retainedBytes
+        self.enforceOwnerBudget(input.ownerID, protecting: queueOrder)
         return .queued
     }
 
@@ -214,13 +211,29 @@ package final class LiveReplyPreparationQueue {
         }
     }
 
+    /// Keeps one chat's pending text within budget by dropping the text of its oldest pending
+    /// items. The item just admitted or refreshed (`protecting`) always keeps its text.
+    private func enforceOwnerBudget(_ ownerID: UUID, protecting queueOrder: UInt64) {
+        var ownerBytes = self.pending.reduce(0) { $0 + ($1.input.ownerID == ownerID ? $1.input.retainedBytes : 0) }
+        var index = self.pending.startIndex
+        while ownerBytes > self.perOwnerByteLimit, index < self.pending.endIndex {
+            let work = self.pending[index]
+            if work.input.ownerID == ownerID, !work.textDropped, work.queueOrder != queueOrder {
+                ownerBytes -= work.input.retainedBytes
+                self.retainedBytes -= work.input.retainedBytes
+                self.pending[index].dropText()
+            }
+            index += 1
+        }
+    }
+
     private func start(_ work: Work) {
         let active = ActiveWork(work)
         self.active = active
         let normalizer = self.normalizer
         self.activeTask = Task { @MainActor [weak self, active] in
             var current = active.current
-            var currentResult = await Self.normalize(current.input, using: normalizer)
+            var currentResult = current.textDropped ? false : await Self.normalize(current.input, using: normalizer)
 
             while let self, self.active === active, let next = active.replacement {
                 active.replacement = nil

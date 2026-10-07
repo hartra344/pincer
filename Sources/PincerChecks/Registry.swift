@@ -72,6 +72,7 @@ enum Suites {
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
             Section("Voice settings value bounds") { runVoiceSettingsValueBoundsChecks() },
+            Section("Read Aloud many-chat delivery") { await runReadAloudManyChatsChecks() },
             Section("Voice playback ownership") { runVoicePlaybackOwnershipChecks() },
             Section("Voice test feedback ownership") { await runVoiceTestFeedbackOwnershipChecks() },
             Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },

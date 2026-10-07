@@ -22,10 +22,15 @@ private final class ProviderReference: @unchecked Sendable {
 /// to show, or nil once something was attached.
 @MainActor
 struct AttachmentIngest: Sendable {
-    private static let sharedImageQueue = BoundedPreparationQueue<AttachmentIngestResult>()
+    /// One hung read or decode (an iCloud placeholder, a stalled network volume) fails after
+    /// this long instead of holding the shared slot until relaunch.
+    static let preparationDeadline: Duration = .seconds(60)
+    private static let sharedImageQueue = BoundedPreparationQueue<AttachmentIngestResult>(itemDeadline: preparationDeadline)
 
     let limits: UploadLimits
     let imageQueue: BoundedPreparationQueue<AttachmentIngestResult>
+    /// The draft this preparation belongs to; retiring the draft cancels its queued work.
+    let owner: UUID?
     let providerTimeoutNanoseconds: UInt64
     /// The limits come from a saved policy while offline, so a size problem says so.
     var limitsAreLastKnown = false
@@ -37,6 +42,7 @@ struct AttachmentIngest: Sendable {
         limits: UploadLimits,
         limitsAreLastKnown: Bool = false,
         imageQueue: BoundedPreparationQueue<AttachmentIngestResult>? = nil,
+        owner: UUID? = nil,
         providerTimeoutNanoseconds: UInt64 = 30_000_000_000,
         reserve: @escaping @MainActor @Sendable () -> (@MainActor @Sendable () -> Void)? = { {} },
         add: @escaping @MainActor @Sendable (OutgoingAttachment) -> Void,
@@ -45,6 +51,7 @@ struct AttachmentIngest: Sendable {
         self.limits = limits
         self.limitsAreLastKnown = limitsAreLastKnown
         self.imageQueue = imageQueue ?? Self.sharedImageQueue
+        self.owner = owner
         self.providerTimeoutNanoseconds = providerTimeoutNanoseconds
         self.reserve = reserve
         self.add = add
@@ -136,7 +143,11 @@ struct AttachmentIngest: Sendable {
         }
         let add = self.add
         let report = self.report
-        let admission = self.imageQueue.submit(retainedBytes: retainedBytes, operation: operation) { result in
+        let admission = self.imageQueue.submit(
+            owner: self.owner,
+            retainedBytes: retainedBytes,
+            timeoutOutput: .failure(Self.tookTooLong(name)),
+            operation: operation) { result in
             defer { finish() }
             switch result {
             case let .attachment(attachment):
@@ -360,6 +371,10 @@ struct AttachmentIngest: Sendable {
             fileName: name,
             mimeType: type?.preferredMIMEType ?? "application/octet-stream",
             data: data))
+    }
+
+    nonisolated static func tookTooLong(_ name: String) -> String {
+        L("\(name) took too long to prepare. Try attaching it again.")
     }
 
     private nonisolated static func queueFull(_ name: String) -> String {

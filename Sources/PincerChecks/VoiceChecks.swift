@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 import Synchronization
 
 @MainActor
@@ -371,6 +371,60 @@ func runDemoVoice() async {
     await voiceSetupChecks(gateway, label: "demo")
     await voiceFallbackChecks()
     await voiceFollowUpChecks(profile: GatewayProfile.demo(), label: "demo")
+}
+
+nonisolated private func semaphoreSignaled(_ semaphore: DispatchSemaphore, within seconds: Double) -> Bool {
+    semaphore.wait(timeout: .now() + seconds) == .success
+}
+
+/// More chats than the old 32-item queue limit all finish a reply while one normalization is held;
+/// none may be dropped or suppressed.
+@MainActor
+func runReadAloudManyChatsChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let profile = GatewayProfile(name: "Read Aloud many chats", url: "ws://127.0.0.1:1", authMode: .none)
+    let gateway = GatewayStore(profile: profile, defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
+    gateway.cacheRoot = nil
+    defer { gateway.stop() }
+    let release = DispatchSemaphore(value: 0)
+    let entered = DispatchSemaphore(value: 0)
+    let heldID = "many-chats-held"
+    let queue = LiveReplyPreparationQueue(normalizer: { input in
+        if input.itemID == heldID {
+            entered.signal()
+            release.wait()
+        }
+        return SpeechText.isSpeakable(textBlocks: input.textBlocks, itemID: input.itemID)
+    })
+    var delivered: [String] = []
+    func reply(_ chat: ChatStore, key: String, id: String) {
+        chat.liveReplyPreparationQueue = queue
+        chat.onFinalAssistantReply = { delivered.append($0.id) }
+        let content: JSONValue = [["type": "text", "text": .string("Reply \(id).")]]
+        chat.handleSessionMessage(["message": ["role": "assistant", "content": content, "__openclaw": ["id": .string(id)]]])
+    }
+    let held = gateway.chat(for: "agent:held:main")
+    reply(held, key: "agent:held:main", id: heldID)
+    let started = await Task.detached { semaphoreSignaled(entered, within: 5) }.value
+    check(started, "the held normalization occupies the shared queue")
+    let count = 40
+    var chats: [ChatStore] = []
+    for index in 0..<count {
+        let key = "agent:many\(index):main"
+        let chat = gateway.chat(for: key)
+        chats.append(chat)
+        reply(chat, key: key, id: "many-reply-\(index)")
+    }
+    for (index, chat) in chats.enumerated() {
+        chat.handleChat(["runId": .string("many-run-\(index)"), "sessionKey": .string("agent:many\(index):main"), "state": "final"])
+    }
+    held.handleChat(["runId": "many-held-run", "sessionKey": "agent:held:main", "state": "final"])
+    check(queue.pendingCount == count && chats.allSatisfy { !$0.liveReplyGenerationSuppressed },
+          "more than 32 chats queue behind the held reply without suppression")
+    release.signal()
+    let done = await waitFor("many chats deliver", timeout: 10) { queue.isIdle && delivered.count == count + 1 }
+    check(done && Set(delivered).count == count + 1, "every chat's final reply is delivered exactly once")
 }
 
 @MainActor
