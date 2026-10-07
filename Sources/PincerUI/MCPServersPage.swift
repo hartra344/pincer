@@ -61,6 +61,7 @@ struct MCPStatusText {
 
 struct MCPStatusLabel: View {
     let status: MCPServerStatus
+    var compact = true
 
     var body: some View {
         let text = MCPStatusText(self.status)
@@ -68,6 +69,7 @@ struct MCPStatusLabel: View {
             HStack(spacing: Theme.Spacing.sm) {
                 Circle().fill(text.color).frame(width: 8, height: 8).accessibilityHidden(true)
                 Text(text.title).foregroundStyle(text.color == .green ? .primary : text.color)
+                    .lineLimit(self.compact ? 1 : nil)
             }
             if let detail = text.detail {
                 Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled)
@@ -557,7 +559,7 @@ struct MCPServerPage: View {
             }
             .disabled(!model.canEdit)
             if status.state != .unknown {
-                LabeledContent(L("Status")) { MCPStatusLabel(status: status) }
+                LabeledContent(L("Status")) { MCPStatusLabel(status: status, compact: false) }
             }
             if let error = MCPStatusText(status).detail {
                 Button(L("Copy Error"), systemImage: "doc.on.doc") { Clipboard.copy(error) }

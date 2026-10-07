@@ -66,8 +66,8 @@ final class ReadAloudSystemIntegration: ReadAloudSystemIntegrating {
 
     private func beginBackgroundTask() {
         guard self.backgroundTask == .invalid else { return }
-        self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "chat.pincer.readAloud.fetch") { [weak self] in
-            MainActor.assumeIsolated {
+        self.backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "chat.pincer.readAloud.fetch") { @Sendable [weak self] in
+            MainHop.run {
                 self?.endBackgroundTask()
                 self?.controller?.handle(.backgroundTimeExpired)
             }
@@ -91,8 +91,8 @@ final class ReadAloudSystemIntegration: ReadAloudSystemIntegrating {
         let commands = MPRemoteCommandCenter.shared()
         for command in [commands.pauseCommand, commands.stopCommand, commands.togglePlayPauseCommand] {
             command.isEnabled = true
-            let target = command.addTarget { [weak self] _ in
-                MainActor.assumeIsolated { self?.controller?.handle(.remoteStop) }
+            let target = command.addTarget { @Sendable [weak self] _ in
+                MainHop.run { self?.controller?.handle(.remoteStop) }
                 return .success
             }
             self.commandTargets.append((command, target))

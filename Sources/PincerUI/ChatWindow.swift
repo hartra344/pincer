@@ -18,6 +18,7 @@ extension EnvironmentValues {
     /// The chat a chat window shows. Chat chrome reads it instead of the gateway's selection, which
     /// belongs to the main window.
     @Entry var chatWindowKey: String?
+    @Entry var isDetachedChatScene = false
 }
 
 extension ChatWindowOpener {
@@ -26,6 +27,11 @@ extension ChatWindowOpener {
         ChatWindowOpener { openWindow(id: ChatWindow.sceneId, value: $0) }
     }
     #endif
+}
+
+/// Marks the detached scene without conflating the split pane's chatWindowKey override.
+struct DetachedChatScene: ViewModifier {
+    func body(content: Content) -> some View { content.environment(\.isDetachedChatScene, true) }
 }
 
 /// One chat, its title, toolbar and composer, sharing the app's gateway connection. While it's on
@@ -80,6 +86,7 @@ private struct ChatWindowContent: View {
         }
         .environment(self.gateway)
         .environment(\.chatWindowKey, self.ref.sessionKey)
+        .modifier(DetachedChatScene())
         .environment(\.dictationSceneID, self.dictationSceneID)
         .environment(\.openGatewaySettings, GatewaySettingsOpener { gateway, destination, routes in
             gateway.settings.requestedRoutes = routes
@@ -146,21 +153,41 @@ private struct MainWindowForLinks: ViewModifier {
 #endif
 
 #if os(macOS)
+private struct ChatWindowCommandTargetKey: FocusedValueKey { typealias Value = ChatWindowCommandTarget }
+extension FocusedValues {
+    var chatWindowCommandTarget: ChatWindowCommandTarget? {
+        get { self[ChatWindowCommandTargetKey.self] }
+        set { self[ChatWindowCommandTargetKey.self] = newValue }
+    }
+}
 /// File ▸ Open Chat in New Window (⌥⌘N) for the main window's focused chat.
 struct ChatWindowCommands: Commands {
     let app: AppModel
+    @FocusedValue(\.chatWindowCommandTarget) private var focusedTarget
     @Environment(\.openWindow) private var openWindow
+
+    private var resolvedTarget: ChatWindowCommandTarget? {
+        let main = self.app.selectedGateway.flatMap { gateway in
+            gateway.focusedKey.map { ChatWindowCommandTarget(ref: .init(gatewayId: gateway.id, sessionKey: $0), isDetached: false) }
+        }
+        return ChatWindowCommandTarget.resolve(main: main, focused: self.focusedTarget) { ref in
+            guard let gateway = self.app.gateways.first(where: { $0.id == ref.gatewayId }) else { return false }
+            return !ChatWindow.isGone(ref.sessionKey, in: gateway)
+        }
+    }
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button(L("Open Chat in New Window")) {
                 // The focused side of the split view (#404); opening it in a window closes the split.
-                guard let gateway = self.app.selectedGateway, let key = gateway.focusedKey else { return }
+                guard let target = self.resolvedTarget,
+                      let gateway = self.app.gateways.first(where: { $0.id == target.ref.gatewayId }) else { return }
+                let key = target.ref.sessionKey
                 ChatWindowOpener.window(self.openWindow)(gateway, key: key)
-                if key == gateway.visibleSplitKey { gateway.closeSplit() }
+                if !target.isDetached && key == gateway.visibleSplitKey { gateway.closeSplit() }
             }
             .shortcut(.openChatInNewWindow)
-            .disabled(self.app.selectedGateway?.selectedKey == nil)
+            .disabled(self.resolvedTarget == nil)
         }
         CommandGroup(after: .sidebar) {
             if let gateway = self.app.selectedGateway, gateway.visibleSplitKey != nil {

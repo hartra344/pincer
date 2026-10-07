@@ -103,20 +103,19 @@ lane() {
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
-# Only the plain run does the offline suite (with the slow Shortcuts & Siri checks); mode runs
-# only run their own suite, so --skip-intent-checks there is a harmless no-op.
+# Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
 lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
-lane demo-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo-core
-lane demo-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo-extras
-lane live-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-core "$(url 0)" dev-token
-lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-extras "$(url 1)" dev-token
-lane live-no-usage "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
-lane live-no-reply-to "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
-lane live-reconnect "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-reconnect "$(url 4)" dev-token
-lane live-no-session-reactions "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-session-reactions "$(url 5)" dev-token
+lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
+lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras
+lane live-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-core "$(url 0)" dev-token
+lane live-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-extras "$(url 1)" dev-token
+lane live-no-usage "$CHECKS" --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
+lane live-no-reply-to "$CHECKS" --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
+lane live-reconnect "$CHECKS" --skip-perf-budgets --live-reconnect "$(url 4)" dev-token
+lane live-no-session-reactions "$CHECKS" --skip-perf-budgets --live-no-session-reactions "$(url 5)" dev-token
 
 status=0
 summary=()

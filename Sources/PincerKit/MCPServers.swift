@@ -54,7 +54,7 @@ public struct MCPKeyValue: Hashable, Sendable, Identifiable {
 
     private static func describe(_ value: JSONValue) -> String {
         switch value {
-        case let .number(number): Int(exactly: number).map { String($0) } ?? String(number)
+        case let .number(number): number.integerString() ?? String(number)
         case let .bool(flag): String(flag)
         default: ""
         }

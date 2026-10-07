@@ -1,6 +1,46 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "And 1 more chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And 1 more chat"
+          }
+        }
+      }
+    },
+    "And %lld more chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And %lld more chats"
+          }
+        }
+      }
+    },
+    "Enhanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enhanced"
+          }
+        }
+      }
+    },
+    "Premium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium"
+          }
+        }
+      }
+    },
     "%@ — Chat window": {
       "localizations": {
         "en": {
@@ -187,76 +227,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email"
-          }
-        }
-      }
-    },
-    "Fields were filled on the Gateway. Review the page before submitting there.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fields were filled on the Gateway. Review the page before submitting there."
-          }
-        }
-      }
-    },
-    "Leave the page untouched": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leave the page untouched"
-          }
-        }
-      }
-    },
-    "One-time code": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "One-time code"
-          }
-        }
-      }
-    },
-    "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pincer sends these values only to the Gateway's verified sign-in form. The agent never sees them."
-          }
-        }
-      }
-    },
-    "Secure sign-in": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure sign-in"
-          }
-        }
-      }
-    },
-    "Secure sign-in request from the agent": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secure sign-in request from the agent"
-          }
-        }
-      }
-    },
-    "Username": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Username"
           }
         }
       }

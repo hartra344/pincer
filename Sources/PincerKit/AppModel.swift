@@ -40,8 +40,10 @@ public final class AppModel {
     /// The device ID for Settings, only after the app has loaded or created its shared identity.
     /// Reading this value never touches the Keychain.
     public private(set) var deviceIdForDisplay: String?
+    @ObservationIgnored package private(set) var gatewaySelectionIntentRevision: UInt64 = 0
     public var selectedGatewayId: UUID? {
         didSet {
+            self.gatewaySelectionIntentRevision &+= 1
             if oldValue != self.selectedGatewayId { self.cancelPendingExternalRoute() }
             // Shared so the Share extension starts on the same gateway.
             self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
@@ -138,10 +140,16 @@ public final class AppModel {
         self.init(sharedDefaults: defaults, localDefaults: defaults, ownerNameIdleWait: ownerNameIdleWait)
     }
 
+    /// Supplies an owned in-memory identity without changing the default identity lifecycle.
+    package convenience init(defaults: UserDefaults, identity: DeviceIdentity) {
+        self.init(sharedDefaults: defaults, localDefaults: defaults, injectedIdentity: identity)
+    }
+
     private init(
         sharedDefaults: UserDefaults,
         localDefaults: UserDefaults,
         firstRunEnvironment: FirstRunModel.Environment = .live,
+        injectedIdentity: DeviceIdentity? = nil,
         ownerNameIdleWait: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) {
         self.sharedDefaults = sharedDefaults
@@ -150,9 +158,9 @@ public final class AppModel {
         let locationContext = LocationContextModel(defaults: localDefaults)
         self.locationContext = locationContext
         let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
-        SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
+        if injectedIdentity == nil { SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults) }
         // One Keychain read at launch, however many Gateways there are.
-        let identity = profiles.isEmpty ? nil : DeviceIdentity.loadOrCreate()
+        let identity = injectedIdentity ?? (profiles.isEmpty ? nil : DeviceIdentity.loadOrCreate())
         self.identity = identity
         self.deviceIdForDisplay = identity?.deviceId
         self.gateways = profiles.map {

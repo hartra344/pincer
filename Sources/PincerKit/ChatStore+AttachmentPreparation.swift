@@ -15,6 +15,9 @@ extension ChatStore {
     /// Ephemeral reservations never enter the saved draft payload or Gateway protocol.
     public func beginAttachmentPreparation(ownerID: UUID) -> UUID? {
         guard self.ownsAttachmentDraft(ownerID), self.attachmentPreparationTokens.count < 64 else { return nil }
+        // The admitted edit has already captured this draft's attachments. Its saved normal
+        // draft remains a valid owner, including while the later resend acknowledgement waits.
+        guard !(self.isSendingEdit && self.editTarget != nil && self.draft.ownerID == ownerID) else { return nil }
         let token = UUID()
         self.attachmentPreparationTokens[token] = ownerID
         // Selection is user intent before any provider result changes the payload. A late disk

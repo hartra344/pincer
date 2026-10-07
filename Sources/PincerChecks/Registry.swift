@@ -53,7 +53,12 @@ enum Suites {
     /// (CI's demo and live runs, since the plain run already covers it).
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
+            Section("Tools catalog plugin validation") { await runDemoToolsCatalogPluginValidationOfflineChecks(); await runDemoToolsCatalogCompatibilityChecks() },
+            Section("Tools catalog agent validation") { await runDemoToolsCatalogAgentValidationOfflineChecks() },
+        Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks(); await runDemoEffectiveAgentCompatibilityChecks() },
+            Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Selection defaults") { runSelectionDefaultsChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
@@ -79,7 +84,7 @@ enum Suites {
             Section("Rewind history ownership") { await runRewindHistoryOwnershipChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
-            Section("Latest measurement worker") { await runLatestMeasurementChecks() },
+            Section("Composer sizing") { runComposerSizingChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
@@ -120,6 +125,12 @@ enum Suites {
             Section("Plugin credential ownership") { await runPluginCredentialOwnershipChecks() },
             Section(nil) { await checkDeviceManagement() },
             Section(nil) { await checkSkillsTools() },
+            Section("Demo skill API key validation") { await runDemoSkillApiKeyOfflineChecks() },
+            Section("Demo skill API key compatibility") { await runDemoSkillApiKeyCompatibilityChecks() },
+            Section("Demo skill status fields") { await runDemoSkillStatusFieldOfflineChecks(); await runDemoSkillStatusBoundaryChecks() },
+            Section("Demo skill detail parameter error") { await runDemoSkillDetailParamErrorOfflineChecks() },
+            Section("Demo skill search fields") { await runDemoSkillSearchFieldValidationOfflineChecks(); await runDemoSkillSearchBoundaryChecks() },
+            Section("Demo skill detail error") { await runDemoSkillDetailErrorOfflineChecks(); await runDemoSkillDetailErrorReferenceChecks() },
             Section("Skills feedback ownership") { await runSkillsFeedbackOwnershipChecks() },
             Section("Chat export initial history") { await runChatExportInitialHistoryChecks(); await runChatExportEmptyCacheChecks() },
             Section("Skills load admission") { await runSkillsLoadAdmissionChecks() },
@@ -142,6 +153,7 @@ enum Suites {
             Section("Usage & cost") { await checkUsage() },
             Section("Usage load admission") { await runUsageLoadAdmissionChecks() },
             Section("Find refresh selection") { await runTranscriptFindSelectionChecks(); runTranscriptFindChangedInventoryChecks() },
+            Section("Demo action recording") { await runDemoActionRecordingChecks() },
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Quoted row preview preparation") { await runQuotePreviewChecks() },
             Section("Agent avatar signals") { runAvatarSignalChecks() },
@@ -162,10 +174,14 @@ enum Suites {
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Last checked saved status") { runBackgroundRefreshLastCheckChecks() },
+            Section("Chat window command target") { runChatWindowCommandTargetChecks(); runChatWindowCommandAvailabilityChecks() },
+            Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks(); runBackgroundRefreshOverflowContentChecks() },
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
+            Section("Background refresh job expiry") { await runBackgroundRefreshJobChecks(); await runBackgroundRefreshDownGatewayChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
             Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },
+            Section("Device voice region and quality") { await runDeviceSpeechVoiceLabelChecks(); await runDeviceSpeechVoiceLabelBoundsChecks() },
             Section("Device speech catalog") { await runDeviceSpeechCatalogChecks() },
             Section("Dictation target routing") { runDictationTargetChecks() },
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
@@ -225,6 +241,8 @@ enum Suites {
             Section(nil) { runLocalizationChecks() },
             Section(nil) { checkToolDiffs() },
             Section(nil) { checkOutboxLogic() },
+            Section("Outbox location at rest (#927)") { await runOutboxLocationAtRestChecks() },
+            Section("Numeric conversion policy (#925)") { runNumericConversionChecks() },
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
@@ -234,6 +252,12 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
+        sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
+        sections.append(Section("Branch selection ownership") { await runBranchSelectionOwnershipChecks() })
+        sections.append(Section("Quick Capture prepared attachment") { await runQuickCapturePreparedAttachmentChecks() })
+        sections.append(Section("Edit send attachment admission") { await runEditSendAttachmentAdmissionChecks(); await runEditSendNormalDraftPreparationChecks() })
+        sections.append(Section("Quick Capture send target ownership") { await runQuickCaptureSendTargetOwnershipChecks() })
+        sections.append(Section("Quick Capture created target ownership") { await runQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission") { await runTranscriptFindWorkerChecks(); await runTranscriptFindWorkerQueueChecks() })
         sections.append(Section("Palette search preparation") { await runPaletteSearchPreparationChecks(); await runPaletteSearchOwnershipChecks() })
         sections.append(Section("Cache restore publication ownership") { await runCacheRestorePublicationOwnershipChecks(); await runCacheRestoreFreshPublicationChecks() })
@@ -264,6 +288,9 @@ enum Suites {
             sections.insert(Section("Channel QR ownership") { await runChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
         #endif
+        #if DEBUG
+        sections.append(Section("Palette creation selection ownership") { await runPaletteCreateSelectionOwnershipChecks() })
+        #endif
         return sections
     }
 
@@ -276,6 +303,7 @@ enum Suites {
         Section("Search track (demo)") { await runDemoSearchTrackChecks() },
         Section("Chat navigation") { await runNavigation() },
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
+        Section("Demo action recording (demo)") { await runConnectedDemoActionRecordingChecks() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
         Section("Bookmark sync (demo)") { await runDemoBookmarkSync() },
         Section("Agent reply targets (demo)") { await runDemoReplyTargets() },
@@ -290,6 +318,10 @@ enum Suites {
     /// The built-in demo, second half.
     static var demoExtras: [Section] {
         var sections: [Section] = [
+        Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
+        Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
+        Section("Effective tools agent validation (demo)") { await runDemoEffectiveAgentValidationChecks() },
+        Section("Skill enabled validation (demo)") { await runDemoSkillEnabledValidationChecks() },
         Section("MCP refresh outcomes (demo)") { await runDemoMCPRefreshOutcomeChecks() },
         Section("Rewind history ownership (demo)") { await runDemoRewindHistoryOwnershipChecks() },
         Section("Session detail ownership (demo)") { await runDemoSessionDetailOwnershipChecks() },
@@ -360,6 +392,11 @@ enum Suites {
         Section("Demo agent and model settings") { await runDemoAgentModelsPageChecks() },
         Section("Agent file reload ownership (demo)") { await runDemoAgentFileReloadOwnershipChecks() },
         Section("Agent file write authority (demo)") { await runDemoAgentFileWriteAuthorityChecks() },
+        Section("Skill API key validation (demo)") { await runDemoSkillApiKeyChecks() },
+        Section("Skill status fields (demo)") { await runDemoSkillStatusFieldChecks() },
+        Section("Skill detail parameter error (demo)") { await runDemoSkillDetailParamErrorChecks() },
+        Section("Skill search fields (demo)") { await runDemoSkillSearchFieldValidationChecks() },
+        Section("Skill detail error (demo)") { await runDemoSkillDetailErrorChecks() },
         Section("Skills feedback ownership (demo)") { await runDemoSkillsFeedbackOwnershipChecks() },
         Section("Numeric config bound validation (demo)") { await runDemoConfigBoundValidationSafetyChecks() },
         Section("Chat export initial history (demo)") { await runDemoChatExportInitialHistoryChecks() },
@@ -391,10 +428,13 @@ enum Suites {
         Section("Voice settings draft ownership (demo)") { await runDemoVoiceSettingsDraftChecks() },
         Section("Device speech settings (demo)") { await runDemoDeviceSpeechCatalogChecks() },
         Section("Chat window titles (demo)") { await runDemoChatWindowTitleChecks() },
+        Section("Chat window command target (demo)") { await runDemoChatWindowCommandTargetChecks() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Chat window notification visibility (demo)") { await runDemoChatWindowNotificationVisibility() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
+        Section("Background refresh overflow summary (demo)") { await runDemoBackgroundRefreshOverflowChecks() },
         Section("Background refresh power note (demo)") { await runDemoBackgroundRefreshPowerChecks() },
+        Section("Device voice region and quality (demo)") { await runDemoDeviceSpeechVoiceLabelChecks() },
         Section("Dictation recognition delivery (demo)") { await runDemoDictationRecognitionDeliveryChecks() },
         Section("Last checked saved status (demo)") { await runDemoBackgroundRefreshLastCheckChecks() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
@@ -404,6 +444,12 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
+        sections.append(Section("Device voice stop intent (demo)") { await runDemoDeviceVoiceStopChecks() })
+        sections.append(Section("Branch selection ownership (demo)") { await runDemoBranchSelectionOwnershipChecks() })
+        sections.append(Section("Quick Capture prepared attachment (demo)") { await runDemoQuickCapturePreparedAttachmentChecks() })
+        sections.append(Section("Edit send attachment admission (demo)") { await runDemoEditSendAttachmentAdmissionChecks(); await runEditSendNormalDraftPreparationChecks() })
+        sections.append(Section("Quick Capture send target ownership (demo)") { await runDemoQuickCaptureSendTargetOwnershipChecks() })
+        sections.append(Section("Quick Capture created target ownership (demo)") { await runDemoQuickCaptureCreatedTargetOwnershipChecks() })
         sections.append(Section("Find worker admission (demo)") { await runDemoTranscriptFindWorkerChecks() })
         sections.append(Section("Cache restore publication ownership (demo)") { await runDemoCacheRestorePublicationOwnershipChecks() })
         sections.append(Section("Palette search preparation (demo)") { await runDemoPaletteSearchPreparationChecks(); await runDemoPaletteSearchOwnershipChecks() })
@@ -429,6 +475,9 @@ enum Suites {
             sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
         }
         #endif
+        #if DEBUG
+        sections.append(Section("Palette creation selection ownership (demo)") { await runDemoPaletteCreateSelectionOwnershipChecks() })
+        #endif
         return sections
     }
 
@@ -440,6 +489,10 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Skill enabled validation (live)") { url, token in await runLiveSkillEnabledValidationChecks(url: url, token: token) },
+        LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
+        LiveSection("Effective tools agent validation (live)") { url, token in await runLiveToolsEffectiveAgentValidationChecks(url: url, token: token) },
+        LiveSection("Tools catalog plugin validation (live)") { url, token in await runLiveToolsCatalogPluginValidationChecks(url: url, token: token) },
         LiveSection("Device load admission (live)") { url, token in await runLiveDeviceLoadAdmissionChecks(url: url, token: token) },
         LiveSection("Automation delete versus held load (live)") { url, token in await runLiveAutomationDeleteLoadChecks(url: url, token: token) },
         LiveSection("Command policy load admission (live)") { url, token in await runLiveExecPolicyLoadAdmissionChecks(url: url, token: token) },
@@ -461,6 +514,11 @@ enum Suites {
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
+        LiveSection("Skill API key validation (live)") { url, token in await runLiveSkillApiKeyChecks(url: url, token: token) },
+        LiveSection("Skill status fields (live)") { url, token in await runLiveSkillStatusFieldChecks(url: url, token: token) },
+        LiveSection("Skill detail parameter error (live)") { url, token in await runLiveSkillDetailParamErrorChecks(url: url, token: token) },
+        LiveSection("Skill search fields (live)") { url, token in await runLiveSkillSearchFieldValidationChecks(url: url, token: token) },
+        LiveSection("Skill detail error (live)") { url, token in await runLiveSkillDetailErrorChecks(url: url, token: token) },
         LiveSection("MCP servers (live)") { url, token in await runLiveMCP(url: url, token: token) },
         LiveSection("MCP tool links (live)") { url, token in await runLiveMCPToolLinks(url: url, token: token) },
         LiveSection("Voice / Read Aloud (live)") { url, token in await runLiveVoice(url: url, token: token) },

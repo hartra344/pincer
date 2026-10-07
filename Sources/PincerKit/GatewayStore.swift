@@ -112,13 +112,15 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var loadingCommands: Set<String> = []
     /// Bumped on every connect, so catalogs from an earlier connection are refetched.
     @ObservationIgnored private(set) var connectionEpoch = 0
+    @ObservationIgnored package private(set) var selectionIntentRevision: UInt64 = 0
     public var selectedKey: String? {
         didSet {
+            self.selectionIntentRevision &+= 1
             guard oldValue != self.selectedKey else { return }
             self.splitPaneFocused = false
             if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
             guard let key = self.selectedKey else { return }
-            self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            DefaultsWriter.set(key, forKey: "pincer.selected.\(self.id.uuidString)", in: self.defaults)
             self.noteSelected(key)
             Task { await self.openChat(key) }
         }
@@ -1212,6 +1214,7 @@ public final class GatewayStore: Identifiable {
 
     /// Creates a chat and, with `select`, opens it in the main window.
     public func createSession(agentId: String?, label: String?, category: String? = nil, select: Bool = true) async -> String? {
+        let selectionRevision = self.selectionIntentRevision
         var params: [String: JSONValue] = ["agentId": .string(agentId ?? self.defaultAgentId)]
         if let label = label?.nilIfEmpty { params["label"] = .string(label) }
         if let category = category?.nilIfEmpty { params["category"] = .string(category) }
@@ -1223,7 +1226,7 @@ public final class GatewayStore: Identifiable {
             } else {
                 await self.refreshSessions()
             }
-            if select { self.selectedKey = key }
+            if select, self.selectionIntentRevision == selectionRevision { self.selectedKey = key }
             return key
         } catch {
             self.lastError = error.localizedDescription
@@ -1447,12 +1450,6 @@ public final class GatewayStore: Identifiable {
             "id": .string(prompt.id),
             "answers": ["answers": .object(answers.mapValues { .array($0.map(JSONValue.string)) })],
         ]
-        return await self.resolveQuestion(prompt, params)
-    }
-
-    /// Sends a secure-form answer. Returns an error message to show on the card, or nil once it's answered.
-    public func answerSecureForm(_ prompt: QuestionPrompt, answers: [String: String]) async -> String? {
-        guard let params = prompt.secureFormResolvePayload(answers: answers) else { return "Every field needs a value." }
         return await self.resolveQuestion(prompt, params)
     }
 

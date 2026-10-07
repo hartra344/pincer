@@ -145,7 +145,8 @@ actor DemoGateway {
     var repliesMarkUnread = true
     func setRepliesMarkUnread(_ marks: Bool) { self.repliesMarkUnread = marks }
     /// `message.action` calls received, oldest first.
-    var recordedActions: [JSONValue] = []
+    private(set) var recordedActions: [JSONValue] = []
+    func recordAction(_ params: JSONValue) { self.recordedActions.append(params) }
 #if DEBUG
     var sendObservations: [String: [DemoSendRequestObservation]] = [:]
 #endif

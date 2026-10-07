@@ -10,9 +10,9 @@ enum BackgroundRefreshTask {
 
     /// Must run before `didFinishLaunching` returns.
     static func register() {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: BackgroundRefresh.taskIdentifier, using: .main) { task in
-            let job = Job(task)
-            MainActor.assumeIsolated { job.start() }
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: BackgroundRefresh.taskIdentifier, using: .main) { @Sendable task in
+            nonisolated(unsafe) let task = task
+            MainHop.run { Job(task).start() }
         }
         self.observer = NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main)
@@ -48,10 +48,20 @@ enum BackgroundRefreshTask {
     @MainActor
     private final class Job {
         private let task: BGTask
-        private var work: Task<Void, Never>?
-        private var finished = false
+        private let job: BackgroundRefreshJob
 
-        init(_ task: BGTask) { self.task = task }
+        init(_ task: BGTask) {
+            self.task = task
+            self.job = BackgroundRefreshJob(
+                work: {
+                    let report = await BackgroundRefresh().run()
+                    return report.aborted.isEmpty && report.failed.isEmpty
+                },
+                complete: { [task] success in
+                    task.expirationHandler = nil
+                    task.setTaskCompleted(success: success)
+                })
+        }
 
         func start() {
             if ClosedAppDelivery.current() == .backgroundRefresh, Notifier.shared.enabled {
@@ -59,19 +69,10 @@ enum BackgroundRefreshTask {
             } else {
                 BackgroundRefreshTask.cancel()
             }
-            self.task.expirationHandler = { [weak self] in
-                MainActor.assumeIsolated { self?.work?.cancel() }
-            }
-            self.work = Task { @MainActor in
-                let report = await BackgroundRefresh().run()
-                self.finish(success: report.aborted.isEmpty && report.failed.isEmpty)
-            }
-        }
-
-        private func finish(success: Bool) {
-            guard !self.finished else { return }
-            self.finished = true
-            self.task.setTaskCompleted(success: success && self.work?.isCancelled != true)
+            // Called on a background queue (#930): `@Sendable` so Swift doesn't assert main-actor
+            // isolation on entry, and `expire` hops to main itself.
+            self.task.expirationHandler = { @Sendable [job] in job.expire() }
+            self.job.start()
         }
     }
 }

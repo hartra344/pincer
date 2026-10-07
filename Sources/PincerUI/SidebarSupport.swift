@@ -166,6 +166,57 @@ struct SidebarModel: Equatable {
         old.placements != new.placements
     }
 
+    /// Rows to remove and insert, per parent (`""` for the top level), when that's all that changed:
+    /// say the selected automation chat showing up with its hidden group. Removal offsets are in the
+    /// old children, insertions in the new. A top-level group comes and goes whole; below the top
+    /// level only chats do. Nil when the list should rebuild instead: a row changed parent or order,
+    /// or too much changed for small edits to pay off (#571).
+    static func rowEdits(old: [Placement], new: [Placement], limit: Int = 8) -> [String: RowEdit]? {
+        func children(_ placements: [Placement]) -> [String: [String]] {
+            var byParent: [String: [String]] = [:]
+            for placement in placements { byParent[placement.parent ?? "", default: []].append(placement.id) }
+            return byParent
+        }
+        func subtree(_ id: String, in byParent: [String: [String]]) -> [String] {
+            [id] + (byParent[id] ?? []).flatMap { subtree($0, in: byParent) }
+        }
+        let before = children(old), after = children(new)
+        var edits: [String: RowEdit] = [:]
+        var removed = Set<String>(), inserted = Set<String>()
+        for parent in Set(before.keys).union(after.keys) {
+            // A parent with no rows on one side is checked below, once every removal is known.
+            guard let oldIds = before[parent], let newIds = after[parent] else { continue }
+            guard oldIds != newIds else { continue }
+            let rows = parent.isEmpty ? "section:" : "chat:"
+            var edit = RowEdit()
+            for change in newIds.difference(from: oldIds) {
+                switch change {
+                case let .remove(offset, id, _):
+                    guard id.hasPrefix(rows) else { return nil }
+                    for gone in subtree(id, in: before) { guard removed.insert(gone).inserted else { return nil } }
+                    edit.removed.insert(offset)
+                case let .insert(offset, id, _):
+                    guard id.hasPrefix(rows) else { return nil }
+                    for added in subtree(id, in: after) { guard inserted.insert(added).inserted else { return nil } }
+                    edit.inserted.insert(offset)
+                }
+            }
+            edits[parent] = edit
+        }
+        // A row removed in one place and inserted in another moved: rebuild, as #416 needs.
+        guard removed.isDisjoint(with: inserted), removed.count + inserted.count <= limit else { return nil }
+        // Every parent that lost or gained all its rows must be inside a group that came or went.
+        for parent in Set(before.keys).symmetricDifference(after.keys) where !parent.isEmpty {
+            guard removed.contains(parent) || inserted.contains(parent) else { return nil }
+        }
+        return edits
+    }
+
+    struct RowEdit: Equatable {
+        var removed = IndexSet()
+        var inserted = IndexSet()
+    }
+
     /// Every header and row, in display order, each with the header it sits under.
     var placements: [Placement] {
         self.groups.flatMap { [Placement(id: $0.header.id, parent: nil)] + $0.placements }

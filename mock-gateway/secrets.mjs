@@ -17,6 +17,13 @@ function store(state) {
   return state.secretsStore;
 }
 
+// Saves an entry the way secrets.store.set does (used by store-bound question answers).
+export function writeSecret(state, name, { kind = 'secret', value, allowedHosts = [] }) {
+  const entries = store(state);
+  const now = Date.now();
+  entries.set(name, { kind, value, allowedHosts: [...new Set(allowedHosts.map(String))].sort(), createdAtMs: entries.get(name)?.createdAtMs ?? now, updatedAtMs: now });
+}
+
 // The value a SecretRef or literal resolves to, or undefined when it does not resolve.
 export function resolveSecretRef(state, value) {
   if (typeof value === 'string') return value && value !== REDACTED ? value : undefined;

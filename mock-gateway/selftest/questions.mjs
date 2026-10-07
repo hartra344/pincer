@@ -15,41 +15,36 @@ export async function run(ctx) {
   const skippedFinal = await client.waitEvent('chat', (p) => p.runId === skippedRun.runId && p.state === 'final', 10_000);
   assert.ok(skippedFinal.message.content.some((b) => b.type === 'text' && b.text.includes('skipping')));
 
-  // Secure-form questions carry only field metadata and never echo the answers back.
-  const secureRun = await client.send('chat.send', {
+  // Secret-store questions (upstream's `secrets` tool): the value goes to secrets.store, only "stored" goes on.
+  const secretRun = await client.send('chat.send', {
     sessionKey: 'agent:main:main',
-    message: 'please help me login',
+    message: 'save my stripe secret',
     idempotencyKey: `idem_${crypto.randomUUID()}`,
   });
-  const securePrompt = await client.waitEvent('question.requested', (p) => p.runId === secureRun.runId);
-  assert.equal(securePrompt.kind, 'secure_form');
-  assert.equal(securePrompt.origin, 'mail.google.com');
-  assert.equal(securePrompt.fields.length, 3);
-  assert.deepEqual(securePrompt.fields.map((field) => field.role), ['username', 'password', 'otp']);
-  const listed = await client.send('question.list');
-  assert.ok(listed.questions.some((q) => q.id === securePrompt.id && q.kind === 'secure_form'));
+  const secretPrompt = await client.waitEvent('question.requested', (p) => p.runId === secretRun.runId);
+  assert.equal(secretPrompt.kind, undefined, 'upstream question records have no kind');
+  assert.equal(secretPrompt.questions.length, 1);
+  const [secretQuestion] = secretPrompt.questions;
+  assert.equal(secretQuestion.questionId, 'secret_value');
+  assert.equal(secretQuestion.isSecret, true);
+  assert.deepEqual(secretQuestion.options, []);
+  assert.equal(secretQuestion.secretStore.name, 'STRIPE_API_KEY');
+  assert.equal(secretQuestion.secretStore.kind, 'secret');
 
-  const invalid = await client.call('question.resolve', {
-    id: securePrompt.id,
-    answers: { requestId: securePrompt.requestId, answers: { identifier: 'user@example.com' } },
-  });
-  assert.equal(invalid.error.details.reason, 'QUESTION_INVALID_ANSWER');
+  const twoValues = await client.call('question.resolve', { id: secretPrompt.id, answers: { answers: { secret_value: ['a', 'b'] } } });
+  assert.equal(twoValues.error.details.reason, 'QUESTION_INVALID_ANSWER', 'a store-bound answer takes exactly one value');
 
-  const canary = {
-    identifier: 'user+canary@example.com',
-    password: 'mock-password-canary',
-    otp: '123456',
-  };
-  const resolvedEvent = client.waitEvent('question.resolved', (p) => p.id === securePrompt.id);
-  const resolution = await client.send('question.resolve', {
-    id: securePrompt.id,
-    answers: { requestId: securePrompt.requestId, answers: canary },
-  });
-  assert.equal(resolution.status, 'answered');
-  assert.deepEqual((await resolvedEvent).answers, { requestId: securePrompt.requestId, answers: canary });
+  const canary = ' sk_test_mock-canary ';
+  const resolvedEvent = client.waitEvent('question.resolved', (p) => p.id === secretPrompt.id);
+  const resolution = await client.send('question.resolve', { id: secretPrompt.id, answers: { answers: { secret_value: [canary] } } });
+  assert.deepEqual(resolution, { status: 'answered', answers: { answers: { secret_value: ['stored'] } } });
+  assert.deepEqual((await resolvedEvent).answers, { answers: { secret_value: ['stored'] } });
+  assert.equal(ctx.server.state.secretsStore.get('STRIPE_API_KEY').value, canary, 'the exact value lands in the secret store');
+  assert.deepEqual(ctx.server.state.questions.get(secretPrompt.id).answers, { answers: { secret_value: ['stored'] } });
 
-  const secureFinal = await client.waitEvent('chat', (p) => p.runId === secureRun.runId && p.state === 'final', 10_000);
-  const finalText = secureFinal.message.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  assert.match(finalText, /mail\.google\.com/);
-  for (const secret of Object.values(canary)) assert.ok(!finalText.includes(secret), 'final reply must not echo secure-form values');
+  const secretFinal = await client.waitEvent('chat', (p) => p.runId === secretRun.runId && p.state === 'final', 10_000);
+  const history = await client.send('chat.history', { sessionKey: 'agent:main:main', limit: 50 });
+  assert.ok(!JSON.stringify(history).includes('mock-canary'), 'the secret never reaches the transcript');
+  assert.ok(!JSON.stringify(secretFinal).includes('mock-canary'), 'the secret never reaches the reply');
+  assert.match(JSON.stringify(history), /Stored; value hidden/);
 }

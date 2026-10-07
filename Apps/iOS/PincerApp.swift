@@ -56,8 +56,8 @@ private final class BackgroundActivity {
     private var identifier = UIBackgroundTaskIdentifier.invalid
 
     init(name: String, expired: @escaping @MainActor () -> Void) {
-        self.identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
-            MainActor.assumeIsolated {
+        self.identifier = UIApplication.shared.beginBackgroundTask(withName: name) { @Sendable [weak self] in
+            MainHop.run {
                 expired()
                 self?.end()
             }

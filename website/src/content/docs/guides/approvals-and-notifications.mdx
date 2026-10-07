@@ -69,7 +69,7 @@ When an agent asks you something with `ask_user`, a question card appears above 
 To answer:
 
 - click an option, or press its number (<kbd>1</kbd>, <kbd>2</kbd>, …) while the card is selected. Some questions let you pick more than one;
-- or type in the field ("Type your own answer here", or "Type your answer" when there are no options). Answers to secret questions are hidden as you type, and the card shows where the gateway stores them;
+- or type in the field ("Type your own answer here", or "Type your answer" when there are no options). Answers to secret questions, such as an API key the agent requests with the `secrets` tool, are hidden as you type, and the card shows where the gateway stores them. The value goes straight to the gateway's secret store: the chat, its cache, Read Aloud and the gateway log only ever see that it was stored;
 - then choose **Submit**, or press <kbd>Return</kbd>. With several questions, **Next** and **Back** move between them, and all the answers are sent together.
 
 **Skip** tells the agent you'd rather not answer. When a question has a time limit, the card counts down the time left.
