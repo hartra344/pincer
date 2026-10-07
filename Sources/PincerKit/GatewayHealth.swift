@@ -189,8 +189,8 @@ public struct GatewayHealthSummary: Hashable, Sendable {
 
     // Counts are protocol Numbers. Bound each conversion without inventing a pressure total.
     private static func count(_ value: JSONValue?) -> Int {
-        guard let number = value?.double, number.isFinite, number > 0 else { return 0 }
-        return Int(exactly: number.rounded(.towardZero)) ?? Int.max
+        guard let number = value?.double, number > 0 else { return 0 }
+        return Int(saturating: number, rounding: .towardZero) ?? 0
     }
 
     public let ok: Bool?

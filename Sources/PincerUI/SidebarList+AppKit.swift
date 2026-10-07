@@ -133,9 +133,25 @@ struct SidebarList: NSViewRepresentable {
                     self.keyboardFocusedHeaderID = nil
                 }
                 self.programmatic {
-                    if update.isInitial || SidebarModel.structureChanged(old: update.old, new: model) {
+                    if update.isInitial {
                         self.controller.markLoaded()
                         outline.reloadData()
+                    } else if SidebarModel.structureChanged(old: update.old, new: model) {
+                        // A few rows in or out keep every other row's view; a reload makes them all again.
+                        if let edits = SidebarModel.rowEdits(old: update.old.placements, new: model.placements),
+                           edits.keys.allSatisfy({ $0.isEmpty || self.nodes[$0] != nil }) {
+                            outline.beginUpdates()
+                            for (parent, edit) in edits {
+                                let node = parent.isEmpty ? nil : self.nodes[parent]
+                                if !edit.removed.isEmpty { outline.removeItems(at: edit.removed, inParent: node, withAnimation: []) }
+                                if !edit.inserted.isEmpty { outline.insertItems(at: edit.inserted, inParent: node, withAnimation: []) }
+                            }
+                            outline.endUpdates()
+                            self.reconfigure(changedFrom: update.old)
+                        } else {
+                            self.controller.markLoaded()
+                            outline.reloadData()
+                        }
                     } else {
                         self.reconfigure(changedFrom: update.old)
                     }

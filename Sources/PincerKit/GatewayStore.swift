@@ -120,7 +120,7 @@ public final class GatewayStore: Identifiable {
             self.splitPaneFocused = false
             if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
             guard let key = self.selectedKey else { return }
-            self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            DefaultsWriter.set(key, forKey: "pincer.selected.\(self.id.uuidString)", in: self.defaults)
             self.noteSelected(key)
             Task { await self.openChat(key) }
         }

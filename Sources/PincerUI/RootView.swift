@@ -377,13 +377,15 @@ private struct GatewayDetail: View {
             default:
                 if let key = gateway.selectedKey {
                     let chat = gateway.chat(for: key)
-                    // The per-chat `.id` stays inside a stable, full-size container, with the title and
-                    // toolbar outside it. Replacing the view under the toolbar, or the toolbar with
-                    // it, makes macOS redraw every toolbar button on each switch. Toolbar items need
-                    // the same care (#262); see CONTRIBUTING.md and `ToolbarStabilityCheck`.
+                    // Keyed per gateway, not per chat: the chat view, its transcript table and their
+                    // measured layouts are kept and only the chat swaps, so a switch doesn't rebuild
+                    // the tree (#571). `ChatView` scopes its per-chat state itself. It stays inside a stable,
+                    // full-size container, with the title and toolbar outside it: replacing the
+                    // toolbar with it makes macOS redraw every toolbar button on each switch (#262);
+                    // see CONTRIBUTING.md and `ToolbarStabilityCheck`.
                     ZStack {
                         ChatView(chat: chat)
-                            .id("\(gateway.id)|\(key)")
+                            .id(gateway.id)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .modifier(ChatSplitHost(gateway: gateway, sidebarSplitKey: self.sidebarSplitKey))

@@ -494,7 +494,7 @@ struct MermaidPie {
             if slice.value / total >= 0.05 {
                 let mid = angle + sweep / 2
                 let lp = CGPoint(x: center.x + radius * 0.65 * CGFloat(cos(mid)), y: center.y + radius * 0.65 * CGFloat(sin(mid)))
-                let percent = Int((slice.value / total * 100).rounded())
+                let percent = Int(saturating: slice.value / total * 100) ?? 0
                 canvas.add(MermaidSource.text(lp.x, lp.y + 5, "\(percent)%", size: 13, fill: "#FFFFFF", bold: true))
             }
             angle += sweep

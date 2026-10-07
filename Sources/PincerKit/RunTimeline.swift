@@ -420,9 +420,7 @@ public struct RunTimeline: Sendable, Hashable {
 /// Durations the way the Runs panel shows them: `<1s`, `m:ss` under an hour, `h:mm:ss` above.
 public enum RunDuration {
     public static func format(_ interval: TimeInterval) -> String {
-        guard interval.isFinite, interval >= 1 else { return "<1s" }
-        // Double(Int.max) rounds up to 2^63; branch before the integer conversion.
-        let total = interval >= Double(Int.max) ? Int.max : Int(interval)
+        guard interval >= 1, let total = Int(saturating: interval, rounding: .towardZero) else { return "<1s" }
         let hours = total / 3600, minutes = total / 60 % 60, seconds = total % 60
         return hours > 0
             ? "\(hours):" + String(format: "%02d:%02d", minutes, seconds)

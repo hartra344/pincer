@@ -20,6 +20,41 @@ enum BodyCounter {
 }
 #endif
 
+/// A value tagged with the chat it came from, so a change handler can tell a chat switch apart from
+/// a change within one chat (#571).
+struct PerChat<Value: Equatable>: Equatable {
+    let chat: ObjectIdentifier
+    let value: Value
+
+    @MainActor init(chat: ChatStore, value: Value) {
+        self.chat = ObjectIdentifier(chat)
+        self.value = value
+    }
+}
+
+/// `ChatView`'s state for the chat it shows, made fresh for each chat (#571).
+@MainActor @Observable
+final class ChatViewState {
+    let disclosure = TranscriptDisclosure()
+    let find = TranscriptFind()
+    let navigator = TranscriptNavigator()
+    let exportState = ChatExportState()
+    let bottomState = TranscriptBottomState()
+    @ObservationIgnored let findTrim = TranscriptFindTrim()
+    var jump: TranscriptJump?
+    var previewing: ImageRef?
+    var previewingHTML: HTMLPreviewItem?
+    var quickLookURL: URL?
+    var exporting: ExportedFile?
+    /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
+    var pendingExport: ExportedFile?
+    var exportError: String?
+    #if os(iOS)
+    var sharedFile: SharedFile?
+    @ObservationIgnored let sharedFilePreparation = SharedFilePreparation()
+    #endif
+}
+
 struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
@@ -32,26 +67,17 @@ struct ChatView: View {
     #endif
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @AppStorage(AvatarSettings.animatedKey) private var avatarAnnouncesErrors = true
-    @State private var disclosure = TranscriptDisclosure()
-    @State private var previewing: ImageRef?
-    @State private var previewingHTML: HTMLPreviewItem?
-    @State private var quickLookURL: URL?
-    @State private var exporting: ExportedFile?
-    @State private var find = TranscriptFind()
-    @State private var jump: TranscriptJump?
-    @State private var navigator = TranscriptNavigator()
-    @State private var exportState = ChatExportState()
-    /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
-    @State private var pendingExport: ExportedFile?
-    @State private var exportError: String?
-    @State private var bottomState = TranscriptBottomState()
+    /// The view outlives a chat switch (#571), so per-chat state lives here and starts over per chat.
+    @State private var scoped = ChatScoped<ChatViewState>()
+    private var state: ChatViewState { self.scoped.value(for: self.chat.sessionKey) { ChatViewState() } }
+    private var disclosure: TranscriptDisclosure { self.state.disclosure }
+    private var find: TranscriptFind { self.state.find }
+    private var navigator: TranscriptNavigator { self.state.navigator }
+    private var exportState: ChatExportState { self.state.exportState }
+    private var bottomState: TranscriptBottomState { self.state.bottomState }
     @State private var readAloudPillInset: CGFloat = 0
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @Environment(\.chatPaneHandles) private var paneHandles
-    #if os(iOS)
-    @State private var sharedFile: SharedFile?
-    @State private var sharedFilePreparation = SharedFilePreparation()
-    #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
     private var composerPlaceholder: String {
@@ -95,10 +121,12 @@ struct ChatView: View {
         .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
         .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
         .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
-        .onChange(of: self.chat.lastOutcomeAt) { _, finished in
-            if finished != nil { self.announceOutcome() }
+        .onChange(of: PerChat(chat: self.chat, value: self.chat.lastOutcomeAt)) { old, new in
+            // A switch to a chat that has finished before isn't a new reply (#571).
+            guard old.chat == new.chat, new.value != nil else { return }
+            self.announceOutcome()
             #if DEBUG
-            if finished != nil { BodyCounter.report() }
+            BodyCounter.report()
             #endif
         }
         .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
@@ -131,9 +159,11 @@ struct ChatView: View {
     // Split out of `body` so the iOS compiler can type-check the modifier chain in time.
     private var transcript: some View {
         TranscriptPane(
-            chat: self.chat, find: self.find, jump: self.jump, navigator: self.navigator, disclosure: self.disclosure,
-            previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
-            exporting: self.$exporting, bottomState: self.bottomState,
+            chat: self.chat, find: self.find, jump: self.state.jump, navigator: self.navigator, disclosure: self.disclosure,
+            findTrim: self.state.findTrim,
+            previewing: Bindable(self.state).previewing, previewingHTML: Bindable(self.state).previewingHTML,
+            quickLookURL: Bindable(self.state).quickLookURL,
+            exporting: Bindable(self.state).exporting, bottomState: self.bottomState,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom
                 + (self.paneIsActive ? self.readAloudPillInset : 0),
             topInset: self.topChrome + self.transcriptSafeArea.top,
@@ -170,9 +200,13 @@ struct ChatView: View {
                     ReasoningHint(chat: self.chat, level: self.row?.reasoningLevel, dismissed: self.$hintDismissed)
                     if let card = self.chat.progressCard {
                         ProgressCardView(chat: self.chat, card: card)
+                            .id(self.chat.sessionKey)
                     }
                     PendingQuestionCard(chat: self.chat)
+                    // Re-made per chat: its field, dictation and attachment state belong to one chat.
                     Composer(chat: self.chat, placeholder: self.composerPlaceholder, find: self.find)
+                        .id(self.chat.sessionKey)
+                        .transition(.identity)
                 }
                 .modifier(QuestionsAnimation())
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
@@ -188,31 +222,37 @@ struct ChatView: View {
             .animation(.snappy, value: self.chat.notice)
             .animation(.snappy, value: self.chat.replyTarget)
             .animation(.snappy, value: self.chat.progressCard)
+            // A switch shows the other chat as it is: no bar, card or Find bar animates across it.
+            .transaction(value: ObjectIdentifier(self.chat)) {
+                $0.animation = nil
+                $0.disablesAnimations = true
+            }
     }
 
     private var presentedContent: some View {
-        self.transcript
-        .sheet(item: self.$previewing) { ref in
+        let state = self.state
+        return self.transcript
+        .sheet(item: Bindable(state).previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
         }
-        .sheet(item: self.$previewingHTML) { item in
+        .sheet(item: Bindable(state).previewingHTML) { item in
             HTMLPreviewSheet(item: item)
         }
-        .modifier(ChatQuickLookLifecycle(url: self.$quickLookURL))
+        .modifier(ChatQuickLookLifecycle(url: Bindable(state).quickLookURL))
         .fileExporter(
-            isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
-            document: self.exporting,
-            contentType: self.exporting?.contentType ?? .data,
-            defaultFilename: self.exporting?.name) { result in
-                self.exporting = nil
+            isPresented: Binding(get: { state.exporting != nil }, set: { if !$0 { state.exporting = nil } }),
+            document: state.exporting,
+            contentType: state.exporting?.contentType ?? .data,
+            defaultFilename: state.exporting?.name) { result in
+                state.exporting = nil
                 if case let .failure(error) = result, (error as? CocoaError)?.code != .userCancelled {
-                    self.exportError = String(format: L("The file couldn't be saved: %@"), error.localizedDescription)
+                    state.exportError = String(format: L("The file couldn't be saved: %@"), error.localizedDescription)
                 }
             }
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
-        .task(id: self.gateway.state.isConnected) { await self.loadReactionLevels() }
+        .task(id: PerChat(chat: self.chat, value: self.gateway.state.isConnected)) { await self.loadReactionLevels() }
         // In the split view only the focused side answers menu commands (#404).
         .focusedSceneValue(\.transcriptFind, self.paneIsActive ? self.find : nil)
         .focusedSceneValue(\.transcriptNavigator, self.paneIsActive ? self.navigator : nil)
@@ -222,34 +262,32 @@ struct ChatView: View {
             ? ChatWindowCommandTarget(ref: .init(gatewayId: self.gateway.id, sessionKey: self.chat.sessionKey),
                                       isDetached: self.isDetachedCommandScene) : nil)
         #endif
-        .onAppear {
-            self.paneHandles?.find = self.find
-            self.paneHandles?.export = self.exportState
-        }
+        .onAppear { self.publishPaneHandles() }
+        .onChange(of: self.chat.sessionKey) { self.chatChanged() }
         .readAloud(chat: self.chat, gateway: self.gateway, bottomInset: self.bottomChrome,
                    pillInset: self.$readAloudPillInset)
-        .sheet(isPresented: self.$exportState.showExport, onDismiss: self.presentPendingExport) {
+        .sheet(isPresented: Bindable(state.exportState).showExport, onDismiss: self.presentPendingExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
                         agents: self.gateway.agents) { file in
-                self.pendingExport = file
+                state.pendingExport = file
             }
         }
-        .alert(L("Couldn't Save File"), isPresented: Binding(get: { self.exportError != nil },
-                                                             set: { if !$0 { self.exportError = nil } })) {
+        .alert(L("Couldn't Save File"), isPresented: Binding(get: { state.exportError != nil },
+                                                             set: { if !$0 { state.exportError = nil } })) {
             Button(L("OK")) {}
         } message: {
-            Text(self.exportError ?? "")
+            Text(state.exportError ?? "")
         }
         #if os(iOS)
-        .sheet(item: self.$sharedFile) { file in
+        .sheet(item: Bindable(state).sharedFile) { file in
             ActivityView(url: file.url).presentationDetents([.medium, .large])
         }
-        .onDisappear { self.sharedFilePreparation.cancel() }
+        .onDisappear { self.state.sharedFilePreparation.cancel() }
         #endif
-        .sheet(isPresented: self.$exportState.showBookmarks) {
+        .sheet(isPresented: Bindable(state.exportState).showBookmarks) {
             BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey,
                           syncProblem: self.gateway.bookmarkSyncProblem) { bookmark in
-                self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
+                state.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
             }
         }
     }
@@ -282,18 +320,19 @@ struct ChatView: View {
     /// Opens Find on a message search result meant for this chat.
     /// Opens the save panel (macOS) or share sheet (iOS) for the export built while the sheet was up.
     private func presentPendingExport() {
-        guard let file = self.pendingExport else { return }
-        self.pendingExport = nil
+        let state = self.state
+        guard let file = state.pendingExport else { return }
+        state.pendingExport = nil
         #if os(iOS)
-        self.sharedFilePreparation.request(name: file.name, data: file.data) { shared in
+        state.sharedFilePreparation.request(name: file.name, data: file.data) { shared in
             guard let shared else {
-                self.exportError = L("The file couldn't be prepared for sharing.")
+                state.exportError = L("The file couldn't be prepared for sharing.")
                 return
             }
-            self.sharedFile = shared
+            state.sharedFile = shared
         }
         #else
-        self.exporting = file
+        state.exporting = file
         #endif
     }
 
@@ -303,9 +342,10 @@ struct ChatView: View {
               self.app.takeFindRequest(for: request.target) != nil
         else { return }
         // The whole cached history is searched, so the match can be selected wherever it is.
+        let find = self.find
         Task {
             await self.chat.loadAllCached()
-            self.find.present(query: request.query, select: request.match)
+            find.present(query: request.query, select: request.match)
         }
     }
 
@@ -315,7 +355,25 @@ struct ChatView: View {
               self.gateway.resolveSessionKey(pending.target.sessionKey) == self.chat.sessionKey,
               let jump = self.app.takeMessageJump(for: pending.target)
         else { return }
-        self.jump = TranscriptJump(id: jump.id, messageId: jump.messageId)
+        self.state.jump = TranscriptJump(id: jump.id, messageId: jump.messageId)
+    }
+
+    private func publishPaneHandles() {
+        self.paneHandles?.find = self.find
+        self.paneHandles?.export = self.exportState
+    }
+
+    /// The view stayed and its chat changed (#571): what a freshly built view did on appear.
+    private func chatChanged() {
+        if let retired = self.scoped.takeRetired() {
+            retired.findTrim.retire()
+            #if os(iOS)
+            retired.sharedFilePreparation.cancel()
+            #endif
+        }
+        self.publishPaneHandles()
+        self.takeFindRequest()
+        self.takeMessageJump()
     }
 
     @ViewBuilder private var errorBar: some View {
@@ -433,6 +491,8 @@ private struct TranscriptPane: View {
     let jump: TranscriptJump?
     let navigator: TranscriptNavigator
     let disclosure: TranscriptDisclosure
+    /// Not observed: only the list's bottom state and Find's toggle drive it.
+    let findTrim: TranscriptFindTrim
     @Binding var previewing: ImageRef?
     @Binding var previewingHTML: HTMLPreviewItem?
     @Binding var quickLookURL: URL?
@@ -444,8 +504,6 @@ private struct TranscriptPane: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
-    /// Not observed: only the list's bottom state and Find's toggle drive it.
-    @State private var findTrim = TranscriptFindTrim()
 
     private var agent: AgentSummary {
         self.gateway.agent(self.chat.sessionRow?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main")
@@ -460,10 +518,16 @@ private struct TranscriptPane: View {
                 self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff)
                 self.followBottom()
             }
-            .onChange(of: ObjectIdentifier(self.chat)) { self.followBottom() }
-            .onChange(of: self.find.isPresented) { _, shown in
-                if shown { Task { await self.chat.loadAllCached() } }
-                self.findTrim.findChanged(isPresented: shown, chat: self.chat)
+            .onChange(of: ObjectIdentifier(self.chat)) {
+                // The pane outlives a chat switch (#571); the new chat's Find starts from its entries.
+                self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff)
+                self.followBottom()
+            }
+            .onChange(of: PerChat(chat: self.chat, value: self.find.isPresented)) { old, new in
+                // On a switch the old chat's Find is retired by `ChatView`; the new one starts closed.
+                guard old.chat == new.chat else { return }
+                if new.value { Task { await self.chat.loadAllCached() } }
+                self.findTrim.findChanged(isPresented: new.value, chat: self.chat)
             }
             .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
             .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }

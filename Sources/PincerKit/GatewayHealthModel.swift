@@ -421,10 +421,11 @@ public final class GatewayHealthModel {
         }
     }
 
-    /// `shutdown.restartExpectedMs` when it's a number: the Gateway will be back. Nil means a terminal stop.
+    /// `shutdown.restartExpectedMs` when it's a number: the Gateway will be back. Nil means a terminal stop;
+    /// a non-finite delay counts as absent. Huge finite delays clamp (the restart timer caps them anyway).
     public nonisolated static func restartExpectedMs(shutdown payload: JSONValue) -> Int? {
-        guard case let .number(value)? = payload["restartExpectedMs"], value.isFinite, value >= 0 else { return nil }
-        return Int(exactly: value.rounded()) ?? Int.max
+        guard case let .number(value)? = payload["restartExpectedMs"], value >= 0 else { return nil }
+        return Int(saturating: value)
     }
 
     private func beginRestarting(expectedMs: Int?) {
