@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 // Failed-send retry and the offline outbox (issue #46): the demo's seeded failed message and its
 // Retry, and against the mock Gateway: queued while disconnected → sent once on reconnect, in
@@ -480,6 +480,8 @@ private func runLiveOutboxAttachments(url: String, token: String, key: String) a
     check(saved?.attachments == entry.attachments, "the saved outbox keeps the attachment ref")
     check(file.flatMap { try? Data(contentsOf: $0) } == bytes, "the attachment's bytes are on disk")
 
+    // Quitting writes on the main thread on purpose; restoring and sending mustn't (#915).
+    OutboxAttachmentStore.mainThreadFileWork.withLock { _ = $0.remove(profile.id) }
     let second = GatewayStore(profile: profile)
     second.start()
     defer { second.stop() }
@@ -487,6 +489,8 @@ private func runLiveOutboxAttachments(url: String, token: String, key: String) a
         second.state.isConnected && !second.sessions.isEmpty && second.unsentCount == 0
     }
     check(sent, "the next launch sends it (\(second.unsentCount) left)")
+    check(!OutboxAttachmentStore.mainThreadFileWork.withLock { $0.contains(profile.id) },
+          "restoring and sending it touch its attachment files off the main thread")
     let secondChat = second.chat(for: key)
     _ = await waitFor("attachment runs settle", timeout: 30) { !secondChat.isRunning }
 
@@ -523,4 +527,33 @@ private func runLiveOutboxAttachments(url: String, token: String, key: String) a
         attachmentsDirectory.map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? true
     }
     check(cleaned, "the attachment files are gone once it's sent")
+}
+
+/// #915: restoring the saved outbox shows its messages and checks their attachment files off the
+/// main thread; a message whose files are gone fails instead of vanishing.
+@MainActor
+func runOutboxRestoreOffMainChecks() async {
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-outbox-restore-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let profile = GatewayProfile(name: "Restore", url: "ws://127.0.0.1:9", authMode: .none)
+    let created = Date(timeIntervalSince1970: 1_800_000_000)
+    let bytes = OutgoingAttachment(fileName: "kept.png", mimeType: "image/png", data: Data(repeating: 7, count: 64))
+    let kept = OutboxEntry(id: "kept", sessionKey: "agent:main:main", text: "kept", createdAt: created,
+                           attachments: OutboxAttachmentStore.refs(for: [bytes]))
+    let gone = OutboxEntry(id: "gone", sessionKey: "agent:main:main", text: "gone", createdAt: created,
+                           attachments: [OutboxAttachmentRef(id: UUID(), fileName: "gone.png", mimeType: "image/png", byteCount: 64)])
+    OutboxAttachmentStore.enqueueWrite([bytes], entryId: kept.id, gatewayId: profile.id, root: root)
+    await OutboxStore.save(Outbox(entries: [kept, gone]), gatewayId: profile.id, root: root)
+
+    let gateway = GatewayStore(profile: profile, defaults: defaults)
+    gateway.cacheRoot = nil; gateway.outboxRoot = root; gateway.notifier = nil
+    await gateway.loadOutbox()
+    check(!OutboxAttachmentStore.mainThreadFileWork.withLock { $0.contains(profile.id) },
+          "restoring checks attachment files off the main thread")
+    check(gateway.outbox.entries.map(\.id) == ["kept", "gone"], "both restored messages show")
+    check(gateway.outbox.entry(id: "kept")?.state == .queued, "a message whose files are there stays queued")
+    check(isFailed(gateway.outbox.entry(id: "gone")?.state, retryable: false), "a message whose files are gone fails with Delete")
+    check(!gateway.outboxValidating, "sends are held only until the check finishes")
 }

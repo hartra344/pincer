@@ -144,8 +144,8 @@ extension GatewayStore {
         return await self.readAttachments(for: entry) ?? []
     }
 
-    func attachmentFilesExist(for entry: OutboxEntry) -> Bool {
-        OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot)
+    func attachmentFilesExist(for entry: OutboxEntry) async -> Bool {
+        await OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot)
     }
 
     /// Discards every unsent message of this Gateway (Settings → Storage).
@@ -184,16 +184,24 @@ extension GatewayStore {
             return
         }
         saved.recoverAfterLaunch()
-        // An entry whose attachment files are gone can't be sent: it fails (non-retryable, so it
-        // stays put with Delete) instead of vanishing.
-        for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot) {
-            let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
-            saved.markFailed(id: entry.id, kind: .rejected(message), message: message)
-        }
+        let restored = saved.entries.filter { !$0.attachments.isEmpty }
         // Anything composed while the file was being read goes after what was saved.
         for entry in self.outbox.entries where saved.entry(id: entry.id) == nil { saved.enqueue(entry) }
+        // Restored messages show at once; nothing sends until their attachment files are checked.
+        self.outboxValidating = true
         self.outbox = saved
         OutboxAttachmentStore.enqueueSweep(keeping: Set(saved.entries.map(\.id)), gatewayId: self.id, root: self.outboxRoot)
+        let lifecycle = self.replySendLifecycle
+        let missing = await OutboxAttachmentStore.entriesMissingFiles(restored, gatewayId: self.id, root: self.outboxRoot)
+        self.outboxValidating = false
+        // An entry whose attachment files are gone can't be sent: it fails (non-retryable, so it
+        // stays put with Delete) instead of vanishing.
+        let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
+        for id in missing where self.outbox.entry(id: id).map({ $0.state != .sending }) == true {
+            self.outbox.markFailed(id: id, kind: .rejected(message), message: message)
+        }
+        // A store stopped or replaced meanwhile doesn't send; its next start (or successor) does.
+        guard self.outboxRestored, lifecycle == self.replySendLifecycle else { return }
         if self.state.isConnected, self.hello != nil { await self.flushOutbox() }
     }
 
@@ -244,7 +252,8 @@ extension GatewayStore {
     /// Sends every queued message, oldest first and in order per chat. One flush at a time; a
     /// flush stops when the connection drops (what's left stays queued for the next one).
     public func flushOutbox() async {
-        guard !self.outboxFlushing else { return }
+        // `loadOutbox` flushes once the restored attachments are checked.
+        guard !self.outboxFlushing, !self.outboxValidating else { return }
         self.outboxFlushing = true
         defer { self.outboxFlushing = false }
         var checked: Set<String> = []

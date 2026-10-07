@@ -246,6 +246,7 @@ enum Suites {
             Section(nil) { checkToolDiffs() },
             Section(nil) { checkOutboxLogic() },
             Section("Outbox location at rest (#927)") { await runOutboxLocationAtRestChecks() },
+            Section("Outbox restore off-main (#915)") { await runOutboxRestoreOffMainChecks() },
             Section("Numeric conversion policy (#925)") { runNumericConversionChecks() },
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },

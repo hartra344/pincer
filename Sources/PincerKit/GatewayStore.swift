@@ -171,6 +171,8 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    /// The restored outbox's attachment files are being checked off-main; sends wait for it.
+    @ObservationIgnored var outboxValidating = false
     @ObservationIgnored var replySendLifecycle = 0
     @ObservationIgnored var replyAcceptanceWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored var replyReservationPreparations: [String: Task<String?, Never>] = [:]
