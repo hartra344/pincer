@@ -251,6 +251,7 @@ enum Suites {
             Section(nil) { checkOutboxLogic() },
             Section("Outbox location at rest (#927)") { await runOutboxLocationAtRestChecks() },
             Section("Numeric conversion policy (#925)") { runNumericConversionChecks() },
+            Section("Resident chat cache (#934)") { runResidentChatCacheChecks() },
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
