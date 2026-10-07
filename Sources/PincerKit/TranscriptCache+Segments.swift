@@ -3,12 +3,20 @@ import Synchronization
 
 /// v8 storage: `<digest>.json` is a small manifest naming segment files in `<digest>.segments/`.
 extension TranscriptCache {
-    /// Counts manifest JSON parses so a test can prove a read decodes once.
-    static let manifestDecodeCount = Atomic<Int>(0)
+    #if DEBUG
+    /// Manifest JSON parses per file path, so a test can prove a read decodes once (keyed by path so parallel tests don't interfere).
+    private static let manifestDecodeCounts = Mutex<[String: Int]>([:])
+
+    package static func manifestDecodeCount(for url: URL) -> Int {
+        manifestDecodeCounts.withLock { $0[url.path(percentEncoded: false)] ?? 0 }
+    }
+    #endif
 
     /// One parse: `Manifest` carries `version`, so a manifest of a supported version needs no separate peek.
-    static func decodeManifest(_ data: Data) -> Manifest? {
-        manifestDecodeCount.add(1, ordering: .relaxed)
+    static func decodeManifest(_ data: Data, url: URL) -> Manifest? {
+        #if DEBUG
+        Self.manifestDecodeCounts.withLock { $0[url.path(percentEncoded: false), default: 0] += 1 }
+        #endif
         guard let manifest = try? JSONDecoder().decode(Manifest.self, from: data),
               manifestVersions.contains(manifest.version) else { return nil }
         return manifest
@@ -464,7 +472,7 @@ extension TranscriptCache.Writer {
         } catch {
             return fileManager.fileExists(atPath: url.path(percentEncoded: false)) ? Cache.SaveResult() : nil
         }
-        guard let decoded = Cache.decodeManifest(storedData) else { return nil }
+        guard let decoded = Cache.decodeManifest(storedData, url: url) else { return nil }
         stored = decoded
         let items = snapshot.items
         guard let first = items.first else {

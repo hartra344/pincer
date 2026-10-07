@@ -518,3 +518,20 @@ final class StepLog: @unchecked Sendable {
     func append(_ step: Int) { self.lock.withLock { self.steps.append(step) } }
     func reset() { self.lock.withLock { self.steps.removeAll() } }
 }
+
+#if DEBUG
+@Suite("Transcript cache manifest decode")
+struct TranscriptCacheManifestDecodeTests {
+    @Test func currentVersionReadDecodesManifestOnce() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let gateway = UUID()
+        await TranscriptCache.save(.init(items: V8.items(6), complete: true), gatewayId: gateway, sessionKey: "k", root: temp.url)
+        let url = V8.manifestURL(gateway, "k", temp.url)
+        let before = TranscriptCache.manifestDecodeCount(for: url)
+        let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gateway, sessionKey: "k", root: temp.url)
+        #expect(snapshot?.items.count == 6 && outcome == .loaded)
+        #expect(TranscriptCache.manifestDecodeCount(for: url) - before == 1)
+    }
+}
+#endif
