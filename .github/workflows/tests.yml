@@ -219,7 +219,10 @@ jobs:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
         run: |
           mkdir -p "$CHECKS_LOG_DIR"
-          ( sleep 540; for p in $(pgrep -f 'swiftpm-testing-helper|PincerPackageTests'); do sample "$p" 3 -file "$CHECKS_LOG_DIR/sample-$p.txt" || true; lldb -p "$p" --batch -o 'expr -l objc -O -- [[NSApplication sharedApplication] windows]' -o 'expr -l objc -O -- [[[NSApplication sharedApplication] windows] valueForKeyPath:@"contentView.className"]' -o 'expr -l objc -O -- [[[NSApplication sharedApplication] windows] valueForKeyPath:@"contentView.subviews"]' -o 'expr -l objc -O -- [[[NSApplication sharedApplication] windows] valueForKey:@"title"]' > "$CHECKS_LOG_DIR/lldb-$p.txt" 2>&1 || true; ps -o pid,etime,command -p "$p" >> "$CHECKS_LOG_DIR/ps.txt"; done ) &
+          F="-Xswiftc -enable-incremental-file-hashing"
+          perl -e 'alarm 180; exec @ARGV' swift test --skip-build $F --filter ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/only-chatswitch.log" 2>&1; echo "exit=$?" >> "$CHECKS_LOG_DIR/only-chatswitch.log"
+          perl -e 'alarm 420; exec @ARGV' swift test --skip-build --parallel $F --skip ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/skip-chatswitch.log" 2>&1; echo "exit=$?" >> "$CHECKS_LOG_DIR/skip-chatswitch.log"
+          exit 1
           scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
