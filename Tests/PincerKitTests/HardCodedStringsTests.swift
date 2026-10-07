@@ -23,7 +23,6 @@ struct HardCodedStringsTests {
         #"MenuBarExtra.swift|Set Up Gateway…"#: 1,
         #"NotificationSettingsSection.swift|Background App Refresh is off for Pincer"#: 1,
         #"NotificationSettingsSection.swift|Background App Refresh is restricted on this device"#: 1,
-        #"NotificationSettingsSection.swift|Not yet"#: 1,
         #"NotificationSettingsSection.swift|Notifications"#: 1,
         #"NotificationSettingsSection.swift|Notify about replies and approvals"#: 1,
         #"NotificationSettingsSection.swift|Open Settings"#: 1,

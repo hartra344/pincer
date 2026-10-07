@@ -13,7 +13,7 @@ struct NotificationLastCheckedValue: View {
                     Text(self.saved.result.isEmpty ? when : "\(when) · \(self.saved.result)")
                 }
             } else {
-                Text("Not yet")
+                Text("Not yet", bundle: .module)
             }
         }.accessibilityIdentifier("notification-last-checked-value")
     }
