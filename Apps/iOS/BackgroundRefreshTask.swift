@@ -22,12 +22,14 @@ enum BackgroundRefreshTask {
     }
 
     static func appDidEnterBackground() {
-        guard ClosedAppDelivery.current() == .backgroundRefresh, Notifier.shared.enabled else {
+        let mode = ClosedAppDelivery.current()
+        guard mode != .off, Notifier.shared.enabled else {
             self.cancel()
             return
         }
+        // Relay mode seeds too: a silent push refreshes against these cursors.
         BackgroundRefresh().seed(from: AppModel.shared.gateways)
-        self.schedule()
+        if mode == .backgroundRefresh { self.schedule() } else { self.cancel() }
     }
 
     static func schedule() {
