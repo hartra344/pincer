@@ -24,11 +24,13 @@ name = Path(sys.argv[0]).name
 if name == "swift":
     if "--show-bin-path" in sys.argv:
         print(root / "bin"); sys.exit(0)
+    print("◇ Test run started.", flush=True)
     if "--parallel" in sys.argv:
         (root / "unit-admitted").touch()
         print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
         with open(root / "unit-gate", "r") as gate: gate.read()
+    print("✔ Test run with 1 test in 1 suite passed after 0.1 seconds.")
     print("fixture unit complete"); sys.exit(0)
 if name == "node":
     if any(x.endswith("checks-pending-progress.mjs") for x in sys.argv[1:]):
