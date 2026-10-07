@@ -1,0 +1,57 @@
+import Foundation
+import PincerPush
+import UserNotifications
+
+/// What the relay's pushes already told the user about, so a silent-push refresh doesn't post
+/// the same chat reply or approval a second time.
+public struct PushedTargets: Sendable, Equatable {
+    /// `"<GATEWAY-UUID>|<sessionKey>"`
+    public var sessions: Set<String>
+    /// `"<GATEWAY-UUID>|<approvalId>"`
+    public var approvals: Set<String>
+
+    public init(sessions: Set<String> = [], approvals: Set<String> = []) {
+        self.sessions = sessions
+        self.approvals = approvals
+    }
+
+    public init(userInfos: [[AnyHashable: Any]]) {
+        var targets = PushedTargets()
+        for info in userInfos {
+            guard let gateway = (info["gateway"] as? String).flatMap(UUID.init(uuidString:))?.uuidString else { continue }
+            if let approval = info["approval"] as? String, !approval.isEmpty {
+                targets.approvals.insert("\(gateway)|\(approval)")
+            }
+            if let session = info["session"] as? String, !session.isEmpty {
+                targets.sessions.insert("\(gateway)|\(session)")
+            }
+        }
+        self = targets
+    }
+
+    public init(message: PushMessage) {
+        let gateway = message.gatewayId.uuidString
+        var targets = PushedTargets()
+        switch message.kind {
+        case let .approval(id, _): targets.approvals.insert("\(gateway)|\(id)")
+        case .chat: if let key = message.sessionKey { targets.sessions.insert("\(gateway)|\(key)") }
+        case .other: break
+        }
+        self = targets
+    }
+
+    public func union(_ other: PushedTargets) -> PushedTargets {
+        PushedTargets(sessions: self.sessions.union(other.sessions), approvals: self.approvals.union(other.approvals))
+    }
+
+    public func covers(_ request: UNNotificationRequest) -> Bool {
+        let info = request.content.userInfo
+        guard let gateway = (info["gateway"] as? String).flatMap(UUID.init(uuidString:))?.uuidString else { return false }
+        if let approval = info["approval"] as? String, !approval.isEmpty {
+            return self.approvals.contains("\(gateway)|\(approval)")
+        }
+        if request.identifier.hasPrefix("question:") { return false }
+        guard let session = info["session"] as? String, !session.isEmpty else { return false }
+        return self.sessions.contains("\(gateway)|\(session)")
+    }
+}

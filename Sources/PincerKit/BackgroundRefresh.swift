@@ -207,6 +207,12 @@ public final class BackgroundRefresh {
     public static let defaultBudget: TimeInterval = 20
     public static let interval: TimeInterval = 15 * 60
 
+    public enum Trigger: Sendable, Equatable {
+        case scheduled
+        /// A relay push woke the app; what it (or an already delivered push) covers isn't posted again.
+        case silentPush(PushedTargets)
+    }
+
     public struct Report: Equatable, Sendable {
         public var posted = 0
         /// Gateways that ran out of time or were cancelled.
@@ -229,6 +235,7 @@ public final class BackgroundRefresh {
     private let defaults: UserDefaults
     private let post: @MainActor ([UNNotificationRequest]) async -> Void
     private let setBadge: @MainActor (Int) -> Void
+    private let delivered: @MainActor () async -> [[AnyHashable: Any]]
     private let timer: @Sendable (TimeInterval) async -> Void
 
     public init(
@@ -239,8 +246,12 @@ public final class BackgroundRefresh {
         post: @escaping @MainActor ([UNNotificationRequest]) async -> Void = { await Notifier.shared.postBackground($0) },
         setBadge: @escaping @MainActor (Int) -> Void = { Notifier.shared.setBadge($0) },
         /// Waits out the run's budget; tests pass a gate to end it on cue.
+        delivered: @escaping @MainActor () async -> [[AnyHashable: Any]] = {
+            await UNUserNotificationCenter.current().deliveredNotifications().map(\.request.content.userInfo)
+        },
         timer: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) })
     {
+        self.delivered = delivered
         self.profiles = profiles
         self.connector = connector
         self.cursors = cursors
@@ -254,10 +265,14 @@ public final class BackgroundRefresh {
     public static var lastResult: String? { UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") }
 
     /// Skips unless notifications are on and the mode is background refresh.
-    public func run(budget: TimeInterval = defaultBudget) async -> Report {
+    public func run(budget: TimeInterval = defaultBudget, trigger: Trigger = .scheduled) async -> Report {
         var report = Report()
+        let mode: ClosedAppDelivery = switch trigger {
+        case .scheduled: .backgroundRefresh
+        case .silentPush: .pushRelay
+        }
         guard self.defaults.object(forKey: "pincer.notifications") as? Bool ?? true,
-              ClosedAppDelivery.current(self.defaults) == .backgroundRefresh
+              ClosedAppDelivery.current(self.defaults) == mode
         else {
             report.skipped = true
             return report
@@ -278,6 +293,7 @@ public final class BackgroundRefresh {
         var outcomes: [UUID: Outcome?] = [:]
         var unread = 0
         var sounded = false
+        var pushed: PushedTargets?
         await withTaskCancellationHandler {
             for (profile, fetch) in zip(profiles, fetches) { outcomes[profile.id] = await fetch.value }
         } onCancel: {
@@ -296,12 +312,18 @@ public final class BackgroundRefresh {
                 snapshot: snapshot, cursor: self.cursors.cursor(for: profile.id),
                 filter: .load(gatewayId: profile.id, defaults: self.defaults),
                 gatewayId: profile.id, gatewayName: profile.name)
-            if !plan.requests.isEmpty {
-                await self.post(Self.quieted(plan.requests, firstMaySound: !sounded))
+            var requests = plan.requests
+            if case let .silentPush(triggering) = trigger, !requests.isEmpty {
+                if pushed == nil { pushed = triggering.union(PushedTargets(userInfos: await self.delivered())) }
+                let covered = pushed ?? triggering
+                requests = requests.filter { !covered.covers($0) }
+            }
+            if !requests.isEmpty {
+                await self.post(Self.quieted(requests, firstMaySound: !sounded))
                 sounded = true
             }
             self.cursors.save(plan.cursor, for: profile.id)
-            report.posted += plan.requests.count
+            report.posted += requests.count
             unread += Self.unreadCount(snapshot.sessions, filter: .load(gatewayId: profile.id, defaults: self.defaults))
         }
         if !Task.isCancelled, !profiles.isEmpty, report.aborted.isEmpty, report.failed.isEmpty {
