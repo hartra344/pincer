@@ -220,8 +220,8 @@ jobs:
         run: |
           mkdir -p "$CHECKS_LOG_DIR"
           F="-Xswiftc -enable-incremental-file-hashing"
-          perl -e 'alarm 180; exec @ARGV' swift test --skip-build $F --filter ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/only-chatswitch.log" 2>&1; echo "exit=$?" >> "$CHECKS_LOG_DIR/only-chatswitch.log"
-          perl -e 'alarm 420; exec @ARGV' swift test --skip-build --parallel $F --skip ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/skip-chatswitch.log" 2>&1; echo "exit=$?" >> "$CHECKS_LOG_DIR/skip-chatswitch.log"
+          perl -e 'alarm 180; exec @ARGV' swift test --skip-build $F --filter ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/only-chatswitch.log" 2>&1 && echo exit=0 >> /dev/null || echo "exit=$?" >> "$CHECKS_LOG_DIR/only-chatswitch.log"
+          perl -e 'alarm 420; exec @ARGV' swift test --skip-build --parallel $F --skip ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/skip-chatswitch.log" 2>&1 && echo exit=0 >> /dev/null || echo "exit=$?" >> "$CHECKS_LOG_DIR/skip-chatswitch.log"
           exit 1
           scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
