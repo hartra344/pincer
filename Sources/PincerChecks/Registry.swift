@@ -145,6 +145,7 @@ enum Suites {
             Section("Pairing requests") { await checkPairingInboxModel() },
             Section(nil) { await checkGatewayHealth() },
             Section("Ingress health issues") { runIngressHealthChecks() },
+            Section("Health recurrence") { runHealthRecurrenceChecks() },
             Section("Heartbeat event ordering") { await runHeartbeatEventOrderingChecks() },
             Section("Health canceled admission") { await runHealthCanceledAdmissionChecks() },
             Section("Health event ordering") { await runHealthEventOrderingChecks() },
@@ -180,6 +181,7 @@ enum Suites {
             Section("Background refresh overflow summary") { runBackgroundRefreshOverflowChecks(); runBackgroundRefreshOverflowContentChecks() },
             Section("Background refresh power note") { runBackgroundRefreshPowerChecks() },
             Section("Background refresh job expiry") { await runBackgroundRefreshJobChecks(); await runBackgroundRefreshDownGatewayChecks() },
+            Section("Silent push refresh") { await runSilentPushRefreshChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Chat window titles") { runChatWindowTitleChecks() },
             Section("Dictation recognition delivery") { await runDictationRecognitionDeliveryChecks(); runDictationRecognitionOwnershipChecks() },
@@ -564,4 +566,3 @@ enum Suites {
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
     ]
 }
-            Section("Health recurrence") { runHealthRecurrenceChecks() },
