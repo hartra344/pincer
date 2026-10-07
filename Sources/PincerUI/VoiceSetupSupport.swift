@@ -22,14 +22,6 @@ final class VoiceSetupController {
             self.play(clip)
         }
     }
-    func testVoice(model: GatewayVoiceModel, sample: String, finished: () -> Void = {}, publish: (TTSTestResult) -> Void) async {
-        await self.testCompletion.run(model: model, sample: sample, publish: publish, finished: finished) { clip in
-            #if DEBUG
-            if let override = self.testPlaybackOverride { override(clip); return }
-            #endif
-            self.play(clip)
-        }
-    }
 
     var busy: Bool { self.operations.busy }
     var notice: String?

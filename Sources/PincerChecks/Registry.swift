@@ -247,7 +247,7 @@ enum Suites {
             Section("Checks pending lane diagnostics") { await runChecksPendingProgressChecks() },
         ]
         #if DEBUG
-        sections.append(Section("Voice test page ownership") { await runVoiceTestPageOwnershipChecks(); await runVoiceTestBusyCompletionChecks(); await runVoiceTestQueuedAdmissionChecks(); await runVoiceTestFactoryPendingChecks() })
+        sections.append(Section("Voice test stop") { await runVoiceTestStopChecks() })
         sections.append(Section("Device voice stop intent") { await runDeviceVoiceStopChecks() })
         sections.append(Section("Branch selection ownership") { await runBranchSelectionOwnershipChecks() })
         sections.append(Section("Quick Capture prepared attachment") { await runQuickCapturePreparedAttachmentChecks() })
@@ -439,7 +439,7 @@ enum Suites {
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
         #if DEBUG
-        sections.append(Section("Voice test page ownership (demo)") { await runDemoVoiceTestPageOwnershipChecks(); await runDemoVoiceTestBusyCompletionChecks(); await runDemoVoiceTestQueuedAdmissionChecks(); await runDemoVoiceTestFactoryPendingChecks() })
+        sections.append(Section("Voice test stop (demo)") { await runVoiceTestStopChecks() })
         sections.append(Section("Device voice stop intent (demo)") { await runDemoDeviceVoiceStopChecks() })
         sections.append(Section("Branch selection ownership (demo)") { await runDemoBranchSelectionOwnershipChecks() })
         sections.append(Section("Quick Capture prepared attachment (demo)") { await runDemoQuickCapturePreparedAttachmentChecks() })
