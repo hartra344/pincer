@@ -38,7 +38,8 @@ private actor VoiceTestGate {
         if stopAt == "in flight" {
             let deadline = ContinuousClock.now.advanced(by: .seconds(15))
             while !(await gate.entered), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(10)) }
-            check(await gate.entered, "voice test: tts.speak in flight")
+            let entered = await gate.entered
+            check(entered, "voice test: tts.speak in flight")
             completion.invalidate()
         }
         await gate.release(); await task.value
