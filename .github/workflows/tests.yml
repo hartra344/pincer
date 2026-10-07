@@ -240,7 +240,8 @@ jobs:
 
       # Switching chats keeps the chat view and only swaps its model (#571). Shared runners and a
       # debug build: the timings are reported, and only a gross regression of the median of all 28
-      # switches fails. ChatSwitchReuseHostedTests and SelectionDefaultsWriteTests guard the fix itself.
+      # switches fails; PINCER_SWITCH_REQUIRE_HEIGHT_CACHE also fails it when revisits restore no
+      # measured row heights (#934). ChatSwitchReuseHostedTests and SelectionDefaultsWriteTests guard the fix itself.
       - name: Chat switch time
         timeout-minutes: 3
         env:
@@ -249,6 +250,7 @@ jobs:
           PINCER_SWITCH_CHATS: "7"
           PINCER_SWITCH_BUDGET_MS: "1000"
           PINCER_SWITCH_OVERALL_MS: "500"
+          PINCER_SWITCH_REQUIRE_HEIGHT_CACHE: "1"
         run: |
           BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
           "$BIN/PincerMacDev" --chat-switch-probe

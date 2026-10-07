@@ -75,6 +75,12 @@ final class TranscriptListController {
     private(set) var rows: [TranscriptRow] = []
     private(set) var index: [String: Int] = [:]
     private(set) var heights: [String: TranscriptRowHeight] = [:]
+    /// Measured heights of the chats left behind, restored on return (#934).
+    private(set) var heightCache = ResidentChatCache<TranscriptHeightSnapshot>()
+    private(set) var heightCacheStats = (restored: 0, rejected: 0, snapshots: 0)
+    /// Cumulative over all controllers, for the chat switch probe.
+    static var restoredHeightsTotal = 0
+    static var rejectedHeightsTotal = 0
     private(set) var queue = TranscriptMeasureQueue()
     private var queueWidth: CGFloat = 0
 
@@ -162,9 +168,50 @@ final class TranscriptListController {
     /// starts the list over.
     func beginUpdate(context: TranscriptContext, rowCount: Int) -> Bool {
         let changed = context.differs(from: self.context)
+        if changed { self.stashHeights() }
         self.context = context
         self.renderer.update(context: context)
         return changed
+    }
+
+    /// Keeps the outgoing chat's measured heights and drops those of chats that left residency.
+    private func stashHeights() {
+        if let chat = self.context.chat {
+            var entries: [String: (row: TranscriptRow, height: TranscriptRowHeight)] = [:]
+            for (id, height) in self.heights where height.measured {
+                if let row = self.index[id] { entries[id] = (self.rows[row], height) }
+            }
+            if !entries.isEmpty {
+                self.heightCache.store(TranscriptHeightSnapshot(
+                    chat: chat, disclosure: self.context.disclosure, agent: self.context.agent,
+                    settings: self.renderer.currentSettings, entries: entries), for: self.context.sessionKey)
+                self.heightCacheStats.snapshots += 1
+            }
+        }
+        self.heightCache.removeAll { _, snapshot in !(snapshot.chat?.isHydrated ?? false) }
+    }
+
+    /// Heights of the chat being opened that are still valid for `newRows`.
+    private func restoreHeights(for newRows: [TranscriptRow]) {
+        guard let snapshot = self.heightCache.take(self.context.sessionKey) else { return }
+        guard snapshot.chat != nil, snapshot.chat === self.context.chat,
+              snapshot.disclosure === self.context.disclosure, snapshot.agent == self.context.agent,
+              snapshot.settings == self.renderer.currentSettings else {
+            self.heightCacheStats.rejected += newRows.count
+            Self.rejectedHeightsTotal += newRows.count
+            return
+        }
+        for row in newRows {
+            guard let entry = snapshot.entries[row.id] else { continue }
+            if entry.row == row {
+                self.heights[row.id] = entry.height
+                self.heightCacheStats.restored += 1
+                Self.restoredHeightsTotal += 1
+            } else {
+                self.heightCacheStats.rejected += 1
+                Self.rejectedHeightsTotal += 1
+            }
+        }
     }
 
     /// Adopts `newRows` (duplicate ids after the first are dropped) and marks what needs
@@ -174,6 +221,7 @@ final class TranscriptListController {
             self.premeasure.cancelAll()
             self.heights.removeAll()
             self.rows = []
+            self.restoreHeights(for: newRows)
         }
         if case .top = self.anchor, newRows.first?.id != self.rows.first?.id {
             // Rows arriving above: keep reading the same row instead of following the top.
@@ -482,6 +530,7 @@ final class TranscriptListController {
                 changed.insert(row)
             }
         } else {
+            self.heightCache.removeAll()
             self.premeasure.cancelAll()
             for id in self.heights.keys { self.heights[id]?.measured = false }
             self.queue.markAllUnmeasured(count: self.rows.count)

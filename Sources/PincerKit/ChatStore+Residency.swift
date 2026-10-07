@@ -17,7 +17,7 @@ extension ChatStore {
     }
 
     /// Whether there is heavy content to drop.
-    var isHydrated: Bool { self.hasLoaded && !self.isDehydrated }
+    public var isHydrated: Bool { self.hasLoaded && !self.isDehydrated }
 
     /// Saves the transcript, then drops its heavy contents (items, entries, maps, full copies) in place.
     /// The store keeps its identity, draft, live run and unsent messages, and reloads through `load()`.

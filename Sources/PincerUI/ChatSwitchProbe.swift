@@ -59,6 +59,8 @@ import SwiftUI
         for key in keys {
             _ = await self.switchTo(key, gateway: gateway, window: window)
         }
+        let restoredBefore = TranscriptListController.restoredHeightsTotal
+        let rejectedBefore = TranscriptListController.rejectedHeightsTotal
         var times: [String: [Double]] = [:]
         var hangs: [Double] = []
         for round in 0..<max(rounds, others.count * 2) {
@@ -69,6 +71,13 @@ import SwiftUI
             }
         }
         var failures = 0
+        let restored = TranscriptListController.restoredHeightsTotal - restoredBefore
+        let rejected = TranscriptListController.rejectedHeightsTotal - rejectedBefore
+        print("Chat switch probe: row heights restored on revisit: \(restored) rows (\(rejected) rejected)")
+        if env["PINCER_SWITCH_REQUIRE_HEIGHT_CACHE"] == "1", restored == 0 {
+            failures += 1
+            print("Chat switch probe: no row heights were restored on warm revisits")
+        }
         for key in keys {
             guard let values = times[key], !values.isEmpty else { continue }
             let sorted = values.sorted()
