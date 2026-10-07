@@ -39,7 +39,7 @@ public struct ContextUsage: Equatable, Sendable {
     public var percent: Int {
         guard self.used > 0, self.limit > 0 else { return 0 }
         guard self.used < self.limit else { return 100 }
-        return Int((self.ratio * 100).rounded())
+        return Int(saturating: self.ratio * 100) ?? 0
     }
     public var remaining: Int { max(self.limit - self.used, 0) }
 

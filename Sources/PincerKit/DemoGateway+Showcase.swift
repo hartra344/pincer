@@ -41,7 +41,7 @@ extension DemoGateway {
         - **approve** raises a command approval; **approve once-only** leaves out Always allow, and \
         **approve later** sends one a few seconds after the reply.
         - **ask** brings up a question card.
-        - **login** or **secure form** raises a secure sign-in card.
+        - **secret** asks for an API key that goes straight to the Gateway's secret store.
         - **plan** walks the task progress card.
         - **long** streams a multi-page reply.
         - **fail** ends the run with an error.
@@ -352,7 +352,7 @@ extension DemoGateway {
                     id: "demo-location-context-reply", ago: 15),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
-                is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask*, *login* or *plan*, \
+                is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask*, *secret* or *plan*, \
                 or send */compact*.
 
                 Settings → **Location** can share available device location with your assistant. It starts off.

@@ -120,7 +120,7 @@ public final class GatewayStore: Identifiable {
             self.splitPaneFocused = false
             if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
             guard let key = self.selectedKey else { return }
-            self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            DefaultsWriter.set(key, forKey: "pincer.selected.\(self.id.uuidString)", in: self.defaults)
             self.noteSelected(key)
             Task { await self.openChat(key) }
         }
@@ -1450,12 +1450,6 @@ public final class GatewayStore: Identifiable {
             "id": .string(prompt.id),
             "answers": ["answers": .object(answers.mapValues { .array($0.map(JSONValue.string)) })],
         ]
-        return await self.resolveQuestion(prompt, params)
-    }
-
-    /// Sends a secure-form answer. Returns an error message to show on the card, or nil once it's answered.
-    public func answerSecureForm(_ prompt: QuestionPrompt, answers: [String: String]) async -> String? {
-        guard let params = prompt.secureFormResolvePayload(answers: answers) else { return "Every field needs a value." }
         return await self.resolveQuestion(prompt, params)
     }
 

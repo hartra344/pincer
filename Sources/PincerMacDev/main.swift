@@ -38,16 +38,6 @@ if let index = CommandLine.arguments.firstIndex(of: "--avatar-snapshots") {
 // (token dev-token, MOCK_PAIRING=auto), saves a PNG of the window at each step, removes the gateway it
 // added and quits. For reviewing the wizard; see FirstRunTour.
 #if DEBUG
-if CommandLine.arguments.contains("--composer-sizing-probe") {
-    // This probe needs AppKit's layout loop, not an activated app scene or a foreground window.
-    NSApplication.shared.setActivationPolicy(.accessory)
-    Task { @MainActor in
-        exit(await ComposerSizingProbe.run())
-    }
-    NSApplication.shared.run()
-    exit(2)
-}
-
 if let index = CommandLine.arguments.firstIndex(of: "--first-run-screens") {
     let rest = CommandLine.arguments.dropFirst(index + 1)
     let path = rest.first ?? "first-run-screens"
@@ -59,24 +49,6 @@ if let index = CommandLine.arguments.firstIndex(of: "--first-run-screens") {
     }
 }
 #endif
-// `--secure-form-snapshots <dir>` renders the secure sign-in card to PNGs (via a real offscreen
-// window, so materials composite correctly) and exits. Needs the app's run loop, so it falls
-// through to `PincerMacApp.main()` instead of exiting synchronously.
-if let index = CommandLine.arguments.firstIndex(of: "--secure-form-snapshots") {
-    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "secure-form-snapshots"
-    let directory = URL(filePath: (path as NSString).expandingTildeInPath)
-    Task { @MainActor in
-        try? await Task.sleep(for: .milliseconds(300))
-        do {
-            let count = try await SecureFormSnapshots.write(to: directory)
-            print("Wrote \(count) images to \(directory.path)")
-            exit(0)
-        } catch {
-            print("Couldn't write secure-form snapshots: \(error)")
-            exit(1)
-        }
-    }
-}
 // `--sidebar-working-snapshots <dir>` renders the sidebar's working indicator to PNGs and exits.
 if let index = CommandLine.arguments.firstIndex(of: "--sidebar-working-snapshots") {
     let path = CommandLine.arguments.dropFirst(index + 1).first ?? "sidebar-working-snapshots"

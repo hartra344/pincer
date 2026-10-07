@@ -43,10 +43,8 @@ public struct UsageTotals: Hashable, Sendable {
     }
 
     private static func count(_ value: Double?) -> Int {
-        guard let value, value.isFinite, value > 0 else { return 0 }
-        let rounded = value.rounded()
-        guard rounded < Double(Int.max) else { return Int.max }
-        return Int(rounded)
+        guard let value, value > 0 else { return 0 }
+        return Int(saturating: value) ?? 0
     }
 
     private static func add(_ lhs: Int, _ rhs: Int) -> Int {

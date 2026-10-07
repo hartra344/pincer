@@ -229,6 +229,7 @@ func runLive(url: String, token: String) async {
         return false
     }
     check(answeredReply, "agent continues with the typed answer")
+    await checkSecretQuestion(gateway, chat: chat, key: key, label: "live")
 
     let newKey = await gateway.createSession(agentId: "research", label: "Pincer check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "sessions.create")
