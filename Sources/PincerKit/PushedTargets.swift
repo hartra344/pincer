@@ -66,3 +66,14 @@ public struct PushedTargets: Sendable, Equatable {
         return self.sessions.contains("\(gateway)|\(session)")
     }
 }
+
+/// Targets of pushes that arrive while a silent-push refresh is already running. The run reads it
+/// when it posts, so those pushes aren't repeated.
+@MainActor
+public final class PushedTargetsBox {
+    public private(set) var targets: PushedTargets
+
+    public init(_ targets: PushedTargets = PushedTargets()) { self.targets = targets }
+
+    public func cover(_ more: PushedTargets) { self.targets = self.targets.union(more) }
+}

@@ -1,4 +1,5 @@
 import Foundation
+import PincerPush
 import Testing
 @testable import PincerKit
 
@@ -82,5 +83,57 @@ struct SilentPushRefreshRunsTests {
         ClosedAppDelivery.set(.backgroundRefresh, defaults)
         runs.handle(Self.push, appIsActive: false, defaults: defaults, make: make) { answers.append($0) }
         #expect(answers == [.noData, .noData, .noData] && results.made == 0 && !runs.isRunning)
+    }
+
+    @MainActor
+    final class Gate {
+        private var waiter: CheckedContinuation<Void, Never>?
+        private(set) var reached = false
+
+        func wait() async {
+            self.reached = true
+            await withCheckedContinuation { self.waiter = $0 }
+        }
+
+        func open() { self.waiter?.resume() }
+    }
+
+    @MainActor
+    @Test func aPushDuringARunIsCoveredAndSilentPushPostsNoSound() async throws {
+        let rig = BackgroundRefreshTests.Rig(mode: .pushRelay)
+        rig.cursors.save(BackgroundRefreshTests.base, for: rig.profile.id)
+        rig.connection.sessions = [
+            BackgroundRefreshTests.row(BackgroundRefreshTests.key(1), activity: 2000),
+            BackgroundRefreshTests.row("agent:main:main", activity: 3000),
+        ]
+        let keys = WebPushKeys.generate()
+        let later = SilentPushRefreshTests.payload(
+            gatewayId: rig.profile.id, keys: keys, json: #"{"title":"Claw","body":"Done","url":"chat/main"}"#)
+        let gate = Gate()
+        let posts = rig.posts
+        let refresh = BackgroundRefresh(
+            profiles: { [profile = rig.profile] in [profile] },
+            connector: BackgroundRefreshTests.FakeConnector(connections: [rig.profile.id: rig.connection]),
+            cursors: rig.cursors, defaults: rig.defaults, post: { posts.batches.append($0) }, setBadge: { _ in },
+            delivered: { await gate.wait(); return [] })
+        let runs = SilentPushRefreshRuns()
+        var results: [SilentPushRefresh.Result] = []
+        let first = ["pincer": ["g": rig.profile.id.uuidString, "p": "x"]]
+        runs.handle(first, appIsActive: false, defaults: rig.defaults, keys: { _ in keys }, make: { info, done in
+            SilentPushRefresh(userInfo: info, refresh: refresh, budget: 25, deadline: 25, keys: { _ in keys }, completion: done)
+        }) { results.append($0) }
+        let end = Date().addingTimeInterval(5)
+        while !gate.reached, Date() < end { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(gate.reached)
+
+        var second: [SilentPushRefresh.Result] = []
+        runs.handle(later, appIsActive: false, defaults: rig.defaults, keys: { _ in keys }) { second.append($0) }
+        #expect(second == [.noData])
+        gate.open()
+        while results.isEmpty, Date() < end { try? await Task.sleep(for: .milliseconds(10)) }
+
+        #expect(results == [.newData])
+        #expect(posts.identifiers == ["reply:\(BackgroundRefreshTests.key(1)):2000"], "the second push's chat isn't posted")
+        #expect(posts.batches.flatMap { $0 }.allSatisfy { $0.content.sound == nil }, "the push already made the sound")
     }
 }

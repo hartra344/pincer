@@ -22,6 +22,7 @@ public final class SilentPushRefresh {
 
     private let job: BackgroundRefreshJob
     private let state = State()
+    private let late: PushedTargetsBox
     private var started = false
     private let deadlineSeconds: TimeInterval
     private let timer: @Sendable (TimeInterval) async -> Void
@@ -48,11 +49,13 @@ public final class SilentPushRefresh {
     {
         let pushed = PushMessage(apnsPayload: userInfo, keys: keys).map(PushedTargets.init(message:)) ?? PushedTargets()
         let state = self.state
+        let late = PushedTargetsBox()
+        self.late = late
         self.deadlineSeconds = deadline
         self.timer = timer
         self.job = BackgroundRefreshJob(
             work: {
-                let report = await refresh.run(budget: budget, trigger: .silentPush(pushed))
+                let report = await refresh.run(budget: budget, trigger: .silentPush(pushed), late: late)
                 state.result = Self.map(report)
                 return state.result != .failed
             },
@@ -60,6 +63,12 @@ public final class SilentPushRefresh {
                 state.watchdog?.cancel()
                 completion(success ? state.result : .failed)
             })
+    }
+
+    /// Counts a later push's target as already shown, so this run doesn't post it again.
+    public func cover(userInfo: [AnyHashable: Any], keys: (UUID) -> WebPushKeys? = PushKeyStore.keys(for:)) {
+        guard let message = PushMessage(apnsPayload: userInfo, keys: keys) else { return }
+        self.late.cover(PushedTargets(message: message))
     }
 
     public func start() {

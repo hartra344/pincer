@@ -42,4 +42,13 @@ func runSilentPushRefreshRunsChecks() async {
     check(first == [.failed] && !runs.isRunning, "the run completes once at its deadline and is released")
     runs.handle(push, appIsActive: false, defaults: defaults, make: make) { _ in }
     check(made == 2, "a push after completion starts a new run")
+    // A push that arrives during a run is merged into the run's covered set.
+    var sink: [SilentPushRefresh.Result] = []
+    let gateway = UUID()
+    let run = SilentPushRefresh(userInfo: push, completion: { sink.append($0) })
+    let targets = PushedTargets(sessions: ["\(gateway.uuidString)|agent:main:main"])
+    let box = PushedTargetsBox()
+    box.cover(targets)
+    check(box.targets == targets && sink.isEmpty, "later pushes accumulate in the covered set")
+    _ = run
 }

@@ -265,7 +265,7 @@ public final class BackgroundRefresh {
     public static var lastResult: String? { UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") }
 
     /// Skips unless notifications are on and the mode is background refresh.
-    public func run(budget: TimeInterval = defaultBudget, trigger: Trigger = .scheduled) async -> Report {
+    public func run(budget: TimeInterval = defaultBudget, trigger: Trigger = .scheduled, late: PushedTargetsBox? = nil) async -> Report {
         var report = Report()
         let mode: ClosedAppDelivery = switch trigger {
         case .scheduled: .backgroundRefresh
@@ -293,7 +293,9 @@ public final class BackgroundRefresh {
         var outcomes: [UUID: Outcome?] = [:]
         var unread = 0
         var sounded = false
-        var pushed: PushedTargets?
+        var delivered: PushedTargets?
+        var quietly = false
+        if case .silentPush = trigger { quietly = true }
         await withTaskCancellationHandler {
             for (profile, fetch) in zip(profiles, fetches) { outcomes[profile.id] = await fetch.value }
         } onCancel: {
@@ -314,12 +316,13 @@ public final class BackgroundRefresh {
                 gatewayId: profile.id, gatewayName: profile.name)
             var requests = plan.requests
             if case let .silentPush(triggering) = trigger, !requests.isEmpty {
-                if pushed == nil { pushed = triggering.union(PushedTargets(userInfos: await self.delivered())) }
-                let covered = pushed ?? triggering
+                if delivered == nil { delivered = triggering.union(PushedTargets(userInfos: await self.delivered())) }
+                // Pushes that arrived during this run count too, wherever their alert is by now.
+                let covered = (delivered ?? triggering).union(late?.targets ?? PushedTargets())
                 requests = requests.filter { !covered.covers($0) }
             }
             if !requests.isEmpty {
-                await self.post(Self.quieted(requests, firstMaySound: !sounded))
+                await self.post(Self.quieted(requests, firstMaySound: !sounded && !quietly))
                 sounded = true
             }
             self.cursors.save(plan.cursor, for: profile.id)
