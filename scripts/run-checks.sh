@@ -101,12 +101,35 @@ lane() {
     pids+=($!)
 }
 
+# command… → runs `swift test`, failing an exit 0 unless every Swift Testing run it started printed its
+# final summary: something that stops the main run loop can end the runner mid-suite (#920).
+complete_swift_test() {
+    local out code started finished
+    out=$(mktemp)
+    "$@" 2>&1 | tee "$out"
+    code=${PIPESTATUS[0]}
+    started=$(grep -c 'Test run started\.' "$out")
+    finished=$(grep -cE 'Test run with [0-9]+ tests? .*(passed|failed) after' "$out")
+    rm -f "$out"
+    if [ "$code" -eq 0 ] && { [ "$started" -eq 0 ] || [ "$finished" -lt "$started" ]; }; then
+        echo "✗ swift test exited 0 but only $finished of $started test runs finished (#920)"
+        return 1
+    fi
+    return "$code"
+}
+# The guard must reject a run that stops after its start line and accept a finished one.
+if complete_swift_test printf '◇ Test run started.\n' > /dev/null ||
+    ! complete_swift_test printf '◇ Test run started.\n✔ Test run with 2 tests in 1 suite passed after 0.1 seconds.\n' > /dev/null; then
+    echo "complete_swift_test is broken"
+    exit 1
+fi
+
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
-lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+lane unit-tests complete_swift_test swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
 lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
 lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras
@@ -150,7 +173,7 @@ report 0
 # noisy for them; the counter checks and absolute ceilings still apply. PINCER_WALL_CLOCK_CHECKS=1 opts in.
 lane perf-smoke "$CHECKS" --perf-smoke
 report $((${#pids[@]} - 1))
-lane perf-tests env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
+lane perf-tests complete_swift_test env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
     --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe'
 report $((${#pids[@]} - 1))
 
