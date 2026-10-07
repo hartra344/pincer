@@ -109,6 +109,7 @@ test('push forwards the encrypted body to APNs with mapped headers', async () =>
   assert.ok(Number(headers['apns-expiration']) > Date.now() / 1000);
   assert.match(headers.authorization, /^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
   assert.equal(payload.aps['mutable-content'], 1);
+  assert.equal(payload.aps['content-available'], 1, 'also wakes the app to catch up');
   assert.equal(payload.pincer.g, GATEWAY);
   assert.deepEqual(Buffer.from(payload.pincer.p, 'base64url'), body, 'body is forwarded untouched');
 });
