@@ -68,6 +68,7 @@ enum Suites {
             Section("Cold transcript geometry sources") { await runColdTranscriptHeightEstimateChecks() },
             Section("Attachment thumbnails") { await runAttachmentThumbnailChecks() },
             Section("Attachment preparation bounds") { await runAttachmentPreparationChecks() },
+            Section("HTML attachment preview bounds") { runHTMLAttachmentSourceChecks() },
             Section("Latest-wins preparer") { await runLatestWinsPreparerChecks() },
             Section("Progress throttle") { await runProgressThrottleChecks() },
             Section("Transcript cache single manifest decode") { await runTranscriptCacheDecodeChecks() },

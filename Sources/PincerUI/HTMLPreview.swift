@@ -21,6 +21,15 @@ enum HTMLPreview {
             && !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Downloadable HTML attachments that should open as rendered pages instead of source text.
+    static func isPreviewable(file: FileRef) -> Bool {
+        guard file.isDownloadable else { return false }
+        let ext = (file.name as NSString).pathExtension.lowercased()
+        if ["html", "htm", "xhtml", "svg"].contains(ext) { return true }
+        let mime = file.mimeType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased()
+        return mime == "text/html" || mime == "application/xhtml+xml" || mime == "image/svg+xml"
+    }
+
     static let contentSecurityPolicy =
         "default-src 'none'; img-src data:; style-src 'unsafe-inline' data:; font-src data:; media-src data:; form-action 'none'"
 
@@ -127,6 +136,7 @@ struct HTMLPreviewWebView: NSViewRepresentable {
         view.navigationDelegate = context.coordinator
         view.allowsBackForwardNavigationGestures = false
         view.allowsMagnification = true
+        view.allowsLinkPreview = false
         view.setAccessibilityLabel(L("HTML Preview"))
         context.coordinator.load(self.html, in: view)
         return view

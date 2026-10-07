@@ -24,6 +24,7 @@ struct CompactFooterTests {
         func open(_ url: URL) {}
         func loadImage(_ ref: ImageRef) {}
         func loadFilePreview(_ file: FileRef) {}
+        func previewHTML(_ file: FileRef) async -> Bool { false }
         func saveFile(_ file: FileRef) async -> Bool { false }
         func quickLook(_ file: FileRef) async -> Bool { false }
         func reply(to messageId: String) {}

@@ -1111,7 +1111,7 @@ struct TranscriptLayoutBuilder {
 
     private func file(_ ref: FileRef, into stack: inout Stack, layout: inout TranscriptRowLayout) {
         let key = "file:\(layout.id):\(ref.cacheKey)"
-        let canExpand = ref.isText && ref.isDownloadable
+        let canExpand = ref.isText && ref.isDownloadable && !HTMLPreview.isPreviewable(file: ref)
         let expanded = canExpand && self.context.disclosure.isExpanded(key, default: false)
         let headerHeight = 6 + TranscriptStyle.lineHeight(self.style.callout) + 6
         guard expanded else {
