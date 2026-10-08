@@ -126,8 +126,9 @@ struct SidebarControllerTests {
         #expect(controller.dragPayload(forId: SidebarModel.headerId("mochi")) == nil)
         #expect(controller.dragPayload(forId: SidebarModel.headerId("mochi/utilities")) == nil)
         #expect(controller.dragPayload(forId: chat.id) == .chat("agent:mochi:dashboard:c"))
-        #expect(controller.dragPayload(forId: thread.id) == nil)
-        #expect(controller.dragPayload(forId: subagent.id) == nil)
+        // Threads and sub-sessions can be dragged into a group too (#948).
+        #expect(controller.dragPayload(forId: thread.id) == .chat("agent:mochi:dashboard:t"))
+        #expect(controller.dragPayload(forId: subagent.id) == .chat("agent:mochi:subagent:s"))
         #expect(controller.dragPayload(forId: "missing") == nil)
         #expect(SidebarDragPayload.chat("k").typeIdentifier == SidebarDrag.typeIdentifier)
         #expect(SidebarDragPayload.group("g").typeIdentifier == SidebarDrag.groupTypeIdentifier)

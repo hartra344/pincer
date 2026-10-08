@@ -244,6 +244,7 @@ enum Suites {
         sections += [
             Section("Sidebar section work") { runSidebarSectionWorkChecks() },
             Section("Sidebar home chat group placement") { runSidebarHomeGroupMenuChecks() },
+            Section("Sub-session grouping") { runSidebarSubSessionGroupChecks() },
             Section("Shortcuts unread visibility") { await runIntentVisibilityChecks() },
             Section("Deep links & Handoff") { runDeepLinkChecks() },
             Section(nil) { runLocalizationChecks() },
@@ -421,6 +422,7 @@ enum Suites {
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
+        Section("Sub-session grouping (demo)") { await runDemoSubSessionGrouping() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
         Section("Sidebar reveal (demo)") { await runDemoSidebarReveal() },
         Section("Sidebar header interactions (demo)") { await runDemoSidebarHeaderInteractions() },

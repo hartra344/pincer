@@ -44,6 +44,14 @@ struct MenuBarInboxTests {
         MenuBarInbox.build(gateways, now: Self.now)
     }
 
+    @Test func groupedSubSessionIsAnInboxChatButNestedHelperIsNot() {
+        let inbox = Self.build(Self.gateway(sessions: [
+            Self.row("agent:main:subagent:grouped", #""unread":true,"category":"Work","spawnedBy":"agent:main:main""#, age: 1),
+            Self.row("agent:main:subagent:nested", #""unread":true,"spawnedBy":"agent:main:main""#, age: 2),
+        ]))
+        #expect(inbox.unread.map(\.target.sessionKey) == ["agent:main:subagent:grouped"])
+    }
+
     // MARK: Sections and caps
 
     @Test func approvalsBeforeQuestions() {

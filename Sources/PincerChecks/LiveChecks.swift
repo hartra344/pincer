@@ -264,6 +264,16 @@ func runLive(url: String, token: String) async {
         let otherAgent = SidebarSection(id: "agent:main", title: "Main", emoji: nil, channels: [], kind: .agent("main"))
         check(gateway.groupDropValue(for: newKey, onto: agentHome) == .null, "drop onto home agent section ungroups")
         check(gateway.groupDropValue(for: newKey, onto: otherAgent) == nil, "drop onto another agent is ignored")
+        // #948: a sub-session can be grouped; its parent link survives and moving back re-nests it.
+        let helper = "agent:research:subagent:abc"
+        if let parentKey = gateway.sessions[helper]?.parentKey {
+            await gateway.moveChat(helper, toGroup: "Work", before: nil)
+            let grouped = await waitFor("subagent grouped") { gateway.sessions[helper]?.category == "Work" }
+            check(grouped && gateway.sessions[helper]?.parentKey == parentKey, "live: grouped sub-session keeps its parent link")
+            await gateway.moveBackUnderParent(helper)
+            let nested = await waitFor("subagent re-nested") { gateway.sessions[helper]?.category == nil }
+            check(nested && gateway.sessions[helper]?.parentKey == parentKey, "live: sub-session moved back under its parent")
+        }
         gateway.organization = savedOrganization
     }
 
