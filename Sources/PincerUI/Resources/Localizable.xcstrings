@@ -4823,6 +4823,16 @@
         }
       }
     },
+    "Couldn’t load “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load “%@”"
+          }
+        }
+      }
+    },
     "Couldn’t prepare the reply preview. Try replying again.": {
       "localizations": {
         "en": {
@@ -8969,6 +8979,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "More"
+          }
+        }
+      }
+    },
+    "Move Back Under “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Back Under “%@”"
           }
         }
       }
