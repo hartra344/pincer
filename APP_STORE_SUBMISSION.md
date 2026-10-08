@@ -11,7 +11,12 @@ Connect, not in this repository.
 - Review access: built-in demo. No developer-provided backend or reviewer gateway.
 - Privacy URL after deployment: https://www.pincerchat.dev/privacy/
 - Support URL after deployment: https://www.pincerchat.dev/support/
-- Territories, review contact and release timing: still needed.
+- Territories: all countries; iOS saved, Mac final confirmation pending.
+- Manual release after approval: saved for both listings.
+- Private review contact: saved in App Store Connect for both listings.
+- iOS-on-Mac and Vision Pro: disabled; native Mac app retained.
+- EU declaration: retain non-trader; owner confirmed open-source and noncommercial with no monetization intent.
+- Public support: GitHub Issues approved by owner.
 
 ## Description
 
@@ -76,6 +81,6 @@ The Mac app is sandboxed with outgoing network and user-selected file access.
 - Verify these steps against the final TestFlight builds on iPhone, iPad and Mac.
 - Deploy and verify the privacy/support URLs before entering them in the listings.
 - Add final screenshots, copyright, category, age-rating and content-rights answers.
-- Free pricing is saved. Choose territories and resolve automatic versus manual release.
-- Add private reviewer contact name, email and phone in App Store Connect.
+- Free pricing and manual release are saved. Finish verifying Mac worldwide availability.
+- Private reviewer contact is saved in App Store Connect for both apps.
 - Attach the matching processed version 1.0 builds; do not submit version 0.1.0.

@@ -5,7 +5,7 @@ Audit snapshot: October 7, 2026.
 
 ## Current implementation tracker
 
-Updated October 7, 2026. “Implemented” means changed in this branch; it does not mean merged, deployed, uploaded or approved.
+Updated October 8, 2026. “Implemented” means changed in this branch; it does not mean merged, deployed, uploaded or approved.
 
 | Item | Status | Evidence / remaining work |
 | --- | --- | --- |
@@ -21,9 +21,12 @@ Updated October 7, 2026. “Implemented” means changed in this branch; it does
 | Test reliability PR #938 | External work in progress | Recheck merge and complete CI on release candidate. |
 | TestFlight crash triage | Needed | Build 48.1 crash reports require symbolication and candidate retest. |
 | Listing copy | Drafted locally | `APP_STORE_SUBMISSION.md`; ASC fields still to populate. |
-| Screenshots | Needed | Final iPhone, iPad and Mac demo captures. |
-| Review contact | Needed: owner input | Name/email/phone go only in App Store Connect. |
-| Territories / release timing / platform availability | Needed: owner decisions | No countries or extra-platform decisions inferred from free pricing. |
+| Screenshots | Inventory audited; captures/upload needed | 29 full-size iPhone website images at 1206×2622; no iPad assets. Existing Mac images use website dimensions. Listing slots were empty. |
+| Review contact | Done in App Store Connect | Owner-provided contact saved on both records; private details excluded from repository. |
+| Territories | iOS done; Mac confirmation pending | Owner chose all countries. iOS shows 175 countries available on release. Mac final confirmation was interrupted; session now requires sign-in. |
+| Manual release | Done in App Store Connect | Manual release after approval saved on both listings. |
+| Extra-platform availability | Done in App Store Connect | iOS-on-Apple-Silicon-Mac and Vision Pro disabled. Dedicated native Mac listing retained. |
+| EU trader status | Owner confirmed noncommercial | Open-source personal project with no intent to monetize; retain existing non-trader declaration. |
 | Physical-device and accessibility pass | Needed | #59, #933 and essential #58 flows. |
 | Final signed archives / submission | Needed | Build from validated merged commit, inspect, upload, install and submit. |
 
@@ -78,6 +81,8 @@ Status: confirmed missing on both platforms. Fill description, keywords, support
 The support URL should give users a working contact method and help for setup/troubleshooting. Clearly state that users need an OpenClaw Gateway for live operation and explain any external service costs. Verify icons, display names and screenshots match the release binary. Keep public feature claims within tested behavior.
 
 ### 9. Supply iPhone, iPad and Mac screenshots
+
+October 8 inventory: 29 full-size iPhone website captures at 1206×2622, plus cropped variants; no iPad screenshots found. Existing Mac images have varied website dimensions and need release-specific captures. Target five demo scenes per platform: conversation, rich content/tool results, agents/sidebar, search/bookmarks and approvals. Capture a 13-inch iPad at 2064×2752 (or landscape 2752×2064); verify each final file and upload before marking complete. Screenshots must reflect the final candidate. No reviewer credentials or live gateway data are needed.
 
 Status: confirmed zero screenshots in all inspected device families. Capture the final UI with realistic synthetic/demo data, correct privacy-safe content and Apple’s current accepted dimensions. iPad screenshots are required because the app supports iPad. Use App Store Connect Media Manager and the current screenshot specification to resolve required slots; capture Mac images separately. App-preview videos are optional. Do not use live private conversations or credentials.
 
@@ -157,3 +162,7 @@ Separate App Store records and bundle IDs; native iPhone/iPad/Mac targets; built
 - [Apple screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications)
 - [Apple DSA trader requirements](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements)
 - [Apple upcoming SDK requirements](https://developer.apple.com/news/upcoming-requirements/)
+
+## October 8 continuation
+
+All six PR #947 checks passed on commit 66d18ea. PR #938 remains open; final merged-candidate validation is still required. App Store Connect signed out during continuation and is awaiting owner passkey/security-key authentication. No submission or release occurred.
