@@ -125,6 +125,7 @@ export function apnsPayload(gatewayId, body) {
       alert: { title: 'Pincer', body: 'New notification' },
       sound: 'default',
       'mutable-content': 1,
+      'content-available': 1,
       'thread-id': gatewayId,
     },
     pincer: { g: gatewayId, p: Buffer.from(body).toString('base64url') },

@@ -170,7 +170,9 @@ extension ChatStore {
         if entry.hasAttachments, attachments.isEmpty, !entry.attachments.isEmpty {
             if let loaded = await gateway.readAttachments(for: entry) {
                 attachments = loaded
-            } else if gateway.attachmentFilesExist(for: entry) {
+            } else if await gateway.attachmentFilesExist(for: entry) {
+                // The connection may have dropped meanwhile, putting the entry back in the queue.
+                guard gateway.outbox.entry(id: key)?.state == .sending else { return .queued }
                 // The files are there but unreadable (say the device is locked): worth a Retry.
                 let message = "Couldn’t send: the attachments couldn’t be read. Try again."
                 gateway.outbox.markFailed(id: key, kind: .transient, isConnected: true, message: message)

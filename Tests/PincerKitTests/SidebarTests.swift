@@ -314,7 +314,7 @@ struct SidebarTests {
         #expect(absent(store.groupDropValue(for: main, onto: ungrouped)))
         #expect(absent(store.groupDropValue(for: trip, onto: recent)))
         #expect(absent(store.groupDropValue(for: trip, onto: mainAgent)), "agent sections only ungroup when organized by server")
-        #expect(absent(store.groupDropValue(for: "agent:main:subagent:abc", onto: work)))
+        #expect(store.groupDropValue(for: "agent:main:subagent:abc", onto: work) == .string("Work"), "sub-sessions can be grouped (#948)")
         #expect(absent(store.groupDropValue(for: "agent:nope:missing", onto: work)))
 
         store.organization = .servers
@@ -491,7 +491,7 @@ struct SidebarTests {
         #expect(absent(store.groupDropValue(for: apt, onto: sub("main", "Prep"))))
         #expect(absent(store.groupDropValue(for: papers, onto: sub("main", "Day of move"))))
         #expect(absent(store.groupDropValue(for: apt, onto: sub("research", "Prep"))))
-        #expect(absent(store.groupDropValue(for: "agent:main:subagent:s1", onto: sub("main", "Prep"))))
+        #expect(store.groupDropValue(for: "agent:main:subagent:s1", onto: sub("main", "Prep")) == .string("Prep"))
         #expect(store.groupDropValue(for: apt, onto: agent("main")) == .null)
         #expect(absent(store.groupDropValue(for: misc, onto: agent("main"))))
         #expect(absent(store.groupDropValue(for: apt, onto: agent("research"))))
@@ -511,5 +511,115 @@ struct SidebarTests {
         #expect(relaunched.organization == .agent)
         #expect(relaunched.collapsedSections.contains("agent:main"))
         #expect(relaunched.deviceId == Fixtures.deviceId)
+    }
+}
+
+// MARK: Sub-sessions in groups (#948)
+
+@MainActor
+@Suite("Sidebar sub-session grouping")
+struct SidebarSubSessionGroupTests {
+    static let helper = "agent:main:subagent:s1"
+    static let loose = "agent:main:subagent:s2"
+    static let parent = "agent:main:dashboard:trip"
+
+    static let sessions: JSONValue = Fixtures.json(#"""
+    {"sessions":[
+      {"key":"agent:main:main","updatedAt":100},
+      {"key":"agent:main:dashboard:trip","label":"Trip","updatedAt":300},
+      {"key":"agent:main:dashboard:work1","label":"Work one","category":"Work","updatedAt":200},
+      {"key":"agent:main:subagent:s1","label":"Grouped helper","category":"Work","unread":true,
+       "spawnedBy":"agent:main:dashboard:trip","parentSessionKey":"agent:main:dashboard:trip","updatedAt":400},
+      {"key":"agent:main:subagent:s2","label":"Loose helper","unread":true,
+       "spawnedBy":"agent:main:dashboard:trip","parentSessionKey":"agent:main:dashboard:trip","updatedAt":350}
+    ]}
+    """#)
+
+    let scratch = ScratchDefaults()
+    let profile = GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none)
+
+    func store(_ organization: SidebarOrganization = .group) -> GatewayStore {
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        store.applySnapshot(Self.sessions)
+        store.groupCatalog = ["Work", "Play"]
+        store.organization = organization
+        return store
+    }
+
+    func section(_ name: String) -> SidebarSection {
+        SidebarSection(id: "group:\(name)", title: name, emoji: nil, channels: [], kind: .group(name))
+    }
+
+    /// Every channel and thread key the sections list, flattened through subsections.
+    func listed(_ sections: [SidebarSection]) -> (top: [String], threads: [String]) {
+        let channels = sections.flatMap { $0.allChannels }
+        return (channels.map(\.id), channels.flatMap { $0.threads.map(\.key) })
+    }
+
+    @Test func isNestedHelper() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        #expect(store.sessions[Self.helper]?.isSubagent == true)
+        #expect(store.sessions[Self.helper]?.isNestedHelper == false, "grouped: a regular chat")
+        #expect(store.sessions[Self.loose]?.isNestedHelper == true)
+        #expect(store.sessions[Self.parent]?.isNestedHelper == false)
+    }
+
+    @Test func nestingParent() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        #expect(store.nestingParent(of: Self.helper)?.key == Self.parent)
+        #expect(store.nestingParent(of: Self.loose)?.key == Self.parent)
+        #expect(store.nestingParent(of: Self.parent) == nil)
+        #expect(store.nestingParent(of: "agent:main:main") == nil)
+        #expect(store.nestingParent(of: "agent:nope:missing") == nil)
+    }
+
+    @Test func dropValueAllowsSubSessions() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        #expect(store.groupDropValue(for: Self.loose, onto: self.section("Work")) == .string("Work"))
+        #expect(store.groupDropValue(for: Self.loose, onto: self.section("Play")) == .string("Play"))
+        #expect(store.groupDropValue(for: Self.helper, onto: self.section("Play")) == .string("Play"))
+        #expect(store.groupDropValue(for: Self.helper, onto: self.section("Work")) == nil)
+        let ungrouped = SidebarSection(id: "group:", title: "Ungrouped", emoji: nil, channels: [], kind: .other)
+        #expect(store.groupDropValue(for: Self.helper, onto: ungrouped) == .null)
+        #expect(store.groupDropValue(for: Self.loose, onto: ungrouped) == nil)
+    }
+
+    @Test func groupOrderIncludesGroupedSubSession() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        #expect(Set(store.groupOrder("Work")) == [Self.helper, "agent:main:dashboard:work1"])
+    }
+
+    @Test func groupedSubSessionIsTopLevelInEveryOrganization() {
+        defer { self.scratch.remove() }
+        for organization in SidebarOrganization.allCases {
+            let store = self.store(organization)
+            let (top, threads) = self.listed(store.sections())
+            #expect(top.contains(Self.helper), "\(organization): grouped helper is a channel")
+            #expect(!threads.contains(Self.helper), "\(organization): not nested under its parent")
+            #expect(!top.contains(Self.loose), "\(organization): ungrouped helper stays nested")
+            #expect(threads.contains(Self.loose), "\(organization): ungrouped helper nests")
+            let parent = store.sections().flatMap { $0.allChannels }.first { $0.id == Self.parent }
+            #expect(parent?.threads.map(\.key) == [Self.loose], "\(organization)")
+        }
+    }
+
+    @Test func groupedSubSessionLandsInItsGroupSection() throws {
+        defer { self.scratch.remove() }
+        let store = self.store(.group)
+        let work = try #require(store.sections().first { $0.kind == .group("Work") })
+        #expect(work.channels.map(\.id).contains(Self.helper))
+        let agent = self.store(.agent)
+        let sub = try #require(agent.sections().first { $0.id == "agent:main" }?.subsections.first { $0.groupName == "Work" })
+        #expect(sub.channels.map(\.id).contains(Self.helper))
+    }
+
+    @Test func unreadCountsGroupedSubSessionOnly() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        #expect(store.totalUnread == 1, "the grouped helper counts, the nested one doesn't")
     }
 }

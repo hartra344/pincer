@@ -45,6 +45,28 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate {
         PushRegistrar.shared.setDeviceToken(deviceToken)
     }
 
+    /// A relay push carries `content-available`: catch up briefly (badge, questions, replies the
+    /// gateway didn't push). The completion handler runs exactly once, bounded by the refresh deadline.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void)
+    {
+        nonisolated(unsafe) let userInfo = userInfo
+        nonisolated(unsafe) let handler = completionHandler
+        let active = application.applicationState == .active
+        MainHop.run {
+            SilentPushRefreshRuns.shared.handle(userInfo, appIsActive: active) { result in
+                let mapped: UIBackgroundFetchResult = switch result {
+                case .newData: .newData
+                case .noData: .noData
+                case .failed: .failed
+                }
+                handler(mapped)
+            }
+        }
+    }
+
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         NSLog("[Pincer] APNs registration failed: %@", error.localizedDescription)
     }

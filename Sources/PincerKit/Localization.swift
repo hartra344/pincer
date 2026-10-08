@@ -3,7 +3,7 @@ import os
 
 /// Where PincerKit looks up its user-facing sentences.
 ///
-/// PincerKit has no resource bundle of its own: its error messages, accessibility phrases and sender
+/// PincerKit’s resource bundle contains its privacy manifest. Its error messages, accessibility phrases and sender
 /// names are keys in PincerUI's String Catalog (`Sources/PincerUI/Resources/Localizable.xcstrings`),
 /// so translators work in one file. PincerUI registers its bundle at launch. Until then (unit tests,
 /// `PincerChecks`, the share extension) lookups fall back to the main bundle, which has no catalog,

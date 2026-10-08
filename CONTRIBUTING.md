@@ -36,6 +36,7 @@ Switching chats must not remove or re-add a window toolbar item. When one is reb
 - The chat's title, subtitle and toolbar items live in `ChatChrome`, outside the chat view.
 - CI runs `PincerMacDev --toolbar-stability-check`, which fails if a chat switch rebuilds a toolbar item. Run it locally with `PINCER_DEV_NAMESPACE=toolbar-check PINCER_KEYCHAIN=memory swift run PincerMacDev --toolbar-stability-check` (it opens a window for a few seconds).
 - `PincerMacDev --chat-switch-probe [ws://url [token]]` times chat switches from a sidebar click to the new chat's rows on screen, in the demo (default) or against a Gateway, and fails when a chat's median switch exceeds 150 ms (#563; `PINCER_SWITCH_BUDGET_MS` changes it). `PINCER_SWITCH_CHATS=N` cycles through N chats. `PINCER_SWITCH_OVERALL_MS` and `PINCER_SWITCH_STALL_MS` also cap the median of all timed switches and the longest stall. The release target is an overall median of 50 ms (#571); CI reports a debug build's timings and fails only past 500 ms; the hosted reuse test and the selection-defaults test are the structural guards. Run it on a release build (`swift build -c release --product PincerMacDev`) with `PINCER_DEV_NAMESPACE=switch-probe PINCER_KEYCHAIN=memory`; it opens a window for about half a minute.
+- CI's **Launch CPU** step runs `scripts/check-launch-cpu.sh` against the debug `PincerMacDev` with the menu bar off, on, and on with the demo, and fails above 50% average idle CPU (#135). See [Building](website/src/content/docs/development/building.md#launch-cpu-check).
 
 ## Running checks
 

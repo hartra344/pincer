@@ -90,7 +90,7 @@ xcodebuild test -scheme PincerUITests-iOS \
   -only-testing:PincerUITests/SVGRasterizerTests
 ```
 
-Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded.
+Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions (size and rendered pixels) determine whether rasterization succeeded. CI runs `SVGRasterizerTests` in its own step after the transcript suites, because WebKit rendering alongside the hosted UIKit suites starved for minutes. Cancelling an in-flight iOS render (a row scrolled away) stops the web view load and returns no image.
 
 The iPad sidebar geometry probe hosts a 1,200-row transcript in `NavigationSplitView`, drives the public native `UISplitViewController` hide/show transition, and reports detail-width changes and row builds per display frame. It checks that the native column actually changes and that layouts stay bounded while the sidebar animates. This measures native geometry; it does not test the SwiftUI sidebar button binding. Run it on a regular-width iPad simulator (the default iPhone CI lane does not run this probe):
 
@@ -168,7 +168,7 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
 
 `--menu-bar on|off` sets the menu bar item for the run, and `--demo` saves only the built-in demo gateway, so it connects at launch. By default the script runs a copy of the app under its own bundle id with an in-memory Keychain, and it restores that bundle's defaults afterwards, so your own settings and gateways aren't touched. Run `scripts/check-launch-cpu.sh --help` for the other options.
 
-CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar on and the demo gateway and again with the menu bar off, against a release build of `main`. The nightly run is skipped when `main` has no commits from the last day. The workflow also runs on pull requests that change the check or `scripts/bundle-mac.sh`, and from **Actions → Launch CPU → Run workflow**.
+Every pull request runs it in the **Launch CPU** step of `tests.yml`, against the debug `PincerMacDev` that job already built, with the menu bar off, on, and on with the demo gateway. That step fails only above 50% average CPU, which catches runaway update loops like #119 (near 100%) without flaking on shared runners. CI also runs it every night (`.github/workflows/launch-cpu.yml`) at the default 5% threshold, with the menu bar on and the demo gateway and again with the menu bar off, against a release build of `main`. The nightly run is skipped when `main` has no commits from the last day. The workflow also runs on pull requests that change the check or `scripts/bundle-mac.sh`, and from **Actions → Launch CPU → Run workflow**.
 
 ## Continuous integration
 

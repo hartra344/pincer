@@ -428,13 +428,18 @@ func runDemo() async {
         health.dismiss(telegram)
         let expectedDismissals = Dictionary(uniqueKeysWithValues: (deliveries + [telegram]).map { ($0.id, "until:" + $0.fingerprint) })
         check(health.level == .healthy && health.indicator == nil && Set(health.dismissedIssues.map(\.id)) == Set(expectedDismissals.keys)
-              && gateway.healthDismissals[telegram.id] == "until:state=not-connected", "demo dismiss hides the Telegram issue")
+              && gateway.healthDismissals[telegram.id] == "until:" + telegram.fingerprint
+              && telegram.fingerprint.hasPrefix("state=not-connected;at="), "demo dismiss hides the Telegram issue")
         // The demo's users.prefs.set echoes users.prefs.changed and the store re-reads users.prefs.get,
         // replacing the local copy with the Gateway's.
         // Negative window: the echoed users.prefs must not replace the dismissal.
         try? await Task.sleep(for: .milliseconds(500))
         check(gateway.healthDismissals == expectedDismissals && health.level == .healthy,
               "demo dismissal kept after re-reading users.prefs (\(gateway.healthDismissals))")
+        await health.load()
+        await health.load()
+        check(health.level == .healthy && gateway.healthDismissals == expectedDismissals,
+              "demo dismissal survives two consecutive health refreshes")
         for issue in deliveries { health.restore(id: issue.id) }
         health.restore(id: telegram.id)
         check(health.level == .degraded && health.dismissedIssues.isEmpty && gateway.healthDismissals.isEmpty, "demo restore")

@@ -3,7 +3,7 @@ title: Security & privacy
 description: How Pincer handles identity, secrets, transport, images and local data.
 ---
 
-Pincer is designed to be safe to run on machines where the official OpenClaw app isn't allowed.
+Read the [Privacy Policy](../../privacy/) for data handling, retention and contact information. This page describes the technical security controls.
 
 ## A pure client
 
@@ -157,7 +157,7 @@ What you share goes only to the gateway you pick, with the same transport rules 
 
 ## Sandbox
 
-The Xcode-built macOS app is **sandboxed**, with outgoing network access and read-only access to files you pick.
+The Xcode-built macOS app is **sandboxed**, with outgoing network access and read/write access to files you pick.
 
 The quick `scripts/bundle-mac.sh` development bundle is only ad-hoc signed and isn't meant for everyday use.
 

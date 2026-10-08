@@ -78,7 +78,7 @@ extension GatewayStore {
     /// Whether a reply at `replyAt` (ms) should turn `row` unread: it isn't already, it's a chat of the
     /// user's own, and nobody read it after the reply (another device, say).
     static func shouldMarkReplyUnread(row: SessionRow, replyAt: Double) -> Bool {
-        guard !row.isUnread, !row.isSubagent, !row.isArchived else { return false }
+        guard !row.isUnread, !row.isNestedHelper, !row.isArchived else { return false }
         let readAt = row.raw["lastReadAt"]?.double ?? 0
         let endedAt = row.raw["endedAt"]?.double ?? 0
         return readAt < max(replyAt, endedAt)

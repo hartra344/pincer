@@ -12,7 +12,7 @@ let package = Package(
     ],
     targets: [
         // Gateway protocol client, identity, and observable stores. No UI, no node/host capabilities.
-        .target(name: "PincerKit", dependencies: ["PincerPush"]),
+        .target(name: "PincerKit", dependencies: ["PincerPush"], resources: [.process("Resources")]),
         // Web Push decryption and payload parsing, shared with the iOS Notification Service Extension.
         .target(name: "PincerPush"),
         // Shared SwiftUI for macOS and iOS.

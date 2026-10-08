@@ -89,11 +89,20 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
         img{display:block;width:\(size.width)px;height:\(size.height)px}</style></head>
         <body><img src="data:image/svg+xml;base64,\(svg.base64EncodedString())"></body></html>
         """
-        let loaded = await withCheckedContinuation { continuation in
-            delegate.continuation = continuation
-            view.loadHTMLString(html, baseURL: nil)
+        // A row scrolled away cancels its render: stop WebKit instead of finishing the load and snapshot.
+        let loaded = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else { return continuation.resume(returning: false) }
+                delegate.continuation = continuation
+                view.loadHTMLString(html, baseURL: nil)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                view.stopLoading()
+                delegate.finish(false)
+            }
         }
-        guard loaded else { return nil }
+        guard loaded, !Task.isCancelled else { return nil }
         let snapshotConfiguration = WKSnapshotConfiguration()
         snapshotConfiguration.rect = CGRect(origin: .zero, size: size)
         snapshotConfiguration.snapshotWidth = NSNumber(value: Double(pixels.width / view.traitCollection.displayScale))
@@ -102,7 +111,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
         return SVGRasterizer.redraw(image, size: pixels)
     }
 
-    private func finish(_ loaded: Bool) {
+    fileprivate func finish(_ loaded: Bool) {
         self.continuation?.resume(returning: loaded)
         self.continuation = nil
     }

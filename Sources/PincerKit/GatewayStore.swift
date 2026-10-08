@@ -171,6 +171,8 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    /// The restored outbox's attachment files are being checked off-main; sends wait for it.
+    @ObservationIgnored var outboxValidating = false
     @ObservationIgnored var replySendLifecycle = 0
     @ObservationIgnored var replyAcceptanceWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored var replyReservationPreparations: [String: Task<String?, Never>] = [:]
@@ -1128,7 +1130,7 @@ public final class GatewayStore: Identifiable {
             let previous = self.sessions[row.key]
             self.setSession(row.keepingPreview(of: previous), for: row.key)
             self.recordReconciledRow(row.key)
-            if self.bootstrapped, let previous, !row.isSubagent,
+            if self.bootstrapped, let previous, !row.isNestedHelper,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
             {
@@ -1160,7 +1162,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private func notifyReply(sessionKey: String, runId: String?, snapshot: JSONValue?) {
-        guard let row = self.sessions[sessionKey], !row.isSubagent else { return }
+        guard let row = self.sessions[sessionKey], !row.isNestedHelper else { return }
         let text = snapshot.flatMap { ChatItem($0, fallbackIndex: 0) }?.plainText
         self.notifier?.notifyReply(row: row, text: text ?? row.preview, dedupe: runId, gateway: self)
     }

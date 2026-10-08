@@ -245,10 +245,10 @@ struct SidebarModel: Equatable {
             if row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) {
                 indicator = SidebarWorkingIndicator.resolve(
                     hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
-                    agent: agent, companionsEnabled: avatarsOn, isUnread: row.isUnread && !row.isSubagent)
+                    agent: agent, companionsEnabled: avatarsOn, isUnread: row.isUnread && !row.isNestedHelper)
             }
             let avatar = indicator ?? SidebarWorkingIndicator.resolveUnread(
-                isUnread: row.isUnread, isSubagent: row.isSubagent, agent: agent, companionsEnabled: avatarsOn)
+                isUnread: row.isUnread, isSubagent: row.isNestedHelper, agent: agent, companionsEnabled: avatarsOn)
             return (indicator, avatar, avatar != nil && avatarsOn ? AvatarSettings.style(for: agent, in: gateway) : nil)
         }
         func entries(_ channels: [SidebarChannel], depth: Int, groupName: String? = nil) -> [Entry] {
@@ -361,6 +361,8 @@ struct SidebarActions {
     var openInNewWindow: ((String) -> Void)?
     /// Shows a chat beside the selected one; nil where there's no room (iPhone).
     var openInSplit: ((String) -> Void)?
+    /// Opens a chat's threads so a sub-session moved back under it stays visible.
+    var expandThreads: (String) -> Void = { _ in }
 }
 
 // MARK: Row appearance
@@ -480,7 +482,16 @@ enum SidebarMenus {
             }
         })
         if row.category != nil {
-            groups.append(.action(L("Remove from Group")) { patch(["category": .null]) })
+            if let parent = gateway.nestingParent(of: row.key) {
+                groups.append(.action(String(format: L("Move Back Under “%@”"), parent.title)) {
+                    Task {
+                        await gateway.moveBackUnderParent(row.key)
+                        actions.expandThreads(parent.key)
+                    }
+                })
+            } else {
+                groups.append(.action(L("Remove from Group")) { patch(["category": .null]) })
+            }
         }
         let custom = gateway.customColor(for: row.key)
         var colors: [SidebarMenuItem] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"].map { color in

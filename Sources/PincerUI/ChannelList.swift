@@ -194,7 +194,8 @@ struct ChannelList: View {
             refresh: { await self.gateway.refreshSessions() },
             openAutomations: { self.openAutomations(self.gateway) },
             openInNewWindow: self.openChatWindow.isAvailable ? { self.openChatWindow(self.gateway, key: $0) } : nil,
-            openInSplit: self.shouldOfferSplitAction ? { self.gateway.openInSplit($0) } : nil)
+            openInSplit: self.shouldOfferSplitAction ? { self.gateway.openInSplit($0) } : nil,
+            expandThreads: { key in self.expandedThreads.insert(key) })
     }
 }
 

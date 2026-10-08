@@ -41,7 +41,7 @@ extension DemoGateway {
                 ] : [
                     "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
                     "connected": false, "restartPending": false, "reconnectAttempts": 4,
-                    "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
+                    "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000 + 5 * 60_000), "lifecycle": "recovering",
                     "lastError": "getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
                 ],
                 "whatsapp": self.whatsappAccount(),

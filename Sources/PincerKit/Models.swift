@@ -129,6 +129,8 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
 
     /// Agent-spawned helper runs (as opposed to chats a person branched off another chat).
     public var isSubagent: Bool { self.key.contains(":subagent:") }
+    /// A sub-session still nested under its parent; moving it into a group makes it a regular chat.
+    public var isNestedHelper: Bool { self.isSubagent && self.category == nil }
     public var isAutomation: Bool { self.key.contains(":cron:") && !self.isSubagent }
     public var isSlashCommands: Bool { self.key.contains(":slash:") }
 
