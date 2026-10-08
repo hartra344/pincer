@@ -103,8 +103,11 @@ func runDemoSetup() async {
 
     // ⌘K item.
     let item = CommandPalette.setupGatewayItem(gateway: gateway)
-    check(item?.id == "command:setupGateway" && item?.title == "Set Up Gateway…" && item?.subtitle == "2 of 3 steps",
-          "⌘K Set Up Gateway… (\(item?.subtitle ?? "nil"))")
+    check(item?.id == "command:setupGateway" && item?.title == "Setup Assistant…" && item?.subtitle == "2 of 3 steps",
+          "⌘K Setup Assistant… (\(item?.subtitle ?? "nil"))")
+
+    check(item.map { PaletteMatcher.score($0, query: "set up gateway") != nil && PaletteMatcher.score($0, query: "setup assistant") != nil } == true,
+          "⌘K finds Setup Assistant… by its old name, Set Up Gateway (#955)")
 
     // Start Setup opens on the first step not done.
     setup.startSetup()
@@ -191,7 +194,7 @@ func runLiveSetup(url: String, token: String) async {
     _ = await setupLoaded(back, "mock resume checks")
     back.setup.present()
     check(back.setup.isPresented && !back.setup.showsIntro && back.setup.currentStep == back.setup.resumeStep
-          && back.setup.status(of: .testMessage).isDone, "Set Up Gateway… resumes with saved statuses at \(back.setup.currentStep)")
+          && back.setup.status(of: .testMessage).isDone, "Setup Assistant… resumes with saved statuses at \(back.setup.currentStep)")
     back.setup.close()
     setupCleanup(back)
 
