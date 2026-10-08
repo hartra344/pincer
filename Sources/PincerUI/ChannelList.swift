@@ -57,6 +57,7 @@ struct ChannelList: View {
                 .padding(.bottom, 6)
             #endif
             self.searchMessagesRow
+            if self.gateway.profile.isDemo { DemoModeRow() }
             ConnectionStatusRow()
             ChannelListRows(search: self.search, expandedThreads: self.expandedThreads, splitPaneKey: self.splitPaneKey,
                             actions: self.actions, theme: self.theme)
@@ -98,6 +99,9 @@ struct ChannelList: View {
                     Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
                     Divider()
                     Button(L("Add Gateway…")) { self.app.firstRun.present() }
+                    if self.gateway.profile.isDemo {
+                        Button(L("Leave Demo")) { self.app.leaveDemo() }
+                    }
                 } label: {
                     Label(L("Organize"), systemImage: Theme.filterSymbol)
                 }

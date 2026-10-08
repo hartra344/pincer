@@ -180,12 +180,18 @@ struct ConnectionPage: View {
                 Section {
                     Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.", bundle: .module)
                 }
+                Section {
+                    Button(L("Connect Your Gateway…")) { self.leaveDemo(connect: true) }
+                    Button(L("Leave Demo")) { self.leaveDemo(connect: false) }
+                } footer: {
+                    Text("Leaving removes the demo's sample chats from this device. Your other Gateways are kept.", bundle: .module)
+                }
             } else {
                 ConnectionFields(draft: self.$draft, hasSavedSecret: profile.secret != nil)
-            }
-            Section {
-                Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
-                Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
+                Section {
+                    Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
+                    Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
+                }
             }
         }
         .formStyle(.grouped)
@@ -253,6 +259,14 @@ struct ConnectionPage: View {
             self.draft = ConnectionDraft(profile)
         }
         self.loadedFrom = profile
+    }
+
+    private func leaveDemo(connect: Bool) {
+        self.dismiss()
+        self.app.leaveDemo(connect: connect)
+        #if os(macOS)
+        if connect { QuickCaptureController.shared.showMainWindow() }
+        #endif
     }
 
     private func requestApply() {
