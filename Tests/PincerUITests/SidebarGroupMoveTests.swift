@@ -144,4 +144,37 @@ struct SidebarGroupMoveTests {
         #expect(ids == placed)
         #expect(Set(placed).count == placed.count)
     }
+
+    // MARK: Sub-sessions (#948)
+
+    @Test func subSessionMovesIntoAGroupAndBackUnderItsParent() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let gateway = try await connectedDemo(scratch)
+        defer { gateway.stop() }
+        let helper = DemoGateway.seededSubagents.done
+        let parent = DemoGateway.subagentParentKey
+        let ready = await eventually(timeout: .seconds(10)) { gateway.sessions[helper] != nil }
+        try #require(ready)
+        gateway.organization = .group
+        func channels() -> [SidebarChannel] { gateway.sections().flatMap(\.allChannels) }
+        #expect(channels().first { $0.id == parent }?.threads.map(\.key).contains(helper) == true)
+        let parentKey = gateway.sessions[helper]?.parentKey
+        #expect(parentKey == parent)
+
+        await gateway.moveChat(helper, toGroup: "Day of move", before: nil)
+        try await self.settle(gateway, helper, category: "Day of move")
+        #expect(gateway.sessions[helper]?.parentKey == parentKey, "the demo's patch keeps the lineage")
+        #expect(gateway.sessions[helper]?.isNestedHelper == false)
+        let day = try #require(gateway.sections().first { $0.kind == .group("Day of move") })
+        #expect(day.channels.map(\.id).contains(helper))
+        #expect(channels().first { $0.id == parent }?.threads.map(\.key).contains(helper) == false)
+        #expect(gateway.nestingParent(of: helper)?.key == parent)
+
+        await gateway.moveBackUnderParent(helper)
+        try await self.settle(gateway, helper, category: nil)
+        #expect(gateway.sessions[helper]?.parentKey == parentKey)
+        #expect(!(gateway.sections().first { $0.kind == .group("Day of move") }?.channels.map(\.id).contains(helper) ?? false))
+        #expect(channels().first { $0.id == parent }?.threads.map(\.key).contains(helper) == true)
+    }
 }

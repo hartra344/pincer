@@ -257,6 +257,17 @@ struct BackgroundRefreshTests {
         #expect(!filter.notifies(Self.row(Self.key(1), activity: 1, extra: #""archived":true"#)))
     }
 
+    @MainActor @Test func groupedSubSessionNotifiesButNestedHelperDoesNot() {
+        let filter = BackgroundRefreshFilter()
+        let helper = "agent:main:subagent:h"
+        let nested = Self.row(helper, activity: 2, extra: #""spawnedBy":"agent:main:main""#)
+        let grouped = Self.row(helper, activity: 3, extra: #""spawnedBy":"agent:main:main","category":"Work""#)
+        #expect(!filter.notifies(nested))
+        #expect(filter.notifies(grouped), "a grouped sub-session is a regular chat (#948)")
+        #expect(IntentService.unreadRows([nested, Self.row(Self.key(1), activity: 1)]).map(\.key) == [Self.key(1)])
+        #expect(IntentService.unreadRows([grouped, Self.row(Self.key(1), activity: 1)]).map(\.key) == [helper, Self.key(1)])
+    }
+
     // MARK: Cursor store & mode
 
     @Test func cursorStoreRoundTrips() {

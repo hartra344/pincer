@@ -42,6 +42,20 @@ export async function run() {
     assert.deepEqual((await client.send('sessions.list', { spawnedBy: SEEDED_SUBAGENTS.running })).sessions.map((r) => r.key), [SEEDED_SUBAGENTS.killed]);
     assert.deepEqual((await client.send('sessions.list', { spawnedBy: 'agent:main:nope' })).sessions, []);
 
+    // #948: grouping a sub-session keeps its lineage (upstream: lineage is creation-only), and ungrouping clears the category.
+    const before = byKey.get(SEEDED_SUBAGENTS.done);
+    await client.send('sessions.patch', { key: SEEDED_SUBAGENTS.done, category: 'Selftest group' });
+    const grouped = (await client.send('sessions.list', {})).sessions.find((r) => r.key === SEEDED_SUBAGENTS.done);
+    assert.equal(grouped.category, 'Selftest group');
+    assert.equal(grouped.spawnedBy, before.spawnedBy);
+    assert.equal(grouped.parentSessionKey, before.parentSessionKey);
+    assert.equal(grouped.createdVia, 'spawn');
+    await client.send('sessions.patch', { key: SEEDED_SUBAGENTS.done, category: null });
+    const ungrouped = (await client.send('sessions.list', {})).sessions.find((r) => r.key === SEEDED_SUBAGENTS.done);
+    assert.ok(ungrouped.category == null);
+    assert.equal(ungrouped.spawnedBy, before.spawnedBy);
+    assert.equal(ungrouped.parentSessionKey, before.parentSessionKey);
+
     // Seeded transcripts carry the spawn receipts and the failed tool.
     const parentHistory = await client.send('chat.history', { sessionKey: SUBAGENT_PARENT_KEY, limit: 50 });
     const receipts = parentHistory.messages.filter((m) => m.toolName === 'sessions_spawn').map((m) => JSON.parse(m.content[0].text));

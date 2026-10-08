@@ -358,7 +358,7 @@ struct SidebarList: UIViewRepresentable {
 
         func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
             guard let drop = self.drop(coordinator.session, coordinator.destinationIndexPath) else { return }
-            SidebarController.perform(drop, gateway: self.gateway)
+            SidebarController.perform(drop, gateway: self.gateway, expandThreads: self.actions.expandThreads)
         }
 
         private func drop(_ session: UIDropSession, _ path: IndexPath?) -> SidebarDrop? {
@@ -377,7 +377,7 @@ struct SidebarList: UIViewRepresentable {
                 if case .group = group.header.section.kind { onGroup = true }
                 return SidebarController.groupReorder(name, names: model.groupNamesInOrder, groupsBefore: groupsBefore, onGroup: onGroup)
             case let .chat(key):
-                guard let row = self.gateway.sessions[key], !row.isSubagent, let dataSource = self.dataSource else { return nil }
+                guard let row = self.gateway.sessions[key], let dataSource = self.dataSource else { return nil }
                 let visible = dataSource.snapshot(for: group.header.id).visibleItems
                 let target = visible[safe: path.item]
                 // The group a chat dropped here goes into: the one holding the row it lands in front
@@ -487,12 +487,12 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .body)
         content.imageProperties.reservedLayoutSize = CGSize(width: 26, height: 0)
 
-        let unread = row.isUnread && !row.isSubagent
+        let unread = row.isUnread && !row.isNestedHelper
         let font = UIFont.preferredFont(forTextStyle: .body)
         let titleFont = unread
             ? UIFont(descriptor: font.fontDescriptor.withSymbolicTraits(.traitBold) ?? font.fontDescriptor, size: 0)
             : font
-        let titleColor: UIColor = row.isSubagent || row.isArchived ? .secondaryLabel : .label
+        let titleColor: UIColor = row.isNestedHelper || row.isArchived ? .secondaryLabel : .label
         let title = NSMutableAttributedString(string: row.title, attributes: [.font: titleFont, .foregroundColor: titleColor])
         if row.isPinned, !entry.isThread,
            let pin = UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(textStyle: .caption2))?

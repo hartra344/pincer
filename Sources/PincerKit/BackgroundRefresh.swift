@@ -103,7 +103,7 @@ public struct BackgroundRefreshFilter: Equatable, Sendable {
     }
 
     public func notifies(_ row: SessionRow) -> Bool {
-        guard !row.isSubagent, !row.isArchived else { return false }
+        guard !row.isNestedHelper, !row.isArchived else { return false }
         return !((row.isAutomation && !self.showAutomations) || (row.isSlashCommands && !self.showSlashCommands))
     }
 }

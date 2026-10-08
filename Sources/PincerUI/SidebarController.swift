@@ -109,7 +109,7 @@ final class SidebarController {
             guard case let .group(name) = header.section.kind else { return nil }
             return .group(name)
         }
-        guard let entry = self.entries[id], !entry.isThread, !entry.row.isSubagent else { return nil }
+        guard let entry = self.entries[id] else { return nil }
         return .chat(entry.row.key)
     }
 
@@ -156,14 +156,19 @@ final class SidebarController {
         return .group(name, before: names.indices.contains(target) ? names[target] : nil)
     }
 
-    static func perform(_ drop: SidebarDrop, gateway: GatewayStore) {
+    static func perform(_ drop: SidebarDrop, gateway: GatewayStore, expandThreads: @escaping (String) -> Void = { _ in }) {
         switch drop {
         case let .group(name, before):
             Task { await gateway.moveGroup(name, before: before) }
         case let .chatInGroup(key, group, before):
             Task { await gateway.moveChat(key, toGroup: group, before: before) }
         case let .chatOnSection(key, section):
-            Task { await gateway.moveToGroup(key, droppedOn: section) }
+            Task {
+                guard await gateway.moveToGroup(key, droppedOn: section),
+                      let row = gateway.sessions[key], row.category == nil,
+                      let parent = gateway.nestingParent(of: key) else { return }
+                expandThreads(parent.key)
+            }
         }
     }
 }
