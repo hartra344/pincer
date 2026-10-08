@@ -7303,6 +7303,16 @@
         }
       }
     },
+    "Help & Support": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help & Support"
+          }
+        }
+      }
+    },
     "Help me choose": {
       "localizations": {
         "en": {
@@ -11599,6 +11609,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Print"
+          }
+        }
+      }
+    },
+    "Privacy & Support": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy & Support"
+          }
+        }
+      }
+    },
+    "Privacy Policy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
           }
         }
       }

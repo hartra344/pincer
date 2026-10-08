@@ -33,6 +33,7 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 generate() { rm -rf Pincer.xcodeproj/xcshareddata; xcodegen generate --quiet; }
 trap generate EXIT
 PINCER_APP_STORE_SIGNING=YES generate
+python3 scripts/check_release_privacy.py --project Pincer.xcodeproj
 
 # The App Store build must ask for the production APNs environment (iOS is the only platform with push).
 if [ "$PLATFORM" = ios ]; then
@@ -52,6 +53,8 @@ xcodebuild archive \
   -archivePath "$ARCHIVE" \
   CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
+python3 scripts/check_release_privacy.py --app "$ARCHIVE/Products/Applications/Pincer.app" --platform "$PLATFORM"
 
 DESTINATION_MODE=upload
 [ "${UPLOAD:-1}" = 0 ] && DESTINATION_MODE=export

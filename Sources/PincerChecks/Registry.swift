@@ -75,6 +75,7 @@ enum Suites {
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
+            Section("Release privacy resources") { await runReleasePrivacyChecks() },
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
             Section("Voice settings value bounds") { runVoiceSettingsValueBoundsChecks() },
             Section("Read Aloud many-chat delivery") { await runReadAloudManyChatsChecks() },
