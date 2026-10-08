@@ -130,7 +130,10 @@ fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
-lane unit-tests complete_swift_test swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+# Swift Testing otherwise starts every test at once; on a few-core runner the timeout-bounded
+# tests then starve each other (#920). Override with PINCER_TEST_WIDTH.
+lane unit-tests complete_swift_test swift test --skip-build --parallel \
+    --experimental-maximum-parallelization-width "${PINCER_TEST_WIDTH:-4}" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
 lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
 lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras

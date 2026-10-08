@@ -180,7 +180,7 @@ CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar o
    - Restores the cached `.build` folder
    - `swift build --build-tests`
    - `scripts/run-checks.sh`, which starts five mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
-     - `swift test --skip-build --parallel`
+     - `swift test --skip-build --parallel`, running at most 4 tests at once (`PINCER_TEST_WIDTH` changes this), so tests with timeouts don't starve each other on a small runner
      - `PincerChecks`
      - `PincerChecks --demo-core` and `PincerChecks --demo-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
      - `PincerChecks --live-core` and `PincerChecks --live-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`), each against its own mock
