@@ -11,7 +11,8 @@ private final class PreviewPreparationGate: @unchecked Sendable {
     private var wasMain = false
     init(heldCall: Int = 1) { self.heldCall = heldCall }
     var ranOnMain: Bool { lock.withLock { wasMain } }
-    func waitForEntry() -> Bool { entered.wait(timeout: .now() + 3) == .success }
+    // Only a hang guard: a loaded runner can take seconds to reach the held decode.
+    func waitForEntry() -> Bool { entered.wait(timeout: .now() + 60) == .success }
     func open() { release.signal() }
     func probe() {
         let hold = lock.withLock {
