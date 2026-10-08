@@ -36,7 +36,8 @@ struct PremeasureAdmissionTests {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
-        let driver = TranscriptPremeasureDriver()
+        // Its own permit: the shared one refuses at once while a parallel test holds it.
+        let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
         let row = TranscriptRow.entry(.user(ChatItem(id: "admission-control", role: .user,
             blocks: [.text("First actual paragraph"), .text("Second actual paragraph")])) )
         driver.currentRow = { id in id == row.id ? row : nil }
