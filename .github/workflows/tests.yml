@@ -220,12 +220,11 @@ jobs:
         run: |
           mkdir -p "$CHECKS_LOG_DIR"
           F="-Xswiftc -enable-incremental-file-hashing"
-          for S in APIKeyVisibilityTests TranscriptFindTrimTests DictationTargetHostedTests SettingsSpeechHostedTests ComposerTabNavigationTests ComposerSynchronousSizingAppKitTests GroupedMessageKeyboardTests ChatWindowCommandSceneTests NativeChatWindowNotificationVisibilityTests TranscriptPremeasureHostedTests ReadAloudRateHostedTests ReadAloudInsetTests ChatSwitchReuseHostedTests AttachmentThumbnailDecodeTests SettingsHeightTests SidebarHeaderKeyboardTests TipsPresentationTests SettingsNoticeBannerTests ScrollToBottomTests; do
-            perl -e 'alarm 60; exec @ARGV' swift test --skip-build $F --filter "$S" > "$CHECKS_LOG_DIR/s-$S.log" 2>&1 && R=0 || R=$?
-            echo "$S exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/s-$S.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
-          done
-          perl -e 'alarm 240; exec @ARGV' swift test --skip-build --parallel $F --filter PincerUITests > "$CHECKS_LOG_DIR/ui-target.log" 2>&1 && R=0 || R=$?
-          echo "ui-target exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/ui-target.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
+          ( while true; do date +%T; vm_stat | grep -E "Pages (free|active|wired|occupied by compressor)|Swapouts"; ps -Ao pid,pcpu,rss,comm -r | head -6; sleep 20; done ) > "$CHECKS_LOG_DIR/mon.log" 2>&1 &
+          perl -e 'alarm 300; exec @ARGV' swift test --skip-build --parallel $F --filter PincerKitTests > "$CHECKS_LOG_DIR/kit-target.log" 2>&1 && R=0 || R=$?
+          echo "kit-target exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/kit-target.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
+          perl -e 'alarm 300; exec @ARGV' swift test --skip-build --no-parallel $F > "$CHECKS_LOG_DIR/serial.log" 2>&1 && R=0 || R=$?
+          echo "serial exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/serial.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
           exit 1
           scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
