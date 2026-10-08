@@ -21,7 +21,7 @@ Updated October 8, 2026. “Implemented” means changed in this branch; it does
 | Test reliability PR #938 | External work in progress | Recheck merge and complete CI on release candidate. |
 | TestFlight crash triage | Needed | Build 48.1 crash reports require symbolication and candidate retest. |
 | Listing copy | Description/keywords saved on both | `APP_STORE_SUBMISSION.md`; remaining listing fields still to populate. |
-| Screenshots | iPad uploaded; iPhone/Mac needed | Three native demo iPad captures at 2064×2752 uploaded and accepted (3 of 10). Source files: `Apps/AppStore/Screenshots/iPad/`. iPhone/Mac uploads and final-candidate comparison remain. |
+| Screenshots | Done in App Store Connect | 2 iPhone (1320×2868), 3 iPad (2064×2752), 3 Mac (2560×1600). Required iPhone medium slot uses Existing Assets from large slot. Source images and hashes: `Apps/AppStore/Screenshots/manifest.json`. Final-candidate UI comparison remains part of release QA. |
 | Review contact | Done in App Store Connect | Owner-provided contact saved on both records; private details excluded from repository. |
 | Territories | Done in App Store Connect | Both listings show all 175 countries available; Mac verified after restoring sign-in on October 8. |
 | Manual release | Done in App Store Connect | Manual release after approval saved on both listings. |
@@ -84,7 +84,7 @@ The support URL should give users a working contact method and help for setup/tr
 
 October 8 inventory: 29 full-size iPhone website captures at 1206×2622, plus cropped variants; no iPad screenshots found. Existing Mac images have varied website dimensions and need release-specific captures. Target five demo scenes per platform: conversation, rich content/tool results, agents/sidebar, search/bookmarks and approvals. Capture a 13-inch iPad at 2064×2752 (or landscape 2752×2064); verify each final file and upload before marking complete. Screenshots must reflect the final candidate. No reviewer credentials or live gateway data are needed.
 
-Status: confirmed zero screenshots in all inspected device families. Capture the final UI with realistic synthetic/demo data, correct privacy-safe content and Apple’s current accepted dimensions. iPad screenshots are required because the app supports iPad. Use App Store Connect Media Manager and the current screenshot specification to resolve required slots; capture Mac images separately. App-preview videos are optional. Do not use live private conversations or credentials.
+Current status: required screenshot coverage uploaded and verified October 8. The original audit found zero screenshots. Captures now use current branch UI with synthetic/demo data and accepted dimensions. iPad screenshots are required because the app supports iPad. Use App Store Connect Media Manager and the current screenshot specification to resolve required slots; capture Mac images separately. App-preview videos are optional. Do not use live private conversations or credentials.
 
 ### 10. Provide a complete App Review access package
 
@@ -170,3 +170,7 @@ All six PR #947 checks passed on commit 66d18ea. PR #938 remains open; final mer
 Screenshot capture evidence: isolated simulator `Pincer Release Screenshots iPad`, iPad Pro 13-inch (M5), iPadOS 26.5; fresh app install from branch unsigned simulator build. Entered Try the Demo without gateway or credentials; declined optional notifications. Native Device Hub exports preserve 2064×2752 pixels. Captured diagrams, planning and approvals; App Store Connect accepted all three. Final TestFlight comparison and physical iPad QA remain.
 
 Existing iPhone screenshot review: sampled transcript, approval and agent settings images still show older emoji avatars and older presentation. Recapture current UI instead of uploading those website images unchanged.
+
+## Completed screenshot upload — October 8
+
+App Store Connect accepted 2 iPhone, 3 iPad and 3 Mac screenshots for English (U.S.). Fresh page loads show the saved images. The required iPhone medium-display slot explicitly shows “Using Existing Assets” from the populated large-display slot; no manual resize or crop was used. iPad uses the required 13-inch slot. Mac images are 2560×1600 native window captures. All images came from isolated demo environments, and hashes/dimensions are recorded in `Apps/AppStore/Screenshots/manifest.json`. No app-preview video or Vision Pro screenshots are needed for the chosen launch scope. This completes screenshot setup, not final build QA or submission.

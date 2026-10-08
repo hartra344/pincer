@@ -80,7 +80,8 @@ The Mac app is sandboxed with outgoing network and user-selected file access.
 
 - Verify these steps against the final TestFlight builds on iPhone, iPad and Mac.
 - Deploy and verify the privacy/support URLs before entering them in the listings.
-- Add final screenshots, copyright, category, age-rating and content-rights answers.
+- Screenshots uploaded: 2 iPhone, 3 iPad, 3 Mac. Compare against final release candidate.
+- Complete copyright, category, age-rating and content-rights answers.
 - Free pricing, worldwide availability and manual release are saved for both listings.
 - Private reviewer contact is saved in App Store Connect for both apps.
 - Attach the matching processed version 1.0 builds; do not submit version 0.1.0.

@@ -1,0 +1,61 @@
+{
+  "captured": "2026-10-08",
+  "source_commit": "435da99a",
+  "data": "Built-in demo only; isolated capture app/simulators; no live gateway.",
+  "upload_status": "Uploaded to App Store Connect version 1.0 English (U.S.).",
+  "coverage": {
+    "iPhone": "2 large Dynamic Island images; required medium slot uses Existing Assets.",
+    "iPad": "3 images in required 13-inch slot.",
+    "Mac": "3 native window captures in Mac slot."
+  },
+  "files": [
+    {
+      "file": "Mac/01-diagrams.jpg",
+      "width": 2560,
+      "height": 1600,
+      "sha256": "cfc116012a084325bf46d36ad1ace8e90869b233f2c3fe7e71a5e2fd80d6c51b"
+    },
+    {
+      "file": "Mac/02-planning.jpg",
+      "width": 2560,
+      "height": 1600,
+      "sha256": "b4cfee3fbe06d5b7b74edb46ef8b1f4c0fb0bae56118c16360e944a7c087b660"
+    },
+    {
+      "file": "Mac/03-approvals.jpg",
+      "width": 2560,
+      "height": 1600,
+      "sha256": "60da82faa9a49e2032ec78d61be45cc35f391c20474dcf635fb78a8ec8d9eafd"
+    },
+    {
+      "file": "iPad/01-diagrams.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "d5399c19c73f60f8e3863248b6ec11ef59460b1dae575457d6ef617768627175"
+    },
+    {
+      "file": "iPad/02-planning.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "7de4077461f319e590615d3228d516c6b56dbd5107640ebd353195dbaf8378c5"
+    },
+    {
+      "file": "iPad/03-approvals.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "eeb25cab78bd037b7249157686479c5783417dbe14f24deeb54047726db8c258"
+    },
+    {
+      "file": "iPhone/01-chats.png",
+      "width": 1320,
+      "height": 2868,
+      "sha256": "855752dcb0b89cd4137ae17d2a92a12069a6df7f7afe11fe31291d5b5d01c07c"
+    },
+    {
+      "file": "iPhone/02-diagrams.png",
+      "width": 1320,
+      "height": 2868,
+      "sha256": "e1d11eb0f4f842d417c58cfb6abf3bdd0088c0f89b413d23ee2093e7d7d61fda"
+    }
+  ]
+}
