@@ -453,7 +453,7 @@ struct SidebarList: NSViewRepresentable {
             if let name = pasteboard.string(forType: Self.groupDragType) {
                 return self.groupDrop(name, item: item, index: index)
             }
-            guard let key = pasteboard.string(forType: Self.dragType), let row = self.gateway.sessions[key], !row.isSubagent
+            guard let key = pasteboard.string(forType: Self.dragType), let row = self.gateway.sessions[key]
             else { return nil }
             // Between sections: the end of the section above.
             if item == nil {
@@ -518,7 +518,8 @@ struct SidebarList: NSViewRepresentable {
                 let before = SidebarModel.chat(atOrAfter: childIndex, in: entries, excluding: key)
                 SidebarController.perform(.chatInGroup(key, group: group, before: before), gateway: self.gateway)
             case let .chatOnSection(key, _, section):
-                SidebarController.perform(.chatOnSection(key, section), gateway: self.gateway)
+                SidebarController.perform(.chatOnSection(key, section), gateway: self.gateway,
+                                          expandThreads: self.actions.expandThreads)
             case nil:
                 return false
             }
@@ -719,8 +720,8 @@ final class SidebarChatCell: NSTableCellView {
             ?? NSImage(systemSymbolName: "number", accessibilityDescription: nil)
         self.icon.contentTintColor = ChannelRowStyle.tint(for: entry)
         self.title.stringValue = row.title
-        self.title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: row.isUnread && !row.isSubagent ? .semibold : .regular)
-        self.title.textColor = row.isSubagent || row.isArchived ? .secondaryLabelColor : .labelColor
+        self.title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: row.isUnread && !row.isNestedHelper ? .semibold : .regular)
+        self.title.textColor = row.isNestedHelper || row.isArchived ? .secondaryLabelColor : .labelColor
         self.pin.isHidden = !(row.isPinned && !entry.isThread)
         self.preview.stringValue = entry.preview ?? ""
         self.preview.isHidden = entry.preview == nil
@@ -744,14 +745,14 @@ final class SidebarChatCell: NSTableCellView {
         } else {
             self.workingAvatar.stop()
         }
-        self.unreadDot.isHidden = entry.avatar != nil || !(row.isUnread && !row.isSubagent)
+        self.unreadDot.isHidden = entry.avatar != nil || !(row.isUnread && !row.isNestedHelper)
         self.splitPaneIndicator.isHidden = !entry.isShownInSplitPane
         let activity = entry.avatar != nil || !self.unreadDot.isHidden ? nil : row.activityDate
         self.date.isHidden = activity == nil
         self.date.stringValue = activity.map(ChannelRowStyle.relativeDate) ?? ""
 
         self.setAccessibilityLabel(AccessibilityText.sessionRow(
-            title: row.title, isUnread: row.isUnread && !row.isSubagent, isPinned: !self.pin.isHidden,
+            title: row.title, isUnread: row.isUnread && !row.isNestedHelper, isPinned: !self.pin.isHidden,
             isRunning: working, workingLabel: entry.working?.label, preview: entry.preview))
         self.setAccessibilityHelp(ChannelRowStyle.accessibilityHint(for: entry))
     }

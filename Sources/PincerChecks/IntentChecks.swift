@@ -174,8 +174,10 @@ func runIntentChecks() async {
         SessionRow(json(#"{"key":"c","unread":false}"#))!,
         SessionRow(json(#"{"key":"d","unread":true,"archived":true}"#))!,
         SessionRow(json(#"{"key":"agent:main:subagent:e","unread":true,"spawnedBy":"agent:main:main"}"#))!,
+        SessionRow(json(#"{"key":"agent:main:subagent:g","unread":true,"spawnedBy":"agent:main:main","category":"Work","lastActivityAt":3}"#))!,
     ]
-    check(IntentService.unreadRows(rows).map(\.key) == ["b", "a"], "unread: not archived, not subagents, newest first")
+    check(IntentService.unreadRows(rows).map(\.key) == ["agent:main:subagent:g", "b", "a"],
+          "unread: not archived, not nested helpers (grouped sub-sessions count), newest first")
 
     // Entities from ids, offline
     let offline = service([home, work])

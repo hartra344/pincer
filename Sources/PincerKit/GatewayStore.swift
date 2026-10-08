@@ -1130,7 +1130,7 @@ public final class GatewayStore: Identifiable {
             let previous = self.sessions[row.key]
             self.setSession(row.keepingPreview(of: previous), for: row.key)
             self.recordReconciledRow(row.key)
-            if self.bootstrapped, let previous, !row.isSubagent,
+            if self.bootstrapped, let previous, !row.isNestedHelper,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
             {
@@ -1162,7 +1162,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private func notifyReply(sessionKey: String, runId: String?, snapshot: JSONValue?) {
-        guard let row = self.sessions[sessionKey], !row.isSubagent else { return }
+        guard let row = self.sessions[sessionKey], !row.isNestedHelper else { return }
         let text = snapshot.flatMap { ChatItem($0, fallbackIndex: 0) }?.plainText
         self.notifier?.notifyReply(row: row, text: text ?? row.preview, dedupe: runId, gateway: self)
     }

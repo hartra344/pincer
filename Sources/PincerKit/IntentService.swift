@@ -851,7 +851,7 @@ public final class IntentService {
         _ rows: [SessionRow], filter: BackgroundRefreshFilter = .init(), selectedSessionKey: String? = nil) -> [SessionRow]
     {
         rows.filter {
-            $0.isUnread && !$0.isArchived && !$0.isSubagent
+            $0.isUnread && !$0.isArchived && !$0.isNestedHelper
                 && (filter.notifies($0) || $0.key == selectedSessionKey)
         }
             .sorted { $0.activityMs != $1.activityMs ? $0.activityMs > $1.activityMs : $0.key < $1.key }

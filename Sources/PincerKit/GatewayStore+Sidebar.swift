@@ -117,7 +117,7 @@ extension GatewayStore {
 
     /// Subagent runs are the agent's own work; their parent chat carries the result.
     public var totalUnread: Int {
-        self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent && !self.isHiddenInSidebar($0) }.count
+        self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isNestedHelper && !self.isHiddenInSidebar($0) }.count
     }
 
     /// Automation and slash-command sessions stay out of the sidebar unless opted in; the open chat always shows.
@@ -206,7 +206,7 @@ extension GatewayStore {
         var threads: [String: [SessionRow]] = [:]
         var topLevel: [SessionRow] = []
         for row in rows {
-            if query.isEmpty,
+            if query.isEmpty, row.category == nil,
                let parent = (parentCandidatesByKey[row.key] ?? self.sidebarParentCandidates(for: row)).first(where: keys.contains) {
                 threads[parent, default: []].append(row)
             } else {
@@ -262,7 +262,7 @@ extension GatewayStore {
     /// The `category` value that dropping chat `key` onto `section` should set (`.null` removes
     /// it from its group), or `nil` when that drop wouldn't move the chat anywhere.
     public func groupDropValue(for key: String, onto section: SidebarSection) -> JSONValue? {
-        guard let row = self.sessions[key], !row.isSubagent else { return nil }
+        guard let row = self.sessions[key] else { return nil }
         switch section.kind {
         case let .group(name):
             return row.category == name ? nil : .string(name)
@@ -297,6 +297,26 @@ extension GatewayStore {
         }
         await self.patch(key, ["category": value])
         return true
+    }
+
+    /// The row a grouped sub-session or thread nests under when ungrouped; `nil` for standalone chats.
+    public func nestingParent(of key: String) -> SessionRow? {
+        guard let row = self.sessions[key] else { return nil }
+        for parent in row.parentCandidates {
+            if let found = self.sessions[parent] { return found }
+        }
+        return nil
+    }
+
+    /// Takes a grouped sub-session out of its group so it nests under its parent again.
+    public func moveBackUnderParent(_ key: String) async {
+        guard let row = self.sessions[key] else { return }
+        if let old = row.category { self.registerGroups([old]) }
+        if self.chatPositions[key] != nil {
+            self.chatPositions[key] = nil
+            Task { await self.push(self.syncedMap(Self.chatOrderPref), key, nil) }
+        }
+        await self.patch(key, ["category": .null])
     }
 
     private static func ungroupedHome(of row: SessionRow) -> SidebarSection.Kind {
@@ -643,7 +663,7 @@ extension GatewayStore {
 
     /// Chats of a group in the order the sidebar shows them.
     public func groupOrder(_ name: String) -> [String] {
-        let rows = self.sortedRows.filter { $0.category == name && !$0.isSubagent }
+        let rows = self.sortedRows.filter { $0.category == name }
         let channels = rows.map { SidebarChannel(row: $0, threads: []) }
         return self.arranged(self.organization == .servers ? Self.channelOrder(channels) : channels).map(\.row.key)
     }
@@ -651,7 +671,7 @@ extension GatewayStore {
     /// Puts a chat in a group before another of its chats (`nil` puts it last), moving it
     /// there first if it's in another group.
     public func moveChat(_ key: String, toGroup name: String, before: String?) async {
-        guard let row = self.sessions[key], !row.isSubagent, key != before else { return }
+        guard let row = self.sessions[key], key != before else { return }
         var order = self.groupOrder(name).filter { $0 != key }
         let index = before.flatMap { order.firstIndex(of: $0) } ?? order.count
         order.insert(key, at: index)

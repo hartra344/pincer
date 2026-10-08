@@ -285,7 +285,7 @@ public struct MenuBarInbox: Equatable, Sendable {
 
         var chats: [Chat] = []
         for (index, input) in connected.enumerated() {
-            for row in input.sessions where !row.isSubagent && !row.isArchived {
+            for row in input.sessions where !row.isNestedHelper && !row.isArchived {
                 chats.append(Chat(input: input, row: row, gatewayIndex: index))
             }
         }

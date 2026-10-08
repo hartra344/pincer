@@ -161,6 +161,9 @@ struct ReplyUnreadTests {
                 "another client read it after the reply")
         #expect(!GatewayStore.shouldMarkReplyUnread(row: row(["unread": true]), replyAt: replyAt), "the Gateway marked it already")
         #expect(!GatewayStore.shouldMarkReplyUnread(row: row(["key": "agent:main:subagent:x", "unread": false]), replyAt: replyAt))
+        #expect(GatewayStore.shouldMarkReplyUnread(
+            row: row(["key": "agent:main:subagent:x", "unread": false, "category": "Work"]), replyAt: replyAt),
+            "a sub-session moved into a group is a regular chat (#948)")
     }
 
     @Test func currentGatewaysNeedNoPatch() async {

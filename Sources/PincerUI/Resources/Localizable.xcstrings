@@ -8993,6 +8993,16 @@
         }
       }
     },
+    "Move Back Under “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Back Under “%@”"
+          }
+        }
+      }
+    },
     "Move Down": {
       "localizations": {
         "en": {
