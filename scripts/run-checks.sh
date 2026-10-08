@@ -103,14 +103,22 @@ lane() {
 
 # command… → runs `swift test`, failing an exit 0 unless every Swift Testing run it started printed its
 # final summary: something that stops the main run loop can end the runner mid-suite (#920).
+# A test helper that dies of SIGABRT gets one rerun: the Swift task allocator intermittently
+# corrupts its heap on CI (#952), with no test to pin it on.
 complete_swift_test() {
-    local out code started finished
+    local out code started finished aborted attempts=${SWIFT_TEST_ATTEMPTS:-2}
     out=$(mktemp)
     "$@" 2>&1 | tee "$out"
     code=${PIPESTATUS[0]}
     started=$(grep -c 'Test run started\.' "$out")
     finished=$(grep -cE 'Test run with [0-9]+ tests? .*(passed|failed) after' "$out")
+    aborted=$(grep -c 'unexpected signal code 6' "$out")
     rm -f "$out"
+    if [ "$code" -ne 0 ] && [ "$aborted" -gt 0 ] && [ "$attempts" -gt 1 ]; then
+        echo "⚠ the swift test helper aborted (signal 6, #952); running the tests once more"
+        SWIFT_TEST_ATTEMPTS=$((attempts - 1)) complete_swift_test "$@"
+        return
+    fi
     if [ "$code" -eq 0 ] && { [ "$started" -eq 0 ] || [ "$finished" -lt "$started" ]; }; then
         echo "✗ swift test exited 0 but only $finished of $started test runs finished (#920)"
         return 1
@@ -124,6 +132,18 @@ if complete_swift_test printf '◇ Test run started.\n' > /dev/null ||
     echo "complete_swift_test is broken"
     exit 1
 fi
+# …and rerun a helper abort once, but not twice.
+abort_once() {
+    if [ -e "$1" ]; then printf '◇ Test run started.\n✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\n'; return 0; fi
+    : > "$1"; printf "◇ Test run started.\nerror: Process 'helper' exited with unexpected signal code 6\n"; return 1
+}
+abort_marker=$(mktemp -u)
+if ! complete_swift_test abort_once "$abort_marker" > /dev/null ||
+    complete_swift_test sh -c "printf 'unexpected signal code 6\n'; exit 1" > /dev/null; then
+    echo "complete_swift_test's abort rerun is broken"
+    exit 1
+fi
+rm -f "$abort_marker"
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
