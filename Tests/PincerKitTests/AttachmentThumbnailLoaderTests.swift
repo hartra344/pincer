@@ -4,7 +4,7 @@ import ImageIO
 import Testing
 @testable import PincerKit
 
-@Suite("Attachment thumbnail loader")
+@Suite("Attachment thumbnail loader", .parksCooperativeThread)
 struct AttachmentThumbnailLoaderTests {
     @Test func targetSizeIsFiniteAndCapped() {
         #expect(AttachmentThumbnailLoader.targetPixelSize(points: 64, displayScale: 2) == 128)

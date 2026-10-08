@@ -3,7 +3,7 @@ import Testing
 @testable import PincerKit
 
 @MainActor
-@Suite("Live reply preparation queue", .serialized)
+@Suite("Live reply preparation queue", .serialized, .parksCooperativeThread)
 struct LiveReplyPreparationQueueTests {
     @Test func queuedTextIsNormalizedOffMainAndDrainsInArrivalOrder() async {
         let owner = UUID()

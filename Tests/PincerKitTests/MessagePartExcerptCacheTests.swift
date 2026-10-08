@@ -4,7 +4,7 @@ import Testing
 @testable import PincerKit
 
 @MainActor
-@Suite("Message part accessibility excerpts")
+@Suite("Message part accessibility excerpts", .parksCooperativeThread)
 struct MessagePartExcerptCacheTests {
     @Test func sourceRetainsOnlyTheBoundedPrefixAndDistinguishesChangedOpenings() {
         let prefix = "ALPHA opening " + String(repeating: "middle ", count: 40)

@@ -27,7 +27,7 @@ private final class PreviewPreparationGate: @unchecked Sendable {
 }
 
 @MainActor
-@Suite("Queued image preview")
+@Suite("Queued image preview", .parksCooperativeThread)
 struct QueuedImagePreviewTests {
     let scratch = ScratchDefaults()
     let key = "agent:main:main"

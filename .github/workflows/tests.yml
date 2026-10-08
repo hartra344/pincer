@@ -176,7 +176,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
-    timeout-minutes: 50
+    timeout-minutes: 30
     env:
       PINCER_KEYCHAIN: memory
     steps:
@@ -214,17 +214,10 @@ jobs:
       # Unit tests and every check run side by side, each live run against its own mock.
       # Below the job's limit, so a hung lane still leaves its logs for the upload step.
       - name: Unit tests and checks
-        timeout-minutes: 25
+        timeout-minutes: 22
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
-        run: |
-          mkdir -p "$CHECKS_LOG_DIR"
-          F="-Xswiftc -enable-incremental-file-hashing"
-          ( sleep 120; screencapture -x "$CHECKS_LOG_DIR/screen.png" || true; for p in $(pgrep -f 'swiftpm-testing-helper|PincerPackageTests'); do sample "$p" 3 -file "$CHECKS_LOG_DIR/sample-$p.txt" || true; lldb -p "$p" --batch -o 'thread backtrace all' -o 'expr -l objc -O -- [[NSApplication sharedApplication] modalWindow]' -o 'expr -l objc -O -- [[NSApplication sharedApplication] windows]' > "$CHECKS_LOG_DIR/lldb-$p.txt" 2>&1 || true; done ) &
-          perl -e 'alarm 200; exec @ARGV' swift test --skip-build --parallel $F --filter PincerKitTests > "$CHECKS_LOG_DIR/kit-target.log" 2>&1 && R=0 || R=$?
-          echo "kit-target exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/kit-target.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
-          exit 1
-          scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
+        run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
