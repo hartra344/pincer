@@ -46,6 +46,9 @@ public struct PincerScene: Scene {
                     QuickCaptureController.shared.showMainWindow()
                 }
                 .shortcut(.addGateway)
+                if self.app.demoGateway != nil {
+                    Button(L("Leave Demo")) { self.app.leaveDemo() }
+                }
             }
             CommandGroup(after: .sidebar) {
                 Button(L("Next Unread Chat")) { self.app.selectNextUnread() }
