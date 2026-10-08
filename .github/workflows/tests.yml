@@ -226,23 +226,6 @@ jobs:
           ls -la ~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports 2>/dev/null || true
           for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips /Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -3); do echo "=== $f"; head -c 60000 "$f"; done
 
-      # TEMP: which shard of the unit tests aborts the test helper (#952)?
-      - name: TEMP crash shards
-        if: always()
-        timeout-minutes: 25
-        env:
-          PINCER_KEYCHAIN: memory
-          PINCER_DEV_NAMESPACE: shard
-        run: |
-          for round in 1 2; do
-            for shard in 'PincerKitTests\.[A-Ca-c]' 'PincerKitTests\.[D-Gd-g]' 'PincerKitTests\.[H-Mh-m]' 'PincerKitTests\.[N-Rn-r]' 'PincerKitTests\.[S-Zs-z]' 'PincerUITests\.[A-Ma-m]' 'PincerUITests\.[N-Zn-z]'; do
-              start=$SECONDS
-              swift test --skip-build --parallel --experimental-maximum-parallelization-width 4 -Xswiftc -enable-incremental-file-hashing --filter "^$shard" > /tmp/shard.log 2>&1 && code=0 || code=$?
-              aborted=$(grep -c 'unexpected signal code 6' /tmp/shard.log || true)
-              echo "SHARD round=$round $shard code=$code aborted=$aborted secs=$((SECONDS-start)) $(grep -E 'Test run with' /tmp/shard.log | tr '\n' ' ' || true)"
-            done
-          done
-
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
       - name: Toolbar stability on chat switch
