@@ -314,8 +314,10 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.observeQuoteReadiness()
         self.observeAck()
         let center = NotificationCenter.default
-        self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { _ = self?.settingsChanged() }
+        // Not `queue: .main`: that makes every defaults write on another thread wait for main.
+        self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            let changed: @Sendable () -> Void = { MainActor.assumeIsolated { _ = self?.settingsChanged() } }
+            if Thread.isMainThread { changed() } else { DispatchQueue.main.async(execute: changed) }
         })
         #if os(macOS)
         self.accessibilityObservation = NSWorkspace.shared.notificationCenter.addObserver(
