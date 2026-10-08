@@ -115,6 +115,7 @@ complete_swift_test() {
         echo "✗ swift test exited 0 but only $finished of $started test runs finished (#920)"
         return 1
     fi
+    [ "$code" -eq 0 ] || [ "$finished" -ge "$started" ] || echo "✗ swift test exited $code before its test run finished"
     return "$code"
 }
 # The guard must reject a run that stops after its start line and accept a finished one.
