@@ -309,7 +309,7 @@ public final class GatewayStore: Identifiable {
     /// badge never creates it from a view body (#119). The demo may manage without `operator.admin`.
     @ObservationIgnored public let devices: DeviceManagementModel
 
-    /// The first-run setup wizard (Set Up Gateway…); offered after the first successful connection.
+    /// The first-run setup wizard (Setup Assistant…); offered after the first successful connection.
     @ObservationIgnored public private(set) lazy var setup: SetupWizardModel = {
         let connection = self.connection
         let environment = SetupWizardModel.Environment(
