@@ -4823,6 +4823,16 @@
         }
       }
     },
+    "Couldn’t load “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load “%@”"
+          }
+        }
+      }
+    },
     "Couldn’t prepare the reply preview. Try replying again.": {
       "localizations": {
         "en": {
@@ -7289,6 +7299,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Help"
+          }
+        }
+      }
+    },
+    "Help & Support": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help & Support"
           }
         }
       }
@@ -11579,6 +11599,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Print"
+          }
+        }
+      }
+    },
+    "Privacy & Support": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy & Support"
+          }
+        }
+      }
+    },
+    "Privacy Policy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy Policy"
           }
         }
       }
