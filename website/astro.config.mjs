@@ -96,6 +96,8 @@ export default defineConfig({
 					label: 'Reference',
 					items: [
 						{ slug: 'reference/security' },
+						{ slug: 'privacy' },
+						{ slug: 'support' },
 						{ slug: 'reference/keyboard-shortcuts' },
 						{ slug: 'reference/synced-preferences' },
 						{ slug: 'reference/troubleshooting' },

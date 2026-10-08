@@ -415,6 +415,7 @@ private struct FirstRunWelcome: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityHidden(true)
+                PrivacySupportLinks()
             }
             .controlSize(.large)
             .frame(maxWidth: 360, alignment: .leading)

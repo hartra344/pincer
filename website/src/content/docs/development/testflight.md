@@ -16,6 +16,11 @@ Only the selected platforms start a runner.
 
 Each build number is `<run number>.<attempt>`.
 
+The upload workflow first requires a completed, successful **Tests** push run on
+`main` for the exact commit being uploaded. Pending, failed, cancelled, skipped,
+PR-only or older-commit checks do not authorize an upload. Wait for the main
+checks to finish and rerun TestFlight if this gate fails.
+
 ## Signing
 
 Signing uses manual App Store profiles through `project.appstore.yml`, which is only included when `PINCER_APP_STORE_SIGNING=YES`. `scripts/testflight.sh ios|macos` does the work and also runs locally. Use `UPLOAD=0` to export without uploading.
@@ -46,3 +51,21 @@ open the app and tap "Try the Demo" on the first screen (right under "Get Starte
 straight to the chat list. The demo runs a simulated gateway entirely on the device, with sample
 agents, chats, approvals and settings. Nothing leaves the device.
 ```
+
+## Privacy manifests and release checks
+
+`PrivacyInfo.xcprivacy` is copied into each app and extension. PincerKit and
+PincerUI also ship their own SwiftPM resource manifests. The declarations cover
+app preferences, shared App Group preferences, elapsed-time measurements, and
+metadata for files in app-owned containers. They do not authorize fingerprinting.
+
+Before archiving, `scripts/testflight.sh` validates the generated project's
+Copy Bundle Resources phases. After archiving, it inspects the actual app, Share
+extension, iOS notification extension and package resource bundles. Missing or
+changed declarations fail the release before export/upload. These checks do not
+replace Apple's archive privacy report or App Store privacy questionnaires.
+
+Run `python3 scripts/test_release_privacy.py` for the omission/malformed-manifest
+regressions, and `python3 scripts/check_release_privacy.py --project Pincer.xcodeproj`
+to check XcodeGen output. PincerChecks includes the same regression harness in
+its offline suite. Review API use when dependencies or persistence change.
