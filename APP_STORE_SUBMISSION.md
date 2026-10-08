@@ -1,6 +1,6 @@
 # Pincer App Store submission material
 
-Status: description/keywords saved for both listings; demo review notes and no-sign-in settings saved for both apps. Free price schedules saved for both apps. Not submitted. Keep review contact details in App Store
+Status: category, copyright, content rights, 13+ age ratings, privacy URL, GitHub support URL, description/keywords saved for both listings; App Privacy drafts saved but not yet published; demo review notes and no-sign-in settings saved for both apps. Free price schedules saved for both apps. Not submitted. Keep review contact details in App Store
 Connect, not in this repository.
 
 ## Confirmed launch decisions
@@ -9,8 +9,13 @@ Connect, not in this repository.
 - Version: 1.0, matching the current App Store version records.
 - Review sign-in required: **No**. Leave username and password empty.
 - Review access: built-in demo. No developer-provided backend or reviewer gateway.
-- Privacy URL after deployment: https://www.pincerchat.dev/privacy/
-- Support URL after deployment: https://www.pincerchat.dev/support/
+- Privacy URL deployed, verified and saved on both: https://www.pincerchat.dev/privacy/
+- Support URL saved on both: https://github.com/hartra344/pincer/issues
+- Additional public help page deployed: https://www.pincerchat.dev/support/
+- Primary category: Productivity. Copyright: 2026 Travis Vu.
+- Age rating: 13+ override, matching the owner-requested current ChatGPT US listing, with Apple regional equivalents.
+- Content rights: necessary rights confirmed; owner states bundled artwork/assets are AI-generated.
+- App Privacy drafts: Crash Data for App Functionality, not linked to identity, no tracking. Owner receives only Apple-provided crash reports; publication agreement awaiting confirmation.
 - Territories: all 175 countries; saved and verified for both listings.
 - Manual release after approval: saved for both listings.
 - Private review contact: saved in App Store Connect for both listings.
@@ -79,9 +84,9 @@ The Mac app is sandboxed with outgoing network and user-selected file access.
 ## Still needed before copying to App Store Connect
 
 - Verify these steps against the final TestFlight builds on iPhone, iPad and Mac.
-- Deploy and verify the privacy/support URLs before entering them in the listings.
+- Privacy/support pages are deployed and verified; privacy URL saved on both records. Publish the completed privacy drafts after owner confirms Apple’s accuracy/compliance/update agreement.
 - Screenshots uploaded: 2 iPhone, 3 iPad, 3 Mac. Compare against final release candidate.
-- Complete copyright, category, age-rating and content-rights answers.
+- Copyright, category, age-rating and content-rights answers are saved on both records.
 - Free pricing, worldwide availability and manual release are saved for both listings.
 - Private reviewer contact is saved in App Store Connect for both apps.
 - Attach the matching processed version 1.0 builds; do not submit version 0.1.0.
