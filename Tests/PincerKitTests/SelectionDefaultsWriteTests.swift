@@ -42,8 +42,9 @@ struct SelectionDefaultsWriteTests {
         #expect(defaults.string(forKey: key) == "agent:main:switch-b", "writes keep their order")
     }
 
-    /// #920: transcripts observe defaults changes on the main queue, so a write's notification
-    /// post waits for main. Flushing from main must not block it, or the two wait on each other.
+    /// #920: a main-queue observer makes a write's notification post wait for main. Flushing from
+    /// main must not block it, or the two wait on each other. The observer watches only this suite:
+    /// one for every object would stall every other test's defaults writes while it's registered.
     @Test func flushFromMainWhileAMainQueueObserverWaitsDoesNotDeadlock() async {
         let name = "pincer.tests.\(UUID().uuidString)"
         let defaults = SlowDefaults(suiteName: name)!
@@ -52,7 +53,7 @@ struct SelectionDefaultsWriteTests {
             try? FileManager.default.removeItem(at: URL.libraryDirectory.appending(path: "Preferences/\(name).plist"))
         }
         let observer = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in }
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: .main) { _ in }
         defer { NotificationCenter.default.removeObserver(observer) }
         DefaultsWriter.set("written", forKey: "flush-probe", in: defaults)
         await DefaultsWriter.flush()

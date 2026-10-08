@@ -169,9 +169,12 @@ public final class MCPServersModel {
             repeat {
                 self.reloadQueued = false
                 self.loadState = .running
-                async let plugins: Void = self.fetchPluginServers()
-                await self.fetchStatuses()
-                await plugins
+                // A task group, not `async let`: tearing down this `async let` crashed the
+                // runtime's task allocator on CI (#920).
+                await withTaskGroup(of: Void.self) { group in
+                    group.addTask { await self.fetchPluginServers() }
+                    await self.fetchStatuses()
+                }
             } while self.reloadQueued
             // Finalize the shared operation before releasing ownership. An earlier awaiting caller
             // must not mark a newer load idle after this task has finished.
