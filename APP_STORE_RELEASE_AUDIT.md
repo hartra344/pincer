@@ -20,10 +20,10 @@ Updated October 8, 2026. “Implemented” means changed in this branch; it does
 | Release CI gate | Implemented; unit tests pass | TestFlight now requires successful Tests on the exact main commit before signing/upload. Workflow CI still needed. |
 | Test reliability PR #938 | External work in progress | Recheck merge and complete CI on release candidate. |
 | TestFlight crash triage | Needed | Build 48.1 crash reports require symbolication and candidate retest. |
-| Listing copy | Drafted locally | `APP_STORE_SUBMISSION.md`; ASC fields still to populate. |
-| Screenshots | Inventory audited; captures/upload needed | 29 full-size iPhone website images at 1206×2622; no iPad assets. Existing Mac images use website dimensions. Listing slots were empty. |
+| Listing copy | Description/keywords saved on both | `APP_STORE_SUBMISSION.md`; remaining listing fields still to populate. |
+| Screenshots | iPad uploaded; iPhone/Mac needed | Three native demo iPad captures at 2064×2752 uploaded and accepted (3 of 10). Source files: `Apps/AppStore/Screenshots/iPad/`. iPhone/Mac uploads and final-candidate comparison remain. |
 | Review contact | Done in App Store Connect | Owner-provided contact saved on both records; private details excluded from repository. |
-| Territories | iOS done; Mac confirmation pending | Owner chose all countries. iOS shows 175 countries available on release. Mac final confirmation was interrupted; session now requires sign-in. |
+| Territories | Done in App Store Connect | Both listings show all 175 countries available; Mac verified after restoring sign-in on October 8. |
 | Manual release | Done in App Store Connect | Manual release after approval saved on both listings. |
 | Extra-platform availability | Done in App Store Connect | iOS-on-Apple-Silicon-Mac and Vision Pro disabled. Dedicated native Mac listing retained. |
 | EU trader status | Owner confirmed noncommercial | Open-source personal project with no intent to monetize; retain existing non-trader declaration. |
@@ -165,4 +165,8 @@ Separate App Store records and bundle IDs; native iPhone/iPad/Mac targets; built
 
 ## October 8 continuation
 
-All six PR #947 checks passed on commit 66d18ea. PR #938 remains open; final merged-candidate validation is still required. App Store Connect signed out during continuation and is awaiting owner passkey/security-key authentication. No submission or release occurred.
+All six PR #947 checks passed on commit 66d18ea. PR #938 remains open; final merged-candidate validation is still required. App Store Connect sign-in was restored by the owner; Mac worldwide availability verified. No submission or release occurred.
+
+Screenshot capture evidence: isolated simulator `Pincer Release Screenshots iPad`, iPad Pro 13-inch (M5), iPadOS 26.5; fresh app install from branch unsigned simulator build. Entered Try the Demo without gateway or credentials; declined optional notifications. Native Device Hub exports preserve 2064×2752 pixels. Captured diagrams, planning and approvals; App Store Connect accepted all three. Final TestFlight comparison and physical iPad QA remain.
+
+Existing iPhone screenshot review: sampled transcript, approval and agent settings images still show older emoji avatars and older presentation. Recapture current UI instead of uploading those website images unchanged.
