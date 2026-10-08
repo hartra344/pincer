@@ -1,6 +1,6 @@
 # Pincer App Store submission material
 
-Status: category, copyright, content rights, 13+ age ratings, privacy URL, GitHub support URL, description/keywords saved for both listings; App Privacy drafts saved but not yet published; demo review notes and no-sign-in settings saved for both apps. Free price schedules saved for both apps. Not submitted. Keep review contact details in App Store
+Status: category, copyright, content rights, 13+ age ratings, privacy URL, GitHub support URL, description/keywords saved for both listings; App Privacy responses published on both records; demo review notes and no-sign-in settings saved for both apps. Free price schedules saved for both apps. Not submitted. Keep review contact details in App Store
 Connect, not in this repository.
 
 ## Confirmed launch decisions
@@ -15,7 +15,7 @@ Connect, not in this repository.
 - Primary category: Productivity. Copyright: 2026 Travis Vu.
 - Age rating: 13+ override, matching the owner-requested current ChatGPT US listing, with Apple regional equivalents.
 - Content rights: necessary rights confirmed; owner states bundled artwork/assets are AI-generated.
-- App Privacy drafts: Crash Data for App Functionality, not linked to identity, no tracking. Owner receives only Apple-provided crash reports; publication agreement awaiting confirmation.
+- App Privacy published on both: Crash Data for App Functionality, not linked to identity, no tracking. Owner receives only Apple-provided crash reports; publication agreement accepted after explicit owner confirmation.
 - Territories: all 175 countries; saved and verified for both listings.
 - Manual release after approval: saved for both listings.
 - Private review contact: saved in App Store Connect for both listings.
@@ -84,7 +84,7 @@ The Mac app is sandboxed with outgoing network and user-selected file access.
 ## Still needed before copying to App Store Connect
 
 - Verify these steps against the final TestFlight builds on iPhone, iPad and Mac.
-- Privacy/support pages are deployed and verified; privacy URL saved on both records. Publish the completed privacy drafts after owner confirms Apple’s accuracy/compliance/update agreement.
+- Privacy/support pages are deployed and verified; privacy URL saved on both records. Privacy responses published on both after owner confirmed Apple’s accuracy/compliance/update agreement.
 - Screenshots uploaded: 2 iPhone, 3 iPad, 3 Mac. Compare against final release candidate.
 - Copyright, category, age-rating and content-rights answers are saved on both records.
 - Free pricing, worldwide availability and manual release are saved for both listings.

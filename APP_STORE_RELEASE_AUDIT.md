@@ -15,7 +15,7 @@ Updated October 8, 2026. PR #947 merged on October 8. “Implemented” does not
 | Privacy/support pages | Deployed and verified | Both public pages return HTTP 200 with the intended content after PR #947 merged. Privacy URL saved in both listings; approved GitHub Issues support URL saved in both. |
 | In-app privacy/support links | Implemented; validating | Welcome and Settings; 83 targeted Swift tests, localization sync, Mac and iOS Simulator builds pass. |
 | AI-sharing consent | Needed | Implement explicit destination disclosure and consent across applicable send paths. |
-| App Privacy questionnaires | Drafts saved; publication awaiting owner confirmation | Both declare Crash Data, App Functionality, not linked to identity, no tracking. Owner receives only Apple-provided crash reports. Apple’s final Publish action includes an explicit accuracy/compliance/update agreement. |
+| App Privacy questionnaires | Published on both | Both show Published by Travis Vu after owner-approved publication. Crash Data for App Functionality, not linked to identity, no tracking; owner receives only Apple-provided crash reports. |
 | Version 1.0 | Implemented locally | `project.yml`; matching TestFlight uploads and build selection still needed. |
 | Release CI gate | Implemented; unit tests pass | TestFlight now requires successful Tests on the exact main commit before signing/upload. Workflow CI still needed. |
 | Test reliability PR #938 | External work in progress | Recheck merge and complete CI on release candidate. |
@@ -40,11 +40,10 @@ Saved on both iOS/iPad and native Mac records:
 - Privacy Policy URL: https://www.pincerchat.dev/privacy/. Both this page and /support/ were checked live after PR #947 merged; the policy includes Apple diagnostics and user-selected services.
 - Content rights: has the necessary rights to third-party content. Owner confirmed bundled artwork/assets are AI-generated and authorized for use; the app can also access user-selected content.
 - Age rating: 13+ override, matching the owner-requested current ChatGPT US rating. Apple displays 13+ in 172 territories, regional equivalents, and 12+ on older operating systems. Questionnaire answers describe the supplied operator-client experience: no social feed, broad UGC distribution, direct person-to-person messaging, unrestricted in-app browser, advertising, parental controls or age assurance; no supplied objectionable, medical/wellness, gambling or contest content. User-selected model content is not moderated by Pincer; the 13+ choice is not a claim that Pincer has ChatGPT’s safety controls. Reassess the questionnaire if the actual release experience differs.
-- App Privacy drafts: Crash Data used for App Functionality, not linked to user identity, not used for tracking. Owner confirmed no developer-received app data except Apple-provided crash reports. No third-party analytics/crash SDK is present in Package.swift. The developer’s Apple diagnostic use is disclosed; independent user-operated gateways/providers are described in the policy, not represented as developer-operated data collection.
+- App Privacy responses published on both records after owner confirmation: Crash Data used for App Functionality, not linked to user identity, not used for tracking. Owner confirmed no developer-received app data except Apple-provided crash reports. No third-party analytics/crash SDK is present in Package.swift. The developer’s Apple diagnostic use is disclosed; independent user-operated gateways/providers are described in the policy, not represented as developer-operated data collection.
 
 Remaining in App Store Connect:
 
-- Publish both saved privacy drafts. The final confirmation states that publishing agrees the answers are accurate, compliant and will be kept updated. Owner confirmation requested before accepting that agreement.
 - Select the final release builds. Both Add Build dialogs currently list only version 0.1.0, latest 50.1. None was attached to version 1.0.
 - Confirm any final-build encryption/export-compliance prompts after the 1.0 builds process, then perform final submission validation. No app was added for review or released.
 
@@ -52,7 +51,7 @@ Outside App Store Connect, explicit AI-sharing consent and final signed-build/de
 
 ## Release readiness: not ready for submission
 
-Both Pincer Chat (iOS/iPadOS) and Pincer Chat for Mac remain at 1.0 “Prepare for Submission.” Required listing metadata is saved. Privacy drafts await publication confirmation, and available binaries are still version 0.1.0. AI-sharing consent and final-device/signed-build validation remain before selecting a release candidate.
+Both Pincer Chat (iOS/iPadOS) and Pincer Chat for Mac remain at 1.0 “Prepare for Submission.” Required listing metadata is saved. Privacy responses are published, and available binaries are still version 0.1.0. AI-sharing consent and final-device/signed-build validation remain before selecting a release candidate.
 
 ## Original audit scope and evidence
 
