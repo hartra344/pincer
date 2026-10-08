@@ -58,7 +58,7 @@ enum Suites {
         Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks(); await runDemoEffectiveAgentCompatibilityChecks() },
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
-            Section("Selection defaults") { runSelectionDefaultsChecks() },
+            Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
