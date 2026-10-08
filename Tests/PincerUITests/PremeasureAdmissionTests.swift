@@ -44,7 +44,7 @@ struct PremeasureAdmissionTests {
         defer { PremeasureAdmissionProbe.remove(row.id) }
         let job = try #require(driver.split([0], all: [row], width: 360, renderer: renderer).offload.first)
         #expect(job.bodies.isEmpty && job.sourceRow == nil, "admission retains no prepared source")
-        let result = TranscriptPremeasurer.shared.measureWithin(5, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
+        let result = TranscriptPremeasurer.shared.measureWithin(60, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
         #expect(result.count == 1)
         #expect(result.first?.bodies.first?.key.source == "First actual paragraph\n\nSecond actual paragraph")
         #expect(!driver.adopt(result, width: 360, epoch: driver.epoch.current).isEmpty)

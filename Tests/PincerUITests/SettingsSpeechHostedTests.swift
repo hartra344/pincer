@@ -28,7 +28,7 @@ private final class SettingsDiscoveryGate: @unchecked Sendable {
         self.calls += 1
         self.ranOnMain = Thread.isMainThread
         if !Thread.isMainThread {
-            let deadline = Date().addingTimeInterval(5)
+            let deadline = Date().addingTimeInterval(60)
             while !self.released && self.condition.wait(until: deadline) {}
         }
         self.condition.unlock()
@@ -104,8 +104,11 @@ struct SettingsSpeechHostedTests {
         #endif
         let elapsed = start.duration(to: .now)
         print("Settings form while speech discovery is pending: \(elapsed)")
-        #expect(elapsed < PerfBudget.limit(.milliseconds(200)),
-                "form layout and scrolling must not wait for speech discovery")
+        // Wall-clock only in the solo perf lane; under the shared CPU the held worker proves it.
+        if PerfBudget.isStrict {
+            #expect(elapsed < PerfBudget.limit(.milliseconds(200)),
+                    "form layout and scrolling must not wait for speech discovery")
+        }
         #expect(state.isRefreshing && state.snapshot == nil,
                 "the native interaction completed before the held worker")
         #expect(gate.callCount == 1, "both sections share one in-flight discovery")

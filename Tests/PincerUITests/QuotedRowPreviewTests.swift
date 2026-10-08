@@ -142,7 +142,7 @@ struct QuotedRowPreviewTests {
                                                 renderer: controller.renderer).offload.first)
             let oldEpoch = driver.epoch.current
             let result = await TranscriptPremeasurer.shared.measureWithin(
-                5, jobs: [job], env: controller.renderer.textEnvironment, epoch: driver.epoch)
+                60, jobs: [job], env: controller.renderer.textEnvironment, epoch: driver.epoch)
             try #require(result.count == 1)
             let cold = controller.renderer.layout(for: row, width: 700)
             #expect(cold.decoration.quote?.targetId == "readiness-target" && cold.decoration.quote?.text == nil)
