@@ -176,7 +176,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       PINCER_KEYCHAIN: memory
     steps:
@@ -214,14 +214,18 @@ jobs:
       # Unit tests and every check run side by side, each live run against its own mock.
       # Below the job's limit, so a hung lane still leaves its logs for the upload step.
       - name: Unit tests and checks
-        timeout-minutes: 11
+        timeout-minutes: 25
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
         run: |
           mkdir -p "$CHECKS_LOG_DIR"
           F="-Xswiftc -enable-incremental-file-hashing"
-          perl -e 'alarm 180; exec @ARGV' swift test --skip-build $F --filter ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/only-chatswitch.log" 2>&1 && echo exit=0 >> /dev/null || echo "exit=$?" >> "$CHECKS_LOG_DIR/only-chatswitch.log"
-          perl -e 'alarm 420; exec @ARGV' swift test --skip-build --parallel $F --skip ChatSwitchReuseHostedTests > "$CHECKS_LOG_DIR/skip-chatswitch.log" 2>&1 && echo exit=0 >> /dev/null || echo "exit=$?" >> "$CHECKS_LOG_DIR/skip-chatswitch.log"
+          for S in APIKeyVisibilityTests TranscriptFindTrimTests DictationTargetHostedTests SettingsSpeechHostedTests ComposerTabNavigationTests ComposerSynchronousSizingAppKitTests GroupedMessageKeyboardTests ChatWindowCommandSceneTests NativeChatWindowNotificationVisibilityTests TranscriptPremeasureHostedTests ReadAloudRateHostedTests ReadAloudInsetTests ChatSwitchReuseHostedTests AttachmentThumbnailDecodeTests SettingsHeightTests SidebarHeaderKeyboardTests TipsPresentationTests SettingsNoticeBannerTests ScrollToBottomTests; do
+            perl -e 'alarm 60; exec @ARGV' swift test --skip-build $F --filter "$S" > "$CHECKS_LOG_DIR/s-$S.log" 2>&1 && R=0 || R=$?
+            echo "$S exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/s-$S.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
+          done
+          perl -e 'alarm 240; exec @ARGV' swift test --skip-build --parallel $F --filter PincerUITests > "$CHECKS_LOG_DIR/ui-target.log" 2>&1 && R=0 || R=$?
+          echo "ui-target exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/ui-target.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
           exit 1
           scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
