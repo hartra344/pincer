@@ -8,7 +8,9 @@ import Testing
 /// _performBlockAfterCATransactionCommitSynchronizes:]`), but the `async` delegate method's
 /// compiler-generated `@objc` thunk called it from the cooperative pool.
 @MainActor
-@Suite("Notification response thread (#330)")
+@Suite(
+    "Notification response thread (#330)",
+    .disabled("Suspected trigger of task-allocator heap corruption on CI: https://github.com/hartra344/pincer/issues/952"))
 struct NotificationResponseThreadTests {
     /// A tap on a reply notification, delivered by the system through the Objective-C entry point.
     private static func tapResponse(gateway: UUID, session: String) throws -> UNNotificationResponse {
