@@ -356,6 +356,19 @@ public final class AppModel {
         }
     }
 
+    /// The built-in demo, if it's been added.
+    public var demoGateway: GatewayStore? { self.gateways.first { $0.profile.isDemo } }
+
+    /// Removes the built-in demo and everything it left on this device. Saved Gateways are kept,
+    /// and the first one is selected. `connect` then opens the Add Gateway flow: Find over the chat
+    /// list when Gateways remain, else the full-window wizard past Welcome ("Do you have a Gateway?").
+    public func leaveDemo(connect: Bool = false) {
+        for demo in self.gateways where demo.profile.isDemo { self.remove(demo.id) }
+        guard connect else { return }
+        self.firstRun.present()
+        if self.firstRun.state.step == .welcome { self.firstRun.send(.getStarted) }
+    }
+
     /// Replaces the connection; the device identity (and thus pairing) is kept.
     public func update(_ profile: GatewayProfile, secret: String?, credentialsChanged: Bool) {
         guard let index = self.gateways.firstIndex(where: { $0.id == profile.id }) else { return }

@@ -170,6 +170,10 @@ struct ConnectionPage: View {
     @State private var loadedFrom: GatewayProfile?
     @State private var confirmRemove = false
     @State private var confirmApply = false
+    @Environment(\.closeGatewaySettings) private var closeSettings
+    #if os(macOS)
+    @Environment(\.dismissWindow) private var dismissWindow
+    #endif
 
     var body: some View {
         let profile = self.gateway.profile
@@ -180,12 +184,18 @@ struct ConnectionPage: View {
                 Section {
                     Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.", bundle: .module)
                 }
+                Section {
+                    Button(L("Connect Your Gateway…")) { self.leaveDemo(connect: true) }
+                    Button(L("Leave Demo")) { self.leaveDemo(connect: false) }
+                } footer: {
+                    Text("Leaving removes the demo's sample chats from this device. Your other Gateways are kept.", bundle: .module)
+                }
             } else {
                 ConnectionFields(draft: self.$draft, hasSavedSecret: profile.secret != nil)
-            }
-            Section {
-                Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
-                Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
+                Section {
+                    Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
+                    Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
+                }
             }
         }
         .formStyle(.grouped)
@@ -253,6 +263,18 @@ struct ConnectionPage: View {
             self.draft = ConnectionDraft(profile)
         }
         self.loadedFrom = profile
+    }
+
+    private func leaveDemo(connect: Bool) {
+        let app = self.app
+        #if os(macOS)
+        self.dismissWindow(id: "gateway-settings", value: self.gateway.id)
+        app.leaveDemo(connect: connect)
+        if connect { QuickCaptureController.shared.showMainWindow() }
+        #else
+        // Gateway Settings is a sheet here: the Find sheet can only show once it's gone.
+        self.closeSettings { app.leaveDemo(connect: connect) }
+        #endif
     }
 
     private func requestApply() {

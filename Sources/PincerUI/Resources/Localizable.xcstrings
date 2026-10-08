@@ -3823,6 +3823,16 @@
         }
       }
     },
+    "Connect Your Gateway…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect Your Gateway…"
+          }
+        }
+      }
+    },
     "Connect to %@ to search messages.": {
       "localizations": {
         "en": {
@@ -8183,12 +8193,32 @@
         }
       }
     },
+    "Leave Demo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Demo"
+          }
+        }
+      }
+    },
     "Leave empty to let the Gateway create a new workspace for this agent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Leave empty to let the Gateway create a new workspace for this agent."
+          }
+        }
+      }
+    },
+    "Leaving removes the demo's sample chats from this device. Your other Gateways are kept.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leaving removes the demo's sample chats from this device. Your other Gateways are kept."
           }
         }
       }
@@ -18779,6 +18809,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You're connected"
+          }
+        }
+      }
+    },
+    "You're in the Demo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're in the Demo"
           }
         }
       }
