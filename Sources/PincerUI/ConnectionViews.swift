@@ -170,6 +170,10 @@ struct ConnectionPage: View {
     @State private var loadedFrom: GatewayProfile?
     @State private var confirmRemove = false
     @State private var confirmApply = false
+    @Environment(\.closeGatewaySettings) private var closeSettings
+    #if os(macOS)
+    @Environment(\.dismissWindow) private var dismissWindow
+    #endif
 
     var body: some View {
         let profile = self.gateway.profile
@@ -262,10 +266,14 @@ struct ConnectionPage: View {
     }
 
     private func leaveDemo(connect: Bool) {
-        self.dismiss()
-        self.app.leaveDemo(connect: connect)
+        let app = self.app
         #if os(macOS)
+        self.dismissWindow(id: "gateway-settings", value: self.gateway.id)
+        app.leaveDemo(connect: connect)
         if connect { QuickCaptureController.shared.showMainWindow() }
+        #else
+        // Gateway Settings is a sheet here: the Find sheet can only show once it's gone.
+        self.closeSettings { app.leaveDemo(connect: connect) }
         #endif
     }
 
