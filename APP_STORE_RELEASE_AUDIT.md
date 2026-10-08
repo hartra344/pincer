@@ -11,16 +11,16 @@ Updated October 8, 2026. PR #947 merged on October 8. “Implemented” does not
 | --- | --- | --- |
 | Free pricing decision | Done in App Store Connect | Owner confirmed completely free; both saved current price schedules show $0.00. |
 | Demo-only review access | Done in App Store Connect | Sign-in required is off on both records; demo-only review notes saved. No credentials/backend. |
-| Privacy manifests | Implemented; validating | XcodeGen and compiled Kit checks pass; unsigned Mac and iOS Simulator app/extension/package bundle manifests verified. Signed archive still needed. |
+| Privacy manifests | Signed archive bundle checks passed | TestFlight run 37823251689 passed release privacy declaration and archive bundle checks for both platforms; 1.0 (52.1) processed successfully. Runtime device validation remains separate. |
 | Privacy/support pages | Deployed and verified | Both public pages return HTTP 200 with the intended content after PR #947 merged. Privacy URL saved in both listings; approved GitHub Issues support URL saved in both. |
 | In-app privacy/support links | Implemented; validating | Welcome and Settings; 83 targeted Swift tests, localization sync, Mac and iOS Simulator builds pass. |
 | AI-sharing consent | Needed | Implement explicit destination disclosure and consent across applicable send paths. |
 | App Privacy questionnaires | Published on both | Both show Published by Travis Vu after owner-approved publication. Crash Data for App Functionality, not linked to identity, no tracking; owner receives only Apple-provided crash reports. |
-| Version 1.0 | Implemented locally | `project.yml`; matching TestFlight uploads and build selection still needed. |
-| Release CI gate | Implemented; unit tests pass | TestFlight now requires successful Tests on the exact main commit before signing/upload. Workflow CI still needed. |
+| Version 1.0 | Uploaded, processed and attached on both | iOS/iPad and native Mac listings both use 1.0 (52.1). Apple accepted both into draft submissions; status Ready for Review. Not submitted. |
+| Release CI gate | Passed for 52.1 | Run 37823251689 validated successful Tests on exact main commit fa775734a0d46bbad920bbdd57f25007da330186 before both archive/upload jobs passed. |
 | Test reliability PR #938 | External work in progress | Recheck merge and complete CI on release candidate. |
 | TestFlight crash triage | Needed | Build 48.1 crash reports require symbolication and candidate retest. |
-| Listing metadata | Saved on both | Description, keywords, GitHub Issues support URL, copyright 2026 Travis Vu, Productivity category, content rights and age ratings. Both privacy-policy URLs saved. |
+| Listing metadata | Saved on both | Description, keywords, marketing URL https://pincerchat.dev/, GitHub Issues support URL, copyright 2026 Travis Vu, Productivity category, content rights and age ratings. Both privacy-policy URLs saved. |
 | Age ratings | Saved on both | Owner requested ChatGPT’s rating; current US listing is 13+. Pincer uses a 13+ override, with Apple-calculated regional equivalents and 12+ on older OS versions. |
 | Screenshots | Done in App Store Connect | 2 iPhone (1320×2868), 3 iPad (2064×2752), 3 Mac (2560×1600). Required iPhone medium slot uses Existing Assets from large slot. Source images and hashes: `Apps/AppStore/Screenshots/manifest.json`. Final-candidate UI comparison remains part of release QA. |
 | Review contact | Done in App Store Connect | Owner-provided contact saved on both records; private details excluded from repository. |
@@ -29,7 +29,7 @@ Updated October 8, 2026. PR #947 merged on October 8. “Implemented” does not
 | Extra-platform availability | Done in App Store Connect | iOS-on-Apple-Silicon-Mac and Vision Pro disabled. Dedicated native Mac listing retained. |
 | EU trader status | Owner confirmed noncommercial | Open-source personal project with no intent to monetize; retain existing non-trader declaration. |
 | Physical-device and accessibility pass | Needed | #59, #933 and essential #58 flows. |
-| Final signed archives / submission | Needed | Build from validated merged commit, inspect, upload, install and submit. |
+| Final signed archives / submission | 52.1 attached; draft validation passed | Both builds archived/uploaded successfully and listings are Ready for Review draft submissions. Device installation/testing and AI-sharing consent remain unverified; neither app sent for review. |
 
 ## App Store Connect completion — October 8
 
@@ -44,14 +44,15 @@ Saved on both iOS/iPad and native Mac records:
 
 Remaining in App Store Connect:
 
-- Select the final release builds. Both Add Build dialogs currently list only version 0.1.0, latest 50.1. None was attached to version 1.0.
-- Confirm any final-build encryption/export-compliance prompts after the 1.0 builds process, then perform final submission validation. No app was added for review or released.
+- Both listings now have processed version 1.0 (52.1) attached. Add for Review validation passed and each is a Ready for Review draft submission. No missing metadata or export-compliance prompt appeared. Neither final Submit for Review button was clicked.
+- Marketing URL https://pincerchat.dev/ saved on both records at the owner’s request.
+- Complete AI-sharing consent and final-candidate device validation before sending the drafts for review. If a replacement build is needed, update both draft submissions and rerun validation.
 
 Outside App Store Connect, explicit AI-sharing consent and final signed-build/device validation remain separate release work.
 
 ## Release readiness: not ready for submission
 
-Both Pincer Chat (iOS/iPadOS) and Pincer Chat for Mac remain at 1.0 “Prepare for Submission.” Required listing metadata is saved. Privacy responses are published, and available binaries are still version 0.1.0. AI-sharing consent and final-device/signed-build validation remain before selecting a release candidate.
+Both Pincer Chat (iOS/iPadOS) and Pincer Chat for Mac are at 1.0 “Ready for Review” in draft submissions, with build 52.1 selected. Required listing metadata is saved and privacy responses are published. This is Apple metadata validation, not approval or a final device test. AI-sharing consent and final-device validation remain before submission.
 
 ## Original audit scope and evidence
 

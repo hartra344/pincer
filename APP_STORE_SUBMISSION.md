@@ -12,6 +12,7 @@ Connect, not in this repository.
 - Privacy URL deployed, verified and saved on both: https://www.pincerchat.dev/privacy/
 - Support URL saved on both: https://github.com/hartra344/pincer/issues
 - Additional public help page deployed: https://www.pincerchat.dev/support/
+- Marketing URL: https://pincerchat.dev/ (saved on both).
 - Primary category: Productivity. Copyright: 2026 Travis Vu.
 - Age rating: 13+ override, matching the owner-requested current ChatGPT US listing, with Apple regional equivalents.
 - Content rights: necessary rights confirmed; owner states bundled artwork/assets are AI-generated.
@@ -89,4 +90,4 @@ The Mac app is sandboxed with outgoing network and user-selected file access.
 - Copyright, category, age-rating and content-rights answers are saved on both records.
 - Free pricing, worldwide availability and manual release are saved for both listings.
 - Private reviewer contact is saved in App Store Connect for both apps.
-- Attach the matching processed version 1.0 builds; do not submit version 0.1.0.
+- Version 1.0 (52.1) is attached to both listings. Both passed Add for Review metadata validation and are draft submissions in Ready for Review; neither has been sent to Apple. No export-compliance prompt appeared. Complete AI-sharing consent and final-device validation before submission.
