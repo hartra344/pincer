@@ -219,13 +219,6 @@ jobs:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
         run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
-      # TEMP: crash reports for the unit lane's silent exit.
-      - name: TEMP crash reports
-        if: failure()
-        run: |
-          ls -la ~/Library/Logs/DiagnosticReports /Library/Logs/DiagnosticReports 2>/dev/null || true
-          for f in $(ls -t ~/Library/Logs/DiagnosticReports/*.ips /Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -3); do echo "=== $f"; head -c 60000 "$f"; done
-
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
       - name: Toolbar stability on chat switch
