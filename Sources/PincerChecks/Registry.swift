@@ -59,6 +59,7 @@ enum Suites {
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Selection defaults") { runSelectionDefaultsChecks() },
+            Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
@@ -325,6 +326,7 @@ enum Suites {
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
         Section("Shared chat load (demo)") { await runDemoSharedLoadChecks() },
+        Section("Leave demo (demo)") { await runDemoLeaveDemoChecks() },
     ]
 
     /// The built-in demo, second half.

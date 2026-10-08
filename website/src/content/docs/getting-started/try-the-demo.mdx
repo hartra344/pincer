@@ -28,19 +28,27 @@ Pincer has a built-in demo, so you can look around before you set up a gateway. 
 
 It's also on the **Set up OpenClaw** screen, if you chose **No, help me set one up**.
 
-The demo is saved like any other gateway, named **Demo**. You can switch away from it or remove it whenever you like (see [Leave the demo](#leave-the-demo)).
+The demo is saved like any other gateway, named **Demo**. You can [leave it](#leaving-the-demo) whenever you like.
 
 Choosing **Try the Demo** takes you straight to the chat list, with no setup steps in the way. To try [gateway setup](../setup-wizard/) on the demo too, choose **Setup Assistant…** from the sidebar's **Organize** menu or <kbd>⌘</kbd> <kbd>K</kbd>.
 
-## Leave the demo
+<DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo conversation on iPhone showing a disk status reply and chart." iosCaption="A real iPhone simulator capture using synthetic demo content. Alex is a fictional documentation persona." alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
 
-To use your own server, choose **Add Gateway…**. It's in the sidebar's **Organize** menu (the filter button), under **File ▸ Add Gateway…** and in the [menu bar](../../guides/menu-bar/) on macOS, and in the command palette (<kbd>⌘</kbd> <kbd>K</kbd>). It walks you through [connecting a gateway](../connect-a-gateway/), and selects your gateway once it's connected.
+## Leaving the demo
+
+While the demo is open, the top of the chat list (sidebar, on macOS and iOS) shows a **You're in the Demo** row with a **Connect Your Gateway…** button. It removes the demo and opens the usual Add Gateway flow: **Find your Gateway**, or, if the demo was your only Gateway, the [setup wizard](../setup-wizard/) starting at **Do you have a Gateway?**. The demo's page in **Gateway Settings → Connection** has **Connect Your Gateway…** and **Leave Demo**.
+
+To leave without adding anything, choose **Leave Demo** in any of these places:
+
+- **Gateway Settings → Connection**;
+- the **Organize** menu (the filter icon above the chat list);
+- on macOS, **File → Leave Demo** (after **Add Gateway…**).
 
 **Setup Assistant…** doesn't leave the demo. It runs [setup](../setup-wizard/) on the gateway that's selected, which is still the demo.
 
-The demo stays saved, so you can come back to it. To switch between the demo and your gateway, see [Switch gateways](../connect-a-gateway/#switch-gateways). To remove it, select it, open **Gateway Settings → Connection** and choose **Remove Gateway…**.
+To keep the demo and switch between it and your own gateway, see [Switch gateways](../connect-a-gateway/#switch-gateways).
 
-<DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo conversation on iPhone showing a disk status reply and chart." iosCaption="A real iPhone simulator capture using synthetic demo content. Alex is a fictional documentation persona." alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
+Leaving never touches your saved Gateways. It deletes the demo's sample chats, drafts and bookmarks from this device. To get a fresh copy, choose **Add Gateway… → Try the Demo**, or use the Welcome screen.
 
 ## Trigger words
 
@@ -144,4 +152,4 @@ The demo is what TestFlight testers and App Review use, so they don't need a Gat
 
 ## Next
 
-When you're ready, [connect your own gateway](../connect-a-gateway/).
+When you're ready, choose **Connect Your Gateway…** in the demo, or [connect your own gateway](../connect-a-gateway/) directly.
