@@ -220,11 +220,9 @@ jobs:
         run: |
           mkdir -p "$CHECKS_LOG_DIR"
           F="-Xswiftc -enable-incremental-file-hashing"
-          ( while true; do date +%T; vm_stat | grep -E "Pages (free|active|wired|occupied by compressor)|Swapouts"; ps -Ao pid,pcpu,rss,comm -r | head -6; sleep 20; done ) > "$CHECKS_LOG_DIR/mon.log" 2>&1 &
-          perl -e 'alarm 300; exec @ARGV' swift test --skip-build --parallel $F --filter PincerKitTests > "$CHECKS_LOG_DIR/kit-target.log" 2>&1 && R=0 || R=$?
+          ( sleep 120; screencapture -x "$CHECKS_LOG_DIR/screen.png" || true; for p in $(pgrep -f 'swiftpm-testing-helper|PincerPackageTests'); do sample "$p" 3 -file "$CHECKS_LOG_DIR/sample-$p.txt" || true; lldb -p "$p" --batch -o 'thread backtrace all' -o 'expr -l objc -O -- [[NSApplication sharedApplication] modalWindow]' -o 'expr -l objc -O -- [[NSApplication sharedApplication] windows]' > "$CHECKS_LOG_DIR/lldb-$p.txt" 2>&1 || true; done ) &
+          perl -e 'alarm 200; exec @ARGV' swift test --skip-build --parallel $F --filter PincerKitTests > "$CHECKS_LOG_DIR/kit-target.log" 2>&1 && R=0 || R=$?
           echo "kit-target exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/kit-target.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
-          perl -e 'alarm 300; exec @ARGV' swift test --skip-build --no-parallel $F > "$CHECKS_LOG_DIR/serial.log" 2>&1 && R=0 || R=$?
-          echo "serial exit=$R $(grep -E 'Test run with' "$CHECKS_LOG_DIR/serial.log" | tail -1)" | tee -a "$CHECKS_LOG_DIR/summary.log"
           exit 1
           scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
