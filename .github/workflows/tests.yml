@@ -217,7 +217,10 @@ jobs:
         timeout-minutes: 22
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
-        run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
+        run: |
+          mkdir -p "$CHECKS_LOG_DIR"
+          ( sleep 240; for p in $(pgrep -f 'swiftpm-testing-helper'); do lldb -p "$p" --batch -o 'thread backtrace all' > "$CHECKS_LOG_DIR/lldb-$p.txt" 2>&1 || true; done ) &
+          scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
