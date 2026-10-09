@@ -161,13 +161,13 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                         os.write(descriptor, b"cleanup"); os.close(descriptor)
                     except OSError: pass
                 try: os.killpg(process.pid, signal.SIGTERM)
-                except ProcessLookupError: pass
+                except (ProcessLookupError, PermissionError): pass
                 try: process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL); process.wait()
             # Interruption can leave the owned held unit child alive; kill only this process group.
             try: os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError: pass
+            except (ProcessLookupError, PermissionError): pass
             # Only task-owned fake processes are eligible for cleanup.
             for file in (root / "mocks").glob("*.pid"):
                 if file.with_suffix(".stopped").exists(): continue
