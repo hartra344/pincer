@@ -19,8 +19,8 @@ Pincer can show and edit your gateway's configuration, so you don't have to hand
 
 ## Opening Gateway Settings
 
-- **macOS:** choose **Organize → Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>). It opens in its own window.
-- **iOS:** choose **Organize → Gateway Settings…** in the sidebar. It opens as a sheet.
+- **macOS:** choose **Gateway → Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>) in the menu bar, or **Gateway Settings…** from the gateway button at the top of the sidebar. It opens in its own window.
+- **iOS:** choose **Gateway Settings…** from the gateway button at the top of the sidebar. It opens as a sheet.
 
 You can also open it from the [command palette](../command-palette-and-navigation/).
 
@@ -116,7 +116,7 @@ Validation runs in the background while you type; Save becomes available when th
 
 <DocScreenshot src={history} ios={historyIOS} alt="Approval History with sample allowed, denied, expired, and cancelled requests." caption="Review earlier decisions without reopening an active approval. All entries shown here are demo fixtures." />
 
-**Approval History** lists the gateway's decisions on commands, plugins and system changes from the last 30 days, newest first. Besides the Gateway Settings sidebar, you can open it with **Approval History…** in the Organize menu or the command palette.
+**Approval History** lists the gateway's decisions on commands, plugins and system changes from the last 30 days, newest first. Besides the Gateway Settings sidebar, you can open it with **Approval History…** in the command palette.
 
 It needs the `operator.approvals` scope, which both access levels include, so you don't need **Full Management**. It's read-only: answer pending approvals in the chat or from the notification. See [Exec approvals](../approvals-and-notifications/#exec-approvals).
 

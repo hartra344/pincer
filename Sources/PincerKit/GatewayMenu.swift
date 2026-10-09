@@ -45,6 +45,29 @@ public struct GatewayMenuModel: Sendable, Equatable {
         case connectYourGateway, addGateway
     }
 
+    /// The selected Gateway's actions, in the switcher and the macOS Gateway menu. These are the
+    /// only homes for them outside ⌘K and Gateway Settings since the Organize menu went back to
+    /// view options (#955).
+    public enum GatewayAction: String, CaseIterable, Sendable, Identifiable {
+        case gatewaySettings, automations, setupAssistant, reconnect
+
+        public var id: String { self.rawValue }
+
+        public var title: String {
+            switch self {
+            case .gatewaySettings: L("Gateway Settings…")
+            case .automations: L("Automations…")
+            case .setupAssistant: L("Setup Assistant…")
+            case .reconnect: L("Reconnect")
+            }
+        }
+
+        /// The Setup Assistant drives the Gateway, so it waits for a connection.
+        public var needsConnection: Bool { self == .setupAssistant }
+    }
+
+    public static let gatewayActions = GatewayAction.allCases
+
     public var entries: [Entry]
 
     public static func build(_ inputs: [Input], selectedId: UUID?) -> GatewayMenuModel {

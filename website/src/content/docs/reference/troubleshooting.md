@@ -275,7 +275,7 @@ open --env PINCER_REQUEST_LOG=/tmp/pincer.log /Applications/Pincer.app
 
 Each request is logged with ✓ or the gateway's error. History and image downloads, and Gateway Logs polls, are left out.
 
-This is Pincer's own log. To see the **gateway's** log, open [Gateway Logs](../../guides/gateway-logs/) (**Organize → Gateway Logs…** or <kbd>⌘</kbd> <kbd>K</kbd>).
+This is Pincer's own log. To see the **gateway's** log, open [Gateway Logs](../../guides/gateway-logs/) (<kbd>⌘</kbd> <kbd>K</kbd> → **Gateway Logs…**, or **Gateway Settings → Gateway Logs**).
 
 ## Gateway Logs says it isn't available or can't read the log
 

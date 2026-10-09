@@ -7,6 +7,7 @@ struct GatewaySwitcherButton: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAppSettings) private var openAppSettings
+    @Environment(\.openAutomations) private var openAutomations
 
     var body: some View {
         let menu = self.app.gatewayMenu
@@ -30,10 +31,15 @@ struct GatewaySwitcherButton: View {
             }
             if let gateway = self.app.selectedGateway {
                 Section {
-                    Button(L("Gateway Settings…")) { self.openGatewaySettings(gateway) }
-                    Button(L("Setup Assistant…")) { gateway.setup.present() }
-                        .disabled(!gateway.state.isConnected)
-                    Button(L("Reconnect")) { gateway.stop(); gateway.start() }
+                    ForEach(GatewayMenuModel.gatewayActions) { action in
+                        Button(action.title) { self.perform(action, on: gateway) }
+                            .disabled(action.needsConnection && !gateway.state.isConnected)
+                            #if os(iOS)
+                            // macOS binds it in the Gateway menu instead.
+                            .keyboardShortcut(action == .gatewaySettings
+                                ? ShortcutStore.shared.activeCombo(for: .gatewaySettings)?.keyboardShortcut : nil)
+                            #endif
+                    }
                 }
             }
         } label: {
@@ -48,6 +54,15 @@ struct GatewaySwitcherButton: View {
         .padding(.vertical, 6)
         .accessibilityHint(L("Gateway menu"))
         .accessibilityIdentifier("sidebar-gateway-switcher")
+    }
+
+    private func perform(_ action: GatewayMenuModel.GatewayAction, on gateway: GatewayStore) {
+        switch action {
+        case .gatewaySettings: self.openGatewaySettings(gateway)
+        case .automations: self.openAutomations(gateway)
+        case .setupAssistant: gateway.setup.present()
+        case .reconnect: gateway.stop(); gateway.start()
+        }
     }
 
     @ViewBuilder private func label(_ menu: GatewayMenuModel) -> some View {
@@ -174,11 +189,18 @@ struct GatewayCommands: Commands {
                 self.openSettings()
             }
             let gateway = self.app.selectedGateway
+            // Same steps as RootView's settingsOpener / automationsOpener; Commands can't read the scene's environment.
             Button(L("Gateway Settings…")) {
                 guard let gateway else { return }
                 gateway.settings.requestedRoutes = []
                 gateway.settings.requestedDestination = nil
                 self.openWindow(id: "gateway-settings", value: gateway.id)
+            }
+            .shortcut(.gatewaySettings)
+            .disabled(gateway == nil)
+            Button(L("Automations…")) {
+                guard let gateway else { return }
+                self.openWindow(id: "automations", value: gateway.id)
             }
             .disabled(gateway == nil)
             Button(L("Setup Assistant…")) { gateway?.setup.present() }

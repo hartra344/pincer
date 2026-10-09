@@ -52,6 +52,8 @@ func runDemoGatewayMenuChecks() {
     check(app.gatewayMenu.showsDemoBadge && app.gatewayMenu.hasDemo && app.gatewayMenu.addAction == .addGateway,
           "gateway menu: demo selected beside Home shows the badge and Add Gateway")
     check(app.gatewayMenu.entries.count == 2 && app.gatewayMenu.canCycle, "gateway menu: demo and Home listed")
+    // The switcher's Gateway Settings / Automations / Setup Assistant / Reconnect section needs a selection.
+    check(app.selectedGateway?.id == demo.id, "gateway menu: the demo is selected, so its Gateway actions show")
 
     app.selectNextGateway()
     check(app.selectedGatewayId != demo.id && app.selectedGatewayId != nil, "gateway menu: next switches away from the demo")
