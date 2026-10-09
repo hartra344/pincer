@@ -30,7 +30,7 @@ It's also on the **Set up OpenClaw** screen, if you chose **No, help me set one 
 
 The demo is saved like any other gateway, named **Demo**. You can [leave it](#leaving-the-demo) whenever you like.
 
-Choosing **Try the Demo** takes you straight to the chat list, with no setup steps in the way. To try [gateway setup](../setup-wizard/) on the demo too, choose **Setup Assistant…** from the sidebar's **Organize** menu or <kbd>⌘</kbd> <kbd>K</kbd>.
+Choosing **Try the Demo** takes you straight to the chat list, with no setup steps in the way. To try [gateway setup](../setup-wizard/) on the demo too, choose **Setup Assistant…** from the gateway button at the top of the sidebar, the macOS **Gateway** menu, or <kbd>⌘</kbd> <kbd>K</kbd>.
 
 <DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo conversation on iPhone showing a disk status reply and chart." iosCaption="A real iPhone simulator capture using synthetic demo content. Alex is a fictional documentation persona." alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
 
@@ -74,7 +74,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 
 ## Things to try
 
-- **Setup Assistant:** open [setup](../setup-wizard/) again from the **Organize** menu or ⌘K → **Setup Assistant…**, and send the test message to the demo's *Setup Test* chat.
+- **Setup Assistant:** open [setup](../setup-wizard/) again from the gateway button, the macOS **Gateway** menu, or ⌘K → **Setup Assistant…**, and send the test message to the demo's *Setup Test* chat.
 - **Approval History:** open it from [Gateway Settings](../../guides/gateway-settings/) or the command palette (<kbd>⌘</kbd> <kbd>K</kbd> → **Approval History…**) to browse past decisions of every kind.
 - **[Tool calls](../../guides/tool-calls/):** open **Check the MCP servers** to expand a command, a failed command, an MCP tool call, a web fetch, a web search with its link list, and a coloured Swift file read. Durations show in the collapsed headers.
 - **Find in Chat:** press <kbd>⌘</kbd> <kbd>F</kbd> (on iOS, use the chat's ⋯ menu) and search for "onsen" in *Japan trip*.
@@ -85,7 +85,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **[Retry a failed message](../../guides/offline-outbox/):** the last message in *Dinner party* failed to send. Behind it, a queued message carries a seating-plan photo. Retry the shopping list and the queued seating plan follows it. Choose **Retry** under the failed message (or in its context menu).
 - **Drafts:** start typing in one chat, switch to another, and come back. Each chat keeps its own draft.
 - **Context ring:** the ring by the composer shows how full a chat's context is. *Main* is orange; *Japan trip* is red, so open the ring and choose **Compact Now**.
-- **Usage & Cost:** open it from the **Organize** menu or command palette to explore sample usage, model costs and rate limits. A chat's **Session Usage…** opens its usage history.
+- **Usage & Cost:** open it from the command palette (<kbd>⌘</kbd> <kbd>K</kbd>) or Gateway Settings to explore sample usage, model costs and rate limits. A chat's **Session Usage…** opens its usage history.
 - **[Sessions](../../guides/sessions/):** open **Gateway Settings → Sessions** (or ⌘K → **Manage Sessions…**). Switch the filter to **Archived** or **All**, watch *Refactor auth module*'s run time count up until it finishes, select a few sessions to archive or delete, switch *Garden planner* to another branch or rewind it, and recover *Photo import*, which a simulated restart interrupted.
 - **MCP Servers:** open **Gateway Settings → MCP Servers** to see sample servers in each state, sign in to **linear** or **notion**, and reconnect or edit them. See [MCP Servers](../../guides/mcp-servers/).
 - **Agents & Models:** open **Gateway Settings → Agents & Models** to browse the demo's named agents and sample default model. Open an agent's page to try the **Pet** character picker; enable **Animated avatars** in **Settings → Appearance** if the Pet section is hidden. See [Agent avatars](../../guides/agent-avatars/).
@@ -96,7 +96,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **Settings → Appearance**, to try a different [theme](../../guides/appearance/).
 - **Gateway Settings → Message Requests:** review and approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
 - **Gateway Settings → [Operator Devices](../../guides/devices/):** approve or reject the sample devices waiting to pair, and rename or revoke paired ones. Revoking this device shows the warning without disconnecting anything real.
-- **Gateway Logs:** open **Organize → Gateway Logs…** (or ⌘K → **Gateway Logs…**) to watch the simulated gateway's log grow. Send a message or trigger an approval and it shows up there. Try the level buttons, search, **Pause** and **Export…**.
+- **Gateway Logs:** open ⌘K → **Gateway Logs…** (or **Gateway Logs** in Gateway Settings) to watch the simulated gateway's log grow. Send a message or trigger an approval and it shows up there. Try the level buttons, search, **Pause** and **Export…**.
 - **Gateway Settings → Health:** Telegram is disconnected, so the demo gateway shows **Degraded**. The chat sidebar doesn't mention it until you've opened Health once; after that it shows **Gateway degraded · 1 issue** like a real gateway would. Inspect the channels, heartbeat and connected clients, then try **Restart Gateway…** to simulate a safe restart. Nothing real restarts; chats remain available and Telegram reconnects. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**.
 - **Replies:** in *Main*, "Can you sketch that as a little gauge?" is a reply that quotes the disk status. Click the quote to jump to it, or click **Reply** under any message (or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd>) to reply yourself.
 - **Reactions:** in *Main*, Claw reacted ✅ to your disk usage question, and you've reacted 👍 and 🎉 to its replies. Click **React** under a message, or click a chip to add or remove yours. In *home-lab*, Claw reacted 👀 to the sensor message, and your reactions there are also sent to the (simulated) Discord.
@@ -141,7 +141,7 @@ Actions always use the app's own demo, and start it if it isn't running yet, eve
 
 ## Sample usage and cost
 
-The demo comes with 90 days of made-up usage, busiest in the last month, so the [Usage](../../guides/usage-and-cost/) page has something to show. Open it with **Usage & Cost…** in the **Organize** menu or the command palette.
+The demo comes with 90 days of made-up usage, busiest in the last month, so the [Usage](../../guides/usage-and-cost/) page has something to show. Open it with **Usage & Cost…** in the command palette or from Gateway Settings.
 
 - **Dashboard:** daily spend that varies from day to day and drops on weekends, across four agents (Claw, Scout, Forge and Kiko) and five models from Anthropic, OpenAI, Google and a local Ollama model. Each chat's usage is billed to the model shown in its toolbar. `gpt-5.6-sol` has some unpriced requests every few days, so its cost is marked partial (*). The Ollama model has no pricing at all, so its session's cost shows as **—**.
 - **Rate limits:** Claude's 5-hour window is at 92% (red) and resets within the hour, next to weekly windows. OpenAI has a daily request window, a credit balance and a monthly budget that matches the demo's OpenAI spend. Gemini shows a sign-in error, and Ollama says local models aren't metered.

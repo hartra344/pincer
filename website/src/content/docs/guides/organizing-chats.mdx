@@ -22,20 +22,17 @@ Pick a layout from the menu at the top of the sidebar:
 | **By group** | One section per group you've made. |
 | **Recent** | One list, most recently active first. |
 
-<DocScreenshot src={organization} ios={organizationIOS} iosAlt="iPhone Organize menu with grouping and gateway tools." iosCaption="Open Organize from the demo sidebar to change grouping or reach gateway tools." alt="Organize menu with By server, By agent, By group, Recent, New Group, and Automations." caption="The Organize menu controls the sidebar layout and opens gateway tools. Built-in demo." />
+<DocScreenshot src={organization} ios={organizationIOS} iosAlt="iPhone Organize menu with grouping and view options." iosCaption="Open Organize from the demo sidebar to change grouping or what the list shows." alt="Organize menu with By server, By agent, By group, Recent, and the view options." caption="The Organize menu controls the sidebar layout and what it shows. Built-in demo." />
 
 ### The Organize menu
 
-This menu, called **Organize**, also has:
+This menu, called **Organize**, holds view options only. Besides the grouping picker it has:
 
 - **Show Archived**, to list archived chats;
 - **Show Automations** and **Show Slash Commands**, to list automation (cron) chats and slash-command chats (see [Automation and slash-command chats](#automation-and-slash-command-chats));
-- **New Group…**, in *By group* and *By server*;
-- **Automations…**;
-- **Approval History…**, to see [past approval decisions](../gateway-settings/#approval-history);
-- **Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>).
+- **New Group…**, in *By group* and *By server*.
 
-To switch gateways, open Gateway Settings or reconnect, use the gateway button at the top of the sidebar. See [Switch gateways](../../getting-started/connect-a-gateway/#switch-gateways).
+Gateway tools aren't in this menu. Use the gateway button at the top of the sidebar (**Gateway Settings…**, **Automations…**, **Setup Assistant…**, **Reconnect**), the **Gateway** menu on macOS, or the command palette (<kbd>⌘</kbd> <kbd>K</kbd>) for those, plus [Approval History](../gateway-settings/#approval-history). To switch gateways, see [Switch gateways](../../getting-started/connect-a-gateway/#switch-gateways).
 
 ### Discord server names
 
@@ -147,7 +144,7 @@ While hidden, they don't add to unread counts or section badges. They're still e
 
 - the chat you have open stays in the sidebar until you leave it;
 - typing in the sidebar's **Search** field lists matching hidden chats too;
-- [Search messages](../search/), the command palette (<kbd>⌘</kbd> <kbd>K</kbd>), links and **Organize → Automations…** open them as usual.
+- [Search messages](../search/), the command palette (<kbd>⌘</kbd> <kbd>K</kbd>), links and **Automations…** (gateway button or **Gateway** menu) open them as usual.
 
 ## Compaction
 
@@ -174,7 +171,7 @@ Press **⌘K** and type part of a chat name. Matching is fuzzy: in the demo, **j
 
 ## Automations
 
-Choose **Organize → Automations…** (or **Manage Automations…** on the Automations section's header) to open the gateway's cron jobs: a window on macOS and a sheet on iOS. Each job shows its schedule, last and next run, and status; a failing job shows its error. Select one to see its task, delivery destination, and run history (`cron.runs`), where every run links to its chat.
+Choose **Automations…** from the gateway button at the top of the sidebar or the macOS **Gateway** menu (or **Manage Automations…** on the Automations section's header) to open the gateway's cron jobs: a window on macOS and a sheet on iOS. Each job shows its schedule, last and next run, and status; a failing job shows its error. Select one to see its task, delivery destination, and run history (`cron.runs`), where every run links to its chat.
 
 Automation run history preserves the Gateway’s explicit run IDs. When one is absent, Pincer derives a stable identity from the job and timestamp, including timestamps too large for a native integer.
 

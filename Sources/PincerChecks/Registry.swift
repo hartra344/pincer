@@ -63,6 +63,7 @@ enum Suites {
             Section("Gateways settings") { runGatewaysSettingsOfflineChecks() },
             Section("Gateway Settings sidebar") { runGatewaySettingsSidebarOfflineChecks() },
             Section("Gateway menu") { runGatewayMenuOfflineChecks() },
+            Section("Organize menu") { runSidebarOrganizeMenuOfflineChecks() },
             Section("App settings layout") { runAppSettingsLayoutChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },

@@ -75,29 +75,21 @@ struct ChannelList: View {
         .toolbar {
             ToolbarItem {
                 Menu {
-                    Picker(L("Organize"), selection: $gateway.organization) {
-                        ForEach(SidebarOrganization.allCases) { Text($0.label).tag($0) }
+                    ForEach(SidebarOrganizeMenu.items(organization: self.gateway.organization)) { item in
+                        switch item {
+                        case .organization:
+                            Picker(item.title, selection: $gateway.organization) {
+                                ForEach(SidebarOrganization.allCases) { Text($0.label).tag($0) }
+                            }
+                            .pickerStyle(.inline)
+                        case .showArchived: Toggle(item.title, isOn: $gateway.showArchived)
+                        case .showAutomations: Toggle(item.title, isOn: $gateway.showAutomations)
+                        case .showSlashCommands: Toggle(item.title, isOn: $gateway.showSlashCommands)
+                        case .newGroup:
+                            Button(item.title) { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
+                                .disabled(!self.gateway.state.isConnected)
+                        }
                     }
-                    .pickerStyle(.inline)
-                    Toggle(L("Show Archived"), isOn: $gateway.showArchived)
-                    Toggle(L("Show Automations"), isOn: $gateway.showAutomations)
-                    Toggle(L("Show Slash Commands"), isOn: $gateway.showSlashCommands)
-                    if self.gateway.organization == .group || self.gateway.organization == .servers {
-                        Button(L("New Group…")) { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
-                            .disabled(!self.gateway.state.isConnected)
-                    }
-                    Divider()
-                    Button(L("Automations…")) { self.openAutomations(self.gateway) }
-                    Button(L("Approval History…")) { self.openGatewaySettings(self.gateway, at: .approvals) }
-                    Button(L("Gateway Logs…")) { self.openGatewaySettings(self.gateway, at: .logs) }
-                    Button(L("Command Policy…")) { self.openGatewaySettings(self.gateway, at: .execPolicy) }
-                    Button(L("Usage & Cost…")) { self.openGatewaySettings(self.gateway, at: .usage) }
-                    Button(L("Setup Assistant…")) { self.gateway.setup.present() }
-                        .disabled(!self.gateway.state.isConnected)
-                    Button(L("Gateway Settings…")) { self.openGatewaySettings(self.gateway) }
-                        .shortcut(.gatewaySettings)
-                    Divider()
-                    Button(L("Add Gateway…")) { self.app.firstRun.present() }
                 } label: {
                     Label(L("Organize"), systemImage: Theme.filterSymbol)
                 }
