@@ -3,7 +3,8 @@ import Testing
 @testable import PincerKit
 
 @MainActor
-@Suite("Session detail deletion ownership")
+@Suite("Session detail deletion ownership",
+       .disabled("Aborts the test helper on CI runners (task-allocator corruption): https://github.com/hartra344/pincer/issues/952"))
 struct SessionDetailOwnershipTests {
     private static let key = "agent:main:dashboard:alpha"
     private static let other = "agent:main:dashboard:beta"

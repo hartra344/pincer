@@ -27,7 +27,7 @@ private final class SharePreparationGate: @unchecked Sendable {
 }
 
 @MainActor
-@Suite("Share upload policy")
+@Suite("Share upload policy", .parksCooperativeThread)
 struct ShareUploadPolicyTests {
     let scratch = ScratchDefaults()
     let tight = GatewayProfile(name: "Tight", url: "ws://127.0.0.1:9", authMode: .none)

@@ -24,11 +24,13 @@ name = Path(sys.argv[0]).name
 if name == "swift":
     if "--show-bin-path" in sys.argv:
         print(root / "bin"); sys.exit(0)
+    print("◇ Test run started.", flush=True)
     if "--parallel" in sys.argv:
         (root / "unit-admitted").touch()
         print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
         with open(root / "unit-gate", "r") as gate: gate.read()
+    print("✔ Test run with 1 test in 1 suite passed after 0.1 seconds.")
     print("fixture unit complete"); sys.exit(0)
 if name == "node":
     if any(x.endswith("checks-pending-progress.mjs") for x in sys.argv[1:]):
@@ -159,13 +161,13 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                         os.write(descriptor, b"cleanup"); os.close(descriptor)
                     except OSError: pass
                 try: os.killpg(process.pid, signal.SIGTERM)
-                except ProcessLookupError: pass
+                except (ProcessLookupError, PermissionError): pass
                 try: process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL); process.wait()
             # Interruption can leave the owned held unit child alive; kill only this process group.
             try: os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError: pass
+            except (ProcessLookupError, PermissionError): pass
             # Only task-owned fake processes are eligible for cleanup.
             for file in (root / "mocks").glob("*.pid"):
                 if file.with_suffix(".stopped").exists(): continue

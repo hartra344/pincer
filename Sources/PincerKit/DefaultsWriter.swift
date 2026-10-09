@@ -11,7 +11,9 @@ public enum DefaultsWriter {
     }
 
     /// Waits for every write queued so far. For tests and before reading a value just written.
-    public static func flush() {
-        self.queue.sync {}
+    /// Suspends instead of blocking: a write posts `UserDefaults.didChangeNotification`, and an
+    /// observer on the main queue makes that post wait for main, so `queue.sync` there deadlocks.
+    public static func flush() async {
+        await withCheckedContinuation { done in self.queue.async { done.resume() } }
     }
 }

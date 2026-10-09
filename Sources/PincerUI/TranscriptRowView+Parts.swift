@@ -931,7 +931,7 @@ final class TranscriptFooterView: TranscriptBaseView {
             let branch = footer.branch
             for button in self.branchControls { button.isHidden = branch == nil }
             if let branch {
-                self.branchLabel.set(title: L("\(branch.number) / \(branch.count)"), symbol: "")
+                self.branchLabel.set(title: "\(branch.number) / \(branch.count)", symbol: "")
                 self.branchLabel.accessibilityText = L("Branch \(branch.number) of \(branch.count)")
                 self.previousBranchButton.isDisabled = !branch.canSwitch || branch.number <= 1
                 self.nextBranchButton.isDisabled = !branch.canSwitch || branch.number >= branch.count

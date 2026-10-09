@@ -33,7 +33,7 @@ private final class FieldSearchWorkGate: @unchecked Sendable {
     }
 }
 
-@MainActor @Suite("Settings field search ownership", .timeLimit(.minutes(2)))
+@MainActor @Suite("Settings field search ownership", .timeLimit(.minutes(2)), .parksCooperativeThread)
 struct SettingsFieldSearchOwnershipTests {
     private func model(count: Int = 2, helpBytes: Int = 0) async -> GatewaySettingsModel {
         let response = await Task.detached {

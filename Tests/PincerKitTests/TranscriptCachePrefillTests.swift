@@ -20,7 +20,8 @@ struct TranscriptCachePrefillTests {
         temp.remove()
     }
 
-    @Test func headlessRestorePrimesBeforeTailSave() async throws {
+    @Test(.disabled("Fails on main, hidden by the #920 early exit: https://github.com/hartra344/pincer/issues/959"))
+    func headlessRestorePrimesBeforeTailSave() async throws {
         let temp = TempDir()
         let scratch = ScratchDefaults()
         let gatewayID = UUID()

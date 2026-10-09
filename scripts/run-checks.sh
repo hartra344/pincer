@@ -101,12 +101,59 @@ lane() {
     pids+=($!)
 }
 
+# command… → runs `swift test`, failing an exit 0 unless every Swift Testing run it started printed its
+# final summary: something that stops the main run loop can end the runner mid-suite (#920).
+# A test helper that dies of SIGABRT gets one rerun: the Swift task allocator intermittently
+# corrupts its heap on CI (#952), with no test to pin it on.
+complete_swift_test() {
+    local out code started finished aborted attempts=${SWIFT_TEST_ATTEMPTS:-2}
+    out=$(mktemp)
+    "$@" 2>&1 | tee "$out"
+    code=${PIPESTATUS[0]}
+    started=$(grep -c 'Test run started\.' "$out")
+    finished=$(grep -cE 'Test run with [0-9]+ tests? .*(passed|failed) after' "$out")
+    aborted=$(grep -c 'unexpected signal code 6' "$out")
+    rm -f "$out"
+    if [ "$code" -ne 0 ] && [ "$aborted" -gt 0 ] && [ "$attempts" -gt 1 ]; then
+        echo "⚠ the swift test helper aborted (signal 6, #952); running the tests once more"
+        SWIFT_TEST_ATTEMPTS=$((attempts - 1)) complete_swift_test "$@"
+        return
+    fi
+    if [ "$code" -eq 0 ] && { [ "$started" -eq 0 ] || [ "$finished" -lt "$started" ]; }; then
+        echo "✗ swift test exited 0 but only $finished of $started test runs finished (#920)"
+        return 1
+    fi
+    [ "$code" -eq 0 ] || [ "$finished" -ge "$started" ] || echo "✗ swift test exited $code before its test run finished"
+    return "$code"
+}
+# The guard must reject a run that stops after its start line and accept a finished one.
+if complete_swift_test printf '◇ Test run started.\n' > /dev/null ||
+    ! complete_swift_test printf '◇ Test run started.\n✔ Test run with 2 tests in 1 suite passed after 0.1 seconds.\n' > /dev/null; then
+    echo "complete_swift_test is broken"
+    exit 1
+fi
+# …and rerun a helper abort once, but not twice.
+abort_once() {
+    if [ -e "$1" ]; then printf '◇ Test run started.\n✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\n'; return 0; fi
+    : > "$1"; printf "◇ Test run started.\nerror: Process 'helper' exited with unexpected signal code 6\n"; return 1
+}
+abort_marker=$(mktemp -u)
+if ! complete_swift_test abort_once "$abort_marker" > /dev/null ||
+    complete_swift_test sh -c "printf 'unexpected signal code 6\n'; exit 1" > /dev/null; then
+    echo "complete_swift_test's abort rerun is broken"
+    exit 1
+fi
+rm -f "$abort_marker"
+
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
-lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+# Swift Testing otherwise starts every test at once; on a few-core runner the timeout-bounded
+# tests then starve each other (#920). Override with PINCER_TEST_WIDTH.
+lane unit-tests complete_swift_test swift test --skip-build --parallel \
+    --experimental-maximum-parallelization-width "${PINCER_TEST_WIDTH:-4}" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
 lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
 lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras
@@ -150,7 +197,7 @@ report 0
 # noisy for them; the counter checks and absolute ceilings still apply. PINCER_WALL_CLOCK_CHECKS=1 opts in.
 lane perf-smoke "$CHECKS" --perf-smoke
 report $((${#pids[@]} - 1))
-lane perf-tests env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
+lane perf-tests complete_swift_test env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
     --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe'
 report $((${#pids[@]} - 1))
 

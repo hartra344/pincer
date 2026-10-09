@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Testing
 @testable import PincerKit
 
 /// Fixed Ed25519 key (bytes 1…32), so ids and public keys are known constants. Never touches the Keychain.
@@ -116,5 +117,39 @@ actor Gate {
         self.isOpen = true
         for waiter in self.waiters { waiter.resume() }
         self.waiters = []
+    }
+}
+
+/// For suites whose fakes park a cooperative-pool thread on a semaphore: their tests take turns.
+/// The pool has one thread per core and `Task.sleep` wakes up on it, so a few parked threads at
+/// once on a small CI runner leave none to wake anyone, and the whole run stalls (#920).
+struct ParksCooperativeThread: SuiteTrait, TestTrait, TestScoping {
+    var isRecursive: Bool { true }
+
+    func provideScope(for test: Test, testCase: Test.Case?, performing function: @Sendable () async throws -> Void) async throws {
+        guard testCase != nil else { return try await function() }
+        await CooperativeThreadTurn.shared.acquire()
+        do { try await function() } catch { await CooperativeThreadTurn.shared.release(); throw error }
+        await CooperativeThreadTurn.shared.release()
+    }
+}
+
+extension Trait where Self == ParksCooperativeThread {
+    static var parksCooperativeThread: Self { Self() }
+}
+
+/// An async lock: waiting for a turn suspends rather than blocking a thread.
+actor CooperativeThreadTurn {
+    static let shared = CooperativeThreadTurn()
+    private var taken = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        guard self.taken else { self.taken = true; return }
+        await withCheckedContinuation { self.waiters.append($0) }
+    }
+
+    func release() {
+        if self.waiters.isEmpty { self.taken = false } else { self.waiters.removeFirst().resume() }
     }
 }

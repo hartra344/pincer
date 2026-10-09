@@ -180,7 +180,7 @@ Every pull request runs it in the **Launch CPU** step of `tests.yml`, against th
    - Restores the cached `.build` folder
    - `swift build --build-tests`
    - `scripts/run-checks.sh`, which starts five mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
-     - `swift test --skip-build --parallel`
+     - `swift test --skip-build --parallel`, running at most 4 tests at once (`PINCER_TEST_WIDTH` changes this), so tests with timeouts don't starve each other on a small runner
      - `PincerChecks`
      - `PincerChecks --demo-core` and `PincerChecks --demo-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
      - `PincerChecks --live-core` and `PincerChecks --live-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`), each against its own mock
@@ -188,7 +188,7 @@ Every pull request runs it in the **Launch CPU** step of `tests.yml`, against th
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
      - `PincerChecks --live-reconnect` (bootstrap races, overlapping reconnects and per-launch RPC counts) against its own mock
 
-     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
+     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. Both `swift test` runs fail if any Swift Testing run they started exits without printing its final summary, so a test that stops the main run loop (for example with `NSApp.postEvent`) can't end the suite early and still pass. If the test helper process aborts (signal 6, a Swift task-allocator crash tracked in [#952](https://github.com/hartra344/pincer/issues/952)), the tests run once more; a second abort fails the run. A test whose fake parks a thread on a semaphore (so the code under test stays in flight) belongs in a suite marked `.parksCooperativeThread`: such tests take turns, because a few of them at once fill the small runners' cooperative thread pool, and then no `Task.sleep` wakes up and the run hangs. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
 `.github/workflows/docs.yml` builds the website (`npm ci && npm run build` in `website/`) on pull requests and pushes to `main` that change it.
 
