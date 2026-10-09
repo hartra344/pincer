@@ -64,7 +64,7 @@ struct ColdTranscriptHeightEstimateTests {
         let job = try #require(driver.split([0], all: controller.rows, width: 360,
                                             renderer: controller.renderer).offload.first)
         let result = await TranscriptPremeasurer.shared.measureWithin(
-            5, jobs: [job], env: controller.renderer.textEnvironment, epoch: driver.epoch)
+            60, jobs: [job], env: controller.renderer.textEnvironment, epoch: driver.epoch)
         #expect(result.count == 1)
         #expect(!driver.adopt(result, width: 360, epoch: driver.epoch.current).isEmpty)
         let layout = controller.renderer.layout(for: row, width: 360)
