@@ -58,6 +58,8 @@ public final class AppModel {
     public let push = PushRegistrar.shared
     /// The palette's request to start or stop dictation in one chat's composer.
     public var dictationToggleRequest: DictationToggleRequest?
+    /// macOS: the Pincer Settings tab to show next time the Settings window reads it. One-shot.
+    public var pendingAppSettingsPage: AppSettingsPage?
     /// Composers currently dictating, keyed by window, Gateway, and chat for the command palette.
     public var dictationActiveTargets: Set<DictationTarget> = []
     /// Available composers, scoped like active targets so another window cannot affect the palette.

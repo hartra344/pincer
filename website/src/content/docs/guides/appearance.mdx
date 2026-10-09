@@ -10,6 +10,24 @@ import appearance from '../../../assets/screenshots/appearance.png';
 
 Open **Settings → Appearance** to choose how Pincer looks.
 
+## Pincer Settings
+
+Pincer's own Settings hold preferences for this device. They're separate from [Gateway Settings](../gateway-settings/), which change the gateway's config.
+
+- **macOS:** choose **Pincer → Settings…** (<kbd>⌘</kbd> <kbd>,</kbd>). Settings is a window with tabs.
+- **iPhone and iPad:** tap the gear at the top of the chat list, or open the [command palette](../command-palette-and-navigation/) (<kbd>⌘</kbd> <kbd>K</kbd>) and choose **Open Settings…**. Settings opens a list of pages; tap one to open it.
+
+Both have the same pages, in this order:
+
+| Page | What's on it |
+| --- | --- |
+| **General** | Your name; **Launch**, **Quick Capture** and **Menu Bar** (macOS only); **This device**; **Storage** (cached chats and the outbox); **Search** (Spotlight); **Tips**; **About** (help and the privacy policy). |
+| **Appearance** | Theme, avatars, colors and **Sidebar**. |
+| **Chats** | Thinking steps and reactions; **Read Aloud**; **Dictation**. |
+| **Notifications** | Notifications on this device and, on iOS, [while Pincer is closed](../push-notifications/). |
+| **Privacy** | **Location**: **Share location context with the agent** (see [Composer](../composer/)). **Web Content**: **Load images the agent links from the web**. |
+| **Keyboard Shortcuts** | iPad and Mac only (the Mac tab is labeled **Shortcuts**). See [Change a shortcut](../../reference/keyboard-shortcuts/#change-a-shortcut). |
+
 On macOS, the Settings window fits the available height of its display. Moving it to a shorter display, or changing the space available around the Dock, updates the height limit; long tabs scroll and shorter tabs stay compact.
 
 <DocScreenshot src={appearance} ios={appearanceIOS} iosAlt="iPhone Appearance settings with Light mode and the Default theme." iosCaption="iOS appearance controls in the isolated demo app." alt="Appearance settings with Light mode, Lobster selected, and theme color controls." caption="macOS appearance controls. This selection affects the documentation app only." narrow />
@@ -50,6 +68,13 @@ export const themes = [
 ## Custom colors
 
 Any of a theme's colors can be overridden with your own pick, and reset back to the theme's.
+
+## Sidebar
+
+The **Sidebar** section sets what the chat list shows:
+
+- **Show last message under each chat**: a one-line preview of the latest message. On by default.
+- **List subagent runs under their chat**: off by default, so each chat is one thread and you open a run from its tool call. See [Organizing chats](../organizing-chats/).
 
 ## Chat and group icons and colors
 

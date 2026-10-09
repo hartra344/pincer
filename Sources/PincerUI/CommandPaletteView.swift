@@ -6,8 +6,6 @@ import Observation
 /// all from the keyboard. Type to filter, ↑/↓ to move, Return to run, Esc to go back or close.
 struct CommandPaletteView: View {
     @Binding var isPresented: Bool
-    /// iOS: Settings is a sheet owned by the presenter.
-    var openAppSettings: () -> Void
     @Environment(AppModel.self) private var app
     #if DEBUG
     @Environment(\.paletteSearchProbe) private var searchProbe
@@ -17,9 +15,7 @@ struct CommandPaletteView: View {
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
     @Environment(\.sidebarToggle) private var sidebarToggle
-    #if os(macOS)
-    @Environment(\.openSettings) private var openSettings
-    #endif
+    @Environment(\.openAppSettings) private var openAppSettings
     @FocusedValue(\.readAloud) private var readAloud
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @State private var query: String
@@ -59,11 +55,10 @@ struct CommandPaletteView: View {
         let building: Bool
     }
 
-    init(isPresented: Binding<Bool>, page: Page = .root, query: String = "", openAppSettings: @escaping () -> Void = {}) {
+    init(isPresented: Binding<Bool>, page: Page = .root, query: String = "") {
         self._isPresented = isPresented
         self._page = State(initialValue: page)
         self._query = State(initialValue: query)
-        self.openAppSettings = openAppSettings
     }
 
     private enum Command: String {
@@ -730,11 +725,7 @@ struct CommandPaletteView: View {
         case .toggleThinking:
             self.thinkingDisplay = self.thinkingDisplay == .none ? ThinkingDisplay.defaultValue : .none
         case .appSettings:
-            #if os(macOS)
-            self.openSettings()
-            #else
             self.openAppSettings()
-            #endif
         case .gatewaySettings:
             if let gateway { self.openGatewaySettings(gateway) }
         case .automations:
@@ -766,11 +757,7 @@ struct CommandPaletteView: View {
         case .readAloud:
             self.readAloud?.toggleLastReply()
         case .readAloudSettings:
-            #if os(macOS)
-            self.openSettings()
-            #else
-            self.openAppSettings()
-            #endif
+            self.openAppSettings(.chats)
         case .voiceSettings:
             if let gateway { self.openGatewaySettings(gateway, at: .voice) }
         case .toggleDictation:
@@ -835,7 +822,6 @@ extension EnvironmentValues {
 /// Dims the window behind the palette; clicking outside closes it.
 struct CommandPaletteOverlay: View {
     @Binding var request: PaletteRequest?
-    var openAppSettings: () -> Void = {}
 
     var body: some View {
         if let request {
@@ -845,7 +831,7 @@ struct CommandPaletteOverlay: View {
                     .onTapGesture { self.request = nil }
                     .accessibilityHidden(true)
                 CommandPaletteView(isPresented: Binding(get: { self.request != nil }, set: { if !$0 { self.request = nil } }),
-                                   page: request.page, query: request.query, openAppSettings: self.openAppSettings)
+                                   page: request.page, query: request.query)
                     .id(request.id)
                     .accessibilityAddTraits(.isModal)
                     .padding(.top, 72)

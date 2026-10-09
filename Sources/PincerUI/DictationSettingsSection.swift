@@ -1,7 +1,7 @@
 import PincerKit
 import SwiftUI
 
-/// Settings → Conversation: keep dictation on this device (#463).
+/// Settings → Chats: keep dictation on this device (#463).
 struct DictationSettingsSection: View {
     let catalog: AppleDeviceSpeechCatalog
     @AppStorage(DictationPreferences.onDeviceOnlyKey) private var onDeviceOnly = DictationPreferences.onDeviceOnlyDefault

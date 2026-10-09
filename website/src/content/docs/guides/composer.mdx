@@ -27,7 +27,7 @@ If you're offline, or a message can't be sent, it stays in the chat marked **Que
 
 ## Location context
 
-In app Settings, turn on **Share location context with the agent** under **Location** (on macOS, in the **Conversation** tab). It starts off. With permission, Pincer requests a one-time location while the app is active and sends a recent fix as agent context. The context is separate from your message text. Pincer keeps the coordinates supplied by the device and reports the provider's horizontal accuracy; system privacy settings may reduce precision.
+In **Settings → Privacy → Location**, turn on **Share location context with the agent**. It starts off. With permission, Pincer requests a one-time location while the app is active and sends a recent fix as agent context. The context is separate from your message text. Pincer keeps the coordinates supplied by the device and reports the provider's horizontal accuracy; system privacy settings may reduce precision.
 
 Location acquisition happens separately from sending. If permission is denied, the device cannot obtain a fix, or the last observation is more than five minutes old, the message sends without location. Settings shows the current permission or acquisition status and offers recovery. Pincer uses one-shot requests while the app is active and clears its location cache when it goes into the background. This requires OpenClaw 2026.9.6 or newer; if an older Gateway explicitly rejects the work-context field, Pincer sends the authored message without location and shows a compatibility notice.
 
@@ -82,7 +82,7 @@ The first time, Pincer asks for permission to use the **microphone** and **speec
 Unless you turn on **On-device only** (below), your device may send the audio to Apple to turn it into text. It isn't sent to your gateway. Only the text you send reaches the gateway.
 :::
 
-To keep your voice on the device, turn on **Settings → Conversation → Dictation → On-device only**. When on, your speech is recognized on this device and isn't sent to Apple. When off, Apple's servers may be used for languages that don't have an on-device model. If your language has no on-device model while it's on, Settings says so ("On-device dictation isn't available for *language*, so dictation won't work while this is on."), and the microphone button explains it and doesn't dictate. Turn the setting off to use Apple's servers.
+To keep your voice on the device, turn on **Settings → Chats → Dictation → On-device only**. When on, your speech is recognized on this device and isn't sent to Apple. When off, Apple's servers may be used for languages that don't have an on-device model. If your language has no on-device model while it's on, Settings says so ("On-device dictation isn't available for *language*, so dictation won't work while this is on."), and the microphone button explains it and doesn't dictate. Turn the setting off to use Apple's servers.
 
 The microphone button doesn't appear if speech recognition isn't available for your language.
 

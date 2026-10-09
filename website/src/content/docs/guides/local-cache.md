@@ -77,7 +77,7 @@ log stream --predicate 'subsystem == "chat.pincer" AND category == "TranscriptCa
 
 ## Clearing the cache
 
-To free the space or start fresh, open **Settings** (**General** tab on macOS) and find **Storage**:
+To free the space or start fresh, open **Settings → General** and find **Storage**:
 
 - **Cached transcripts** shows how much space the cache uses, for all gateways (or **Off** when `PINCER_CACHE_DIR=off`).
 - **Clear Cache…** asks **Clear cached transcripts?** and, when you confirm with **Clear Cache**, deletes every gateway's cached transcripts, search indexes and quarantined files.

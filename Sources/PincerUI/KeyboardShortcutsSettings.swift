@@ -372,13 +372,4 @@ private struct PadShortcutCapture: UIViewRepresentable {
         }
     }
 }
-
-/// iPad: Settings → Keyboard Shortcuts, pushed from the Settings sheet.
-struct KeyboardShortcutsSettingsPage: View {
-    var body: some View {
-        Form { KeyboardShortcutsSettingsSections() }
-            .formStyle(.grouped)
-            .navigationTitle(L("Keyboard Shortcuts"))
-    }
-}
 #endif

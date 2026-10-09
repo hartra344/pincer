@@ -21,7 +21,7 @@ struct ChannelList: View {
     @State private var changingIcon: SessionRow?
     @State private var changingGroupIcon: String?
     @State private var pickingColor: SessionRow?
-    @State private var showingSettings = false
+    @Environment(\.openAppSettings) private var openAppSettings
     @State private var expandedThreads: Set<String> = []
     @Environment(\.appTheme) private var theme
     @Environment(AppModel.self) private var app
@@ -141,13 +141,7 @@ struct ChannelList: View {
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button { self.showingSettings = true } label: { Label(L("Settings"), systemImage: "gearshape") }
-            }
-        }
-        .sheet(isPresented: self.$showingSettings) {
-            NavigationStack {
-                SettingsView()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.showingSettings = false } } }
+                Button { self.openAppSettings() } label: { Label(L("Settings"), systemImage: "gearshape") }
             }
         }
         #endif

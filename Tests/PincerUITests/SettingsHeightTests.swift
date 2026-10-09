@@ -15,7 +15,7 @@ struct SettingsHeightTests {
         let app = AppModel(defaults: scratch.defaults)
         var visibleHeight: CGFloat = 900
         let host = NSHostingView(rootView: SettingsForm(
-            sections: SettingsForm.Section.generalTab,
+            sections: AppSettingsPage.general.sections(on: .mac),
             visibleScreenHeightProvider: { _ in visibleHeight })
             .environment(app).frame(width: 520))
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 520, height: 900),
@@ -62,7 +62,7 @@ struct SettingsHeightTests {
         defer { scratch.remove() }
         var reads = 0
         let host = NSHostingView(rootView: SettingsForm(
-            sections: SettingsForm.Section.generalTab, maxHeight: 400,
+            sections: AppSettingsPage.general.sections(on: .mac), maxHeight: 400,
             visibleScreenHeightProvider: { _ in reads += 1; return 900 })
             .environment(AppModel(defaults: scratch.defaults)).frame(width: 520))
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 520, height: 900),
@@ -87,8 +87,12 @@ struct SettingsHeightTests {
         return host.fittingSize.height
     }
 
+    static var macTabs: [[SettingsForm.Section]] {
+        AppSettingsPage.pages(on: .mac).map { $0.sections(on: .mac) }
+    }
+
     @Test func everySectionIsOnATab() {
-        #expect(Set(SettingsForm.Section.macTabs.joined()) == Set(SettingsForm.Section.available))
+        #expect(Set(Self.macTabs.flatMap { $0 }) == Set(AppSettingsSection.available))
     }
 
     @Test func noTabGrowsPastAShortScreen() {
@@ -97,7 +101,7 @@ struct SettingsHeightTests {
         let app = AppModel(defaults: scratch.defaults)
         // A short display: 600pt visible leaves 460pt for the tab's content.
         let cap = SettingsHeightCap.limit(visibleScreenHeight: 600)
-        for tab in SettingsForm.Section.macTabs {
+        for tab in Self.macTabs {
             let height = Self.height(of: tab, maxHeight: cap, app: app)
             #expect(height <= cap + 1, "tab \(tab) is \(height)pt, past the \(cap)pt cap")
             #expect(height > 0)
@@ -108,8 +112,8 @@ struct SettingsHeightTests {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let app = AppModel(defaults: scratch.defaults)
-        let short = Self.height(of: SettingsForm.Section.notificationsTab, maxHeight: 10_000, app: app)
-        let tall = Self.height(of: SettingsForm.Section.generalTab, maxHeight: 10_000, app: app)
+        let short = Self.height(of: AppSettingsPage.notifications.sections(on: .mac), maxHeight: 10_000, app: app)
+        let tall = Self.height(of: AppSettingsPage.general.sections(on: .mac), maxHeight: 10_000, app: app)
         #expect(short < tall, "Notifications (\(short)pt) should hug its content, not fill the cap")
         #expect(short < SettingsHeightCap.comfortableMax)
     }
