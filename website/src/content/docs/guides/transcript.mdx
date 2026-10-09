@@ -158,7 +158,7 @@ Pincer shows images inline, with a Quick Look-style preview and sharing. Embedde
 - the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route;
 - public `https` images the agent links to. These are downloaded directly, **without** any credentials or cookies.
 
-To stop Pincer from loading images from the web, turn off **Load images the agent links from the web** in Settings.
+To stop Pincer from loading images from the web, turn off **Load images the agent links from the web** in **Settings → Privacy**.
 
 To keep image-heavy chats light, the transcript keeps a smaller copy of each image sized for the screen. Opening the preview loads the full-resolution image. Pincer holds a fixed amount of image memory per gateway (about 64 MB on iPhone and iPad, 160 MB on Mac), downloads up to four images at a time, and frees images you've scrolled away from when the system runs low on memory. Freed images load again when you scroll back. Images larger than 25 MB aren't downloaded, and show **Image too large to preview** instead.
 

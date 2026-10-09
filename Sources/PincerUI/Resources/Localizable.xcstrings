@@ -1433,6 +1433,16 @@
         }
       }
     },
+    "About": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About"
+          }
+        }
+      }
+    },
     "About %lld percent used": {
       "localizations": {
         "en": {
@@ -3159,6 +3169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat: %@"
+          }
+        }
+      }
+    },
+    "Chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
           }
         }
       }
@@ -11713,6 +11733,16 @@
         }
       }
     },
+    "Privacy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        }
+      }
+    },
     "Privacy & Support": {
       "localizations": {
         "en": {
@@ -18529,6 +18559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting — Personal Hotspot"
+          }
+        }
+      }
+    },
+    "Web Content": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web Content"
           }
         }
       }

@@ -121,7 +121,7 @@ Attachments of queued and failed messages are saved as ordinary files next to th
 - **Size limit.** Each gateway's outbox keeps up to 200 MB of attachments. A message that would go over that isn't saved: it needs a connection, as before.
 - **Cleanup.** A message's files are deleted as soon as it's sent, or when you delete it, clear the outbox, delete its chat or remove its gateway. When Pincer starts, it also deletes any leftover attachment files that no message refers to.
 
-To see or empty it, open **Settings** (**General** tab on macOS) and find **Storage**:
+To see or empty it, open **Settings → General** and find **Storage**:
 
 - **Outbox** shows how many messages are unsent, across all gateways, and how much space their attachments take, for example **2 messages · 4.2 MB**.
 - **Clear Outbox…** asks **Clear the outbox?** and, when you confirm with **Clear Outbox**, deletes every queued and failed message and its attachments without sending it. A message being sent at that moment isn't affected. Your chats and cached transcripts aren't affected either.

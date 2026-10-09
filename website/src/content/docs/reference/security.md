@@ -54,7 +54,7 @@ Viewing agents and reading their workspace files (`agents.list`, `agent.identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.
 
-Settings → **This device** shows the device ID cached by the app. Before you add a Gateway, the row shows a placeholder; opening Settings does not create a device key.
+**Settings → General → This device** shows the device ID cached by the app. Before you add a Gateway, the row shows a placeholder; opening Settings does not create a device key.
 
 ## Secrets
 
@@ -76,7 +76,7 @@ The list of saved gateways, with no secrets, is in Pincer's App Group, so the Sh
 
 Images are fetched only from the gateway itself: inline, through `artifacts.download`, or from the gateway's own host.
 
-The one exception is public `https` images the agent links to. These are downloaded directly with **no credentials or cookies**, and you can turn this off in Settings with **Load images the agent links from the web**.
+The one exception is public `https` images the agent links to. These are downloaded directly with **no credentials or cookies**, and you can turn this off in **Settings → Privacy** with **Load images the agent links from the web**.
 
 ## Local cache
 
@@ -85,7 +85,7 @@ Transcripts are cached so chats open instantly:
 - **Location:** `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat.
 - **Size:** up to 20,000 messages per chat.
 - **Protection:** files use complete file protection.
-- **Cleanup:** removing a gateway deletes its cache. **Settings → Storage → Clear Cache…** deletes the cache for every gateway.
+- **Cleanup:** removing a gateway deletes its cache. **Settings → General → Storage → Clear Cache…** deletes the cache for every gateway.
 - **Versioning:** each file records its format version. Files from a version Pincer can't upgrade, or from a newer Pincer, are deleted and reloaded from the gateway. Damaged files are moved to a `Quarantine/` folder in the same place (the 5 most recent are kept) and reloaded.
 
 See [Local cache](../../guides/local-cache/) for details.

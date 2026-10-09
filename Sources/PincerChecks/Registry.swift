@@ -61,6 +61,7 @@ enum Suites {
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Gateway menu") { runGatewayMenuOfflineChecks() },
+            Section("App settings layout") { runAppSettingsLayoutChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },

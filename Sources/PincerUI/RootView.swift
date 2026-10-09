@@ -132,8 +132,6 @@ struct RootView: View {
     @State private var afterSettingsDismiss: AfterDismiss?
     /// iOS: Automations shown as a sheet.
     @State private var automationsRequest: AutomationsRequest?
-    /// iOS: app Settings opened from the command palette.
-    @State private var showingAppSettings = false
     @State private var paletteRequest: PaletteRequest?
     @State private var dictationSceneID = UUID()
     #if os(macOS)
@@ -206,7 +204,7 @@ struct RootView: View {
             }
         }
         .overlay {
-            CommandPaletteOverlay(request: self.$paletteRequest, openAppSettings: { self.showingAppSettings = true })
+            CommandPaletteOverlay(request: self.$paletteRequest)
         }
         .animation(.snappy(duration: 0.15), value: self.paletteRequest)
         .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
@@ -214,14 +212,6 @@ struct RootView: View {
         .modifier(FirstRunCover())
         .modifier(SetupWizardPresenter())
         .modifier(TipsOverlay())
-        #if os(iOS)
-        .sheet(isPresented: self.$showingAppSettings) {
-            NavigationStack {
-                SettingsView()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.showingAppSettings = false } } }
-            }
-        }
-        #endif
         .sheet(item: self.$settingsRequest, onDismiss: self.settingsDismissed) { request in
             GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil },
                                   closeThen: { action in
@@ -236,6 +226,7 @@ struct RootView: View {
         .environment(\.openAutomations, self.automationsOpener)
         .environment(\.searchMessages, self.searchMessagesAction)
         .environment(\.dictationSceneID, self.dictationSceneID)
+        .modifier(AppSettingsPresenter())
         #if os(macOS)
         .environment(\.openChatWindow, .window(self.openWindow))
         #endif
@@ -423,33 +414,56 @@ private struct MainWindowFronting: ViewModifier {
 }
 #endif
 
-/// macOS: a tabbed Settings window, like the system's own apps. iOS: one grouped form in a sheet.
+/// Pincer Settings: a tabbed window on macOS, like the system's own apps; a list of pages on iOS.
+/// Both use `AppSettingsPage`, so the structure is the same everywhere.
 struct SettingsView: View {
+    @Environment(AppModel.self) private var app
+    #if os(macOS)
+    @State private var tab = AppSettingsPage.general
+    #endif
+
     var body: some View {
         #if os(macOS)
-        TabView {
-            Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: SettingsForm.Section.generalTab)
-            }
-            Tab("Appearance", systemImage: "paintpalette") {
-                SettingsForm(sections: SettingsForm.Section.appearanceTab)
-            }
-            Tab("Conversation", systemImage: "bubble.left.and.text.bubble.right") {
-                SettingsForm(sections: SettingsForm.Section.conversationTab)
-            }
-            Tab("Notifications", systemImage: "bell.badge") {
-                SettingsForm(sections: SettingsForm.Section.notificationsTab)
-            }
-            Tab(L("Shortcuts"), systemImage: "keyboard") {
-                SettingsForm(sections: SettingsForm.Section.shortcutsTab)
+        TabView(selection: self.$tab) {
+            ForEach(AppSettingsPage.pages(on: .mac)) { page in
+                Tab(page.tabTitle, systemImage: page.systemImage, value: page) {
+                    SettingsForm(page: page)
+                }
             }
         }
         .frame(width: 520)
+        .onAppear { self.takePendingPage() }
+        .onChange(of: self.app.pendingAppSettingsPage) { self.takePendingPage() }
         #else
-        SettingsForm(sections: SettingsForm.Section.available)
-            .navigationTitle(L("Settings"))
+        List(AppSettingsPage.pages(on: .current)) { page in
+            NavigationLink(value: page) {
+                Label(page.title, systemImage: page.systemImage)
+            }
+        }
+        .navigationTitle(L("Settings"))
+        .toolbar { self.doneButton }
+        .navigationDestination(for: AppSettingsPage.self) { page in
+            SettingsForm(page: page)
+                .navigationTitle(page.title)
+                .toolbar { self.doneButton }
+        }
         #endif
     }
+
+    #if os(iOS)
+    /// Every page has Done, so a sheet opened straight at a page closes in one tap.
+    var close: () -> Void = {}
+
+    private var doneButton: some ToolbarContent {
+        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: self.close) }
+    }
+    #endif
+
+    #if os(macOS)
+    private func takePendingPage() {
+        if let page = self.app.takePendingAppSettingsPage() { self.tab = page }
+    }
+    #endif
 }
 
 #if os(macOS)
@@ -554,28 +568,7 @@ enum ReactionFeature {
 }
 
 struct SettingsForm: View {
-    enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, location, sidebar, notifications, keyboardShortcuts, device, storage, spotlight, tips, help
-
-        /// Sections that exist on this platform.
-        static var available: [Self] {
-            #if os(macOS)
-            Self.allCases
-            #else
-            Self.allCases.filter { $0 != .launch && $0 != .quickCapture && $0 != .menuBar }
-            #endif
-        }
-
-        #if os(macOS)
-        static let generalTab: [Self] = [.you, .launch, .quickCapture, .menuBar, .device, .storage, .spotlight, .tips, .help]
-        static let appearanceTab: [Self] = [.appearance, .avatars, .colors]
-        static let conversationTab: [Self] = [.conversation, .readAloud, .dictation, .location, .sidebar]
-        static let notificationsTab: [Self] = [.notifications]
-        static let shortcutsTab: [Self] = [.keyboardShortcuts]
-        /// The Settings window's tabs, in order.
-        static let macTabs = [generalTab, appearanceTab, conversationTab, notificationsTab, shortcutsTab]
-        #endif
-    }
+    typealias Section = AppSettingsSection
 
     let sections: [Section]
     var speechCatalog: AppleDeviceSpeechCatalog = .shared
@@ -698,13 +691,16 @@ struct SettingsForm: View {
                     Text("Thinking steps", bundle: .module)
                     Text(self.thinkingDisplay.detail + " Includes reasoning and tool calls.")
                 }
-                Toggle(isOn: self.$loadWebImages) {
-                    Text("Load images the agent links from the web", bundle: .module)
-                    Text("Like OpenClaw's web UI. The image's website can see your IP address.", bundle: .module)
-                }
                 Toggle(isOn: self.$reactionsEnabled) {
                     Text("Enable experimental reactions", bundle: .module)
                     Text("Off by default. Reactions may not interoperate across channels or Gateways.", bundle: .module)
+                }
+            }
+        case .webImages:
+            SwiftUI.Section(L("Web Content")) {
+                Toggle(isOn: self.$loadWebImages) {
+                    Text("Load images the agent links from the web", bundle: .module)
+                    Text("Like OpenClaw's web UI. The image's website can see your IP address.", bundle: .module)
                 }
             }
         case .sidebar:
@@ -721,18 +717,7 @@ struct SettingsForm: View {
         case .notifications:
             NotificationSettingsSection()
         case .keyboardShortcuts:
-            #if os(macOS)
             KeyboardShortcutsSettingsSections()
-            #else
-            // iPad with a hardware keyboard; iPhone has no menu commands to rebind.
-            if UIDevice.current.userInterfaceIdiom == .pad {
-                SwiftUI.Section {
-                    NavigationLink(L("Keyboard Shortcuts")) { KeyboardShortcutsSettingsPage() }
-                } footer: {
-                    Text("For a hardware keyboard.", bundle: .module)
-                }
-            }
-            #endif
         case .device:
             SwiftUI.Section(L("This device")) {
                 LabeledContent(L("Device ID")) {
@@ -902,5 +887,20 @@ private struct ThemeColorRow: View {
         .onChange(of: overridden) { _, overridden in
             if !overridden { self.picked = nil }
         }
+    }
+}
+
+extension SettingsForm {
+    /// One Settings page (a macOS tab or an iOS page), with this platform's sections.
+    @MainActor init(page: AppSettingsPage) {
+        self.init(sections: page.sections(on: .current))
+    }
+}
+
+extension AppSettingsSection {
+    /// Sections that exist on this platform.
+    @MainActor static var available: [Self] {
+        let here = AppSettingsPage.sections(on: .current)
+        return Self.allCases.filter(here.contains)
     }
 }

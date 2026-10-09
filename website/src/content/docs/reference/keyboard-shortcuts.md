@@ -7,7 +7,7 @@ These are the default shortcuts. Most menu commands can be changed; see [Change 
 
 ## Change a shortcut
 
-On a Mac, open **Pincer → Settings → Shortcuts**. On iPad with a hardware keyboard, open **Settings → Keyboard Shortcuts**. Every command that can have a shortcut is listed by menu.
+Open **Settings → Keyboard Shortcuts**: on a Mac it's a tab of **Pincer → Settings…**, and on iPad it's a page of Settings. It isn't on iPhone. Every command that can have a shortcut is listed by menu.
 
 - **Record a shortcut:** click the shortcut next to a command, then press the new keys. It needs <kbd>⌘</kbd>, <kbd>⌃</kbd> or <kbd>⌥</kbd>, or a function key. Pincer's menus are paused while you record, so you can type a combination Pincer already uses.
 - **Remove a shortcut:** while recording, press <kbd>⌫</kbd>. Or right-click the shortcut and choose **Clear Shortcut**.

@@ -22,7 +22,7 @@ struct PrivacySupportSettingsSection: View {
                 Label(L("Help & Support"), systemImage: "questionmark.circle")
             }
         } header: {
-            Text("Privacy & Support", bundle: .module)
+            Text("About", bundle: .module)
         }
     }
 }

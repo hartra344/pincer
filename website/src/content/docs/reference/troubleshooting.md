@@ -80,7 +80,7 @@ Something on the gateway isn't working, usually a channel that lost its connecti
 
 ## A helper run is missing from the sidebar
 
-Subagent (helper) runs are hidden by default. Open one with **Open run** on the tool call that started it, or turn on listing them under their parent in **Settings → Sidebar**.
+Subagent (helper) runs are hidden by default. Open one with **Open run** on the tool call that started it, or turn on listing them under their parent in **Settings → Appearance → Sidebar**.
 
 ## My Discord server is just called "Discord"
 
@@ -163,7 +163,7 @@ See [Shortcuts & Siri](../../guides/shortcuts-and-siri/).
 
 ## Images from the web don't load
 
-Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.
+Check that **Load images the agent links from the web** is on in **Settings → Privacy**. Images from the gateway itself always load.
 
 ## Message search misses messages or says it's indexing
 
@@ -180,7 +180,7 @@ A damaged or outdated search index is deleted and rebuilt on its own, so you nev
 
 After an update that changes the cache format, or when a cached transcript file is damaged, Pincer discards that file and loads the chat's history from the gateway again. This is expected and nothing is lost. Damaged files are kept in `Quarantine/` inside the gateway's cache folder (the 5 most recent) only for bug reports; you can delete them.
 
-If chats keep reloading or the cache looks wrong, choose **Settings → Storage → Clear Cache…**. It deletes cached history and search indexes for every gateway, not anything on the gateway. See [Local cache](../../guides/local-cache/).
+If chats keep reloading or the cache looks wrong, choose **Settings → General → Storage → Clear Cache…**. It deletes cached history and search indexes for every gateway, not anything on the gateway. See [Local cache](../../guides/local-cache/).
 
 ## "Always allow" is missing
 
