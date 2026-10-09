@@ -223,7 +223,9 @@ jobs:
         run: swift build --build-tests -Xswiftc -enable-incremental-file-hashing
 
       # Unit tests and every check run side by side, each live run against its own mock.
+      # Below the job's limit, so a hung lane still leaves its logs for the upload step.
       - name: Unit tests and checks
+        timeout-minutes: 22
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
         run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing

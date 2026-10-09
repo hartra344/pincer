@@ -10213,6 +10213,16 @@
         }
       }
     },
+    "Not yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not yet"
+          }
+        }
+      }
+    },
     "Nothing here yet.": {
       "localizations": {
         "en": {

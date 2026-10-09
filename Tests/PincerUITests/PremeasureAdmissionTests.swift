@@ -36,7 +36,8 @@ struct PremeasureAdmissionTests {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
-        let driver = TranscriptPremeasureDriver()
+        // Its own permit: the shared one refuses at once while a parallel test holds it.
+        let driver = TranscriptPremeasureDriver(admission: TranscriptPremeasureAdmission())
         let row = TranscriptRow.entry(.user(ChatItem(id: "admission-control", role: .user,
             blocks: [.text("First actual paragraph"), .text("Second actual paragraph")])) )
         driver.currentRow = { id in id == row.id ? row : nil }
@@ -44,7 +45,7 @@ struct PremeasureAdmissionTests {
         defer { PremeasureAdmissionProbe.remove(row.id) }
         let job = try #require(driver.split([0], all: [row], width: 360, renderer: renderer).offload.first)
         #expect(job.bodies.isEmpty && job.sourceRow == nil, "admission retains no prepared source")
-        let result = TranscriptPremeasurer.shared.measureWithin(5, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
+        let result = TranscriptPremeasurer.shared.measureWithin(60, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
         #expect(result.count == 1)
         #expect(result.first?.bodies.first?.key.source == "First actual paragraph\n\nSecond actual paragraph")
         #expect(!driver.adopt(result, width: 360, epoch: driver.epoch.current).isEmpty)

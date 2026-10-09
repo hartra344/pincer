@@ -4,7 +4,7 @@ import Testing
 @testable import PincerKit
 
 @MainActor
-@Suite("Live reply preparation flow", .serialized)
+@Suite("Live reply preparation flow", .serialized, .parksCooperativeThread)
 struct LiveReplyPreparationFlowTests {
     private let profile = GatewayProfile(name: "Live reply tests", url: "ws://127.0.0.1:1", authMode: .none)
     private let sessionKey = "agent:research:main"

@@ -14,7 +14,7 @@ private final class MainWriteRecordingDefaults: UserDefaults, @unchecked Sendabl
 
 /// #571: switching chats doesn't wait on cfprefsd to save the selection.
 @MainActor
-func runSelectionDefaultsChecks() {
+func runSelectionDefaultsChecks() async {
     let suite = "pincer.checks.\(UUID().uuidString)"
     guard let defaults = MainWriteRecordingDefaults(suiteName: suite) else {
         check(false, "selection defaults: scratch suite")
@@ -29,6 +29,6 @@ func runSelectionDefaultsChecks() {
     defaults.mainThreadWrites.withLock { $0.removeAll() }
     for index in 0..<20 { gateway.selectedKey = "agent:main:switch-\(index)" }
     check(!defaults.mainThreadWrites.withLock { $0.contains(key) }, "selection defaults: a chat switch saves its selection off main")
-    DefaultsWriter.flush()
+    await DefaultsWriter.flush()
     check(defaults.string(forKey: key) == "agent:main:switch-19", "selection defaults: the last selection is the one saved")
 }

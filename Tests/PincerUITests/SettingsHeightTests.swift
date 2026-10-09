@@ -24,7 +24,10 @@ struct SettingsHeightTests {
         window.contentView = host
         window.orderBack(nil)
         defer { window.close() }
-        try? await Task.sleep(for: .milliseconds(30))
+        await self.drainMainQueue()
+        host.layoutSubtreeIfNeeded()
+        // The display observer may only attach in that layout; let its queued refresh run first.
+        await self.drainMainQueue()
         host.layoutSubtreeIfNeeded()
         let shortCap = SettingsHeightCap.limit(visibleScreenHeight: 600)
         #expect(host.fittingSize.height > shortCap + 1, "the fixture must actually exceed the shorter display's cap")
@@ -34,19 +37,24 @@ struct SettingsHeightTests {
         unrelated.isReleasedWhenClosed = false
         defer { unrelated.close() }
         NotificationCenter.default.post(name: NSWindow.didChangeScreenNotification, object: unrelated)
-        try? await Task.sleep(for: .milliseconds(30))
+        await self.drainMainQueue()
         #expect(host.fittingSize.height > shortCap + 1, "a different window's screen event must not resize this tab")
         NotificationCenter.default.post(name: NSWindow.didChangeScreenNotification, object: window)
-        try? await Task.sleep(for: .milliseconds(30))
+        await self.drainMainQueue()
         host.layoutSubtreeIfNeeded()
         #expect(host.fittingSize.height <= shortCap + 1,
                 "moving the existing Settings window to a shorter display must update its cap")
         visibleHeight = 900
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
-        try? await Task.sleep(for: .milliseconds(30))
+        await self.drainMainQueue()
         host.layoutSubtreeIfNeeded()
         #expect(host.fittingSize.height > shortCap + 1,
                 "a visible-frame change can restore the same tab's larger height")
+    }
+
+        /// Display refreshes are queued with `DispatchQueue.main.async`; one later main-queue turn runs them.
+    private func drainMainQueue() async {
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
     }
 
     @Test func explicitHeightOverrideDoesNotReadOrFollowDisplayEvents() async {

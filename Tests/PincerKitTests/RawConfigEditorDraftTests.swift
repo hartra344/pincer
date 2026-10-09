@@ -13,7 +13,7 @@ private final class RawValidationGate: @unchecked Sendable {
     }
 }
 
-@MainActor @Suite("Raw config editor intent")
+@MainActor @Suite("Raw config editor intent", .parksCooperativeThread)
 struct RawConfigEditorDraftTests {
     @Test func delayedInitialSnapshotPreservesExistingUserIntent() async {
         let draft = RawConfigEditorDraft()

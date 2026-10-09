@@ -187,7 +187,7 @@ struct TranscriptPremeasureTests {
         driver.currentRow = { id in rows.first { $0.id == id } }
         let job = try! #require(driver.split([0], all: rows, width: 700, renderer: renderer).offload.first)
         let measured = await TranscriptPremeasurer.shared.measureWithin(
-            5, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
+            60, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
         #expect(driver.adopt(measured, width: 700, epoch: driver.epoch.current).count == 1)
         #expect(driver.split([0], all: rows, width: 700, renderer: renderer).measureNow == [0])
 

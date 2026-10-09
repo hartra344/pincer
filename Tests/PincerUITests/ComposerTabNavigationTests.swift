@@ -109,18 +109,18 @@ struct ComposerTabNavigationTests {
         [view] + view.subviews.flatMap(Self.descendants)
     }
 
+    /// Dispatches straight through `NSApp.sendEvent`. Never round-trip through the global event
+    /// queue here: `postEvent(_:atStart:)` stops the main run loop, which ends `swift test`'s async
+    /// main before every suite has finished (#920).
     private static func sendTab(_ window: NSWindow, modifiers: NSEvent.ModifierFlags) {
+        // A real Shift-Tab carries NSBackTabCharacter, which AppKit maps to insertBacktab:.
+        let characters = modifiers.contains(.shift) ? "\u{19}" : "\t"
         guard let event = NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
-            isARepeat: false, keyCode: 48
+            windowNumber: window.windowNumber, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 48
         ) else { Issue.record("could not create Tab event"); return }
-        NSApp.postEvent(event, atStart: true)
-        guard let queued = NSApp.nextEvent(matching: .keyDown, until: Date(), inMode: .default, dequeue: true) else {
-            Issue.record("Tab event was not queued")
-            return
-        }
-        NSApp.sendEvent(queued)
+        NSApp.sendEvent(event)
     }
 }
 #endif

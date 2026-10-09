@@ -36,7 +36,7 @@ private final class CatalogRefreshGate: @unchecked Sendable {
 }
 
 @MainActor
-@Suite("Device speech catalog")
+@Suite("Device speech catalog", .parksCooperativeThread)
 struct DeviceSpeechCatalogTests {
     @Test func refreshDoesNotRunDiscoveryOnTheMainThread() async {
         let probe = CatalogThreadProbe()
