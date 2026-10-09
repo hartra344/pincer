@@ -55,7 +55,8 @@ struct ColdTranscriptHeightEstimateTests {
     @Test func actualPremeasureCanReplaceColdEstimateWithoutChangingReaderAnchor() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let (controller, _, _) = TranscriptListControllerTests().make(scratch)
+        // Its own permit: the shared one refuses at once while a parallel test holds it.
+        let (controller, _, _) = TranscriptListControllerTests().make(scratch, admission: TranscriptPremeasureAdmission())
         let row = TranscriptListControllerTests.user(902, text: "A measured paragraph with real text.")
         _ = controller.accept([row], contextChanged: false)
         controller.anchor = .row(row.id, 12)
