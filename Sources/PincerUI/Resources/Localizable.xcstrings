@@ -1353,6 +1353,16 @@
         }
       }
     },
+    "A live tail of the Gateway's log": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A live tail of the Gateway's log"
+          }
+        }
+      }
+    },
     "A one-line preview of the latest message in the chat list.": {
       "localizations": {
         "en": {
@@ -1529,6 +1539,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Active %@ ago"
+          }
+        }
+      }
+    },
+    "Activity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity"
           }
         }
       }
@@ -1829,6 +1849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agents lose its tools until someone signs in again."
+          }
+        }
+      }
+    },
+    "Agents, defaults and models": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents, defaults and models"
           }
         }
       }
@@ -2283,12 +2313,12 @@
         }
       }
     },
-    "Approving new senders? See Pairing Requests.": {
+    "Approving new senders? See Message Requests.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Approving new senders? See Pairing Requests."
+            "value": "Approving new senders? See Message Requests."
           }
         }
       }
@@ -2299,6 +2329,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection."
+          }
+        }
+      }
+    },
+    "Apps signed in to this Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apps signed in to this Gateway"
           }
         }
       }
@@ -3833,6 +3873,16 @@
         }
       }
     },
+    "Configure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configure"
+          }
+        }
+      }
+    },
     "Confirm Plugin Change": {
       "localizations": {
         "en": {
@@ -4673,12 +4723,12 @@
         }
       }
     },
-    "Couldn't Load Pairing Requests": {
+    "Couldn't Load Message Requests": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn't Load Pairing Requests"
+            "value": "Couldn't Load Message Requests"
           }
         }
       }
@@ -5443,32 +5493,12 @@
         }
       }
     },
-    "Devices": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Devices"
-          }
-        }
-      }
-    },
     "Devices Aren't Available": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Devices Aren't Available"
-          }
-        }
-      }
-    },
-    "Devices…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Devices…"
           }
         }
       }
@@ -6253,12 +6283,32 @@
         }
       }
     },
+    "Every session, to archive or branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every session, to archive or branch"
+          }
+        }
+      }
+    },
     "Every setting the Gateway's schema describes. The other pages show the common ones.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Every setting the Gateway's schema describes. The other pages show the common ones."
+          }
+        }
+      }
+    },
+    "Every setting, by config section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every setting, by config section"
           }
         }
       }
@@ -6443,12 +6493,32 @@
         }
       }
     },
+    "Extensions the Gateway loads": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions the Gateway loads"
+          }
+        }
+      }
+    },
     "Extensive": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Extensive"
+          }
+        }
+      }
+    },
+    "External tools your agents can call": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "External tools your agents can call"
           }
         }
       }
@@ -7073,6 +7143,16 @@
         }
       }
     },
+    "Gateway configuration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway configuration"
+          }
+        }
+      }
+    },
     "Gateway default": {
       "localizations": {
         "en": {
@@ -7373,6 +7453,16 @@
         }
       }
     },
+    "Heartbeat, cron and hooks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heartbeat, cron and hooks"
+          }
+        }
+      }
+    },
     "Help": {
       "localizations": {
         "en": {
@@ -7549,6 +7639,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "How freely the agent reacts"
+          }
+        }
+      }
+    },
+    "How replies are read aloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How replies are read aloud"
+          }
+        }
+      }
+    },
+    "How this device connects": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How this device connects"
           }
         }
       }
@@ -7793,6 +7903,16 @@
         }
       }
     },
+    "Installed skills and ClawHub": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed skills and ClawHub"
+          }
+        }
+      }
+    },
     "Installers": {
       "localizations": {
         "en": {
@@ -7869,6 +7989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Invalid Config"
+          }
+        }
+      }
+    },
+    "Is each channel account connected?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Is each channel account connected?"
           }
         }
       }
@@ -8723,6 +8853,16 @@
         }
       }
     },
+    "Machines that run commands for your agents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Machines that run commands for your agents"
+          }
+        }
+      }
+    },
     "Main chat": {
       "localizations": {
         "en": {
@@ -8909,6 +9049,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Message #%@"
+          }
+        }
+      }
+    },
+    "Message Requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message Requests"
+          }
+        }
+      }
+    },
+    "Message Requests Aren't Available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message Requests Aren't Available"
           }
         }
       }
@@ -10893,6 +11053,26 @@
         }
       }
     },
+    "Operator Devices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operator Devices"
+          }
+        }
+      }
+    },
+    "Operator Devices…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operator Devices…"
+          }
+        }
+      }
+    },
     "Optional": {
       "localizations": {
         "en": {
@@ -11093,26 +11273,6 @@
         }
       }
     },
-    "Pairing Requests": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pairing Requests"
-          }
-        }
-      }
-    },
-    "Pairing Requests Aren't Available": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pairing Requests Aren't Available"
-          }
-        }
-      }
-    },
     "Parent: %@": {
       "localizations": {
         "en": {
@@ -11129,6 +11289,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Password"
+          }
+        }
+      }
+    },
+    "Past approval decisions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Past approval decisions"
           }
         }
       }
@@ -11289,6 +11459,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pending Requests"
+          }
+        }
+      }
+    },
+    "People & Devices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People & Devices"
+          }
+        }
+      }
+    },
+    "People waiting to message your agents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "People waiting to message your agents"
           }
         }
       }
@@ -11609,6 +11799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Policy"
+          }
+        }
+      }
+    },
+    "Port, auth and reload": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port, auth and reload"
           }
         }
       }
@@ -14433,6 +14633,16 @@
         }
       }
     },
+    "Session and message behavior": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session and message behavior"
+          }
+        }
+      }
+    },
     "Sessions": {
       "localizations": {
         "en": {
@@ -15653,6 +15863,16 @@
         }
       }
     },
+    "Status, channels, clients and restart": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status, channels, clients and restart"
+          }
+        }
+      }
+    },
     "Status: %@": {
       "localizations": {
         "en": {
@@ -16549,6 +16769,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The config changed on the Gateway since it was loaded."
+          }
+        }
+      }
+    },
+    "The config file as JSON": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The config file as JSON"
           }
         }
       }
@@ -17613,6 +17843,16 @@
         }
       }
     },
+    "Tokens, cost and quotas": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tokens, cost and quotas"
+          }
+        }
+      }
+    },
     "Too large to queue offline — sends when you’re connected": {
       "localizations": {
         "en": {
@@ -18463,6 +18703,16 @@
         }
       }
     },
+    "Version, status and config file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version, status and config file"
+          }
+        }
+      }
+    },
     "View": {
       "localizations": {
         "en": {
@@ -18633,6 +18883,16 @@
         }
       }
     },
+    "What agents are allowed to use": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What agents are allowed to use"
+          }
+        }
+      }
+    },
     "What should the agent do?": {
       "localizations": {
         "en": {
@@ -18703,6 +18963,16 @@
         }
       }
     },
+    "Where agents can be reached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where agents can be reached"
+          }
+        }
+      }
+    },
     "Where is OpenClaw running?": {
       "localizations": {
         "en": {
@@ -18719,6 +18989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Which channels and chats route to this agent. Bindings are managed in the config."
+          }
+        }
+      }
+    },
+    "Which commands agents may run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which commands agents may run"
           }
         }
       }

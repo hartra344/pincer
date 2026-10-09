@@ -22,11 +22,11 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case usage
     /// Voice: the Gateway's text-to-speech provider and persona (`tts.*`).
     case voice
-    /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
+    /// Message Requests (was Pairing Requests): senders waiting to DM the agents on a pairing-policy channel.
     case pairing
     /// Channel Status: each channel account's connection, and start, stop, log out, reconnect and QR login.
     case channelStatus
-    /// Devices: operator devices paired with the Gateway and devices waiting to pair (`device.pair.*`).
+    /// Operator Devices: operator devices paired with the Gateway and devices waiting to pair (`device.pair.*`).
     case devices
     /// Nodes: devices that run commands for agents (`node.list`).
     case nodes
@@ -188,9 +188,12 @@ public enum SettingsCatalog {
         SettingsDestinationMatch(destination: .execPolicy, title: "Command Policy", symbol: "lock.shield",
                                  keywords: ["command policy", "exec", "allowlist", "always allow", "approval policy",
                                             "ask", "security"]),
-        SettingsDestinationMatch(destination: .devices, title: "Devices", symbol: "laptopcomputer.and.iphone",
-                                 keywords: ["devices", "device pairing", "pair", "approve", "reject", "revoke", "remove",
+        SettingsDestinationMatch(destination: .devices, title: "Operator Devices", symbol: "laptopcomputer.and.iphone",
+                                 keywords: ["operator devices", "devices", "device pairing", "pair", "approve", "reject", "revoke", "remove",
                                             "fingerprint", "paired", "operators", "access"]),
+        SettingsDestinationMatch(destination: .pairing, title: "Message Requests", symbol: "person.badge.key",
+                                 keywords: ["message requests", "pairing requests", "pairing", "senders", "dm",
+                                            "approve", "dismiss", "people"]),
         SettingsDestinationMatch(destination: .nodes, title: "Nodes", symbol: "cpu",
                                  keywords: ["nodes", "node", "paired nodes", "companion", "rename", "unpair"]),
         SettingsDestinationMatch(destination: .skills, title: "Skills", symbol: "wand.and.stars",

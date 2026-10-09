@@ -9,7 +9,7 @@ import shotChannelStatusIOS from '../../../assets/screenshots/features/ios/chann
 
 **Channel Status** shows every channel account on your gateway (Discord, Telegram, WhatsApp and the rest) and whether it's working. You can reconnect, start, stop or log out an account, and link WhatsApp with a QR code, without a terminal.
 
-This page is about whether accounts are connected. Their settings are on the **Channels** settings page, and letting a new person message your agents is under [Pairing Requests](../gateway-settings/#pairing-requests).
+This page is about whether accounts are connected. Their settings are on the **Channels** settings page, and letting a new person message your agents is under [Message Requests](../gateway-settings/#message-requests).
 
 ## Opening it
 
@@ -36,7 +36,7 @@ Every state has an icon and a text label. **Logged Out** uses the standard text 
 
 Channels are optional: Pincer talks to your agents directly. If none is set up, the page just says **No Channels** (with **Open Channels Settings**); it's never flagged as a problem. If your gateway doesn't report channel status, the page says **Unavailable on this Gateway** and shows the channels from Health, read-only. While Pincer isn't connected, it shows the last list it had, dimmed.
 
-At the bottom, **Approving new senders? See Pairing Requests.** opens [Pairing Requests](../gateway-settings/#pairing-requests).
+At the bottom, **Approving new senders? See Message Requests.** opens [Message Requests](../gateway-settings/#message-requests).
 
 <DocScreenshot src={shotChannelStatus} alt="Channel Status with connected Discord, degraded Telegram and logged-out WhatsApp." caption="macOS, built-in demo. The demo contrasts a healthy account, a simulated Telegram polling conflict and an unlinked WhatsApp account." ios={shotChannelStatusIOS} iosAlt="Channel Status with connected Discord, degraded Telegram and logged-out WhatsApp. iPhone view." iosCaption="iOS, built-in demo. The demo contrasts a healthy account, a simulated Telegram polling conflict and an unlinked WhatsApp account." />
 

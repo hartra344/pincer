@@ -14,7 +14,7 @@ openclaw devices approve <requestId>
 
 Pincer reconnects on its own after you approve it. If you switched a gateway to **Full Management**, it needs to be approved again for the extra access.
 
-If another Mac, iPhone or iPad is already paired with **Full Management**, you can approve the request from **Gateway Settings → Devices** on that device instead. See [Devices & Nodes](../../guides/devices/).
+If another Mac, iPhone or iPad is already paired with **Full Management**, you can approve the request from **Gateway Settings → Operator Devices** on that device instead. See [Operator Devices & Nodes](../../guides/devices/).
 
 ## "ws:// isn't allowed" for my address
 
@@ -60,11 +60,11 @@ Someone (or an **Always allow** answer) changed the policy file while you were e
 
 The gateway found something invalid in the policy file. Your draft is kept: fix the value named in the message, or choose **Revert**, then save again.
 
-## Pairing Requests says it isn't available
+## Message Requests says it isn't available
 
 "This Gateway doesn't support channel pairing requests" means the gateway is older than the channel pairing methods (`channels.pairing.*`). Update OpenClaw.
 
-## Pairing Requests needs Full Management
+## Message Requests needs Full Management
 
 Reviewing pairing requests needs **Access → Full Management** in **Pincer Settings ▸ Gateways**, and the gateway has to approve the change. Pincer doesn't ask for the narrower `operator.pairing` scope; see [Security & privacy](../security/#pairing-requests).
 

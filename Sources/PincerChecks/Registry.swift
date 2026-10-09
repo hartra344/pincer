@@ -61,6 +61,7 @@ enum Suites {
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Gateways settings") { runGatewaysSettingsOfflineChecks() },
+            Section("Gateway Settings sidebar") { runGatewaySettingsSidebarOfflineChecks() },
             Section("Gateway menu") { runGatewayMenuOfflineChecks() },
             Section("App settings layout") { runAppSettingsLayoutChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
@@ -505,6 +506,7 @@ enum Suites {
     static let liveCore: [LiveSection] = [
         LiveSection("Location transport (live)") { url, token in await runLiveLocationTransportChecks(url: url, token: token) },
         LiveSection("Demo removal offer (live)") { url, token in await runLiveDemoRemovalOfferChecks(url: url, token: token) },
+        LiveSection("Gateway Settings sidebar (live)") { url, token in await runLiveGatewaySettingsSidebarChecks(url: url, token: token) },
         LiveSection(title: { "Live against \($0)" }) { url, token in await runLive(url: url, token: token) },
     ]
 

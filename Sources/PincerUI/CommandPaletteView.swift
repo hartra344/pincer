@@ -532,7 +532,7 @@ struct CommandPaletteView: View {
                      keywords: ["logs", "tail", "debug", "diagnose", "errors", "console"]),
                 item(.execPolicy, L("Command Policy…"), "lock.shield",
                      keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
-                item(.devices, L("Devices…"), "laptopcomputer.and.iphone",
+                item(.devices, L("Operator Devices…"), "laptopcomputer.and.iphone",
                      keywords: ["devices", "pairing", "approve", "revoke", "paired", "nodes", "fingerprint"]),
                 item(.usage, L("Usage & Cost…"), "chart.bar.xaxis",
                      keywords: ["usage", "cost", "tokens", "spend", "billing", "quota", "rate limit", "budget"]),
