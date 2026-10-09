@@ -8,8 +8,6 @@ import Testing
 struct DemoRemovalOfferTests {
     @Test func quietWithoutTheDemoOrAConnectedGateway() {
         let scratch = ScratchDefaults()
-        let real = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([real], to: scratch.defaults)
         let app = AppModel(defaults: scratch.defaults)
         defer {
             for gateway in app.gateways { app.remove(gateway.id) }
@@ -17,9 +15,27 @@ struct DemoRemovalOfferTests {
         }
         #expect(app.demoRemovalOffer == nil)
         app.openDemo()
+        _ = app.add(GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none), secret: nil)
         // Home never connects (nothing listens on port 1), so there's nothing to offer yet.
         #expect(app.demoRemovalOffer == nil)
         #expect(!app.demoRemovalOffered)
+    }
+
+    /// Picking the demo while a real Gateway is already saved is deliberate: it's never offered for
+    /// removal, or Try the Demo would be met with "Remove the Demo?".
+    @Test func openingTheDemoBesideARealGatewayNeverOffers() {
+        let scratch = ScratchDefaults()
+        let real = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
+        GatewayProfileStore.save([real], to: scratch.defaults)
+        let app = AppModel(defaults: scratch.defaults)
+        defer {
+            for gateway in app.gateways { app.remove(gateway.id) }
+            scratch.remove()
+        }
+        app.openDemo()
+        #expect(app.demoGateway != nil)
+        #expect(app.demoRemovalOffered)
+        #expect(app.demoRemovalOffer == nil)
     }
 
     @Test func removingAnswersAndRemovesTheDemo() {

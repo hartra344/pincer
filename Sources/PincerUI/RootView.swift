@@ -361,8 +361,9 @@ private struct DemoRemovalOffer: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        // Not over the Add Gateway wizard: it asks once that's done.
-        let offer = self.app.firstRun.presentation == nil ? self.app.demoRemovalOffer : nil
+        // Not over the Add Gateway wizard or a Gateway's setup wizard: it asks once they're done.
+        let busy = self.app.firstRun.presentation != nil || self.app.gateways.contains { $0.setup.isPresented }
+        let offer = busy ? nil : self.app.demoRemovalOffer
         Color.clear
             .alert(L("Remove the Demo?"), isPresented: .constant(offer != nil), presenting: offer) { _ in
                 Button(L("Remove Demo"), role: .destructive) { self.app.answerDemoRemovalOffer(remove: true) }

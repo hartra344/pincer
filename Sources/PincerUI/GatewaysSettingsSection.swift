@@ -30,7 +30,12 @@ struct GatewaysSettingsSection: View {
         } footer: {
             Text("Connections are saved on this device. To change a Gateway itself, open Gateway Settings from the gateway menu.", bundle: .module)
         }
-        .onAppear { self.takePending(); self.sync(selected) }
+        .onAppear {
+            self.takePending()
+            // Pinned, so switching Gateways in a main window can't swap the editor under the user.
+            if self.picked == nil { self.picked = selected?.id }
+            self.sync(self.app.gatewayForSettings(self.picked))
+        }
         .onChange(of: self.app.pendingAppSettingsGatewayId) { self.takePending() }
         .onChange(of: selected?.profile) { self.sync(self.app.gatewayForSettings(self.picked)) }
         .confirmationDialog(L("Discard unsaved changes?"), isPresented: self.discardBinding) {
@@ -141,7 +146,7 @@ struct GatewaysSettingsSection: View {
     }
 
     private func pick(_ id: UUID) {
-        guard id != self.app.gatewayForSettings(self.picked)?.id else { return }
+        guard id != self.app.gatewayForSettings(self.picked)?.id else { self.picked = id; return }
         if self.hasUnsavedEdits {
             self.pendingPick = id
         } else {

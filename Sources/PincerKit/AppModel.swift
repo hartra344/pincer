@@ -352,6 +352,8 @@ public final class AppModel {
     /// Selects the built-in demo, adding it the first time. Try the Demo lands straight in its chat
     /// list: its setup wizard is never offered on its own, only from the gateway menu and ⌘K (#175).
     public func openDemo() {
+        // Picking the demo alongside a real Gateway is deliberate: never offer to remove it.
+        if self.gateways.contains(where: { !$0.profile.isDemo }) { self.markDemoRemovalOffered() }
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
             existing.setup.withdrawOffer()
@@ -376,9 +378,14 @@ public final class AppModel {
 
     /// Answers the one-time offer; it's never asked again, whichever way it went.
     public func answerDemoRemovalOffer(remove: Bool) {
+        self.markDemoRemovalOffered()
+        if remove { self.leaveDemo() }
+    }
+
+    private func markDemoRemovalOffered() {
+        guard !self.demoRemovalOffered else { return }
         self.demoRemovalOffered = true
         self.localDefaults.set(true, forKey: Self.demoRemovalOfferedKey)
-        if remove { self.leaveDemo() }
     }
 
     /// Removes the built-in demo and everything it left on this device. Saved Gateways are kept,

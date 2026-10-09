@@ -41,7 +41,8 @@ func runGatewaysSettingsOfflineChecks() {
     check(app.gateways.map(\.id) == [work.id], "gateways settings: Remove from Pincer removes only that Gateway")
 
     app.openDemo()
-    check(app.demoRemovalOffer == nil, "gateways settings: no demo offer before a real Gateway connects")
+    check(app.demoRemovalOffer == nil && app.demoRemovalOffered,
+          "gateways settings: opening the demo beside a real Gateway never offers to remove it")
     app.answerDemoRemovalOffer(remove: false)
     check(app.demoGateway != nil && app.demoRemovalOffered && defaults.bool(forKey: AppModel.demoRemovalOfferedKey),
           "gateways settings: keeping the demo is remembered")
