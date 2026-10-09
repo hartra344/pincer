@@ -36,6 +36,8 @@ While an approval or question is waiting, the icon changes to a speech bubble wi
 | **Settings…** | Opens Pincer's Settings window, in front of other apps. |
 | **Quit Pincer** | Quits Pincer. |
 
+This is the menu bar extra, separate from the **Gateway** menu in Pincer's own menu bar, which switches gateways (including **Next Gateway** and **Previous Gateway**) while Pincer is the front app.
+
 The menu works with Pincer's main window closed, and it keeps up to date while Pincer runs.
 
 ## Needs You, Running and Unread

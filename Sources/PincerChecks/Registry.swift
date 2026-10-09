@@ -60,6 +60,7 @@ enum Suites {
             Section("Payload & identity") { runIdentityChecks() },
             Section("Selection defaults") { runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
+            Section("Gateway menu") { runGatewayMenuOfflineChecks() },
             Section("Attachment draft ownership") { runAttachmentDraftOwnershipChecks() },
             Section("Device pairing action scopes") { await runDevicePairingActionScopeChecks() },
             Section("Deferred dictation send ownership") { runDeferredDictationSendChecks() },
@@ -327,6 +328,7 @@ enum Suites {
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
         Section("Shared chat load (demo)") { await runDemoSharedLoadChecks() },
         Section("Leave demo (demo)") { await runDemoLeaveDemoChecks() },
+        Section("Gateway menu (demo)") { runDemoGatewayMenuChecks() },
     ]
 
     /// The built-in demo, second half.

@@ -161,7 +161,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // Go
     case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
-    case stopRun, gatewaySettings
+    case stopRun, gatewaySettings, nextGateway, previousGateway
 
     public var id: String { self.rawValue }
 
@@ -187,7 +187,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
         case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
-        case .stopRun, .gatewaySettings: .chat
+        case .stopRun, .gatewaySettings, .nextGateway, .previousGateway: .chat
         }
     }
 
@@ -221,6 +221,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .nextMessage: L("Next Message")
         case .stopRun: L("Stop the Current Run")
         case .gatewaySettings: L("Gateway Settings…")
+        case .nextGateway: L("Next Gateway")
+        case .previousGateway: L("Previous Gateway")
         }
     }
 
@@ -251,7 +253,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .nextMessage: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .command])
         case .stopRun: KeyCombo(".", [.command])
         case .gatewaySettings: KeyCombo(",", [.shift, .command])
-        case .addGateway, .showBookmarks, .editLastMessage, .regenerateLastReply, .swapSplitChats: nil
+        case .addGateway, .showBookmarks, .editLastMessage, .regenerateLastReply, .swapSplitChats, .nextGateway, .previousGateway: nil
         }
     }
 

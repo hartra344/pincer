@@ -117,6 +117,31 @@ struct KeyboardShortcutsTests {
         #expect(!others.contains(ShortcutCommand.nextMessage.defaultCombo!))
     }
 
+    // MARK: - Gateway switching
+
+    @Test func gatewaySwitchingCommandsAreUnassignedChatCommands() {
+        for command in [ShortcutCommand.nextGateway, .previousGateway] {
+            #expect(command.defaultCombo == nil)
+            #expect(command.category == .chat)
+            #expect(ShortcutCommand.listed(in: .chat).contains(command))
+        }
+        #expect(ShortcutCommand.nextGateway.title == "Next Gateway")
+        #expect(ShortcutCommand.previousGateway.title == "Previous Gateway")
+        #expect(ShortcutCommand.nextGateway.rawValue == "nextGateway")
+        #expect(ShortcutCommand.previousGateway.rawValue == "previousGateway")
+    }
+
+    @MainActor
+    @Test func gatewaySwitchingCommandsCanBeAssignedWithoutConflicts() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let store = ShortcutStore(defaults: scratch.defaults)
+        #expect(store.combo(for: .nextGateway) == nil)
+        store.set(KeyCombo("]", [.control, .command]), for: .nextGateway)
+        #expect(store.combo(for: .nextGateway) == KeyCombo("]", [.control, .command]))
+        #expect(store.combo(for: .previousGateway) == nil)
+    }
+
     // MARK: - Store persistence
 
     @MainActor
