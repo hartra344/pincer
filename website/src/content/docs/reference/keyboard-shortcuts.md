@@ -19,7 +19,7 @@ Changes apply straight away to the menus, buttons, command palette and tips, in 
 
 If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> and <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats), can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>\</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
 
-**Edit Last Message**, **Regenerate Last Reply**, **Bookmarks…**, **Swap Chats** and **Add Gateway…** have no shortcut by default; give them one here.
+**Edit Last Message**, **Regenerate Last Reply**, **Bookmarks…**, **Swap Chats**, **Add Gateway…**, **Next Gateway** and **Previous Gateway** (under Chat and Gateway) have no shortcut by default; give them one here. <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> open pinned chats, so they can't switch gateways.
 
 **Show/Hide Sidebar** (<kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd>) is in the **View** menu. On iPad it's listed as **Toggle Sidebar** and can be changed. On a Mac it's the system's own menu item, so it isn't listed and its keys can't go to another command. It's also in the [command palette](../../guides/command-palette-and-navigation/). On iPad, when the sidebar is hidden, the **Show Sidebar** button at the top left of the chat brings it back.
 

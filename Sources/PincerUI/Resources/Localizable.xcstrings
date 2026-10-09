@@ -5013,6 +5013,16 @@
         }
       }
     },
+    "DEMO": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DEMO"
+          }
+        }
+      }
+    },
     "Daily": {
       "localizations": {
         "en": {
@@ -5289,6 +5299,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Delete…"
+          }
+        }
+      }
+    },
+    "Demo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demo"
           }
         }
       }
@@ -7039,6 +7059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing."
+          }
+        }
+      }
+    },
+    "Gateway menu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway menu"
           }
         }
       }
@@ -9403,6 +9433,16 @@
         }
       }
     },
+    "Next Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Gateway"
+          }
+        }
+      }
+    },
     "Next Message": {
       "localizations": {
         "en": {
@@ -11609,6 +11649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Previews need a newer Gateway."
+          }
+        }
+      }
+    },
+    "Previous Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Gateway"
           }
         }
       }
@@ -19189,6 +19239,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "create_*"
+          }
+        }
+      }
+    },
+    "demo gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "demo gateway"
           }
         }
       }

@@ -16,7 +16,7 @@ import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 The first time you open Pincer, it walks you through connecting to your OpenClaw Gateway. You'll find the gateway, sign in, approve this device, and finish with a quick [setup](../setup-wizard/) of your default agent. Every step has **Back**, and the progress bar at the top shows where you are. If you quit partway through, Pincer picks up where you left off.
 
-You can start the same flow any time with **Add Gateway…**. It's in the sidebar's **Organize** menu (the filter button), under **File ▸ Add Gateway…** and in the menu bar on macOS, and in the command palette (<kbd>⌘</kbd> <kbd>K</kbd>). It starts at **Find your Gateway**.
+You can start the same flow any time with **Add Gateway…**. It's in the gateway button's menu at the top of the sidebar, under **File ▸ Add Gateway…** and in the menu bar on macOS, and in the command palette (<kbd>⌘</kbd> <kbd>K</kbd>). It starts at **Find your Gateway**.
 
 ## 1. Welcome
 
@@ -163,8 +163,10 @@ More in [Troubleshooting](../../reference/troubleshooting/).
 
 Pincer shows one gateway at a time, including the [demo](../try-the-demo/). With more than one saved, switch between them:
 
+- click or tap the **gateway button** at the top of the sidebar. It shows the selected gateway's name and status. Its menu lists your saved gateways (choose one to switch), then **Add Gateway…** (**Connect Your Gateway…** when the demo is your only gateway), **Leave Demo** (while the demo is saved), **Gateway Settings…**, **Setup Assistant…** and **Reconnect**;
+- on macOS, use the **Gateway** menu in the menu bar. It lists your gateways, **Leave Demo** while the demo is saved, and has **Next Gateway** and **Previous Gateway**, which have no shortcut until you [set one](../../reference/keyboard-shortcuts/#change-a-shortcut);
 - press <kbd>⌘</kbd> <kbd>K</kbd> and choose **Switch to *name*** (type the gateway's name, or "gateway", to find it). This works on a Mac, and on an iPad or iPhone with a keyboard;
-- on macOS, click the gateway in the [menu bar](../../guides/menu-bar/), if you've turned it on.
+- on macOS, click the gateway in the [menu bar extra](../../guides/menu-bar/), if you've turned it on.
 
 Adding a gateway selects it once it's connected.
 

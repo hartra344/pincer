@@ -60,6 +60,7 @@ public struct PincerScene: Scene {
         }
         #endif
         .commands { GoCommands(app: self.app) }
+        .commands { GatewayCommands(app: self.app) }
         #if os(iOS)
         .commands { SidebarCommands() }
         #endif

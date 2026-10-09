@@ -50,6 +50,7 @@ struct ChannelList: View {
     var body: some View {
         @Bindable var gateway = self.gateway
         VStack(spacing: 0) {
+            GatewaySwitcherButton()
             #if os(macOS)
             // `.searchable(placement: .sidebar)` only shows up above a SwiftUI List on macOS.
             SidebarSearchField(text: self.$search, prompt: L("Find a chat"))
@@ -95,13 +96,8 @@ struct ChannelList: View {
                         .disabled(!self.gateway.state.isConnected)
                     Button(L("Gateway Settings…")) { self.openGatewaySettings(self.gateway) }
                         .shortcut(.gatewaySettings)
-                    Button(L("Edit Connection…")) { self.openGatewaySettings(self.gateway, at: .connection) }
-                    Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
                     Divider()
                     Button(L("Add Gateway…")) { self.app.firstRun.present() }
-                    if self.gateway.profile.isDemo {
-                        Button(L("Leave Demo")) { self.app.leaveDemo() }
-                    }
                 } label: {
                     Label(L("Organize"), systemImage: Theme.filterSymbol)
                 }
