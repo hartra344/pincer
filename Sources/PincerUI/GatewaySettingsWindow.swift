@@ -404,56 +404,11 @@ private struct SettingsSidebar: View {
         let settings = self.gateway.settings
         List(selection: $navigator.destination) {
             if self.search.trimmingCharacters(in: .whitespaces).isEmpty {
-                Section {
-                    self.row(L("Connection"), symbol: "network", .connection)
-                    self.row(L("Overview"), symbol: "info.circle", .overview)
-                    self.row(L("Health"), symbol: "heart.text.square", .health,
-                             attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
-                    self.row(L("Channel Status"), symbol: "antenna.radiowaves.left.and.right", .channelStatus,
-                             attention: self.gateway.health.hasChannelAccountIssues)
-                    self.row(L("Approval History"), symbol: "checkmark.shield", .approvals)
-                    self.row(L("Gateway Logs"), symbol: "doc.text.magnifyingglass", .logs)
-                    self.row(L("Command Policy"), symbol: "lock.shield", .execPolicy,
-                             unsaved: self.gateway.execPolicy.hasChanges)
-                    if self.gateway.supportsSkills {
-                        self.row(L("Skills"), symbol: "wand.and.stars", .skills)
-                    }
-                    if self.gateway.supportsSessionManager {
-                        self.row(L("Sessions"), symbol: "rectangle.stack", .sessions)
-                    }
-                    self.row(L("Usage"), symbol: "chart.bar.xaxis", .usage)
-                    if self.gateway.voice.supportsStatus {
-                        self.row(L("Voice"), symbol: "speaker.wave.2", .voice)
-                    }
-                    self.row(L("Pairing Requests"), symbol: "person.badge.key", .pairing,
-                             badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
-                    self.row(L("Devices"), symbol: "laptopcomputer.and.iphone", .devices,
-                             badge: self.gateway.state.isConnected ? self.gateway.devices.pendingCount : 0)
-                    if self.gateway.devices.nodesSupported {
-                        self.row(L("Nodes"), symbol: "cpu", .nodes)
-                    }
-                }
-                if settings.hasLoaded {
-                    Section(L("Settings")) {
-                        ForEach(SettingsCatalog.pages.filter { settings.shows($0) }) { page in
-                            self.row(page.title, symbol: page.symbol, .page(page.id),
-                                     badge: page.roots.reduce(0) { $0 + settings.changeCount(under: [$1]) })
-                        }
-                        if settings.pluginsSupported {
-                            self.row(L("Plugins"), symbol: "puzzlepiece.extension", .plugins,
-                                     badge: settings.changeCount(under: ["plugins"]),
-                                     attention: settings.pluginsNeedingAttention > 0)
-                        }
-                        if self.gateway.supportsMCPServers {
-                            self.row("MCP Servers", symbol: "point.3.connected.trianglepath.dotted", .mcpServers,
-                                     badge: settings.changeCount(under: ["mcp"]),
-                                     attention: self.gateway.mcp.needsAttention)
-                        }
-                    }
-                    Section(L("Advanced")) {
-                        self.row(L("All Settings"), symbol: "list.bullet.rectangle", .allSettings,
-                                 badge: settings.changeCount)
-                        self.row(L("Raw Config"), symbol: "curlybraces", .raw)
+                ForEach(GatewaySettingsSidebar.sections(self.capabilities)) { section in
+                    Section {
+                        ForEach(section.rows) { row in self.row(row) }
+                    } header: {
+                        if let title = section.group.title { Text(title) }
                     }
                 }
             } else {
@@ -479,11 +434,43 @@ private struct SettingsSidebar: View {
         }
     }
 
-    private func row(_ title: String, symbol: String, _ destination: SettingsDestination, badge: Int = 0,
-                     attention: Bool = false, unsaved: Bool = false) -> some View {
-        Label {
+    private var capabilities: GatewaySettingsSidebar.Capabilities {
+        let settings = self.gateway.settings
+        return self.gateway.settingsSidebarCapabilities(
+            pageIds: settings.hasLoaded ? SettingsCatalog.pages.filter { settings.shows($0) }.map(\.id) : [])
+    }
+
+    private func row(_ row: GatewaySettingsSidebar.Row) -> some View {
+        let settings = self.gateway.settings
+        let connected = self.gateway.state.isConnected
+        var badge = 0
+        var attention = false
+        var unsaved = false
+        switch row.destination {
+        case .health: attention = self.gateway.health.level == .degraded || self.gateway.health.needsRestart
+        case .channelStatus: attention = self.gateway.health.hasChannelAccountIssues
+        case .execPolicy: unsaved = self.gateway.execPolicy.hasChanges
+        case .pairing: badge = connected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0
+        case .devices: badge = connected ? self.gateway.devices.pendingCount : 0
+        case let .page(id): badge = SettingsCatalog.page(id)?.roots.reduce(0) { $0 + settings.changeCount(under: [$1]) } ?? 0
+        case .plugins:
+            badge = settings.changeCount(under: ["plugins"])
+            attention = settings.pluginsNeedingAttention > 0
+        case .mcpServers:
+            badge = settings.changeCount(under: ["mcp"])
+            attention = self.gateway.mcp.needsAttention
+        case .allSettings: badge = settings.changeCount
+        default: break
+        }
+        return Label {
             HStack {
-                Text(title)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.title)
+                    Text(row.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if unsaved {
                     Spacer()
                     Image(systemName: "circle.fill")
@@ -498,10 +485,10 @@ private struct SettingsSidebar: View {
                 }
             }
         } icon: {
-            Image(systemName: symbol)
+            Image(systemName: row.symbol)
         }
         .badge(badge)
-        .tag(destination)
+        .tag(row.destination)
     }
 }
 

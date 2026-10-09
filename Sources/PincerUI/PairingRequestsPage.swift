@@ -1,7 +1,7 @@
 import PincerKit
 import SwiftUI
 
-/// Gateway Settings → Pairing Requests: senders waiting to DM the agents on a channel account
+/// Gateway Settings → Message Requests (was Pairing Requests): senders waiting to DM the agents on a channel account
 /// with `dmPolicy: "pairing"` (`channels.pairing.*`). There's no event for new requests, so the
 /// page refreshes when it opens, on reconnect and every 30 seconds while it's showing.
 struct PairingRequestsPage: View {
@@ -19,7 +19,7 @@ struct PairingRequestsPage: View {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
                                        description: Text("Connect to the Gateway to review pairing requests.", bundle: .module))
             } else if !model.supported {
-                ContentUnavailableView(L("Pairing Requests Aren't Available"), systemImage: "person.badge.key",
+                ContentUnavailableView(L("Message Requests Aren't Available"), systemImage: "person.badge.key",
                                        description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.", bundle: .module))
             } else if model.needsAccess {
                 self.accessNeeded
@@ -27,7 +27,7 @@ struct PairingRequestsPage: View {
                 self.list(model)
             }
         }
-        .navigationTitle(L("Pairing Requests"))
+        .navigationTitle(L("Message Requests"))
         .toolbar {
             if connected, model.supported, !model.needsAccess {
                 if model.showsChannelFilter {
@@ -160,7 +160,7 @@ struct PairingRequestsPage: View {
                 ProgressView()
             } else if let error = model.loadState.error {
                 ContentUnavailableView {
-                    Label(L("Couldn't Load Pairing Requests"), systemImage: "exclamationmark.triangle")
+                    Label(L("Couldn't Load Message Requests"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error)
                 } actions: {

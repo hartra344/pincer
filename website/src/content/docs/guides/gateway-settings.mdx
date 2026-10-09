@@ -32,38 +32,40 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 
 ## Pages
 
-| Page | What's there |
-| --- | --- |
-| **Connection** | Status, address and access, with **Reconnect** and **Edit Connection…**. Editing the connection is in **Pincer Settings ▸ Gateways**. See [Manage gateways](../manage-gateways/). |
-| **Overview** | The gateway's version, config file and health. |
-| **Health** | Health, channels, connected clients and **Restart Gateway…**. See [Gateway health & restart](../gateway-health/). |
-| **Channel Status** | Each channel account's connection, with **Reconnect**, **Start**, **Stop…**, **Log Out…** and QR login. See [Channel Status](../channel-status/). |
-| **Approval History** | Past approval decisions from the last 30 days. |
-| **Gateway Logs** | A live tail of the gateway's log, with level filters, search, copy and export. See [Gateway Logs](../gateway-logs/). |
-| **Command Policy** | Which commands agents can run and when they ask, and what you've always allowed. See [Command Policy](../command-policy/). |
-| **Skills** | Each agent's skills and why some can't be used yet, plus ClawHub search and install. Only on gateways that offer skills. See [Skills & tools](../skills-and-tools/). |
-| **MCP Servers** | The MCP servers your Gateway connects to: add, edit, enable, reconnect and sign in. Only on gateways with config editing. See [MCP Servers](../mcp-servers/). |
-| **Sessions** | Every session on the gateway: previews, details, run status, bulk archive and delete, branches, rewind and recovery. Only on gateways that offer session management. See [Session manager](../sessions/). |
-| **Usage** | Tokens, estimated cost and rate limits. See [Usage & cost](../usage-and-cost/). |
-| **Voice** | The gateway's text-to-speech provider and persona, and whether it speaks replies on channels. Only on gateways with text-to-speech. See [Gateway voice](../gateway-voice/). |
-| **Pairing Requests** | People waiting to message your agents on a channel that uses DM pairing. See [below](#pairing-requests). |
-| **Devices** | Devices waiting to pair with the gateway and the ones already paired: approve, reject, rename and revoke. See [Devices & Nodes](../devices/). |
-| **Nodes** | The nodes paired with the gateway. See [Devices & Nodes](../devices/#nodes). |
-| **Gateway** | Core gateway settings. |
-| **Agents & Models** | Model defaults, and your agents: create, edit, duplicate and delete them, and edit their workspace files. See [Agents & workspace files](../agents/). |
-| **Channels** | Messaging channel settings, such as Discord. To see whether they're connected, use **Channel Status**. |
-| **Sessions & Messages** | How sessions and messages behave, from the gateway's config. To browse or manage sessions, see [Session manager](../sessions/). |
-| **Tools & Skills** | Tool and skill settings from the gateway's config. To browse skills or see a chat's effective tools, see [Skills & tools](../skills-and-tools/). |
-| **Automation** | Scheduled and automated runs. |
-| **Plugins** | Installed plugins and their settings. |
-| **All Settings** | Every field, grouped by section. |
-| **Raw Config** | The whole config as JSON5. |
+The sidebar is arranged in labeled groups, and each row has a one-line subtitle. **Connection** sits at the top, above the first group.
 
-**Connection**, **Overview**, **Approval History**, **Gateway Logs** and **Usage** are always there. The rest need the gateway's config.
+| Group | Page | What's there |
+| --- | --- | --- |
+| (top) | **Connection** | How this device connects: status, address and access, with **Reconnect** and **Edit Connection…**. Editing the connection is in **Pincer Settings ▸ Gateways**. See [Manage gateways](../manage-gateways/). |
+| **Status** | **Overview** | The gateway's version, config file and health. |
+| | **Health** | Health, channels, connected clients and **Restart Gateway…**. See [Gateway health & restart](../gateway-health/). |
+| | **Channel Status** | Each channel account's connection, with **Reconnect**, **Start**, **Stop…**, **Log Out…** and QR login. See [Channel Status](../channel-status/). |
+| | **Gateway Logs** | A live tail of the gateway's log, with level filters, search, copy and export. See [Gateway Logs](../gateway-logs/). |
+| **Activity** | **Sessions** | Every session on the gateway: previews, details, run status, bulk archive and delete, branches, rewind and recovery. Only on gateways that offer session management. See [Session manager](../sessions/). |
+| | **Approval History** | Past approval decisions from the last 30 days. See [below](#approval-history). |
+| | **Usage** | Tokens, estimated cost and rate limits. See [Usage & cost](../usage-and-cost/). |
+| **People & Devices** | **Message Requests** | People waiting to message your agents on a channel that uses DM pairing (formerly **Pairing Requests**). See [below](#message-requests). |
+| | **Operator Devices** | Apps signed in to this Gateway: approve, reject, rename and revoke devices (formerly **Devices**). See [Operator Devices & Nodes](../devices/). |
+| **Security** | **Command Policy** | Which commands agents can run and when they ask, and what you've always allowed. See [Command Policy](../command-policy/). |
+| | **Nodes** | The nodes paired with the gateway. Only on gateways that offer nodes. See [Operator Devices & Nodes](../devices/#nodes). |
+| **Configure** | **Agents & Models** | Model defaults, and your agents: create, edit, duplicate and delete them, and edit their workspace files. See [Agents & workspace files](../agents/). |
+| | **Channels** | Messaging channel settings, such as Discord. To see whether they're connected, use **Channel Status**. |
+| | **Tools & Skills** | Tool and skill settings from the gateway's config. To browse skills or see a chat's effective tools, see [Skills & tools](../skills-and-tools/). |
+| | **Skills** | Each agent's skills and why some can't be used yet, plus ClawHub search and install. Only on gateways that offer skills. See [Skills & tools](../skills-and-tools/). |
+| | **Sessions & Messages** | How sessions and messages behave, from the gateway's config. To browse or manage sessions, see [Session manager](../sessions/). |
+| | **Voice** | The gateway's text-to-speech provider and persona, and whether it speaks replies on channels. Only on gateways with text-to-speech. See [Gateway voice](../gateway-voice/). |
+| | **Automation** | Scheduled and automated runs. |
+| | **Plugins** | Installed plugins and their settings. |
+| | **MCP Servers** | The MCP servers your Gateway connects to: add, edit, enable, reconnect and sign in. Only on gateways with config editing. See [MCP Servers](../mcp-servers/). |
+| | **Gateway** | Core gateway settings. |
+| **Advanced** | **All Settings** | Every field, grouped by section. |
+| | **Raw Config** | The whole config as JSON5. |
+
+**Connection**, **Overview**, **Approval History**, **Gateway Logs** and **Usage** are always there. The config-based pages in **Configure** appear once the config loads. **Sessions**, **Nodes**, **Skills**, **Voice**, **Plugins** and **MCP Servers** also depend on what the Gateway supports.
 
 The curated pages are built from the gateway's own schema, so they match what your gateway supports. Rarely used fields are under **Advanced**, and sections your gateway doesn't have are hidden.
 
-**Search** in the sidebar finds any setting and jumps to it. Matching runs in the background as you type; only results for your current search and the latest loaded settings are shown. Labels, help text, and setting paths are all searchable.
+**Search** in the sidebar finds any setting and jumps to it. **Message Requests** also turns up when you search for "pairing requests". Matching runs in the background as you type; only results for your current search and the latest loaded settings are shown. Labels, help text, and setting paths are all searchable.
 
 <DocScreenshot src={settings} ios={settingsIOS} iosAlt="iPhone Agents and Models defaults with a model, thinking level, and timeout value of 600." alt="Gateway Settings showing the Agents and Models page and editable default model, thinking level, and timeout." caption="Local mock gateway with Full Management. Pages depend on the schema your gateway provides." />
 
@@ -144,15 +146,15 @@ Select an entry for the details:
 
 If the gateway doesn't keep a history, the page says "Approval History Isn't Available". Update OpenClaw to see past decisions.
 
-In **Channels**, **Devices & Nodes**, and **Pairing Requests**, errors and warnings stay visible until you use their **Dismiss** button (or press **Escape**). Success and informational notices disappear after four seconds. New notices are announced to VoiceOver without moving keyboard focus.
+In **Channels**, **Operator Devices**, and **Message Requests**, errors and warnings stay visible until you use their **Dismiss** button (or press **Escape**). Success and informational notices disappear after four seconds. New notices are announced to VoiceOver without moving keyboard focus.
 
-## Pairing Requests
+## Message Requests
 
 Canceling a pending list refresh keeps the existing pairing requests and access status intact. A canceled refresh cannot replace a newer refresh.
 
-<DocScreenshot src={pairing} ios={pairingIOS} alt="Pairing Requests with fictional Telegram and Discord senders and Approve and Dismiss controls." caption="The demo includes fictional people and account identifiers. No real account is paired by these examples." />
+<DocScreenshot src={pairing} ios={pairingIOS} alt="Message Requests with fictional Telegram and Discord senders and Approve and Dismiss controls." caption="The demo includes fictional people and account identifiers. No real account is paired by these examples." />
 
-When a channel account uses `dmPolicy: "pairing"`, someone new who messages it has to be let in before they can talk to your agents. **Pairing Requests** lists who's waiting, newest first, and the sidebar badge shows how many.
+When a channel account uses `dmPolicy: "pairing"`, someone new who messages it has to be let in before they can talk to your agents. **Message Requests** (formerly **Pairing Requests**) lists who's waiting, newest first, and the sidebar badge shows how many.
 
 Each request shows:
 
@@ -182,7 +184,7 @@ The pairing code the sender was given isn't part of the gateway's protocol, so P
 - Gateway Settings has so far been tested against the [mock gateway](../../development/mock-gateway/) only.
 - It doesn't browse the ClawHub catalog or show install progress yet.
 - Lists of objects can't be edited in forms yet. Use **Raw Config** for those.
-- **Pairing Requests** has no list of approved senders, can't remove them, and doesn't notify you about new requests.
+- **Message Requests** has no list of approved senders, can't remove them, and doesn't notify you about new requests.
 
 Gateway Logs prepares confirmed exports in the background, preserving the raw lines and their order. Leaving the page cancels document presentation; if another export is requested while preparation is running, only the latest request is presented.
 

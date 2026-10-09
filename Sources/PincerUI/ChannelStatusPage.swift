@@ -227,7 +227,7 @@ struct ChannelStatusPage: View {
             if let checked = snapshot.checkedAt {
                 Text("Checked \(Text(checked, style: .relative)) ago", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
-            Button(L("Approving new senders? See Pairing Requests.")) { self.navigator.destination = .pairing }
+            Button(L("Approving new senders? See Message Requests.")) { self.navigator.destination = .pairing }
                 .buttonStyle(.borderless)
                 .font(.callout)
         } footer: {

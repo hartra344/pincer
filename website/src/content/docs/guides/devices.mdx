@@ -1,5 +1,5 @@
 ---
-title: Devices & Nodes
+title: Operator Devices & Nodes
 description: Approve, reject, rename and revoke the devices, and see the nodes, paired with your OpenClaw Gateway, from Pincer.
 ---
 
@@ -9,11 +9,11 @@ import shotDevicesIOS from '../../../assets/screenshots/features/ios/devices.png
 
 Every app that connects to your gateway, such as Pincer on each Mac, iPhone and iPad, the Control UI, the `openclaw` CLI on another machine, or a node app, is a **device** with its own key. The gateway has to approve each one before it can connect. **Devices** in [Gateway Settings](../gateway-settings/) lists the devices waiting for approval and the ones already paired, so you can manage them without running `openclaw devices` on the gateway host.
 
-**Devices** is different from **Pairing Requests**, which lets in people who message your agents on a channel. See [Gateway Settings → Pairing Requests](../gateway-settings/#pairing-requests).
+**Operator Devices** is different from **Message Requests**, which lets in people who message your agents on a channel. See [Gateway Settings → Message Requests](../gateway-settings/#message-requests).
 
-## Opening Devices
+## Opening Operator Devices
 
-In [Gateway Settings](../gateway-settings/), choose **Devices** in the sidebar, under **Pairing Requests**. The badge on the row shows how many devices are waiting for approval. The list updates on its own when a device asks to pair or a request is answered elsewhere (`device.pair.requested`, `device.pair.resolved`), and after each change you make. **Refresh** reloads it.
+In [Gateway Settings](../gateway-settings/), choose **Operator Devices** in the sidebar, under **People & Devices** (it was called **Devices** before). The badge on the row shows how many devices are waiting for approval. The list updates on its own when a device asks to pair or a request is answered elsewhere (`device.pair.requested`, `device.pair.resolved`), and after each change you make. **Refresh** reloads it.
 
 ## What's listed
 
@@ -29,7 +29,7 @@ In [Gateway Settings](../gateway-settings/), choose **Devices** in the sidebar, 
 
 The device Pincer itself connects with is tagged **This Mac**, **This iPhone** or **This iPad**. A request from a device that's already paired and asks for more access, for example after you switch it to **Full Management**, is tagged **Scope upgrade**. A request that asks for the `node` role says so, since approving it lets agents run commands on that device.
 
-<DocScreenshot src={shotDevices} alt="Devices page with a fictional iPad pairing request and a Mac scope upgrade." caption="macOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." ios={shotDevicesIOS} iosAlt="Devices page with a fictional iPad pairing request and a Mac scope upgrade. iPhone view." iosCaption="iOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." />
+<DocScreenshot src={shotDevices} alt="Operator Devices page with a fictional iPad pairing request and a Mac scope upgrade." caption="macOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." ios={shotDevicesIOS} iosAlt="Devices page with a fictional iPad pairing request and a Mac scope upgrade. iPhone view." iosCaption="iOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." />
 
 ## Approving and rejecting
 
@@ -60,11 +60,11 @@ openclaw devices list
 openclaw devices approve <requestId>
 ```
 
-After that, a Mac, iPhone or iPad paired with **Full Management** can approve your other devices from **Devices**. See [Connect a gateway](../../getting-started/connect-a-gateway/).
+After that, a Mac, iPhone or iPad paired with **Full Management** can approve your other devices from **Operator Devices**. See [Connect a gateway](../../getting-started/connect-a-gateway/).
 
 ## Nodes
 
-**Nodes**, right after **Devices** in the sidebar, lists the nodes known to the gateway: Macs, phones and servers that run commands for your agents, such as the OpenClaw apps for macOS, iOS and Android (`node.list`). Each shows its name, platform, version, whether it's connected, or when it was last seen, and tags such as **Gateway Host**. With Full Management you can **Rename…** a node (`node.rename`). Nodes can't be removed from Pincer yet. New nodes are approved on the **Devices** page.
+**Nodes**, under **Security** in the sidebar, lists the nodes known to the gateway: Macs, phones and servers that run commands for your agents, such as the OpenClaw apps for macOS, iOS and Android (`node.list`). Each shows its name, platform, version, whether it's connected, or when it was last seen, and tags such as **Gateway Host**. With Full Management you can **Rename…** a node (`node.rename`). Nodes can't be removed from Pincer yet. New nodes are approved on the **Devices** page.
 
 Pincer itself is never a node. It only connects as an operator.
 

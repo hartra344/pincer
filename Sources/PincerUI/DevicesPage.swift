@@ -32,7 +32,7 @@ struct DevicesPage: View {
                 self.list(model)
             }
         }
-        .navigationTitle(L("Devices"))
+        .navigationTitle(L("Operator Devices"))
         .toolbar {
             if connected, model.supported, !model.needsAccess {
                 ToolbarItem {
