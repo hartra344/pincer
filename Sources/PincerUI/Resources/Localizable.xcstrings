@@ -751,16 +751,6 @@
         }
       }
     },
-    "%lld / %lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld / %lld"
-          }
-        }
-      }
-    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -2149,6 +2139,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apply"
+          }
+        }
+      }
+    },
+    "Applying saves the connection on this device and reconnects.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applying saves the connection on this device and reconnects."
           }
         }
       }
@@ -4173,6 +4173,16 @@
         }
       }
     },
+    "Connections are saved on this device. To change a Gateway itself, open Gateway Settings from the gateway menu.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections are saved on this device. To change a Gateway itself, open Gateway Settings from the gateway menu."
+          }
+        }
+      }
+    },
     "Context": {
       "localizations": {
         "en": {
@@ -5653,6 +5663,16 @@
         }
       }
     },
+    "Discard unsaved changes?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard unsaved changes?"
+          }
+        }
+      }
+    },
     "Discard your changes to the command policy": {
       "localizations": {
         "en": {
@@ -6763,16 +6783,6 @@
         }
       }
     },
-    "For a hardware keyboard.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "For a hardware keyboard."
-          }
-        }
-      }
-    },
     "For your security, new devices must be approved on the machine running OpenClaw. Run this there:": {
       "localizations": {
         "en": {
@@ -7543,6 +7553,16 @@
         }
       }
     },
+    "How this device connects to the Gateway is saved on this device, in Pincer Settings ▸ Gateways.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How this device connects to the Gateway is saved on this device, in Pincer Settings ▸ Gateways."
+          }
+        }
+      }
+    },
     "ID": {
       "localizations": {
         "en": {
@@ -7989,6 +8009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keep Both"
+          }
+        }
+      }
+    },
+    "Keep Demo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Demo"
           }
         }
       }
@@ -8729,6 +8759,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manage Automations…"
+          }
+        }
+      }
+    },
+    "Manage Gateways…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Gateways…"
           }
         }
       }
@@ -11743,16 +11783,6 @@
         }
       }
     },
-    "Privacy & Support": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Privacy & Support"
-          }
-        }
-      }
-    },
     "Privacy Policy": {
       "localizations": {
         "en": {
@@ -12483,12 +12513,12 @@
         }
       }
     },
-    "Remove Gateway…": {
+    "Remove Demo": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remove Gateway…"
+            "value": "Remove Demo"
           }
         }
       }
@@ -12573,6 +12603,16 @@
         }
       }
     },
+    "Remove from Pincer…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from Pincer…"
+          }
+        }
+      }
+    },
     "Remove item %lld": {
       "localizations": {
         "en": {
@@ -12599,6 +12639,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove the %@ key from the Gateway?"
+          }
+        }
+      }
+    },
+    "Remove the Demo?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the Demo?"
           }
         }
       }
@@ -12639,6 +12689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove…"
+          }
+        }
+      }
+    },
+    "Removing the demo deletes its sample chats from this device. Your other Gateways are kept.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removing the demo deletes its sample chats from this device. Your other Gateways are kept."
           }
         }
       }
@@ -13739,16 +13799,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save the command policy to the Gateway"
-          }
-        }
-      }
-    },
-    "Save the connection on this device and reconnect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save the connection on this device and reconnect"
           }
         }
       }
@@ -18919,6 +18969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You're connected"
+          }
+        }
+      }
+    },
+    "You're connected to %@. Remove the demo and its sample chats from this device? You can try it again any time from Add Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're connected to %@. Remove the demo and its sample chats from this device? You can try it again any time from Add Gateway."
           }
         }
       }

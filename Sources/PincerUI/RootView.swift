@@ -77,6 +77,7 @@ public struct PincerScene: Scene {
 
         WindowGroup(L("Gateway Settings"), id: "gateway-settings", for: UUID.self) { $gatewayId in
             GatewaySettingsWindow(gatewayId: gatewayId)
+                .modifier(AppSettingsPresenter())
                 .environment(self.app)
                 .themed()
         }
@@ -237,6 +238,7 @@ struct RootView: View {
         #endif
         .modifier(MainChatVisibility(compactColumn: self.compactColumn))
         .background { UnreadBadgeSync() }
+        .background { DemoRemovalOffer() }
         #if os(macOS)
         .modifier(MainWindowFronting())
         #endif
@@ -353,13 +355,31 @@ private struct UnreadBadgeSync: View {
     }
 }
 
+/// Asks once, when a real Gateway first connects while the demo is still here, whether to remove
+/// the demo. Its own view, so watching every Gateway's state doesn't re-render `RootView`.
+private struct DemoRemovalOffer: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        // Not over the Add Gateway wizard: it asks once that's done.
+        let offer = self.app.firstRun.presentation == nil ? self.app.demoRemovalOffer : nil
+        Color.clear
+            .alert(L("Remove the Demo?"), isPresented: .constant(offer != nil), presenting: offer) { _ in
+                Button(L("Remove Demo"), role: .destructive) { self.app.answerDemoRemovalOffer(remove: true) }
+                Button(L("Keep Demo"), role: .cancel) { self.app.answerDemoRemovalOffer(remove: false) }
+            } message: { gateway in
+                Text("You're connected to \(gateway.profile.name). Remove the demo and its sample chats from this device? You can try it again any time from Add Gateway.", bundle: .module)
+            }
+    }
+}
+
 /// The split view's detail column. Its own view so only it, not `RootView` and the sidebar it
 /// builds, re-renders when the selected chat changes.
 private struct GatewayDetail: View {
     let gateway: GatewayStore
     let sidebarSplitKey: Binding<String?>
     @Environment(AppModel.self) private var app
-    @Environment(\.openGatewaySettings) private var openGatewaySettings
+    @Environment(\.openAppSettings) private var openAppSettings
 
     var body: some View {
         let gateway = self.gateway
@@ -368,7 +388,7 @@ private struct GatewayDetail: View {
             case let .awaitingPairing(requestId, deviceId):
                 PairingView(requestId: requestId, deviceId: deviceId)
             case let .failed(message) where gateway.sessions.isEmpty:
-                FailedView(message: message) { self.openGatewaySettings(gateway, at: .connection) }
+                FailedView(message: message) { self.openAppSettings(.gateways, gateway: gateway.id) }
             default:
                 if let key = gateway.selectedKey {
                     let chat = gateway.chat(for: key)
@@ -431,7 +451,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 520)
+        .frame(width: 580)
         .onAppear { self.takePendingPage() }
         .onChange(of: self.app.pendingAppSettingsPage) { self.takePendingPage() }
         #else
@@ -718,6 +738,8 @@ struct SettingsForm: View {
             NotificationSettingsSection()
         case .keyboardShortcuts:
             KeyboardShortcutsSettingsSections()
+        case .gateways:
+            GatewaysSettingsSection()
         case .device:
             SwiftUI.Section(L("This device")) {
                 LabeledContent(L("Device ID")) {

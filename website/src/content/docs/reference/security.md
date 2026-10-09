@@ -54,7 +54,7 @@ Viewing agents and reading their workspace files (`agents.list`, `agent.identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.
 
-**Settings → General → This device** shows the device ID cached by the app. Before you add a Gateway, the row shows a placeholder; opening Settings does not create a device key.
+**Settings → Gateways → This device** shows the device ID cached by the app. Before you add a Gateway, the row shows a placeholder; opening Settings does not create a device key.
 
 ## Secrets
 

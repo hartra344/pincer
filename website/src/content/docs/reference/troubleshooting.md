@@ -31,7 +31,7 @@ See [Connect over Tailscale](../../getting-started/tailscale/).
 
 ## The connection fails after pinning a certificate
 
-The fingerprint must be the SHA-256 of the gateway's current certificate, in hex. If the certificate was renewed, update the pin under **Gateway Settings → Connection**, or clear it.
+The fingerprint must be the SHA-256 of the gateway's current certificate, in hex. If the certificate was renewed, update the pin in **Pincer Settings ▸ Gateways** (**Security**), or clear it.
 
 ## I don't see the agent's thinking
 
@@ -42,11 +42,11 @@ Thinking has two parts:
 
 ## Gateway Settings is read-only
 
-Editing needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
+Editing needs **Access → Full Management** in **Pincer Settings ▸ Gateways**, and the gateway has to approve the change. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
 
 ## Command Policy says "Needs Full Management"
 
-The gateway shares its command policy only with devices that have `operator.admin`. Choose **Open Connection**, set **Access** to **Full Management**, choose **Apply**, then approve this device on the gateway host with `openclaw devices approve <requestId>`. The page loads once Pincer reconnects.
+The gateway shares its command policy only with devices that have `operator.admin`. Choose **Open Connection**, then **Edit Connection…**, set **Access** to **Full Management**, choose **Apply**, then approve this device on the gateway host with `openclaw devices approve <requestId>`. The page loads once Pincer reconnects.
 
 ## "Command Policy Isn't Available"
 
@@ -66,7 +66,7 @@ The gateway found something invalid in the policy file. Your draft is kept: fix 
 
 ## Pairing Requests needs Full Management
 
-Reviewing pairing requests needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. Pincer doesn't ask for the narrower `operator.pairing` scope; see [Security & privacy](../security/#pairing-requests).
+Reviewing pairing requests needs **Access → Full Management** in **Pincer Settings ▸ Gateways**, and the gateway has to approve the change. Pincer doesn't ask for the narrower `operator.pairing` scope; see [Security & privacy](../security/#pairing-requests).
 
 If the page says no channels use DM pairing, set a channel account's `dmPolicy` to `"pairing"` on the gateway.
 

@@ -37,11 +37,11 @@ struct AppSettingsLayoutTests {
     }
 
     @Test func pageOrderAndIdentity() {
-        #expect(AppSettingsPage.allCases == [.general, .appearance, .chats, .notifications, .privacy, .shortcuts])
+        #expect(AppSettingsPage.allCases == [.general, .gateways, .appearance, .chats, .notifications, .privacy, .shortcuts])
         #expect(AppSettingsPage.pages(on: .mac) == AppSettingsPage.allCases)
-        #expect(AppSettingsPage.pages(on: .phone) == [.general, .appearance, .chats, .notifications, .privacy])
+        #expect(AppSettingsPage.pages(on: .phone) == [.general, .gateways, .appearance, .chats, .notifications, .privacy])
         #expect(AppSettingsPage.allCases.map(\.rawValue)
-            == ["general", "appearance", "chats", "notifications", "privacy", "shortcuts"])
+            == ["general", "gateways", "appearance", "chats", "notifications", "privacy", "shortcuts"])
         #expect(AppSettingsPage.allCases.allSatisfy { $0.id == $0.rawValue })
         let titles = AppSettingsPage.allCases.map(\.title)
         #expect(titles.allSatisfy { !$0.isEmpty })
@@ -55,6 +55,8 @@ struct AppSettingsLayoutTests {
         #expect(AppSettingsPage.privacy.sections(on: platform) == [.location, .webImages])
         #expect(AppSettingsPage.chats.sections(on: platform) == [.conversation, .readAloud, .dictation])
         #expect(AppSettingsPage.notifications.sections(on: platform) == [.notifications])
+        #expect(AppSettingsPage.gateways.sections(on: platform) == [.gateways, .device])
+        #expect(!AppSettingsPage.general.sections(on: platform).contains(.device))
     }
 
     @Test func eachRouteIsANewRequest() {
@@ -64,6 +66,42 @@ struct AppSettingsLayoutTests {
         #expect(first.id != second.id)
         #expect(first != second)
         #expect(AppSettingsRoute().page == nil)
+        #expect(AppSettingsRoute().gatewayId == nil)
+        let id = UUID()
+        let toGateway = AppSettingsRoute(gatewayId: id)
+        #expect(toGateway.page == .gateways && toGateway.gatewayId == id)
+        #expect(AppSettingsRoute(page: .chats, gatewayId: id).page == .gateways)
+    }
+
+    @MainActor
+    @Test func pendingGatewayIsOneShot() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let app = AppModel(defaults: scratch.defaults)
+        let id = UUID()
+        app.pendingAppSettingsGatewayId = id
+        #expect(app.takePendingAppSettingsGatewayId() == id)
+        #expect(app.pendingAppSettingsGatewayId == nil)
+        #expect(app.takePendingAppSettingsGatewayId() == nil)
+    }
+
+    @MainActor
+    @Test func gatewayForSettingsFallsBackToTheSelectedThenFirst() {
+        let scratch = ScratchDefaults()
+        let home = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
+        let work = GatewayProfile(name: "Work", url: "ws://127.0.0.1:2", authMode: .none)
+        GatewayProfileStore.save([home, work], to: scratch.defaults)
+        let app = AppModel(defaults: scratch.defaults)
+        defer {
+            for gateway in app.gateways { app.remove(gateway.id) }
+            scratch.remove()
+        }
+        #expect(app.gatewayForSettings(work.id)?.id == work.id)
+        app.selectedGatewayId = work.id
+        #expect(app.gatewayForSettings(nil)?.id == work.id)
+        #expect(app.gatewayForSettings(UUID())?.id == work.id)
+        app.selectedGatewayId = nil
+        #expect(app.gatewayForSettings(nil)?.id == home.id)
     }
 
     @MainActor

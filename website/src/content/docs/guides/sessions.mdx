@@ -53,7 +53,7 @@ After deletion succeeds, an older detail request cannot bring the deleted sessio
 Changing the filter clears the selection.
 
 :::caution[Some actions need Full Management]
-Browsing, previews, details and branches need `operator.read`. Archiving, unarchiving, recovering and deleting **archived** sessions need `operator.write`. Deleting sessions that aren't archived, switching branches and rewinding need `operator.admin`: set **Access** to **Full Management** on the **Connection** page, then approve this device on the gateway host. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
+Browsing, previews, details and branches need `operator.read`. Archiving, unarchiving, recovering and deleting **archived** sessions need `operator.write`. Deleting sessions that aren't archived, switching branches and rewinding need `operator.admin`: set **Access** to **Full Management** in **Pincer Settings ▸ Gateways**, then approve this device on the gateway host. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
 
 Without it, those buttons are turned off and the page shows **Needs Full Management**. If your selection includes sessions that aren't archived, it says *Only archived sessions can be deleted without Full Management*. Archive them first, then delete them.
 :::
