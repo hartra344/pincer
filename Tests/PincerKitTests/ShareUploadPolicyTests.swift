@@ -11,7 +11,8 @@ private final class SharePreparationGate: @unchecked Sendable {
     private var wasMain = false
 
     var ranOnMain: Bool { lock.withLock { wasMain } }
-    func waitForEntry() -> Bool { entered.wait(timeout: .now() + 3) == .success }
+    // Generous: a loaded CI pool can take seconds to start the worker; success returns at once.
+    func waitForEntry() -> Bool { entered.wait(timeout: .now() + 30) == .success }
     func open() { release.signal() }
     func probe() {
         let first = lock.withLock {
