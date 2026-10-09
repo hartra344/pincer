@@ -132,7 +132,9 @@ struct QuotedRowPreviewTests {
         let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
                                         agent: AgentSummary(id: "main", name: "Claw"), sessionKey: chat.sessionKey,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: chat)
-        let controller = TranscriptListController(context: context, prefetchBudget: 0.004)
+        // Its own permit: the shared one refuses at once while a parallel test holds it.
+        let controller = TranscriptListController(context: context, prefetchBudget: 0.004,
+                                                  premeasureAdmission: TranscriptPremeasureAdmission())
         let row = TranscriptRow.entry(.user(reply))
         _ = controller.accept([row], contextChanged: false)
         let driver = controller.premeasure

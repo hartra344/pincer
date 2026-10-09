@@ -82,14 +82,16 @@ struct TranscriptListControllerTests {
 
     static func rows(_ range: Range<Int>) -> [TranscriptRow] { range.map { self.user($0) } }
 
-    func make(_ scratch: ScratchDefaults) -> (TranscriptListController, FakeHost, TranscriptContext) {
+    func make(_ scratch: ScratchDefaults,
+              admission: TranscriptPremeasureAdmission = .shared) -> (TranscriptListController, FakeHost, TranscriptContext) {
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
         let key = "agent:list:main"
         let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
                                         agent: AgentSummary(id: "probe", name: "Probe"), sessionKey: key,
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
-        let controller = TranscriptListController(context: context, prefetchBudget: 0.006)
+        let controller = TranscriptListController(context: context, prefetchBudget: 0.006,
+                                                  premeasureAdmission: admission)
         let host = FakeHost()
         host.rowCount = { [unowned controller] in controller.rows.count }
         controller.host = host
