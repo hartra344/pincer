@@ -86,14 +86,14 @@ extension GatewayStore {
 extension CommandPalette {
     public static let setupGatewayCommand = "setupGateway"
 
-    /// ⌘K "Set Up Gateway…" for the selected gateway (none without one; disabled while disconnected).
+    /// ⌘K "Setup Assistant…" (formerly "Set Up Gateway…", still found by "set up") for the selected gateway (none without one; disabled while disconnected).
     @MainActor public static func setupGatewayItem(gateway: GatewayStore?) -> PaletteItem? {
         guard let gateway else { return nil }
         let setup = gateway.setup
         let subtitle: String? = setup.progress.completed ? nil
             : "\(setup.settledCount) of \(SetupStep.allCases.count) steps"
-        return PaletteItem(id: "command:\(self.setupGatewayCommand)", title: "Set Up Gateway…", subtitle: subtitle,
-                           symbol: "checklist", keywords: ["setup", "wizard", "onboarding", "getting started"],
+        return PaletteItem(id: "command:\(self.setupGatewayCommand)", title: "Setup Assistant…", subtitle: subtitle,
+                           symbol: "checklist", keywords: ["set up gateway", "setup", "wizard", "onboarding", "getting started"],
                            section: .commands, action: .command(self.setupGatewayCommand),
                            isEnabled: gateway.state.isConnected)
     }

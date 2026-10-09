@@ -60,7 +60,7 @@ Rows with a pet show the chat and agent name without repeating the agent's emoji
 
 ## Gateway status
 
-Each saved gateway is listed in the same order as the rail, with one of these:
+Each saved gateway is listed with one of these:
 
 | Status | Meaning |
 | --- | --- |

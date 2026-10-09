@@ -675,7 +675,7 @@ public final class SetupWizardModel {
         self.close()
     }
 
-    /// "Set Up Gateway…": the steps, at `step` or the first not done.
+    /// "Setup Assistant…": the steps, at `step` or the first not done.
     public func present(at step: SetupStep? = nil) {
         self.update { $0.offered = true }
         self.showsIntro = false

@@ -594,9 +594,13 @@ final class SetupFakeGateway {
     @Test func paletteCommand() {
         let store = GatewayStore(profile: .demo())
         let item = CommandPalette.setupGatewayItem(gateway: store)
-        #expect(item?.id == "command:setupGateway" && item?.title == "Set Up Gateway…")
+        #expect(item?.id == "command:setupGateway" && item?.title == "Setup Assistant…")
         let keywords = Set(item?.keywords ?? [])
-        #expect(keywords.isSuperset(of: ["setup", "wizard", "onboarding", "getting started"]))
+        #expect(keywords.isSuperset(of: ["set up gateway", "setup", "wizard", "onboarding", "getting started"]))
+        // #955: renamed from "Set Up Gateway…"; the old name and the new one both still find it.
+        for query in ["set up gateway", "set up", "setup assistant", "wizard"] {
+            #expect(item.map { PaletteMatcher.score($0, query: query) != nil } == true, "\(query) finds Setup Assistant…")
+        }
         #expect(CommandPalette.setupGatewayItem(gateway: nil) == nil)
         #expect(item?.isEnabled == false && item?.isSelectable == false, "disabled while disconnected")
     }

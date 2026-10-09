@@ -20,7 +20,7 @@ struct HardCodedStringsTests {
         #"GatewayHealthPage.swift|\(beat.status.label) · \(Text(at, style: .relative)) ago"#: 1,
         #"GatewayLogsPage.swift|\(level.label) (\(model.count(level).formatted()))"#: 1,
         #"MenuBarExtra.swift|Add Gateway…"#: 1,
-        #"MenuBarExtra.swift|Set Up Gateway…"#: 1,
+        #"NotificationLastCheckedValue.swift|Not yet"#: 1,
         #"NotificationSettingsSection.swift|Background App Refresh is off for Pincer"#: 1,
         #"NotificationSettingsSection.swift|Background App Refresh is restricted on this device"#: 1,
         #"NotificationSettingsSection.swift|Notifications"#: 1,

@@ -597,7 +597,7 @@ private struct SetupTestReply: View {
 
 // MARK: Gateway Settings → Overview
 
-/// "Set Up Gateway…" with the wizard's progress.
+/// "Setup Assistant…" with the wizard's progress.
 struct SetupGatewaySection: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
@@ -612,7 +612,7 @@ struct SetupGatewaySection: View {
                 LabeledContent {
                     Text(setup.progress.completed ? L("Done") : L("\(setup.settledCount) of \(SetupStep.allCases.count)"))
                 } label: {
-                    Label(L("Set Up Gateway…"), systemImage: "checklist")
+                    Label(L("Setup Assistant…"), systemImage: "checklist")
                 }
             }
             .buttonStyle(.borderless)

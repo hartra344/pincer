@@ -751,6 +751,16 @@
         }
       }
     },
+    "%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / %lld"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -14313,16 +14323,6 @@
         }
       }
     },
-    "Set Up Gateway…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Set Up Gateway…"
-          }
-        }
-      }
-    },
     "Set a channel's dmPolicy to \"pairing\" on the Gateway, and new senders will ask for access here.": {
       "localizations": {
         "en": {
@@ -14439,6 +14439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings…"
+          }
+        }
+      }
+    },
+    "Setup Assistant…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup Assistant…"
           }
         }
       }
