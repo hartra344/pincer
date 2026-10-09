@@ -6,6 +6,7 @@ import SwiftUI
 struct GatewaySwitcherButton: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
+    @Environment(\.openAppSettings) private var openAppSettings
 
     var body: some View {
         let menu = self.app.gatewayMenu
@@ -25,6 +26,7 @@ struct GatewaySwitcherButton: View {
                 if self.app.demoGateway != nil {
                     Button(L("Leave Demo")) { self.app.leaveDemo() }
                 }
+                Button(L("Manage Gateways…")) { self.openAppSettings(.gateways, gateway: self.app.selectedGatewayId) }
             }
             if let gateway = self.app.selectedGateway {
                 Section {
@@ -137,6 +139,7 @@ struct GatewayCommands: Commands {
     let app: AppModel
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     #endif
 
     var body: some Commands {
@@ -164,6 +167,11 @@ struct GatewayCommands: Commands {
             Button(menu.addActionTitle) { self.app.performGatewayAddAction(menu.addAction) }
             if self.app.demoGateway != nil {
                 Button(L("Leave Demo")) { self.app.leaveDemo() }
+            }
+            Button(L("Manage Gateways…")) {
+                self.app.pendingAppSettingsGatewayId = self.app.selectedGatewayId
+                self.app.pendingAppSettingsPage = .gateways
+                self.openSettings()
             }
             let gateway = self.app.selectedGateway
             Button(L("Gateway Settings…")) {

@@ -12,12 +12,13 @@ extension AppSettingsPlatform {
 }
 
 /// Opens Pincer Settings, optionally at a page: the Settings window on macOS, a sheet on iOS.
+/// `gateway` opens Gateways with that Gateway selected for editing.
 struct AppSettingsOpener {
-    var open: @MainActor (AppSettingsPage?) -> Void = { _ in }
+    var open: @MainActor (AppSettingsRoute) -> Void = { _ in }
 
     @MainActor
-    func callAsFunction(_ page: AppSettingsPage? = nil) {
-        self.open(page)
+    func callAsFunction(_ page: AppSettingsPage? = nil, gateway: UUID? = nil) {
+        self.open(AppSettingsRoute(page: page, gatewayId: gateway))
     }
 }
 
@@ -33,24 +34,54 @@ struct AppSettingsPresenter: ViewModifier {
     @Environment(\.openSettings) private var openSettings
     #else
     @State private var route: AppSettingsRoute?
+    @State private var afterDismiss: (@MainActor () -> Void)?
     #endif
 
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.environment(\.openAppSettings, AppSettingsOpener { page in
-            self.app.pendingAppSettingsPage = page
+        content.environment(\.openAppSettings, AppSettingsOpener { route in
+            self.app.pendingAppSettingsGatewayId = route.gatewayId
+            self.app.pendingAppSettingsPage = route.page
             self.openSettings()
         })
         #else
         content
-            .environment(\.openAppSettings, AppSettingsOpener { page in
-                self.route = AppSettingsRoute(page: page)
+            .environment(\.openAppSettings, AppSettingsOpener { route in
+                self.app.pendingAppSettingsGatewayId = route.gatewayId
+                self.route = route
             })
-            .sheet(item: self.$route) { route in
+            .sheet(item: self.$route, onDismiss: self.runAfterDismiss) { route in
                 AppSettingsSheet(initialPage: route.page) { self.route = nil }
+                    .environment(\.closeAppSettings, CloseAppSettings { action in
+                        self.afterDismiss = action
+                        self.route = nil
+                    })
             }
         #endif
     }
+
+    #if os(iOS)
+    private func runAfterDismiss() {
+        let action = self.afterDismiss
+        self.afterDismiss = nil
+        action?()
+    }
+    #endif
+}
+
+/// Closes Pincer Settings, then runs `action`: on iOS once the sheet is gone, so a wizard or
+/// another sheet can show; on macOS the Settings window stays and `action` runs at once.
+struct CloseAppSettings {
+    var close: @MainActor (@escaping @MainActor () -> Void) -> Void = { $0() }
+
+    @MainActor
+    func callAsFunction(then action: @escaping @MainActor () -> Void) {
+        self.close(action)
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var closeAppSettings = CloseAppSettings()
 }
 
 #if os(iOS)

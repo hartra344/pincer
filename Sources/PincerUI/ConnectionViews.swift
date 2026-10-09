@@ -160,24 +160,19 @@ struct ConnectionSheet: View {
     }
 }
 
-/// Gateway Settings → Connection: this device's side of the connection. Unlike the Gateway's
-/// own settings, these are saved on this device, and applying them reconnects.
+/// Gateway Settings → Connection: whether this device is connected and approved. How it connects
+/// (address, token, access) is edited only in Pincer Settings ▸ Gateways, which this page links to.
 struct ConnectionPage: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var draft = ConnectionDraft()
-    @State private var loadedFrom: GatewayProfile?
-    @State private var confirmRemove = false
-    @State private var confirmApply = false
     @Environment(\.closeGatewaySettings) private var closeSettings
+    @Environment(\.openAppSettings) private var openAppSettings
     #if os(macOS)
     @Environment(\.dismissWindow) private var dismissWindow
     #endif
 
     var body: some View {
         let profile = self.gateway.profile
-        let edited = self.draft != ConnectionDraft(profile) || self.draft.secretEdited
         Form {
             self.statusSection
             if profile.isDemo {
@@ -191,55 +186,19 @@ struct ConnectionPage: View {
                     Text("Leaving removes the demo's sample chats from this device. Your other Gateways are kept.", bundle: .module)
                 }
             } else {
-                ConnectionFields(draft: self.$draft, hasSavedSecret: profile.secret != nil)
                 Section {
+                    LabeledContent(L("Address")) { Text(verbatim: profile.url).textSelection(.enabled) }
+                    LabeledContent(L("Access"), value: profile.access.label)
                     Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
-                    Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
+                    Button(L("Edit Connection…"), action: self.editConnection)
+                        .accessibilityIdentifier("gateway-settings-edit-connection")
+                } footer: {
+                    Text("How this device connects to the Gateway is saved on this device, in Pincer Settings ▸ Gateways.", bundle: .module)
                 }
             }
         }
         .formStyle(.grouped)
         .navigationTitle(L("Connection"))
-        .toolbar {
-            if !profile.isDemo {
-                #if os(macOS)
-                ToolbarItemGroup(placement: .primaryAction) {
-                    if edited {
-                        Button(L("Revert")) { self.draft = ConnectionDraft(profile) }
-                    }
-                    Button(L("Apply"), action: self.requestApply)
-                        .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!edited || !self.draft.canSave)
-                        .help(L("Save the connection on this device and reconnect"))
-                }
-                #else
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L("Apply"), action: self.requestApply)
-                        .disabled(!edited || !self.draft.canSave)
-                }
-                if edited {
-                    ToolbarItem(placement: .bottomBar) {
-                        Button(L("Revert")) { self.draft = ConnectionDraft(profile) }
-                    }
-                }
-                #endif
-            }
-        }
-        .onAppear(perform: self.sync)
-        .onChange(of: profile) { self.sync() }
-        .confirmationDialog(L("Remove \(profile.name)?"), isPresented: self.$confirmRemove) {
-            Button(L("Remove"), role: .destructive) {
-                self.app.remove(profile.id)
-                self.dismiss()
-            }
-        } message: {
-            Text("The saved token and device pairing token are deleted from this device.", bundle: .module)
-        }
-        .confirmationDialog(L("Reconnect and discard unsaved settings?"), isPresented: self.$confirmApply) {
-            Button(L("Discard \(self.gateway.settings.changeCount) Changes & Reconnect"), role: .destructive, action: self.apply)
-        } message: {
-            Text("Reconnecting to the Gateway starts over from its saved settings.", bundle: .module)
-        }
     }
 
     @ViewBuilder private var statusSection: some View {
@@ -256,13 +215,16 @@ struct ConnectionPage: View {
         }
     }
 
-    /// Loads the profile, unless the user is in the middle of editing it.
-    private func sync() {
-        let profile = self.gateway.profile
-        if self.loadedFrom == nil || self.draft == ConnectionDraft(self.loadedFrom!) {
-            self.draft = ConnectionDraft(profile)
-        }
-        self.loadedFrom = profile
+    /// Closes Gateway Settings and opens Pincer Settings ▸ Gateways at this Gateway.
+    private func editConnection() {
+        let id = self.gateway.id
+        let open = self.openAppSettings
+        #if os(macOS)
+        self.dismissWindow(id: "gateway-settings", value: id)
+        open(.gateways, gateway: id)
+        #else
+        self.closeSettings { open(.gateways, gateway: id) }
+        #endif
     }
 
     private func leaveDemo(connect: Bool) {
@@ -275,19 +237,6 @@ struct ConnectionPage: View {
         // Gateway Settings is a sheet here: the Find sheet can only show once it's gone.
         self.closeSettings { app.leaveDemo(connect: connect) }
         #endif
-    }
-
-    private func requestApply() {
-        if self.gateway.settings.hasChanges { self.confirmApply = true } else { self.apply() }
-    }
-
-    private func apply() {
-        let existing = self.gateway.profile
-        let profile = self.draft.profile(id: existing.id)
-        let secret = self.draft.authMode == .none ? nil : self.draft.secret
-        self.app.update(profile, secret: self.draft.secretEdited ? secret : existing.secret,
-                        credentialsChanged: self.draft.credentialsChanged(from: existing))
-        self.draft.secret = ""
     }
 }
 

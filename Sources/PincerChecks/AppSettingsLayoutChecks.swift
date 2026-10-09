@@ -18,7 +18,7 @@ func runAppSettingsLayoutChecks() {
           "app settings: launch, Quick Capture and menu bar are Mac only")
     check(!AppSettingsPage.sections(on: .phone).contains(.keyboardShortcuts) && !AppSettingsPage.pages(on: .phone).contains(.shortcuts)
           && AppSettingsPage.pages(on: .pad).contains(.shortcuts), "app settings: iPhone has no Keyboard Shortcuts page")
-    check(AppSettingsPage.allCases == [.general, .appearance, .chats, .notifications, .privacy, .shortcuts],
+    check(AppSettingsPage.allCases == [.general, .gateways, .appearance, .chats, .notifications, .privacy, .shortcuts],
           "app settings: page order")
     check(AppSettingsPage.appearance.sections(on: .mac).contains(.sidebar)
           && AppSettingsPage.privacy.sections(on: .phone) == [.location, .webImages]

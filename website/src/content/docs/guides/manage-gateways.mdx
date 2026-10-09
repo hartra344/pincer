@@ -1,0 +1,63 @@
+---
+title: Manage gateways
+description: Switch, edit, reconnect and remove the gateways saved on this device from Pincer Settings.
+---
+
+**Pincer Settings ▸ Gateways** is the one place to edit how this device connects to a gateway. It lists every gateway saved on this device, the built-in [demo](../../getting-started/try-the-demo/) included.
+
+This page is about the connection (URL, token, access) and is saved on this device. To change the gateway itself, use [Gateway Settings](../gateway-settings/).
+
+## Opening Gateways
+
+- **macOS:** choose **Pincer → Settings…** (<kbd>⌘</kbd> <kbd>,</kbd>), then the **Gateways** tab.
+- **iOS:** tap the gear in the sidebar, then **Gateways**.
+- **From the gateway menu:** choose **Manage Gateways…** in the menu at the top of the sidebar, or in the **Gateway** menu in the macOS menu bar. It opens **Gateways** at the current gateway.
+- **From Gateway Settings:** on the **Connection** page, choose **Edit Connection…**. Gateway Settings closes and **Gateways** opens with that gateway selected.
+- **From a failed connection:** when the chat area shows that Pincer couldn't connect, **Edit Connection…** opens **Gateways** at that gateway.
+
+**Gateways** is the second page, after **General**. See [Appearance](../appearance/).
+
+## The gateway list
+
+The **Gateways** list shows each saved gateway with its name and status: **Connected**, **Connecting…**, **Waiting for approval** or an error. The demo shows **Demo**. Choose a row to select it (a checkmark marks it).
+
+Below the list, **Add Gateway…** opens the usual Add Gateway flow. On iOS it closes Settings first. When the demo is your only gateway, the button reads **Connect Your Gateway…**.
+
+If you switch rows while the connection has unapplied edits, Pincer asks **Discard unsaved changes?**.
+
+## Edit a connection
+
+Select a gateway. Its section is titled with the gateway's name and shows:
+
+- **Status**, with the approval instructions when the gateway is waiting for you to approve this device (`openclaw devices approve <requestId>`, with **Copy Command**).
+- **Reconnect**.
+
+Below that are the connection fields:
+
+| Field | What it is |
+| --- | --- |
+| **Name** | How the gateway is named in Pincer. |
+| **Gateway URL** | The gateway's address. |
+| **Authentication** | The **Method** and its token or password. |
+| **Access** | **Standard** (Chat & Approvals) or **Full Management**. See [Access levels](../../getting-started/connect-a-gateway/#access-levels). |
+| **Security** | The TLS certificate SHA-256 pin. Update it if the certificate was renewed, or clear it. |
+
+**Revert** discards your edits. **Apply** (<kbd>⌘</kbd> <kbd>S</kbd> on Mac) saves the connection on this device and reconnects. If the gateway's own settings in Gateway Settings have unsaved changes, Pincer asks **Reconnect and discard unsaved settings?** first.
+
+Switching to **Full Management** asks the gateway for more access, so the gateway host has to approve this device again.
+
+## Remove a gateway
+
+Choose **Remove from Pincer…** and confirm **Remove *name*?** The saved token and device pairing token are deleted from this device. Nothing changes on the gateway; revoke the device in [Devices](../devices/) if you also want it removed there.
+
+## The demo
+
+Select the demo to see a **Demo** section saying it's simulated. **Connect Your Gateway…** opens the Add Gateway flow. **Remove Demo** deletes the demo's sample chats from this device and keeps your other gateways.
+
+### Remove the demo after you connect
+
+The first time a real gateway connects while the demo is still added, Pincer asks **Remove the Demo?** Choose **Remove Demo** to delete it and its sample chats, or **Keep Demo**. Pincer asks only once on a device, whichever you choose, and never while the Add Gateway wizard or a setup wizard is still showing. If you add the demo when you already have a real gateway, Pincer doesn't ask. You can try the demo again any time from **Add Gateway…**.
+
+## This device
+
+The **This device** section shows this device's **Device ID** and **Role**. See [Security & privacy](../../reference/security/).

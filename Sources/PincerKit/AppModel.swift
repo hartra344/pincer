@@ -60,6 +60,10 @@ public final class AppModel {
     public var dictationToggleRequest: DictationToggleRequest?
     /// macOS: the Pincer Settings tab to show next time the Settings window reads it. One-shot.
     public var pendingAppSettingsPage: AppSettingsPage?
+    /// The Gateway that Pincer Settings ▸ Gateways should select when it next reads this. One-shot.
+    public var pendingAppSettingsGatewayId: UUID?
+    /// The one-time offer to remove the demo, once a real Gateway connects, has been answered.
+    public private(set) var demoRemovalOffered: Bool
     /// Composers currently dictating, keyed by window, Gateway, and chat for the command palette.
     public var dictationActiveTargets: Set<DictationTarget> = []
     /// Available composers, scoped like active targets so another window cannot affect the palette.
@@ -156,6 +160,7 @@ public final class AppModel {
     ) {
         self.sharedDefaults = sharedDefaults
         self.localDefaults = localDefaults
+        self.demoRemovalOffered = localDefaults.bool(forKey: Self.demoRemovalOfferedKey)
         self.ownerNameDraft = OwnerNameDraft(defaults: localDefaults, wait: ownerNameIdleWait)
         let locationContext = LocationContextModel(defaults: localDefaults)
         self.locationContext = locationContext
@@ -347,6 +352,8 @@ public final class AppModel {
     /// Selects the built-in demo, adding it the first time. Try the Demo lands straight in its chat
     /// list: its setup wizard is never offered on its own, only from the gateway menu and ⌘K (#175).
     public func openDemo() {
+        // Picking the demo alongside a real Gateway is deliberate: never offer to remove it.
+        if self.gateways.contains(where: { !$0.profile.isDemo }) { self.markDemoRemovalOffered() }
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
             existing.setup.withdrawOffer()
@@ -360,6 +367,26 @@ public final class AppModel {
 
     /// The built-in demo, if it's been added.
     public var demoGateway: GatewayStore? { self.gateways.first { $0.profile.isDemo } }
+
+    static let demoRemovalOfferedKey = "pincer.demoRemovalOffered"
+
+    /// The real Gateway whose first connection should offer to remove the demo, asked once ever.
+    public var demoRemovalOffer: GatewayStore? {
+        guard !self.demoRemovalOffered, self.demoGateway != nil else { return nil }
+        return self.gateways.first { !$0.profile.isDemo && $0.state.isConnected }
+    }
+
+    /// Answers the one-time offer; it's never asked again, whichever way it went.
+    public func answerDemoRemovalOffer(remove: Bool) {
+        self.markDemoRemovalOffered()
+        if remove { self.leaveDemo() }
+    }
+
+    private func markDemoRemovalOffered() {
+        guard !self.demoRemovalOffered else { return }
+        self.demoRemovalOffered = true
+        self.localDefaults.set(true, forKey: Self.demoRemovalOfferedKey)
+    }
 
     /// Removes the built-in demo and everything it left on this device. Saved Gateways are kept,
     /// and the first one is selected. `connect` then opens the Add Gateway flow: Find over the chat

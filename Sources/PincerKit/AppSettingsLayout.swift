@@ -2,7 +2,7 @@ import Foundation
 
 /// One block of Pincer Settings (app-local preferences, never Gateway config).
 public enum AppSettingsSection: String, CaseIterable, Hashable, Sendable {
-    case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, location, webImages,
+    case gateways, you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, location, webImages,
          sidebar, notifications, keyboardShortcuts, device, storage, spotlight, tips, help
 }
 
@@ -13,13 +13,14 @@ public enum AppSettingsPlatform: Hashable, Sendable, CaseIterable {
 
 /// A tab (macOS) or page (iOS) of Pincer Settings. Both platforms share these, in this order.
 public enum AppSettingsPage: String, CaseIterable, Identifiable, Hashable, Sendable {
-    case general, appearance, chats, notifications, privacy, shortcuts
+    case general, gateways, appearance, chats, notifications, privacy, shortcuts
 
     public var id: String { self.rawValue }
 
     public var title: String {
         switch self {
         case .general: L("General")
+        case .gateways: L("Gateways")
         case .appearance: L("Appearance")
         case .chats: L("Chats")
         case .notifications: L("Notifications")
@@ -28,7 +29,7 @@ public enum AppSettingsPage: String, CaseIterable, Identifiable, Hashable, Senda
         }
     }
 
-    /// The macOS tab label: short enough that six tabs fit the Settings window.
+    /// The macOS tab label: short enough that every tab fits the Settings window.
     public var tabTitle: String {
         self == .shortcuts ? L("Shortcuts") : self.title
     }
@@ -36,6 +37,7 @@ public enum AppSettingsPage: String, CaseIterable, Identifiable, Hashable, Senda
     public var systemImage: String {
         switch self {
         case .general: "gearshape"
+        case .gateways: "server.rack"
         case .appearance: "paintpalette"
         case .chats: "bubble.left.and.text.bubble.right"
         case .notifications: "bell.badge"
@@ -52,7 +54,8 @@ public enum AppSettingsPage: String, CaseIterable, Identifiable, Hashable, Senda
     /// The page's sections on a platform, in order. Every section a platform has is on exactly one page.
     public func sections(on platform: AppSettingsPlatform) -> [AppSettingsSection] {
         let all: [AppSettingsSection] = switch self {
-        case .general: [.you, .launch, .quickCapture, .menuBar, .device, .storage, .spotlight, .tips, .help]
+        case .general: [.you, .launch, .quickCapture, .menuBar, .storage, .spotlight, .tips, .help]
+        case .gateways: [.gateways, .device]
         case .appearance: [.appearance, .avatars, .colors, .sidebar]
         case .chats: [.conversation, .readAloud, .dictation]
         case .notifications: [.notifications]
@@ -71,13 +74,16 @@ public enum AppSettingsPage: String, CaseIterable, Identifiable, Hashable, Senda
     }
 }
 
-/// A request to show Pincer Settings, optionally at a page. Each request is new, so it never sticks.
+/// A request to show Pincer Settings, optionally at a page (and, for Gateways, one Gateway).
+/// Each request is new, so it never sticks.
 public struct AppSettingsRoute: Identifiable, Equatable, Sendable {
     public let id = UUID()
     public let page: AppSettingsPage?
+    public let gatewayId: UUID?
 
-    public init(page: AppSettingsPage? = nil) {
-        self.page = page
+    public init(page: AppSettingsPage? = nil, gatewayId: UUID? = nil) {
+        self.page = gatewayId == nil ? page : .gateways
+        self.gatewayId = gatewayId
     }
 }
 
@@ -86,5 +92,21 @@ extension AppModel {
     public func takePendingAppSettingsPage() -> AppSettingsPage? {
         defer { self.pendingAppSettingsPage = nil }
         return self.pendingAppSettingsPage
+    }
+
+    /// Settings ▸ Gateways reads this once to pick the Gateway to edit, then clears it.
+    public func takePendingAppSettingsGatewayId() -> UUID? {
+        defer { self.pendingAppSettingsGatewayId = nil }
+        return self.pendingAppSettingsGatewayId
+    }
+}
+
+extension AppModel {
+    /// The Gateway that Settings ▸ Gateways edits: the one picked there if it still exists, else the
+    /// Gateway the window is on, else the first.
+    public func gatewayForSettings(_ picked: UUID?) -> GatewayStore? {
+        self.gateways.first { $0.id == picked }
+            ?? self.gateways.first { $0.id == self.selectedGatewayId }
+            ?? self.gateways.first
     }
 }

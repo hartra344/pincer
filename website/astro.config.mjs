@@ -81,6 +81,7 @@ export default defineConfig({
 					label: 'Managing your Gateway',
 					items: [
 						{ slug: 'guides/gateway-settings' },
+						{ slug: 'guides/manage-gateways' },
 						{ slug: 'guides/agents' },
 						{ slug: 'guides/skills-and-tools' },
 						{ slug: 'guides/mcp-servers' },
