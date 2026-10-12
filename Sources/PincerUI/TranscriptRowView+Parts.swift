@@ -1400,7 +1400,9 @@ final class TranscriptTableGridView: TranscriptBaseView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        (self.superview?.superview?.superview as? TranscriptMarkdownTableView).flatMap { table in
+        var ancestor = self.superview
+        while let current = ancestor, !(current is TranscriptMarkdownTableView) { ancestor = current.superview }
+        return (ancestor as? TranscriptMarkdownTableView).flatMap { table in
             var extra = table.extraCopyItems
             let selection = self.selectedText
             if !selection.isEmpty { extra.insert(.init(title: L("Copy"), text: selection), at: 0) }
