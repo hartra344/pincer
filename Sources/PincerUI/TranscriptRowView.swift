@@ -297,7 +297,7 @@ extension TranscriptRowView {
         // Long-pressing text selects it; the text's own edit menu carries the copy actions.
         var hit = self.hitTest(location, with: nil)
         while let view = hit, view !== self {
-            if view is UITextView { return nil }
+            if view is UITextView || view is TranscriptTableGridView { return nil }
             hit = view.superview
         }
         var extra: [TranscriptRowLayout.CopyItem] = []
