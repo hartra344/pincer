@@ -1235,7 +1235,7 @@ final class TranscriptMarkdownTableView: TranscriptBaseView {
             self.rowId = row.id
             self.scroller.scrollToStart()
         }
-        self.grid.table = table
+        self.grid.set(table, identity: row.id)
         self.grid.frame = CGRect(origin: .zero, size: table.contentSize)
         self.grid.redraw()
     }
@@ -1253,14 +1253,167 @@ final class TranscriptMarkdownTableView: TranscriptBaseView {
 }
 
 final class TranscriptTableGridView: TranscriptBaseView {
-    var table: TranscriptPart.Table?
+    private(set) var table: TranscriptPart.Table?
+    private var identity: String?
+    private var model: TranscriptTableText?
+
+    /// The table's flattened text, built on first use (selection, hit-testing), never while configuring.
+    var textModel: TranscriptTableText {
+        if let model { return model }
+        let built = TranscriptTableText(table: self.table ?? .init(cells: [], columnWidths: [], rowHeights: [], plainText: ""))
+        self.model = built
+        return built
+    }
+
+    var selectedRange = NSRange(location: 0, length: 0) {
+        didSet { if self.selectedRange != oldValue { self.redraw() } }
+    }
+
+    var selectedText: String {
+        guard self.selectedRange.length > 0, self.table != nil else { return "" }
+        return self.textModel.text(in: self.selectedRange)
+    }
+
+    /// Replaces the table. The same `identity` (a streaming update of the same row) keeps the selection
+    /// while it still fits; another identity clears it.
+    func set(_ table: TranscriptPart.Table, identity: String) {
+        let sameIdentity = self.identity == identity
+        self.identity = identity
+        self.table = table
+        self.model = nil
+        guard self.selectedRange.length > 0 || self.selectedRange.location != 0 else { return }
+        if sameIdentity, self.selectedRange.length > 0 {
+            // Only a selection fully inside the new text survives.
+            if NSMaxRange(self.selectedRange) <= self.textModel.length { return }
+        }
+        #if os(iOS)
+        self.inputDelegate?.selectionWillChange(self)
+        #endif
+        self.selectedRange = NSRange(location: 0, length: 0)
+        #if os(iOS)
+        self.inputDelegate?.selectionDidChange(self)
+        #endif
+        self.dragAnchor = nil
+    }
+
+    private var dragAnchor: NSRange?
+
+    #if os(iOS)
+    weak var inputDelegate: UITextInputDelegate?
+    private lazy var textInteraction = UITextInteraction(for: .nonEditable)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.textInteraction.textInput = self
+        self.addInteraction(self.textInteraction)
+    }
+    #endif
 
     #if os(macOS)
-    override func menu(for event: NSEvent) -> NSMenu? {
-        (self.superview?.superview?.superview as? TranscriptMarkdownTableView).flatMap { table in
-            self.rowView?.menu(extra: table.extraCopyItems, event: event)
+    private enum Granularity { case character, word, row }
+    private var granularity = Granularity.character
+
+    override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func resetCursorRects() {
+        self.addCursorRect(self.bounds, cursor: .iBeam)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        self.selectedRange = NSRange(location: 0, length: 0)
+        self.dragAnchor = nil
+        return super.resignFirstResponder()
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        self.redraw()
+        return super.becomeFirstResponder()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        self.redraw()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard self.table != nil else { return super.mouseDown(with: event) }
+        self.window?.makeFirstResponder(self)
+        let model = self.textModel
+        let offset = model.offset(at: self.convert(event.locationInWindow, from: nil))
+        switch event.clickCount {
+        case 1:
+            self.granularity = .character
+            if event.modifierFlags.contains(.shift), self.selectedRange.location != 0 || self.selectedRange.length > 0 {
+                let anchor = self.dragAnchor ?? self.selectedRange
+                self.dragAnchor = anchor
+                self.selectedRange = Self.union(anchor, NSRange(location: offset, length: 0))
+            } else {
+                self.dragAnchor = NSRange(location: offset, length: 0)
+                self.selectedRange = NSRange(location: offset, length: 0)
+            }
+        case 2:
+            self.granularity = .word
+            self.dragAnchor = model.wordRange(at: offset)
+            self.selectedRange = self.dragAnchor ?? NSRange(location: offset, length: 0)
+        default:
+            self.granularity = .row
+            self.dragAnchor = model.rowRange(at: offset)
+            self.selectedRange = self.dragAnchor ?? NSRange(location: offset, length: 0)
         }
     }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard table != nil, let anchor = self.dragAnchor else { return }
+        self.autoscroll(with: event)
+        let model = self.textModel
+        let offset = model.offset(at: self.convert(event.locationInWindow, from: nil))
+        let current: NSRange
+        switch self.granularity {
+        case .character: current = NSRange(location: offset, length: 0)
+        case .word: current = model.wordRange(at: offset)
+        case .row: current = model.rowRange(at: offset)
+        }
+        self.selectedRange = Self.union(anchor, current)
+    }
+
+    private static func union(_ a: NSRange, _ b: NSRange) -> NSRange {
+        let start = min(a.location, b.location), end = max(NSMaxRange(a), NSMaxRange(b))
+        return NSRange(location: start, length: end - start)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        let text = self.selectedText
+        if !text.isEmpty { Clipboard.copy(text) }
+    }
+
+    override func selectAll(_ sender: Any?) {
+        guard self.table != nil else { return }
+        self.dragAnchor = nil
+        self.selectedRange = NSRange(location: 0, length: self.textModel.length)
+    }
+
+    func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)) { return self.selectedRange.length > 0 }
+        if item.action == #selector(selectAll(_:)) { return self.table != nil }
+        return true
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        (self.superview?.superview?.superview as? TranscriptMarkdownTableView).flatMap { table in
+            var extra = table.extraCopyItems
+            let selection = self.selectedText
+            if !selection.isEmpty { extra.insert(.init(title: L("Copy"), text: selection), at: 0) }
+            return self.rowView?.menu(extra: extra, event: event)
+        }
+    }
+
+    private var selectionColor: NSColor {
+        self.window?.isKeyWindow == true && self.window?.firstResponder === self
+            ? .selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor
+    }
+    #else
+    private var selectionColor: UIColor { .tintColor.withAlphaComponent(0.25) }
     #endif
 
     override func draw(_ rect: CGRect) {
@@ -1272,6 +1425,12 @@ final class TranscriptTableGridView: TranscriptBaseView {
         if let header = table.rowHeights.first {
             TranscriptColors.codeBackground.setFill()
             PBezierPath(rect: CGRect(x: 0, y: 0, width: bounds.width, height: header)).fill()
+        }
+        if self.selectedRange.length > 0 {
+            self.selectionColor.setFill()
+            for highlight in self.textModel.selectionRects(for: self.selectedRange) where highlight.intersects(rect) {
+                PBezierPath(rect: highlight).fill()
+            }
         }
         var y: CGFloat = 0
         for (rowIndex, cells) in table.cells.enumerated() {
@@ -1297,6 +1456,10 @@ final class TranscriptTableGridView: TranscriptBaseView {
         shape.stroke()
     }
 }
+
+#if os(macOS)
+extension TranscriptTableGridView: NSUserInterfaceValidations {}
+#endif
 
 final class TranscriptThinkingHeaderView: TranscriptTapView {
     private var thinking: TranscriptPart.Thinking?
