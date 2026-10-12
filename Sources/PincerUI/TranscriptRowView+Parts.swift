@@ -1307,6 +1307,15 @@ final class TranscriptTableGridView: TranscriptBaseView {
         self.textInteraction.textInput = self
         self.addInteraction(self.textInteraction)
     }
+
+    override func resignFirstResponder() -> Bool {
+        if self.selectedRange.length > 0 || self.selectedRange.location != 0 {
+            self.inputDelegate?.selectionWillChange(self)
+            self.selectedRange = NSRange(location: 0, length: 0)
+            self.inputDelegate?.selectionDidChange(self)
+        }
+        return super.resignFirstResponder()
+    }
     #endif
 
     #if os(macOS)
@@ -1430,8 +1439,6 @@ final class TranscriptTableGridView: TranscriptBaseView {
         self.window?.isKeyWindow == true && self.window?.firstResponder === self
             ? .selectedTextBackgroundColor : .unemphasizedSelectedTextBackgroundColor
     }
-    #else
-    private var selectionColor: UIColor { .tintColor.withAlphaComponent(0.25) }
     #endif
 
     override func draw(_ rect: CGRect) {
@@ -1444,12 +1451,14 @@ final class TranscriptTableGridView: TranscriptBaseView {
             TranscriptColors.codeBackground.setFill()
             PBezierPath(rect: CGRect(x: 0, y: 0, width: bounds.width, height: header)).fill()
         }
+        #if os(macOS)
         if self.selectedRange.length > 0 {
             self.selectionColor.setFill()
             for highlight in self.textModel.selectionRects(for: self.selectedRange) where highlight.intersects(rect) {
                 PBezierPath(rect: highlight).fill()
             }
         }
+        #endif
         var y: CGFloat = 0
         for (rowIndex, cells) in table.cells.enumerated() {
             let height = table.rowHeights[rowIndex]
