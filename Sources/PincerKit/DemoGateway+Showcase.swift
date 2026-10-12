@@ -122,6 +122,14 @@ extension DemoGateway {
     | Media | mini PC | 4 W |
     | Backups | NAS | 9 W |
 
+    The full inventory is wider than a chat column, so it scrolls sideways:
+
+    | Service | Host | Image | Ports | Volume | Backup schedule | Last backup | Restore time | Owner |
+    | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+    | DNS | mini PC | pihole/pihole:2024.07 | 53/udp, 53/tcp, 8080/tcp | /srv/dns/etc-pihole | Nightly at 02:00 to the NAS | Today, 02:04 | About 2 minutes | Travis |
+    | Media | mini PC | jellyfin/jellyfin:10.9 | 8096/tcp | /srv/media/config | Weekly on Sunday at 03:30 | Sunday, 03:41 | About 10 minutes | Travis |
+    | Backups | NAS | restic/rest-server:0.13 | 8000/tcp | /volume1/restic | Continuous, with an offsite copy | Today, 11:15 | About 45 minutes | Alex |
+
     Power is the hidden cost. A mini PC idles at a few watts, but a rack server can draw a hundred, which adds up to a real \
     line on the electricity bill by the end of the year. Measure with a plug-in meter before you commit, and turn off anything \
     you have not touched in a month; you can always bring it back from a snapshot in a couple of minutes.

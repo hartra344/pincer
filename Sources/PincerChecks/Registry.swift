@@ -235,6 +235,7 @@ enum Suites {
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
             },
             Section("Transcript prefill indexing") { await runTranscriptPrefillIndexChecks() },
+            Section("Transcript table selection (#967)") { runTranscriptTableSelectionChecks() },
             Section("Paged history probe") { runPagingProbeChecks() },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
@@ -330,6 +331,7 @@ enum Suites {
         Section("Messages from other agents (demo)") { await runDemoForwarded() },
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
+        Section("Transcript table selection (demo, #967)") { await runDemoTranscriptTableSelectionChecks() },
         Section("Shared chat load (demo)") { await runDemoSharedLoadChecks() },
         Section("Leave demo (demo)") { await runDemoLeaveDemoChecks() },
         Section("Gateway menu (demo)") { runDemoGatewayMenuChecks() },
