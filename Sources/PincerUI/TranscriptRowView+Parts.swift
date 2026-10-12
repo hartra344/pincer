@@ -1323,7 +1323,6 @@ final class TranscriptTableGridView: TranscriptBaseView {
     private var granularity = Granularity.character
 
     override var acceptsFirstResponder: Bool { true }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func resetCursorRects() {
         self.addCursorRect(self.bounds, cursor: .iBeam)
@@ -1368,12 +1367,10 @@ final class TranscriptTableGridView: TranscriptBaseView {
         let offset = model.offset(at: self.convert(event.locationInWindow, from: nil))
         switch event.clickCount {
         case 1:
-            self.granularity = .character
-            if event.modifierFlags.contains(.shift), self.selectedRange.location != 0 || self.selectedRange.length > 0 {
-                let anchor = self.dragAnchor ?? self.selectedRange
-                self.dragAnchor = anchor
-                self.selectedRange = Self.union(anchor, NSRange(location: offset, length: 0))
+            if event.modifierFlags.contains(.shift), let anchor = self.dragAnchor {
+                self.selectedRange = Self.union(anchor, self.range(at: offset, granularity: self.granularity))
             } else {
+                self.granularity = .character
                 self.dragAnchor = NSRange(location: offset, length: 0)
                 self.selectedRange = NSRange(location: offset, length: 0)
             }
@@ -1393,13 +1390,15 @@ final class TranscriptTableGridView: TranscriptBaseView {
         self.autoscroll(with: event)
         let model = self.textModel
         let offset = model.offset(at: self.convert(event.locationInWindow, from: nil))
-        let current: NSRange
-        switch self.granularity {
-        case .character: current = NSRange(location: offset, length: 0)
-        case .word: current = model.wordRange(at: offset)
-        case .row: current = model.rowRange(at: offset)
+        self.selectedRange = Self.union(anchor, self.range(at: offset, granularity: self.granularity))
+    }
+
+    private func range(at offset: Int, granularity: Granularity) -> NSRange {
+        switch granularity {
+        case .character: NSRange(location: offset, length: 0)
+        case .word: self.textModel.wordRange(at: offset)
+        case .row: self.textModel.rowRange(at: offset)
         }
-        self.selectedRange = Self.union(anchor, current)
     }
 
     private static func union(_ a: NSRange, _ b: NSRange) -> NSRange {
