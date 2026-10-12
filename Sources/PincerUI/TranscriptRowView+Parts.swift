@@ -1333,7 +1333,23 @@ final class TranscriptTableGridView: TranscriptBaseView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        for token in self.keyObservers { NotificationCenter.default.removeObserver(token) }
+        self.keyObservers = []
+        if let window {
+            let names: [Notification.Name] = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification]
+            self.keyObservers = names.map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { if self?.selectedRange.length ?? 0 > 0 { self?.redraw() } }
+                }
+            }
+        }
         self.redraw()
+    }
+
+    private var keyObservers: [NSObjectProtocol] = []
+
+    isolated deinit {
+        for token in self.keyObservers { NotificationCenter.default.removeObserver(token) }
     }
 
     override func mouseDown(with event: NSEvent) {
