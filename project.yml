@@ -93,6 +93,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take a photo to attach to a message you send to your agents."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate messages to your agents."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
