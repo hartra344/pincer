@@ -53,7 +53,12 @@ The gateway gives the agent the message you replied to, so your text is sent as 
 
 ## Attachments
 
-Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.
+Paste or drag in images and files, or pick them with the **+** button next to the text box. It opens a menu:
+
+- **On iPhone and iPad:** **Take Photo** (only on devices with a camera), **Photo Library** (up to 6 photos at a time), **Choose File…** and **Paste Image**. The first time you take a photo, iOS asks for camera access. If you've turned it off, Pincer tells you to allow it in **Settings → Privacy & Security → Camera**.
+- **On the Mac:** **Choose File…** and **Photos…**, which picks from your Photos library.
+
+Images are downscaled to fit the gateway's limits before they're sent. The **+** button is unavailable while attachments need a connection.
 
 While you're offline, attachments queue with their message and go out when you reconnect, even after quitting Pincer, up to the outbox's size limit. Over the limit, the composer says **Too large to queue offline — sends when you’re connected** and keeps the message in your draft. See [Offline sending & retry](../offline-outbox/#attachments-in-the-outbox).
 

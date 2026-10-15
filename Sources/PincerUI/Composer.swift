@@ -211,7 +211,7 @@ struct Composer: View {
                     defer { chat?.finishAttachmentPreparation(token) }
                     do {
                         if let data = try await item.loadTransferable(type: Data.self) {
-                            ingest.addImage(data, name: "photo.jpg")
+                            ingest.addImage(data, name: CapturedPhotoEncoder.fileName)
                         } else {
                             ingest.report(L("Couldn’t load the selected photo."))
                         }
@@ -246,6 +246,7 @@ struct Composer: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .menuOrder(.fixed)
         .fixedSize()
         .composerControl()
         .disabled(!self.canAttach)
@@ -257,7 +258,14 @@ struct Composer: View {
     private func choose(_ option: ComposerAttachOption) {
         guard self.canAttach else { return }
         switch option {
-        case .takePhoto: self.capturingPhoto = true
+        case .takePhoto:
+            #if os(iOS)
+            if CameraCaptureView.isDenied {
+                self.attachmentError = L("Pincer doesn’t have camera access. Allow it in Settings → Privacy & Security → Camera.")
+                return
+            }
+            #endif
+            self.capturingPhoto = true
         case .photoLibrary: self.pickingPhotos = true
         case .chooseFile: self.importing = true
         case .pasteImage: self.pasteImage()

@@ -1,4 +1,5 @@
 #if os(iOS)
+import AVFoundation
 import ImageIO
 import SwiftUI
 import UIKit
@@ -9,7 +10,10 @@ struct CameraCaptureView: UIViewControllerRepresentable {
     let onCapture: @MainActor (SendableCGImage, CGImagePropertyOrientation) -> Void
     let onCancel: @MainActor () -> Void
 
-    static var isAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
+    @MainActor static let isAvailable = UIImagePickerController.isSourceTypeAvailable(.camera)
+
+    /// Access was turned off in Settings; the picker would only show a black screen.
+    static var isDenied: Bool { [.denied, .restricted].contains(AVCaptureDevice.authorizationStatus(for: .video)) }
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()

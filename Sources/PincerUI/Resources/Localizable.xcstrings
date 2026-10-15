@@ -2453,16 +2453,6 @@
         }
       }
     },
-    "Attach photos": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Attach photos"
-          }
-        }
-      }
-    },
     "Attachment %@": {
       "localizations": {
         "en": {
@@ -4959,6 +4949,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t regenerate: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t save the photo.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t save the photo."
           }
         }
       }
@@ -11543,6 +11543,26 @@
         }
       }
     },
+    "Photo Library": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo Library"
+          }
+        }
+      }
+    },
+    "Photos…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos…"
+          }
+        }
+      }
+    },
     "Pick a chat": {
       "localizations": {
         "en": {
@@ -11649,6 +11669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pincer couldn’t open that link."
+          }
+        }
+      }
+    },
+    "Pincer doesn’t have camera access. Allow it in Settings → Privacy & Security → Camera.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer doesn’t have camera access. Allow it in Settings → Privacy & Security → Camera."
           }
         }
       }
@@ -16219,6 +16249,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
+          }
+        }
+      }
+    },
+    "Take Photo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take Photo"
           }
         }
       }
