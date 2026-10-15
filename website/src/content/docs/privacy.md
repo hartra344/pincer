@@ -53,6 +53,8 @@ gateway must be managed on that gateway and, where applicable, with its provider
 
 ## Optional features and other recipients
 
+- **Camera (iOS):** used only when you choose **Take Photo** to attach a photo to a
+  message. The photo goes to your gateway like any other attachment.
 - **Dictation:** Apple Speech converts audio to text. On-device recognition is used
   when available. Unless you enable the on-device-only setting, recognition can
   use Apple's servers when needed. You control microphone and speech permissions

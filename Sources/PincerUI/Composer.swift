@@ -1,3 +1,4 @@
+import ImageIO
 import PhotosUI
 import PincerKit
 import SwiftUI
@@ -28,6 +29,8 @@ struct Composer: View {
     #endif
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
+    @State private var pickingPhotos = false
+    @State private var capturingPhoto = false
     @State private var attachmentError: String?
     @State private var isTargeted = false
     @State private var menuSelection = 0
@@ -170,6 +173,14 @@ struct Composer: View {
             guard case let .success(urls) = result else { return }
             self.ingest(urls.map(PastedMedia.file))
         }
+        .photosPicker(isPresented: self.$pickingPhotos, selection: self.$photoItems,
+                      maxSelectionCount: ComposerAttachMenu.maxPhotoSelection, matching: .images)
+        #if os(iOS)
+        .fullScreenCover(isPresented: self.$capturingPhoto) {
+            CameraCaptureView(onCapture: self.attachCapturedPhoto, onCancel: { self.capturingPhoto = false })
+                .ignoresSafeArea()
+        }
+        #endif
         .dictationLifecycle(self.dictation, draft: self.chat.draft.text, chatKey: self.chat.sessionKey)
         .task(id: self.isTypingCommand ? self.chat.sessionKey : nil) {
             guard self.isTypingCommand else { return }
@@ -200,7 +211,7 @@ struct Composer: View {
                     defer { chat?.finishAttachmentPreparation(token) }
                     do {
                         if let data = try await item.loadTransferable(type: Data.self) {
-                            ingest.addImage(data, name: "photo.jpg")
+                            ingest.addImage(data, name: CapturedPhotoEncoder.fileName)
                         } else {
                             ingest.report(L("Couldn’t load the selected photo."))
                         }
@@ -213,54 +224,85 @@ struct Composer: View {
     }
 
     private var attachMenu: some View {
-        Menu {
-            Button { self.importing = true } label: { Label { Text("Choose File…", bundle: .module) } icon: { Image(systemName: "doc") } }
-            #if os(iOS)
-            Button {
-                let items = MediaPasteboard.items(from: .general)
-                if !items.isEmpty {
-                    self.ingest(items)
-                } else if let image = UIPasteboard.general.image, let data = image.pngData() {
-                    self.addImage(data, name: "Pasted Image.png")
-                } else {
-                    self.attachmentError = L("There’s no image or file on the clipboard.")
+        let platform = ComposerAttachMenu.current
+        #if os(iOS)
+        let cameraAvailable = CameraCaptureView.isAvailable
+        #else
+        let cameraAvailable = false
+        #endif
+        return Menu {
+            ForEach(ComposerAttachMenu.options(platform: platform, cameraAvailable: cameraAvailable)) { option in
+                if option == .pasteImage { Divider() }
+                Button { self.choose(option) } label: {
+                    Label(ComposerAttachMenu.title(option, platform: platform), systemImage: option.systemImage)
                 }
-            } label: {
-                Label { Text("Paste Image", bundle: .module) } icon: { Image(systemName: "doc.on.clipboard") }
             }
-            #endif
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: min(self.attachIconSize, 22), weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 26, height: 26)
                 .contentShape(Circle())
-        } primaryAction: {
-            self.importing = true
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .menuOrder(.fixed)
         .fixedSize()
         .composerControl()
         .disabled(!self.canAttach)
         .help(self.canAttach ? L("Attach files") : Self.attachmentsNeedConnection)
         .accessibilityLabel(Text("Attach files", bundle: .module))
         .accessibilityHint(self.canAttach ? "" : Self.attachmentsNeedConnection)
-        .overlay(alignment: .trailing) {
+    }
+
+    private func choose(_ option: ComposerAttachOption) {
+        guard self.canAttach else { return }
+        switch option {
+        case .takePhoto:
             #if os(iOS)
-            PhotosPicker(selection: self.$photoItems, maxSelectionCount: 6, matching: .images) {
-                Image(systemName: "photo").font(.title3)
+            if CameraCaptureView.isDenied {
+                self.attachmentError = L("Pincer doesn’t have camera access. Allow it in Settings → Privacy & Security → Camera.")
+                return
             }
-            .disabled(!self.canAttach)
-            .help(self.canAttach ? L("Attach photos") : Self.attachmentsNeedConnection)
-            .accessibilityLabel(Text("Attach photos", bundle: .module))
-            .accessibilityHint(self.canAttach ? "" : Self.attachmentsNeedConnection)
-            .offset(x: 30)
             #endif
+            self.capturingPhoto = true
+        case .photoLibrary: self.pickingPhotos = true
+        case .chooseFile: self.importing = true
+        case .pasteImage: self.pasteImage()
         }
+    }
+
+    private func pasteImage() {
         #if os(iOS)
-        .padding(.trailing, 30)
+        let items = MediaPasteboard.items(from: .general)
+        if !items.isEmpty {
+            self.ingest(items)
+        } else if let image = UIPasteboard.general.image, let data = image.pngData() {
+            self.addImage(data, name: "Pasted Image.png")
+        } else {
+            self.attachmentError = L("There’s no image or file on the clipboard.")
+        }
         #endif
+    }
+
+    /// The camera hands back a decoded capture; JPEG encoding runs off-main, then joins the
+    /// same preparation pipeline as picked photos.
+    private func attachCapturedPhoto(_ image: SendableCGImage, orientation: CGImagePropertyOrientation) {
+        self.capturingPhoto = false
+        let chat = self.chat
+        let ingest = self.attachmentIngest
+        guard let token = chat.beginAttachmentPreparation(ownerID: chat.draft.ownerID) else {
+            ingest.report(L("Too many attachments are being prepared. Try again shortly."))
+            return
+        }
+        Task { [weak chat] in
+            defer { chat?.finishAttachmentPreparation(token) }
+            if let data = await CapturedPhotoEncoder.encode(image, orientation: orientation) {
+                ingest.addImage(data, name: CapturedPhotoEncoder.fileName)
+            } else {
+                ingest.report(L("Couldn’t save the photo."))
+            }
+        }
     }
 
     private var text: String {

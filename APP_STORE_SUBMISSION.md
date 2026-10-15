@@ -72,7 +72,8 @@ Remote management controls operate on that user-selected gateway. No additional
 executable app code is downloaded to enable them.
 
 Microphone and speech permissions support optional dictation. Photo/file access
-supports chosen attachments. Location sharing is optional. Background audio is
+supports chosen attachments. Camera access (iOS) only takes a photo the user chooses
+to attach to a message. Location sharing is optional. Background audio is
 for Read Aloud; background refresh and remote notifications refresh gateway state.
 The Mac app is sandboxed with outgoing network and user-selected file access.
 
