@@ -106,6 +106,7 @@ struct Composer: View {
                 if self.chat.isRunning {
                     Button {
                         Task {
+                            self.chat.errorMessage = nil
                             await self.chat.abort()
                             if let message = self.chat.errorMessage { AccessibilityAnnouncer.announce(message) }
                         }
