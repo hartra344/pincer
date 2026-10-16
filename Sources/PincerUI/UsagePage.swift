@@ -7,6 +7,12 @@ import SwiftUI
 struct UsagePage: View {
     @Environment(GatewayStore.self) private var gateway
     @State private var loadedConnection = false
+    @State private var exportedFile: ExportedFile?
+    @State private var exportError: String?
+    #if os(iOS)
+    @State private var sharedFile: SharedFile?
+    @State private var sharePreparation = SharedFilePreparation()
+    #endif
 
     private var model: UsageModel { self.gateway.usage }
 
@@ -32,6 +38,7 @@ struct UsagePage: View {
         }
         .navigationTitle(L("Usage"))
         .toolbar {
+            ToolbarItem { self.exportMenu(model, connected: connected) }
             // Stays available when usage is unsupported, so an updated gateway can be picked up.
             ToolbarItem {
                 if model.isLoading, model.hasData {
@@ -43,6 +50,13 @@ struct UsagePage: View {
                 }
             }
         }
+        .modifier(UsageExportPresentation(file: self.$exportedFile, error: self.$exportError))
+        #if os(iOS)
+        .sheet(item: self.$sharedFile) { file in
+            ActivityView(url: file.url).presentationDetents([.medium, .large])
+        }
+        .onDisappear { self.sharePreparation.cancel() }
+        #endif
         .task(id: connected) {
             // Coming back from a session keeps what's loaded; connecting (again) reloads
             // everything, rate limits included.
@@ -53,6 +67,45 @@ struct UsagePage: View {
             guard !self.loadedConnection else { return }
             self.loadedConnection = true
             await model.load(includeStatus: true)
+        }
+    }
+
+    @ViewBuilder
+    private func exportMenu(_ model: UsageModel, connected: Bool) -> some View {
+        if model.exporting != nil {
+            ProgressView().controlSize(.small)
+                .accessibilityLabel(L("Exporting Usage…"))
+        } else {
+            Menu {
+                ForEach(UsageExportFormat.allCases) { format in
+                    Button(format.label) { self.export(format) }
+                }
+            } label: {
+                Label(L("Export"), systemImage: "square.and.arrow.up")
+            }
+            .disabled(!connected || !model.sessions.supported)
+            .help(L("Export"))
+            .accessibilityLabel(L("Export Usage"))
+        }
+    }
+
+    private func export(_ format: UsageExportFormat) {
+        let model = self.model
+        Task {
+            switch await model.export(format) {
+            case let .success(file):
+                #if os(iOS)
+                self.sharePreparation.request(name: file.name, data: file.data) { shared in
+                    if let shared { self.sharedFile = shared } else {
+                        self.exportError = L("The file couldn't be prepared for sharing.")
+                    }
+                }
+                #else
+                self.exportedFile = ExportedFile(name: file.name, data: file.data)
+                #endif
+            case let .failure(error):
+                self.exportError = error.message
+            }
         }
     }
 
@@ -80,6 +133,34 @@ struct UsagePage: View {
                 Task { await model.setSelection(selection) }
             }
         }
+    }
+}
+
+// MARK: Export
+
+/// The macOS save panel and the failure alert for a Usage export.
+private struct UsageExportPresentation: ViewModifier {
+    @Binding var file: ExportedFile?
+    @Binding var error: String?
+
+    func body(content: Content) -> some View {
+        content
+            .fileExporter(
+                isPresented: Binding(get: { self.file != nil }, set: { if !$0 { self.file = nil } }),
+                document: self.file,
+                contentType: self.file?.contentType ?? .data,
+                defaultFilename: self.file?.name) { result in
+                    self.file = nil
+                    if case let .failure(error) = result, (error as? CocoaError)?.code != .userCancelled {
+                        self.error = String(format: L("The file couldn't be saved: %@"), error.localizedDescription)
+                    }
+                }
+            .alert(L("Couldn't Export Usage"), isPresented: Binding(get: { self.error != nil },
+                                                                    set: { if !$0 { self.error = nil } })) {
+                Button(L("OK")) {}
+            } message: {
+                Text(self.error ?? "")
+            }
     }
 }
 

@@ -2063,6 +2063,16 @@
         }
       }
     },
+    "An export is already running.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An export is already running."
+          }
+        }
+      }
+    },
     "And %lld more chats": {
       "localizations": {
         "en": {
@@ -4763,6 +4773,16 @@
         }
       }
     },
+    "Couldn't Export Usage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Export Usage"
+          }
+        }
+      }
+    },
     "Couldn't Load Automations": {
       "localizations": {
         "en": {
@@ -5199,6 +5219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Daily"
+          }
+        }
+      }
+    },
+    "Daily CSV": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily CSV"
           }
         }
       }
@@ -6553,12 +6583,32 @@
         }
       }
     },
+    "Export Usage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Usage"
+          }
+        }
+      }
+    },
     "Exported %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Exported %@"
+          }
+        }
+      }
+    },
+    "Exporting Usage…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exporting Usage…"
           }
         }
       }
@@ -14863,6 +14913,16 @@
         }
       }
     },
+    "Sessions CSV": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions CSV"
+          }
+        }
+      }
+    },
     "Set Up %@": {
       "localizations": {
         "en": {
@@ -17113,6 +17173,16 @@
         }
       }
     },
+    "The export was cancelled.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The export was cancelled."
+          }
+        }
+      }
+    },
     "The file couldn't be prepared for sharing.": {
       "localizations": {
         "en": {
@@ -17579,6 +17649,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway doesn't report channel status. Update OpenClaw to see it here."
+          }
+        }
+      }
+    },
+    "This Gateway doesn't report daily usage. Update OpenClaw to export it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't report daily usage. Update OpenClaw to export it."
+          }
+        }
+      }
+    },
+    "This Gateway doesn't report usage by session.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't report usage by session."
           }
         }
       }
@@ -18829,6 +18919,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Usage Over Time"
+          }
+        }
+      }
+    },
+    "Usage data is incomplete. Refresh usage and try again, or narrow the date range.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage data is incomplete. Refresh usage and try again, or narrow the date range."
           }
         }
       }

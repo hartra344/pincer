@@ -58,6 +58,11 @@ public final class UsageModel {
     public private(set) var selection = UsageRangeSelection()
     /// Drill-downs by session key, kept for the model's lifetime.
     public private(set) var details: [String: SessionUsageDetail] = [:]
+    /// The export being prepared, if any.
+    public private(set) var exporting: UsageExportFormat?
+    #if DEBUG
+    @ObservationIgnored package var exportProbe: UsageExportProbe?
+    #endif
 
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
@@ -233,6 +238,38 @@ public final class UsageModel {
         self.prepareSession(key)
         let params = UsageRequests.logs(key: key, agentId: self.details[key]?.agentId)
         await self.perform("sessions.usage.logs", params, session: key, \.logs, decode: UsageLogEntry.decode)
+    }
+
+    // MARK: Export
+
+    /// Exports the dashboard's range (#984): a fresh `sessions.usage` for every session, built
+    /// off the main thread. One at a time: a call while one runs fails at once.
+    public func export(_ format: UsageExportFormat) async -> Result<UsageExportFile, UsageExportError> {
+        guard self.exporting == nil else { return .failure(.failed(L("An export is already running."))) }
+        if let methods = self.methods(), !methods.isEmpty, !methods.contains("sessions.usage") { return .failure(.unsupported) }
+        self.exporting = format
+        defer { self.exporting = nil }
+        let now = self.now()
+        let range = self.range
+        let result: JSONValue
+        do {
+            result = try await self.request("sessions.usage", UsageExport.params(format, range: range, at: now))
+        } catch let error where GatewayError.isUnknownMethod(error) {
+            return .failure(.unsupported)
+        } catch {
+            return .failure(.failed(Self.message(for: error)))
+        }
+        guard !Task.isCancelled else { return .failure(.failed(L("The export was cancelled."))) }
+        let calendar = range.calendar
+        #if DEBUG
+        let probe = self.exportProbe
+        #endif
+        return await Task.detached(priority: .userInitiated) { () -> Result<UsageExportFile, UsageExportError> in
+            #if DEBUG
+            probe?.record()
+            #endif
+            return Result { () throws(UsageExportError) in try UsageExport.build(format, result: result, date: now, calendar: calendar) }
+        }.value
     }
 
     private func placeholder(_ key: String) -> SessionUsageDetail {

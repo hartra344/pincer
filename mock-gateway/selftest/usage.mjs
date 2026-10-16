@@ -44,6 +44,10 @@ export async function run(ctx) {
   assert.ok(sessionsUsage.aggregates.byModel.some((m) => m.totals.missingCostEntries > 0 && m.totals.totalCost === 0), 'unknown cost');
   assert.deepEqual(sessionsUsage.aggregates.byAgent.map((a) => a.agentId), ['coder', 'main', 'research']);
   assert.ok(sessionsUsage.aggregates.daily.length > 0 && sessionsUsage.aggregates.costDaily.length > 0);
+  // Usage export (#984) asks for every row, with context weight; the Gateway clamps the limit rather than rejecting it.
+  const everything = await usage.send('sessions.usage', { ...last7, agentScope: 'all', groupBy: 'instance', limit: 100000, includeContextWeight: true });
+  assert.equal(everything.sessions.length, everything.aggregates.sessionCount);
+  assert.equal(everything.cacheStatus, undefined, 'a week is fully counted');
   const quarter = await usage.send('sessions.usage', { ...zone, startDate: shift(todayKey, -89), endDate: todayKey, agentScope: 'all', limit: 200 });
   const computingRow = quarter.sessions.find((s) => s.computing);
   assert.equal(computingRow.usage, null);
