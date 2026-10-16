@@ -12,6 +12,7 @@ final class ControlsGateway: Sendable {
     let failures = Mutex<[String: Error]>([:])
     let held = Mutex<[String: CheckedContinuation<Void, Never>]>([:])
     let holdNext = Mutex<Set<String>>([])
+    let preReleased = Mutex<Set<String>>([])
     let tabsJSON = Mutex(#"[{"targetId":"T1","title":"One","url":"https://one.test/"},{"targetId":"T2","title":"Two","url":"https://two.test/"}]"#)
 
     func count(_ method: String, _ path: String) -> Int { calls.withLock { $0.filter { $0.method == method && $0.path == path }.count } }
@@ -22,7 +23,10 @@ final class ControlsGateway: Sendable {
         let verb = params["method"]?.string ?? ""
         calls.withLock { $0.append(Call(method: verb, path: path, body: params["body"])) }
         if holdNext.withLock({ $0.remove(path) != nil }) {
-            await withCheckedContinuation { c in held.withLock { $0[path] = c } }
+            await withCheckedContinuation { c in
+                // A release that landed before the request parked must not be lost.
+                if preReleased.withLock({ $0.remove(path) != nil }) { c.resume() } else { held.withLock { $0[path] = c } }
+            }
         }
         if let error = failures.withLock({ $0[path] }) { throw error }
         switch path {
@@ -41,7 +45,9 @@ final class ControlsGateway: Sendable {
         }
     }
 
-    func release(_ path: String) { held.withLock { $0.removeValue(forKey: path) }?.resume() }
+    func release(_ path: String) {
+        if let c = held.withLock({ $0.removeValue(forKey: path) }) { c.resume() } else { preReleased.withLock { _ = $0.insert(path) } }
+    }
 
     @MainActor func model() -> BrowserPanelModel {
         BrowserPanelModel(
@@ -382,6 +388,7 @@ struct BrowserControlsTests {
         model.select(targetId: "T1")
         let task = Task { try await model.downloadCurrentPage() }
         #expect(await controlsEventually { model.isDownloading })
+        #expect(await controlsEventually { gateway.held.withLock { $0["/download"] != nil } })
         model.cancelDownload()
         gateway.release("/download")
         await #expect(throws: CancellationError.self) { try await task.value }

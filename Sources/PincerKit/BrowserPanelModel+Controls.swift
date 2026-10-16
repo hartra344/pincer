@@ -121,6 +121,7 @@ extension BrowserPanelModel {
             guard self.isLatest(token, targetId) else { return }
             let closedIndex = self.tabs.firstIndex { $0.targetId == targetId } ?? 0
             self.tabs.removeAll { $0.targetId == targetId }
+            self.clearThumbnail(for: tab)
             if self.selectedTargetId == targetId {
                 if !self.tabs.isEmpty {
                     let next = self.tabs[min(closedIndex, self.tabs.count - 1)]

@@ -7,6 +7,7 @@ struct WorkspacePanel: View {
     enum Tab: Hashable {
         case browser
         case portal(String)
+        case files
     }
 
     @Environment(GatewayStore.self) private var gateway
@@ -21,6 +22,11 @@ struct WorkspacePanel: View {
     @State private var settled = false
     @State private var dismissedCloseError: String?
     @State private var newTab = false
+    @AppStorage(SessionFilesModel.showInPanelKey) private var showFiles = true
+    @Environment(\.chatWindowKey) private var windowKey
+    /// Owned by the window's inspector chrome: the open file and its draft survive the panel closing.
+    let drafts: FilesDraftKeeper
+    @State private var pendingTab: Tab?
 
     /// How long the inspector slide takes to settle. A var so a probe can shorten or lengthen it.
     static var slideSettleDelay: Duration = .milliseconds(350)
@@ -31,16 +37,31 @@ struct WorkspacePanel: View {
         let portals = store.unavailable ? [] : store.portals
         // A portal that closed falls back to Browser.
         let browserWorks = model.status != .needsFullManagement
-        let tab = self.picked ?? (browserWorks ? .browser : portals.first.map { .portal($0.id) } ?? .browser)
+        let filesKey = self.windowKey ?? self.gateway.focusedKey ?? self.gateway.selectedKey
+        let filesModel = filesKey.map { self.gateway.filesModel(for: $0) }
+        let filesShown = self.showFiles && (filesModel?.isAvailable ?? false)
+        let fallback: Tab = browserWorks ? .browser : portals.first.map { .portal($0.id) } ?? .browser
+        let dirty = self.drafts.isDirty(for: filesKey)
+        let initial: Tab = (dirty && filesShown) ? .files : fallback
+        let tab: Tab = (self.picked == .files && !filesShown) ? fallback : (self.picked ?? initial)
         let selected = portals.first { tab == .portal($0.id) }
+        let pick = Binding<Tab?>(get: { self.picked }, set: { new in
+            if dirty, tab == .files, new != .files { self.pendingTab = new } else { self.picked = new }
+        })
         VStack(spacing: 0) {
-            WorkspaceTabStrip(tab: self.$picked, newTab: self.$newTab, model: model, portals: portals, selectedPortal: selected?.id) { self.closing = $0 }
+            WorkspaceTabStrip(tab: pick, newTab: self.$newTab, model: model, portals: portals, selectedPortal: selected?.id, current: tab, showsFiles: filesShown) { self.closing = $0 }
             Divider()
             if let error = store.closeError, error != self.dismissedCloseError {
                 PortalBanner(symbol: "exclamationmark.triangle", dismiss: { self.dismissedCloseError = error }) { Text(error) }
                 Divider()
             }
-            if let selected {
+            if tab == .files {
+                if let filesModel {
+                    FilesPanelView(model: filesModel, state: self.drafts.session(for: filesModel.sessionKey)).id(filesModel.sessionKey)
+                } else {
+                    ContentUnavailableView(L("Select a chat to see its files"), systemImage: "doc.text.magnifyingglass")
+                }
+            } else if let selected {
                 PortalView(portal: selected, cache: self.cache, canLoad: self.settled) { self.closing = selected }
                     .id(selected.id)
             } else {
@@ -51,7 +72,18 @@ struct WorkspacePanel: View {
             try? await Task.sleep(for: Self.slideSettleDelay)
             self.settled = true
         }
+        .confirmationDialog(L("Discard changes?"), isPresented: Binding(get: { self.pendingTab != nil }, set: { if !$0 { self.pendingTab = nil } }), titleVisibility: .visible) {
+            Button(L("Discard Changes"), role: .destructive) {
+                self.drafts.discard(filesKey)
+                self.picked = self.pendingTab
+                self.pendingTab = nil
+            }
+            Button(L("Keep Editing"), role: .cancel) { self.pendingTab = nil }
+        } message: {
+            Text("Your edits to this file haven't been saved.", bundle: .module)
+        }
         .modifier(NewTabPrompt(isPresented: self.$newTab, model: model))
+        .modifier(SheetTitle(title: tab == .files ? L("Files") : (selected?.title ?? L("Browser"))))
         .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
         .onChange(of: portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
         .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
@@ -63,6 +95,19 @@ struct WorkspacePanel: View {
     }
 }
 
+/// The iPhone sheet's navigation title follows the selected tab; the macOS inspector has no title bar of its own.
+private struct SheetTitle: ViewModifier {
+    let title: String
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.navigationTitle(self.title)
+        #else
+        content
+        #endif
+    }
+}
+
 /// `Browser ▾`: the tab name with a menu of the agent's open pages, then one tab per portal (only when
 /// there are portals, so a Browser-only panel keeps its PR 1 look).
 private struct WorkspaceTabStrip: View {
@@ -71,6 +116,8 @@ private struct WorkspaceTabStrip: View {
     let model: BrowserPanelModel
     let portals: [PortalSummary]
     let selectedPortal: String?
+    let current: WorkspacePanel.Tab
+    let showsFiles: Bool
     let close: (PortalSummary) -> Void
 
     var body: some View {
@@ -100,7 +147,7 @@ private struct WorkspaceTabStrip: View {
                 }
             } label: {
                 Label(L("Browser"), systemImage: "globe")
-                    .font(.callout.weight(self.selectedPortal == nil ? .semibold : .regular))
+                    .font(.callout.weight(self.current == .browser ? .semibold : .regular))
             } primaryAction: {
                 self.tab = .browser
             }
@@ -117,6 +164,14 @@ private struct WorkspaceTabStrip: View {
                         }
                     }
                 }
+            }
+            if self.showsFiles {
+                Button { self.tab = .files } label: {
+                    Label(L("Files"), systemImage: "folder")
+                        .font(.callout.weight(self.current == .files ? .semibold : .regular))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(self.current == .files ? .isSelected : [])
             }
             Spacer(minLength: 0)
         }

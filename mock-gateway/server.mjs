@@ -27,6 +27,7 @@ import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } f
 import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
 import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserHttp, handleBrowserRequest } from './browser.mjs';
 import { PORTAL_EVENTS, PORTAL_METHODS, handlePortalsRequest, initPortals, portalsDisabled, stopPortals } from './portals.mjs';
+import { SESSION_FILES_METHODS, handleSessionFilesRequest, sessionFilesDisabled } from './sessions-files.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
 import { handleQuestionRequest } from './questions.mjs';
@@ -82,6 +83,7 @@ const METHODS = [
   ...MCP_METHODS,
   ...BROWSER_METHODS,
   ...PORTAL_METHODS,
+  ...SESSION_FILES_METHODS,
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
@@ -205,6 +207,7 @@ function advertisedMethods() {
     ...(mcpDisabled() ? MCP_METHODS : []),
     ...(browserDisabled() ? BROWSER_METHODS : []),
     ...(portalsDisabled() ? PORTAL_METHODS : []),
+    ...(sessionFilesDisabled() ? SESSION_FILES_METHODS : []),
     ...(reactionsDisabled() ? REACTION_METHODS : []),
     ...hiddenSessionManagerMethods(),
   ];
@@ -233,6 +236,7 @@ const REQUEST_HANDLERS = [
   (state, conn, msg) => handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleBrowserRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
+  (state, conn, msg) => handleSessionFilesRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession }),
   (state, conn, msg) => handleWebPushRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr }),

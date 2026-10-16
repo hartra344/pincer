@@ -79,6 +79,7 @@ When the agent uses the `browser` tool to open, navigate, screenshot or otherwis
 
 - The card sits right after the turn's tool calls and before the reply. It stays in the same place while the agent is working, after the turn finishes, and whether the tool calls are collapsed or expanded.
 - Each turn shows one card per browser tab, for the last page the agent visited in that tab, and at most three cards.
+- While the [browser panel](../browser-panel/) shows that page live, the card's thumbnail updates from the live picture.
 - Only `http` and `https` pages get a card. Failed browser calls don't.
 - The title and address come from the tool result itself, so the card also works offline and from the local cache, and it needs no admin access. Chats cached by an earlier version of Pincer don't have the page details; to get cards for them, clear the cache under **Settings → General → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
 

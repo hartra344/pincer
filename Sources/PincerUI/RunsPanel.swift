@@ -25,6 +25,28 @@ struct ChatInspectorChrome: ViewModifier {
     @State private var shown: ChatInspectorPanel = .runs
     /// This window's portal web views; they outlive the panel, so reopening it is instant.
     @State private var portalCache = PortalWebCache()
+    /// Open Files-tab documents and unsaved drafts; closing the panel asks before dropping them from view.
+    @State private var drafts = FilesDraftKeeper()
+    @State private var confirmClose: ChatInspectorPanel??
+    @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
+    private var filesKey: String? { self.windowKey ?? self.gateway.focusedKey ?? self.gateway.selectedKey }
+    /// The slot binding the buttons use: a change that would hide an edited file asks first.
+    private var guarded: Binding<ChatInspectorPanel?> {
+        Binding(get: { self.panel }, set: { new in
+            if self.drafts.isDirty(for: self.filesKey), self.panel == .workspace, new != .workspace { self.confirmClose = .some(new) } else { self.panel = new }
+        })
+    }
+    private func confirmBinding(compact: Bool) -> Binding<Bool> {
+        Binding(get: { self.confirmClose != nil && self.isCompact == compact },
+                set: { if !$0 { self.confirmClose = nil } })
+    }
+
+    private func discardClose() {
+        self.drafts.discard(self.filesKey)
+        if let target = self.confirmClose { self.panel = target }
+        self.confirmClose = nil
+    }
     private var current: ChatInspectorPanel { self.panel ?? self.shown }
     /// False while the split view's headers show their own Runs and Browser buttons (#427).
     var showsToolbarButton = true
@@ -38,7 +60,7 @@ struct ChatInspectorChrome: ViewModifier {
     /// Trailing inspector on macOS and regular-width iPad; a sheet on compact iPhone.
     private func presented(_ compact: Bool) -> Binding<Bool> {
         Binding(get: { self.panel != nil && self.isCompact == compact },
-                set: { if !$0, self.panel != nil { self.panel = nil } })
+                set: { if !$0, self.panel != nil { self.guarded.wrappedValue = nil } })
     }
 
     func body(content: Content) -> some View {
@@ -46,18 +68,18 @@ struct ChatInspectorChrome: ViewModifier {
             .toolbar {
                 #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {
-                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$panel.isShowing(.runs), isCompact: self.isCompact) }
+                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.guarded.isShowing(.runs), isCompact: self.isCompact) }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if self.showsToolbarButton { BrowserToolbarButton(isPresented: self.$panel.isShowing(.workspace), isCompact: self.isCompact) }
+                    if self.showsToolbarButton { BrowserToolbarButton(isPresented: self.guarded.isShowing(.workspace), isCompact: self.isCompact) }
                 }
                 #else
                 if self.showsToolbarButton {
                     ToolbarItem(placement: .primaryAction) {
-                        RunsToolbarButton(isPresented: self.$panel.isShowing(.runs), isCompact: self.isCompact)
+                        RunsToolbarButton(isPresented: self.guarded.isShowing(.runs), isCompact: self.isCompact)
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        BrowserToolbarButton(isPresented: self.$panel.isShowing(.workspace), isCompact: self.isCompact)
+                        BrowserToolbarButton(isPresented: self.guarded.isShowing(.workspace), isCompact: self.isCompact)
                     }
                 }
                 #endif
@@ -67,7 +89,7 @@ struct ChatInspectorChrome: ViewModifier {
                 Group {
                     switch self.current {
                     case .workspace:
-                        WorkspacePanel(cache: self.portalCache)
+                        WorkspacePanel(cache: self.portalCache, drafts: self.drafts)
                             .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
                     default:
                         RunsPanel()
@@ -78,22 +100,41 @@ struct ChatInspectorChrome: ViewModifier {
             .sheet(isPresented: self.presented(true)) {
                 NavigationStack {
                     Group {
-                        if self.current == .workspace { WorkspacePanel(cache: self.portalCache) } else { RunsPanel() }
+                        if self.current == .workspace { WorkspacePanel(cache: self.portalCache, drafts: self.drafts) } else { RunsPanel() }
                     }
                     .navigationTitle(self.current == .workspace ? L("Browser") : L("Runs"))
                     #if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
                     #endif
+                    // Inside the sheet: a presenter whose sheet is up can't show a second modal.
+                    .modifier(DiscardPrompt(isPresented: self.confirmBinding(compact: true), discard: self.discardClose))
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
-                            Button(L("Done")) { self.panel = nil }
+                            Button(L("Done")) { self.guarded.wrappedValue = nil }
                         }
                     }
                 }
                 .presentationDetents(self.current == .workspace ? [.large] : [.medium, .large])
                 // Pulling down inside a portal page scrolls it; Done closes the sheet.
                 .presentationContentInteraction(self.current == .workspace ? .scrolls : .automatic)
+                .interactiveDismissDisabled(self.drafts.isDirty(for: self.filesKey))
             }
+            .modifier(DiscardPrompt(isPresented: self.confirmBinding(compact: false), discard: self.discardClose))
+    }
+}
+
+/// "Discard changes?" for closing the panel with an edited file.
+private struct DiscardPrompt: ViewModifier {
+    @Binding var isPresented: Bool
+    let discard: () -> Void
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(L("Discard changes?"), isPresented: self.$isPresented, titleVisibility: .visible) {
+            Button(L("Discard Changes"), role: .destructive, action: self.discard)
+            Button(L("Keep Editing"), role: .cancel) {}
+        } message: {
+            Text("Your edits to this file haven't been saved.", bundle: .module)
+        }
     }
 }
 

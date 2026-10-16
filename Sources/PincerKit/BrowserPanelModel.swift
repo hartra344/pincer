@@ -57,6 +57,11 @@ public final class BrowserPanelModel {
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let retryDelay: Duration
     @ObservationIgnored var route = BrowserRoute()
+    /// Receives a downscaled JPEG per tab (nil clears it); `GatewayStore` feeds it to `pagePreviews`.
+    @ObservationIgnored var thumbnailSink: (@MainActor (ImageRef?, String) -> Void)?
+    @ObservationIgnored var thumbnailLast: [String: Date] = [:]
+    @ObservationIgnored var thumbnailInFlight: Set<String> = []
+    @ObservationIgnored var thumbnailDigest: [String: Int] = [:]
     @ObservationIgnored private var viewers: [AnyHashable: CGSize] = [:]
     @ObservationIgnored var visible: Bool { !self.viewers.isEmpty }
     @ObservationIgnored private var pixelSize = CGSize(width: 1280, height: 800)
@@ -352,6 +357,7 @@ public final class BrowserPanelModel {
                 case let .frame(next):
                     gotFrame = true
                     self.frame = next
+                    self.captureThumbnail(next, tab: tab)
                     self.setStatus(.live)
                     self.setPage(title: nil, url: next.pageURL)
                 case let .meta(url, title):
@@ -471,7 +477,7 @@ public final class BrowserPanelModel {
     }
 
     /// An error message with anything that could carry the screencast address or its one-time token removed.
-    public static func sanitized(_ text: String) -> String {
+    public nonisolated static func sanitized(_ text: String) -> String {
         var clean = text.replacing(/[A-Za-z][A-Za-z0-9+.\-]*:\/\/\S*/, with: "…")
         clean = clean.replacing(/\S*\/browser\/screencast\S*/, with: "…")
         clean = clean.replacing(/(?i)\S*(token|wspath)\S*/, with: "…")

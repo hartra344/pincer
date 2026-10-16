@@ -1,6 +1,6 @@
 ---
 title: Browser panel
-description: Watch the agent's live browser and open its portals in a panel next to the chat.
+description: Watch the agent's live browser and open its portals and browse the chat's files in a panel next to the chat.
 ---
 
 The **Browser** panel shows what the agent's browser is looking at right now, so you can follow along while it works. You can move around the agent's browser, open and close its tabs and save a page. Clicking and typing into the page isn't available: the picture is view-only.
@@ -72,9 +72,44 @@ The panel only shows the portal's own site. If a page in the portal links somewh
 
 Portals don't need the browser plugin. If your gateway doesn't support portals, the tab strip and badge never appear.
 
+## Files
+
+The **Files** tab, after **Browser** and any portal tabs, shows the workspace of the chat you have open: what the agent changed, what it read and what it produced. With no chat selected it says "Select a chat to see its files". It also appears on iPhone, in the same sheet.
+
+Turn it off with **Show Files in the workspace panel** under **Settings ▸ Appearance ▸ Workspace panel**. It's on by default. If your gateway doesn't offer file listing, the tab never appears.
+
+### The list
+
+- The header shows the workspace folder (select it, or use **Copy Path** in its menu), a **Search files** field, and filter chips: **All**, **N changed**, **N read** and **N artifacts**. Searching asks the gateway after a short pause and filters what's already shown at once.
+- **Changed:** files the agent edited, with their path and size.
+- **Read:** files the agent opened without changing them.
+- **Artifacts:** things the agent produced in this chat. If the gateway left out some very large ones, a note says "Some large artifacts aren't listed."
+- **Project files:** the workspace's folders. Open a folder to load it. Files the agent changed or read carry a badge. A very large folder shows "Showing the first N entries".
+- A file that was deleted shows as **Deleted**, dimmed.
+
+Groups collapse and expand, and Pincer remembers which per window. The last list for a chat shows immediately while a fresh one loads, and it refreshes when the agent finishes a run.
+
+### Viewing a file
+
+Open a file to see it in the tab, with **Back to Files** to return. Text shows in a scrolling monospaced view and images are shown as images. Anything else says "Pincer can't preview this file", with its size and **Copy Path**. Previews and edits are limited to 256 KiB: a larger file says "This file is too large to preview".
+
+### Editing
+
+Editing needs Full Management (the `operator.admin` scope). Without it, there's no **Edit** button and files are read-only. With it, text files up to 256 KiB can be edited:
+
+1. Choose **Edit**, change the text, then **Save**. **Revert** drops your changes. Leaving with unsaved changes asks "Discard changes?", and you can **Keep Editing**.
+2. If someone or something changed the file on the gateway since you opened it, you get "This file changed since you opened it". **Reload** discards your edits and shows the new version. **Overwrite…** replaces it with yours, after asking you to confirm, and the other changes to the file are lost. **Cancel** keeps you editing.
+3. A file that no longer exists can't be saved: "This file no longer exists on the gateway."
+
+Files with mixed line endings are view-only, so a save can't change them silently.
+
+### What you can't do
+
+You can't create, rename or delete files here. The gateway only lets operators overwrite files that already exist.
+
 ## Privacy and performance
 
-The picture streams only while the panel is visible. Close it and the stream stops. Pincer keeps nothing on disk: the last frame stays in memory, so reopening the panel is instant. Pincer never clicks or types in the agent's browser.
+The picture streams only while the panel is visible. While it shows a page that has a card in the chat, the card's thumbnail is refreshed from the live picture, scaled down and kept only in memory. Close it and the stream stops. Pincer keeps nothing on disk: the last frame stays in memory, so reopening the panel is instant. Pincer never clicks or types in the agent's browser.
 
 ## Troubleshooting
 

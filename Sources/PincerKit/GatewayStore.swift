@@ -268,7 +268,8 @@ public final class GatewayStore: Identifiable {
         onAgentsChanged: { [weak self] in await self?.agentsDidChange() },
         onAgentDeleted: { [weak self] in self?.clearAvatarChoices(for: $0) })
     /// The agent's live browser (`browser.request`, view-only). Needs `operator.admin`; the demo counts as Full Management.
-    @ObservationIgnored public private(set) lazy var browserPanel = BrowserPanelModel(
+    @ObservationIgnored public private(set) lazy var browserPanel: BrowserPanelModel = {
+        let panel = BrowserPanelModel(
         connection: self.connection, profile: { [weak self] in self?.profile ?? GatewayProfile(name: "", url: "", authMode: .none) },
         hello: { [weak self] in self?.hello },
         fetchDownload: { [weak self] path in
@@ -280,9 +281,14 @@ public final class GatewayStore: Identifiable {
             }
             return file
         })
+        panel.thumbnailSink = { [weak self] ref, key in self?.pagePreviews.setScreenshot(ref, forTab: key) }
+        return panel
+    }()
     /// The agent's portals (`portal.list`, `portal.close`); refreshed by `portal.changed`. Hidden when unavailable.
     @ObservationIgnored public private(set) lazy var portals = PortalStore(
         connection: self.connection, hello: { [weak self] in self?.hello }, isDemo: self.profile.isDemo)
+    @ObservationIgnored var filesModelCache: [String: SessionFilesModel] = [:]
+    @ObservationIgnored var filesModelOrder: [String] = []
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
@@ -579,6 +585,7 @@ public final class GatewayStore: Identifiable {
         self.agentManagement.handleReconnect()
         self.browserPanel.handleReconnect()
         self.portals.handleReconnect()
+        self.resetFilesModels()
         self.devices.handleReconnect()
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()
@@ -1071,6 +1078,9 @@ public final class GatewayStore: Identifiable {
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
             self.recordRunActivity(event)
             self.chats[key]?.handleChat(payload)
+            if let state = payload["state"]?.string, state == "final" || state == "error" || state == "aborted" {
+                self.filesModelCache[key]?.runEnded()
+            }
             if payload["state"]?.string == "final" {
                 self.notifyReply(sessionKey: key, runId: payload["runId"]?.text, snapshot: payload["message"])
                 self.noteReplyLanded(key, runId: payload["runId"]?.text, message: payload["message"])
@@ -1515,6 +1525,7 @@ public final class GatewayStore: Identifiable {
         self.profile = profile
         self.images.media.reset()
         self.pagePreviews.reset()
+        self.browserPanel.clearAllThumbnails()
     }
 
     public var serverNameOverrides: [String: String] {

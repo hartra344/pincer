@@ -99,6 +99,7 @@ enum Suites {
             Section("Browser panel wire, tabs and decode") { runBrowserOfflineChecks() },
             Section("Browser controls: address and error mapping") { runBrowserControlsOfflineChecks() },
             Section("Portal origin policy and parsing") { runPortalOfflineChecks() },
+            Section("Session files: parsing, errors, editability, thumbnails") { await runSessionFilesOfflineChecks() },
             Section("Composer sizing") { runComposerSizingChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
@@ -348,6 +349,7 @@ enum Suites {
         var sections: [Section] = [
         Section("Browser panel (demo, #974)") { await runDemoBrowserChecks() },
         Section("Browser controls (demo, #974)") { await runDemoBrowserControlsChecks() },
+        Section("Session files (demo, #974)") { await runDemoSessionFilesChecks() },
         Section("Portals (demo, #974)") { await runDemoPortalChecks() },
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
         Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
@@ -550,6 +552,7 @@ enum Suites {
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
         LiveSection("Browser panel (live, #974)") { url, token in await runLiveBrowserChecks(url: url, token: token) },
         LiveSection("Browser controls (live, #974)") { url, token in await runLiveBrowserControlsChecks(url: url, token: token) },
+        LiveSection("Session files (live, #974)") { url, token in await runLiveSessionFilesChecks(url: url, token: token) },
         LiveSection("Portals (live, #974)") { url, token in await runLivePortalChecks(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Browser page preview (live)") { url, token in await runLiveBrowserPagePreview(url: url, token: token) },
@@ -601,6 +604,7 @@ enum Suites {
     /// Budgets enforced; run it alone.
     static let perfSmoke: [Section] = [
         Section("Browser frame decode perf smoke") { await checkBrowserFrameDecodePerfSmoke() },
+        Section("Session files perf smoke") { await checkSessionFilesPerfSmoke() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
     ]
 }

@@ -1933,6 +1933,16 @@
         }
       }
     },
+    "All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
     "All Channels": {
       "localizations": {
         "en": {
@@ -2483,6 +2493,16 @@
         }
       }
     },
+    "Artifacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artifacts"
+          }
+        }
+      }
+    },
     "Ask for deeper reasoning with /think. Expand a thinking section to read it.": {
       "localizations": {
         "en": {
@@ -2749,6 +2769,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Back and Forward are turned off on this gateway."
+          }
+        }
+      }
+    },
+    "Back to Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Files"
           }
         }
       }
@@ -3023,12 +3053,32 @@
         }
       }
     },
+    "Can't open this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't open this file"
+          }
+        }
+      }
+    },
     "Can't reach Gateway · retrying in %llds": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Can't reach Gateway · retrying in %llds"
+          }
+        }
+      }
+    },
+    "Can't show files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't show files"
           }
         }
       }
@@ -3129,6 +3179,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change the Quick Capture shortcut in General."
+          }
+        }
+      }
+    },
+    "Changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changed"
           }
         }
       }
@@ -4683,6 +4743,16 @@
         }
       }
     },
+    "Copy Path": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Path"
+          }
+        }
+      }
+    },
     "Copy Raw": {
       "localizations": {
         "en": {
@@ -5613,6 +5683,16 @@
         }
       }
     },
+    "Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted"
+          }
+        }
+      }
+    },
     "Deleted %@": {
       "localizations": {
         "en": {
@@ -5949,6 +6029,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Discard all unsaved changes?"
+          }
+        }
+      }
+    },
+    "Discard changes?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard changes?"
           }
         }
       }
@@ -6309,6 +6399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "Editing files needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing files needs Full Management."
           }
         }
       }
@@ -6899,6 +6999,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "File"
+          }
+        }
+      }
+    },
+    "File contents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File contents"
+          }
+        }
+      }
+    },
+    "Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files"
+          }
+        }
+      }
+    },
+    "Files aren't available for folders on paired devices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files aren't available for folders on paired devices."
+          }
+        }
+      }
+    },
+    "Files the agent changes or reads in this chat show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files the agent changes or reads in this chat show up here."
           }
         }
       }
@@ -10353,6 +10493,16 @@
         }
       }
     },
+    "No files yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No files yet"
+          }
+        }
+      }
+    },
     "No heartbeat yet": {
       "localizations": {
         "en": {
@@ -10409,6 +10559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No matches"
+          }
+        }
+      }
+    },
+    "No matching files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching files"
           }
         }
       }
@@ -11683,6 +11843,16 @@
         }
       }
     },
+    "Overwrite": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite"
+          }
+        }
+      }
+    },
     "Overwrite %@ on the Gateway?": {
       "localizations": {
         "en": {
@@ -11693,12 +11863,32 @@
         }
       }
     },
+    "Overwrite the file on the gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite the file on the gateway?"
+          }
+        }
+      }
+    },
     "Overwrite with Mine": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Overwrite with Mine"
+          }
+        }
+      }
+    },
+    "Overwrite…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite…"
           }
         }
       }
@@ -12109,6 +12299,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pincer can't check this server's identity."
+          }
+        }
+      }
+    },
+    "Pincer can't preview this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't preview this file"
+          }
+        }
+      }
+    },
+    "Pincer can't save this content safely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't save this content safely."
           }
         }
       }
@@ -12579,6 +12789,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Probing…"
+          }
+        }
+      }
+    },
+    "Project files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project files"
           }
         }
       }
@@ -13209,6 +13429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reload from Gateway"
+          }
+        }
+      }
+    },
+    "Reload to see the new version and lose your edits, or overwrite it with yours.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload to see the new version and lose your edits, or overwrite it with yours."
           }
         }
       }
@@ -14483,6 +14713,16 @@
         }
       }
     },
+    "Save File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save File"
+          }
+        }
+      }
+    },
     "Save Key": {
       "localizations": {
         "en": {
@@ -14843,6 +15083,16 @@
         }
       }
     },
+    "Search files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search files"
+          }
+        }
+      }
+    },
     "Search in output": {
       "localizations": {
         "en": {
@@ -14979,6 +15229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Select a Gateway to search its messages."
+          }
+        }
+      }
+    },
+    "Select a chat to see its files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a chat to see its files"
           }
         }
       }
@@ -15543,6 +15803,16 @@
         }
       }
     },
+    "Show Files in the workspace panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Files in the workspace panel"
+          }
+        }
+      }
+    },
     "Show Fonts": {
       "localizations": {
         "en": {
@@ -15799,6 +16069,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show this issue again"
+          }
+        }
+      }
+    },
+    "Showing the first %lld entries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the first %lld entries"
           }
         }
       }
@@ -16179,6 +16459,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Some channels didn't answer in time."
+          }
+        }
+      }
+    },
+    "Some large artifacts aren't listed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some large artifacts aren't listed."
           }
         }
       }
@@ -17533,6 +17823,16 @@
         }
       }
     },
+    "The files the agent changed, read and produced in this chat. Editing needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The files the agent changed, read and produced in this chat. Editing needs Full Management."
+          }
+        }
+      }
+    },
     "The folder on the Gateway host with this agent's files.": {
       "localizations": {
         "en": {
@@ -17589,6 +17889,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The name is shown to every operator of this Gateway (up to %lld characters)."
+          }
+        }
+      }
+    },
+    "The other changes to this file will be lost.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The other changes to this file will be lost."
           }
         }
       }
@@ -18323,6 +18633,46 @@
         }
       }
     },
+    "This file can't be edited.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file can't be edited."
+          }
+        }
+      }
+    },
+    "This file can't be overwritten.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file can't be overwritten."
+          }
+        }
+      }
+    },
+    "This file changed since you opened it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file changed since you opened it"
+          }
+        }
+      }
+    },
+    "This file changed since you opened it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file changed since you opened it."
+          }
+        }
+      }
+    },
     "This file is larger than the %@ limit, so it can't be edited here.": {
       "localizations": {
         "en": {
@@ -18333,12 +18683,62 @@
         }
       }
     },
+    "This file is too large to preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is too large to preview"
+          }
+        }
+      }
+    },
+    "This file is too large to preview or edit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is too large to preview or edit."
+          }
+        }
+      }
+    },
     "This file isn’t text. Save it to open it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This file isn’t text. Save it to open it."
+          }
+        }
+      }
+    },
+    "This file no longer exists on the gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file no longer exists on the gateway"
+          }
+        }
+      }
+    },
+    "This file no longer exists on the gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file no longer exists on the gateway."
+          }
+        }
+      }
+    },
+    "This gateway doesn't support session files.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This gateway doesn't support session files."
           }
         }
       }
@@ -18939,6 +19339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try Again"
+          }
+        }
+      }
+    },
+    "Try a different search.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try a different search."
           }
         }
       }
@@ -19973,6 +20383,26 @@
         }
       }
     },
+    "Workspace folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace folder"
+          }
+        }
+      }
+    },
+    "Workspace panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace panel"
+          }
+        }
+      }
+    },
     "Writing": {
       "localizations": {
         "en": {
@@ -20289,6 +20719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your edits are kept."
+          }
+        }
+      }
+    },
+    "Your edits to this file haven't been saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your edits to this file haven't been saved."
           }
         }
       }

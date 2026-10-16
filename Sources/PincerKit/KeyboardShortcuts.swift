@@ -153,7 +153,7 @@ extension KeyCombo: CustomStringConvertible {
 /// stable id stored in `ShortcutStore`'s overrides, so never rename a case's raw value.
 public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // File
-    case newChat, openChatInNewWindow, addGateway, exportChat, showBookmarks
+    case newChat, openChatInNewWindow, addGateway, exportChat, showBookmarks, saveFile
     // Edit
     case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
@@ -183,7 +183,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
 
     public var category: Category {
         switch self {
-        case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
+        case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks, .saveFile: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
         case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .focusAddress, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
@@ -199,6 +199,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .addGateway: L("Add Gateway…")
         case .exportChat: L("Export Chat…")
         case .showBookmarks: L("Bookmarks…")
+        case .saveFile: L("Save File")
         case .findInChat: L("Find in Chat…")
         case .findNext: L("Find Next")
         case .findPrevious: L("Find Previous")
@@ -236,6 +237,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .newChat: KeyCombo("n", [.command])
         case .openChatInNewWindow: KeyCombo("n", [.option, .command])
         case .exportChat: KeyCombo("e", [.shift, .command])
+        case .saveFile: KeyCombo("s", [.command])
         case .findInChat: KeyCombo("f", [.command])
         case .findNext: KeyCombo("g", [.command])
         case .findPrevious: KeyCombo("g", [.shift, .command])
@@ -328,7 +330,6 @@ public enum ReservedShortcuts {
             Entry(combo: combo("h", [.option, .command]), owner: L("Hide Others")),
             Entry(combo: combo("m", [.command]), owner: L("Minimize")),
             Entry(combo: combo(",", [.command]), owner: L("Settings")),
-            Entry(combo: combo("s", [.command]), owner: L("Save")),
             Entry(combo: combo("z", [.command]), owner: L("Undo")),
             Entry(combo: combo("z", [.shift, .command]), owner: L("Redo")),
             Entry(combo: combo("x", [.command]), owner: L("Cut")),
