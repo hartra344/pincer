@@ -377,7 +377,7 @@ public struct SessionRewindPoint: Identifiable, Equatable, Sendable {
     static func points(history: JSONValue) -> [SessionRewindPoint] {
         let messages = history["messages"]?.array ?? []
         return messages.enumerated().compactMap { index, message -> SessionRewindPoint? in
-            guard let item = ChatItem(message, fallbackIndex: index), item.role == .user, !item.isPending,
+            guard !message.isHiddenFromChat, let item = ChatItem(message, fallbackIndex: index), item.role == .user, !item.isPending,
                   let id = item.transcriptId ?? message["messageId"]?.text
             else { return nil }
             let text = item.plainText.trimmingCharacters(in: .whitespacesAndNewlines)

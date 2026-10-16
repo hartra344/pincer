@@ -351,6 +351,8 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// The Gateway cut this message's text to its history cap; the full copy comes from
     /// `chat.message.get`.
     public var isCapped: Bool = false
+    /// The nearest earlier user record is hidden (`display: false`), so this reply answers a prompt the chat doesn't show.
+    public var followsHiddenPrompt: Bool?
     /// Transcript id of the message this user turn replies to (`__openclaw.replyToId`).
     public var replyToId: String?
     public var replyToPreview: ReplyPreview?

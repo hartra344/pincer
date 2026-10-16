@@ -407,6 +407,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var recoveryAttempted: Set<String> = []
     /// A bulk transcript install or retryable fetch failure needs one later recovery pass.
     @ObservationIgnored var cappedRecoveryPending = false
+    /// A hidden user record arrived and no visible user message has followed it yet.
+    @ObservationIgnored var hiddenPromptPending = false
 #if DEBUG
     /// Saturating work counter for the consumed capped-message recovery scan.
     @ObservationIgnored package var cappedRecoveryRowsVisitedForTesting = 0
