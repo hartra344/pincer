@@ -438,7 +438,7 @@ export function postToSession(state, key, { agentId, label, userText, replyText 
   return row;
 }
 
-export const CHAT_METHODS = new Set(['progressCard.get', 'progressCard.put', 'chat.history', 'chat.message.get', 'chat.send', 'message.action', 'chat.abort', 'sessions.compact']);
+export const CHAT_METHODS = new Set(['progressCard.get', 'progressCard.put', 'chat.history', 'chat.message.get', 'chat.send', 'message.action', 'chat.abort', 'sessions.abort', 'sessions.compact']);
 
 export function handleChatRequest(state, conn, msg) {
   if (!CHAT_METHODS.has(msg.method)) return false;
@@ -587,6 +587,35 @@ function dispatch(state, conn, msg) {
     case 'chat.abort': {
       abortMatchingRuns(state, params.sessionKey, params.runId);
       sendRes(conn, id, { aborted: true });
+      break;
+    }
+    case 'sessions.abort': {
+      // Upstream sessions-abort.ts: needs operator.write; validates key/runId; key-only also stops subagent children.
+      const scopes = conn.scopes ?? [];
+      if (!scopes.includes('operator.write') && !scopes.includes(ADMIN_SCOPE)) {
+        return sendErr(conn, id, 'FORBIDDEN', 'missing scope: operator.write', { code: 'MISSING_SCOPE', scope: 'operator.write' });
+      }
+      const runId = typeof params.runId === 'string' && params.runId ? params.runId : undefined;
+      const key = params.key || (runId ? state.activeRuns.get(runId)?.sessionKey : undefined);
+      if (!key || !state.sessions.get(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'session target is unavailable');
+      const keyAgent = /^agent:([^:]+):/.exec(key)?.[1];
+      if (params.agentId && keyAgent && keyAgent !== String(params.agentId).toLowerCase()) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'session key agent does not match agentId');
+      }
+      const own = [...state.activeRuns.values()].filter((run) => run.sessionKey === key && !run.aborted);
+      if (runId && !own.some((run) => run.runId === runId)) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'runId does not match session');
+      }
+      const abortedRunId = runId ?? own[0]?.runId ?? null;
+      if (runId) {
+        abortMatchingRuns(state, key, runId);
+      } else {
+        for (const [childKey, child] of state.sessions) {
+          if (child.spawnedBy === key && child.status === 'running') abortMatchingRuns(state, childKey, undefined);
+        }
+        abortMatchingRuns(state, key, undefined);
+      }
+      sendRes(conn, id, { ok: true, abortedRunId, status: abortedRunId ? 'aborted' : 'no-active-run' });
       break;
     }
     case 'sessions.compact': {

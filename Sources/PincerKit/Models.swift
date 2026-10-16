@@ -309,6 +309,13 @@ public enum SessionKey {
         return String(parts[1])
     }
 
+    /// The shared global session: `global`, or (with `scope: "global"`) a main alias such as `main` / `agent:<id>:main`.
+    public static func isGlobal(_ key: String, scopeIsGlobal: Bool) -> Bool {
+        let lower = key.lowercased()
+        if lower == "global" { return true }
+        return scopeIsGlobal && (lower == "main" || (agentId(from: lower) != nil && lower.hasSuffix(":main")))
+    }
+
     static func isMain(_ key: String) -> Bool {
         key == "main" || key == "global" || key.hasSuffix(":main")
     }

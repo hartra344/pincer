@@ -429,6 +429,17 @@ struct Composer: View {
         guard self.canSend else { return }
         let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
+        if self.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/stop", attachments.isEmpty {
+            // Typed /stop never goes through chat.send: it aborts the whole session.
+            let draft = self.chat.draft
+            self.chat.draft = ComposerDraft()
+            let replacementOwnerID = self.chat.draft.ownerID
+            Task {
+                guard await !self.chat.abortSession() else { return }
+                if self.chat.draft.ownerID == replacementOwnerID, self.chat.draft.text.isEmpty, self.chat.draft.attachments.isEmpty { self.chat.draft = draft }
+            }
+            return
+        }
         if self.chat.editTarget != nil, !self.isTypingCommand {
             self.attachmentError = nil
             let ownerID = self.chat.draft.ownerID
