@@ -235,6 +235,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var answeredApprovals: Set<String> = []
     @ObservationIgnored private var resolvingApprovals: [String: Task<ApprovalOutcome, Never>] = [:]
     public let images: ArtifactImageLoader
+    /// Page images for browser tool cards (`controlUi.linkPreview`).
+    public let pagePreviews = BrowserPagePreviews()
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
     @ObservationIgnored public private(set) lazy var settings: GatewaySettingsModel = {
@@ -397,6 +399,7 @@ public final class GatewayStore: Identifiable {
             allowsWritesWithoutAdmin: profile.isDemo)
         self.channels = ChannelsModel(connection: connection, hello: { nil }, allowsWritesWithoutAdmin: profile.isDemo)
         images.gateway = self
+        self.pagePreviews.gateway = self
         self.startMemoryPressureMonitor()
         self.health.hello = { [weak self] in self?.hello }
         self.devices.bind(hello: { [weak self] in self?.hello })
@@ -1491,6 +1494,7 @@ public final class GatewayStore: Identifiable {
     public func update(profile: GatewayProfile) {
         self.profile = profile
         self.images.media.reset()
+        self.pagePreviews.reset()
     }
 
     public var serverNameOverrides: [String: String] {
