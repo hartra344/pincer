@@ -368,6 +368,22 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
+    /// #1010: a real change after the echo window (a quick switch back, a reset elsewhere) is a full reload again.
+    @Test func changeAfterTheEchoWindowBlanksAgain() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
+        let key = chat.sessionKey
+        await gateway.transcriptChanged(key: key, change: .changed(editorText: nil))
+        let before = chat.fullReloadCount
+        gateway.lastTranscriptInvalidation[key] = .now.advanced(by: .seconds(-3))
+        await gateway.transcriptChanged(key: key, change: .changed(editorText: nil))
+        #expect(chat.fullReloadCount - before == 1)
+        await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) // Inside the new window.
+        #expect(chat.fullReloadCount - before == 1)
+        await self.finish(gateway)
+    }
+
     /// #1010: an authority-less echo queued behind an edit's reload keeps the edit's feedback authority.
     @Test func echoKeepsTheEditsFeedbackAuthorityForTheRerun() async {
         let gateway = await self.connected()
@@ -384,6 +400,7 @@ struct MessageEditTests {
         var calls = 0
         chat.historyResponseProbe = { calls += 1; try await (calls == 1 ? first : second).hold() }
         let key = chat.sessionKey
+        let reloads = chat.fullReloadCount
         let rpc = Task { await gateway.transcriptChanged(key: key, change: .changed(editorText: nil), feedbackAuthority: authority) }
         await self.settle { first.arrived }
         await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) // The echo, no authority.
@@ -393,6 +410,7 @@ struct MessageEditTests {
         second.release()
         await rpc.value
         chat.historyResponseProbe = nil
+        #expect(chat.fullReloadCount - reloads == 1, "the edit and its echo blank once")
         #expect(chat.errorMessage == nil, "the rerun's failure is the departed edit's, so no banner")
         await self.finish(gateway)
     }

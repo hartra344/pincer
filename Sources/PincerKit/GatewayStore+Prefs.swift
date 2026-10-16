@@ -511,7 +511,8 @@ extension GatewayStore {
         defer {
             self.invalidatingTranscripts.remove(key)
             self.runningTranscriptAuthority[key] = nil
-            self.lastTranscriptInvalidation[key] = ContinuousClock.now
+            // A deleted session leaves nothing to coalesce with (and nothing to leak).
+            self.lastTranscriptInvalidation[key] = self.chats[key] == nil ? nil : ContinuousClock.now
         }
         var current = PendingTranscriptChange(change: change, feedbackAuthority: feedbackAuthority)
         // The `sessions.changed` echo of a change we just reloaded for lands after the RPC path finished.
@@ -527,13 +528,11 @@ extension GatewayStore {
 
     private func invalidateTranscript(key: String, change: SessionTranscriptChange,
                                       feedbackAuthority: ChatStore.MessageEditFeedbackAuthority?, isRerun: Bool) async {
-        if isRerun, change != .deleted {
-            if let chat = self.chats[key], !chat.isDehydrated {
-                await chat.refetchAfterHistoryChange(feedbackAuthority: feedbackAuthority)
-            }
+        await self.cancelHeadlessFill(key)
+        if isRerun, change != .deleted, let chat = self.chats[key], !chat.isDehydrated {
+            await chat.refetchAfterHistoryChange(feedbackAuthority: feedbackAuthority)
             return
         }
-        await self.cancelHeadlessFill(key)
         if change == .deleted {
             await self.bookmarkStore.removeConfirmedSessions([key])
             self.chats.removeValue(forKey: key)?.stopCaching()
