@@ -7,141 +7,113 @@ import '../components/landing/landing.css';
 import logo from '../assets/logo.svg';
 import heroMac from '../assets/screenshots/features/homepage.png';
 import heroPhone from '../assets/screenshots/ios/transcript.png';
-import transcriptMac from '../assets/screenshots/transcript.png';
-import transcriptPhone from '../assets/screenshots/ios/tool-details.png';
-import channelsMac from '../assets/screenshots/organize-chats.png';
-import channelsPhone from '../assets/screenshots/ios/organize-chats.png';
+import captureMac from '../assets/screenshots/quick-capture.png';
 import approvalsMac from '../assets/screenshots/exec-approval.png';
 import approvalsPhone from '../assets/screenshots/ios/exec-approval.png';
-import runsMac from '../assets/screenshots/features/run-tree.png';
-import runsPhone from '../assets/screenshots/features/ios/run-tree.png';
-import gatewayMac from '../assets/screenshots/gateway-settings.png';
-import gatewayPhone from '../assets/screenshots/ios/gateway-settings.png';
-import commandsMac from '../assets/screenshots/slash-commands.png';
-import commandsPhone from '../assets/screenshots/ios/slash-commands.png';
-import themesMac from '../assets/screenshots/appearance.png';
-import themesPhone from '../assets/screenshots/ios/appearance.png';
+import paletteMac from '../assets/screenshots/command-palette.png';
+import channelsPhone from '../assets/screenshots/ios/organize-chats.png';
+import offlineMac from '../assets/screenshots/features/offline-outbox.png';
+import offlinePhone from '../assets/screenshots/features/ios/offline-outbox.png';
+import transcriptMac from '../assets/screenshots/transcript.png';
+import transcriptPhone from '../assets/screenshots/ios/tool-details.png';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const href = (path: string) => `${base}/${path.replace(/^\//, '')}`;
 const repo = 'https://github.com/hartra344/pincer';
 const openclaw = 'https://github.com/openclaw/openclaw';
 
-const themes = [
-	{ name: 'Default', colors: ['#0a84ff', '#34c759', '#ff9f0a'] },
-	{ name: 'Lobster', colors: ['#E8543D', '#2F7FD8', '#1E1614'] },
-	{ name: 'Ocean', colors: ['#0A84C6', '#13A5A5', '#0F1A22'] },
-	{ name: 'Forest', colors: ['#2E8B57', '#8A6D3B', '#121A14'] },
-	{ name: 'Grape', colors: ['#8E44AD', '#C0399B', '#19131E'] },
-	{ name: 'Sunset', colors: ['#E67E22', '#E74C3C', '#1F1712'] },
-	{ name: 'Graphite', colors: ['#5E6670', '#4B5563', '#161718'] },
-	{ name: 'Midnight', colors: ['#4F6BED', '#7C4DFF', '#0B0E1A'] },
-];
-
 const lines = [
 	{
-		id: 'transcript',
-		label: 'Transcript',
-		title: 'See the work, not just the answer.',
-		body: 'Native table views, not a web view. Every chat is cached in the background, so scrolling up never waits on the network.',
+		id: 'system',
+		label: 'System',
+		title: 'Part of your Mac and iPhone.',
+		body: 'Pincer isn’t a tab you have to find. It answers a global shortcut, shows up in the share sheet and Shortcuts, and follows you between devices.',
 		specifics: [
-			['Live thinking', 'streams in a collapsible section. Show it never, live only, or for every turn.'],
-			['Tool calls', 'are cards with their arguments and result.'],
-			['Inline images', 'and MEDIA: lines render inline, with a Quick Look-style preview and sharing.'],
-			['Your messages', 'show up under your name, even when sent from another app, with a small tag for where.'],
+			['Quick Capture', 'opens a small composer over any app with ⌃⇧Space. Send to any chat without switching windows. macOS.'],
+			['The share sheet', 'sends a page, photo or file from any app to an agent.'],
+			['Shortcuts, Siri and Spotlight', 'can ask an agent, send to a chat or count pending approvals, mostly without opening the app.'],
+			['Handoff and links', 'move the chat you’re reading between Mac and iPhone. Every chat and message has a pincer:// link.'],
+			['The menu bar', 'shows what’s unread, running and waiting for you. macOS.'],
 		],
-		links: [['Read the transcript guide', 'guides/transcript/']],
+		links: [
+			['Quick Capture', 'guides/quick-capture/'],
+			['Share to Pincer', 'guides/sharing-to-pincer/'],
+			['Shortcuts & Siri', 'guides/shortcuts-and-siri/'],
+			['Deep links & Handoff', 'guides/deep-links-and-handoff/'],
+		],
+		mac: captureMac,
+		macAlt: 'Pincer on macOS, demo capture: the Quick Capture panel with a message ready to send.',
+		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
+	},
+	{
+		id: 'approvals',
+		label: 'Approvals',
+		title: 'Approvals in a notification.',
+		body: 'Allow once, always allow or deny an exec request from a banner or a notification, without opening the chat. On iPhone they arrive even while Pincer is closed, through background refresh or a push relay you host.',
+		links: [
+			['Approvals and notifications', 'guides/approvals-and-notifications/'],
+			['Notifications while closed (iOS)', 'guides/push-notifications/'],
+		],
+		mac: approvalsMac,
+		phone: approvalsPhone,
+		macAlt: 'Pincer on macOS, demo capture: an exec approval request with allow once, always allow and deny.',
+		phoneAlt: 'Pincer on iPhone, demo capture: the same exec approval request.',
+		flip: true,
+		cols: 'minmax(0, 4fr) minmax(0, 8fr)',
+		pad: 'var(--space-9)',
+	},
+	{
+		id: 'gateways',
+		label: 'Gateways',
+		title: 'Every gateway in one window.',
+		body: 'Sign in to home, work and a test box at once. Press ⌘K to jump to any chat on any of them, and open chats in their own windows on the Mac, or side by side on Mac and iPad.',
+		links: [
+			['Manage gateways', 'guides/manage-gateways/'],
+			['Command palette and navigation', 'guides/command-palette-and-navigation/'],
+			['Chat windows', 'guides/chat-windows/'],
+		],
+		mac: paletteMac,
+		phone: channelsPhone,
+		macAlt: 'Pincer on macOS, demo capture: the ⌘K palette finding a chat as you type.',
+		phoneAlt: 'Pincer on iPhone, demo capture: the chat list grouped by agent and channel.',
+		cols: 'minmax(0, 6fr) minmax(0, 6fr)',
+		pad: 'var(--space-8)',
+	},
+	{
+		id: 'offline',
+		label: 'Offline',
+		title: 'Instant, even offline.',
+		body: 'Every chat is kept on your device, so switching chats and scrolling up never wait on the network. Read and search while offline, and anything you write waits in an outbox until you reconnect.',
+		specifics: [
+			['Native lists', 'and text rendering, with time budgets for switching chats, scrolling and streaming that every change is tested against.'],
+		],
+		links: [
+			['Local cache', 'guides/local-cache/'],
+			['Offline sending & retry', 'guides/offline-outbox/'],
+			['Search', 'guides/search/'],
+		],
+		mac: offlineMac,
+		phone: offlinePhone,
+		macAlt: 'Pincer on macOS, demo capture: a chat with a failed message and Retry and Delete controls.',
+		phoneAlt: 'Pincer on iPhone, demo capture: the same failed message.',
+		flip: true,
+		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
+	},
+	{
+		id: 'chat',
+		label: 'Chat',
+		title: 'And everything else you’d expect.',
+		body: 'Live thinking, tool calls, subagent runs, slash commands, read aloud and dictation, themes, and the common Gateway Settings pages, all as native views. For the full config editor and other admin tools, the Control UI is still the place.',
+		links: [
+			['The transcript', 'guides/transcript/'],
+			['Gateway Settings', 'guides/gateway-settings/'],
+			['Pincer vs the Control UI', 'getting-started/why-pincer/'],
+		],
 		mac: transcriptMac,
 		phone: transcriptPhone,
 		macAlt: 'Pincer on macOS, demo capture: a transcript with a thinking section and tool-call cards.',
 		phoneAlt: 'Pincer on iPhone, demo capture: the details of a tool call.',
 		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
-	},
-	{
-		id: 'channels',
-		label: 'Channels',
-		title: 'Organized by channel.',
-		body: 'Servers, #channels, automations and agents, each in their own section. Or group by agent, by group, or by recency.',
-		links: [['Read the guide to organizing chats', 'guides/organizing-chats/']],
-		mac: channelsMac,
-		phone: channelsPhone,
-		macAlt: 'Pincer on macOS, demo capture: the sidebar with chats grouped by agent, channel and server.',
-		phoneAlt: 'Pincer on iPhone, demo capture: the chat list grouped into sections.',
-		flip: true,
-		cols: 'minmax(0, 6fr) minmax(0, 6fr)',
-		pad: 'var(--space-8)',
-	},
-	{
-		id: 'approvals',
-		label: 'Approvals',
-		title: 'Approve without opening the app.',
-		body: 'Allow once, always allow or deny an exec request from a banner or right from the notification. Reply without opening the app.',
-		links: [['Read the approvals guide', 'guides/approvals-and-notifications/']],
-		mac: approvalsMac,
-		phone: approvalsPhone,
-		macAlt: 'Pincer on macOS, demo capture: an exec approval request with allow once, always allow and deny.',
-		phoneAlt: 'Pincer on iPhone, demo capture: the same exec approval request.',
-		cols: 'minmax(0, 4fr) minmax(0, 8fr)',
-		pad: 'var(--space-9)',
-	},
-	{
-		id: 'runs',
-		label: 'Runs',
-		title: 'Follow every subagent run.',
-		body: 'Subagent runs open straight from the tool call that started them, so you can see what each agent is doing and what it spawned.',
-		links: [['Read the subagents and runs guide', 'guides/subagents-and-runs/']],
-		mac: runsMac,
-		phone: runsPhone,
-		macAlt: 'Pincer on macOS, demo capture: a tree of subagent runs.',
-		phoneAlt: 'Pincer on iPhone, demo capture: the run tree.',
-		flip: true,
-		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
-	},
-	{
-		id: 'gateway',
-		label: 'Gateway',
-		title: 'Manage the gateway itself.',
-		body: 'Curated pages built from your gateway’s schema, plugin management, and a shared draft with an unsaved-changes review.',
-		specifics: [
-			['Health, logs and usage', 'sit next to your chats.'],
-			['Agents, devices and skills', 'are managed from the same window.'],
-		],
-		links: [['Read the Gateway Settings guide', 'guides/gateway-settings/']],
-		mac: gatewayMac,
-		phone: gatewayPhone,
-		macAlt: 'Pincer on macOS, demo capture: Gateway Settings.',
-		phoneAlt: 'Pincer on iPhone, demo capture: Gateway Settings.',
-		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
-	},
-	{
-		id: 'commands',
-		label: 'Commands',
-		title: 'Type / for everything.',
-		body: 'See the commands your gateway offers, including skills, plugins, models and thinking levels, with argument completion.',
-		links: [
-			['Read the composer guide', 'guides/composer/'],
-			['Command palette and navigation', 'guides/command-palette-and-navigation/'],
-		],
-		mac: commandsMac,
-		phone: commandsPhone,
-		macAlt: 'Pincer on macOS, demo capture: the composer with slash-command suggestions.',
-		phoneAlt: 'Pincer on iPhone, demo capture: slash-command suggestions.',
-		flip: true,
-		cols: 'minmax(0, 6fr) minmax(0, 6fr)',
-		pad: 'var(--space-8)',
-	},
-	{
-		id: 'themes',
-		label: 'Themes',
-		title: 'Eight themes, light and dark.',
-		body: 'Eight built-in themes with light and dark shades. Override any color, and give chats and groups their own icons and colors.',
-		links: [['Read the appearance guide', 'guides/appearance/']],
-		mac: themesMac,
-		phone: themesPhone,
-		macAlt: 'Pincer on macOS, demo capture: the Appearance settings with theme choices.',
-		phoneAlt: 'Pincer on iPhone, demo capture: the Appearance settings.',
-		cols: 'minmax(0, 6fr) minmax(0, 6fr)',
-		themes: true,
 	},
 ];
 
@@ -158,10 +130,10 @@ const facts = [
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Pincer: a native macOS and iOS client for OpenClaw</title>
+		<title>Pincer: OpenClaw as a native Mac and iPhone app</title>
 		<meta
 			name="description"
-			content="Pincer is a native macOS and iOS client for OpenClaw. Channel-style chat organization with live thinking, tool calls, inline images and exec approvals."
+			content="Pincer is a native macOS and iOS app for your OpenClaw Gateway: Quick Capture, the share sheet, Shortcuts, approvals from notifications, offline reading and every gateway in one window."
 		/>
 		<meta name="theme-color" content="#17211e" media="(prefers-color-scheme: dark)" />
 		<meta name="theme-color" content="#e6ece8" media="(prefers-color-scheme: light)" />
@@ -169,7 +141,7 @@ const facts = [
 		<meta property="og:title" content="Pincer for OpenClaw" />
 		<meta
 			property="og:description"
-			content="Your OpenClaw agents in a native Mac and iPhone app, with thinking, tool calls and inline images."
+			content="Your OpenClaw agents as a native Mac and iPhone app, not a browser tab."
 		/>
 		<meta property="og:type" content="website" />
 		<script is:inline>
@@ -192,16 +164,16 @@ const facts = [
 		<main id="main">
 			<section class="hero" aria-labelledby="hero-title">
 				<div class="hero-copy">
-					<h1 id="hero-title">Your agents, in a native chat app.</h1>
+					<h1 id="hero-title">OpenClaw, without the browser tab.</h1>
 					<p class="lede">
-						Pincer keeps what works about chatting with your <a href={openclaw}>OpenClaw</a> agents in a messaging
-						app, like organized channels and notifications, and adds what a plain chat window can’t show: thinking,
-						tool calls, inline images, and messages that are clearly yours.
+						Pincer is a native Mac and iPhone app for your <a href={openclaw}>OpenClaw</a> Gateway. Send to an agent
+						from any app, answer exec approvals from a notification, read your chats offline, and keep every
+						gateway in one window.
 					</p>
 					<div class="cta-row">
 						<a class="btn lamp" href={href('getting-started/install/')}>Install Pincer <Icon name="arrow" size={18} /></a>
 						<a class="btn" href={href('getting-started/try-the-demo/')}><Icon name="play" size={18} /> Try the demo</a>
-						<a class="textlink" href={href('getting-started/introduction/')}>Read the docs</a>
+						<a class="textlink" href={href('getting-started/why-pincer/')}>Why not just use the Control UI?</a>
 					</div>
 					<p class="fine">TestFlight beta or build from source, for macOS 15+ and iOS 18+. No gateway yet? The built-in demo runs entirely on your device.</p>
 				</div>
@@ -252,20 +224,6 @@ const facts = [
 										{l.specifics.map(([b, t]) => (
 											<li>
 												<strong>{b}</strong> {t}
-											</li>
-										))}
-									</ul>
-								)}
-								{l.themes && (
-									<ul class="plates" aria-label="Built-in themes">
-										{themes.map((t) => (
-											<li class="plate">
-												<span class="chips" aria-hidden="true">
-													{t.colors.map((c) => (
-														<i style={`background:${c}`} />
-													))}
-												</span>
-												{t.name}
 											</li>
 										))}
 									</ul>
