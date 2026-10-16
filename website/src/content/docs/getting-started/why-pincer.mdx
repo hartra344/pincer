@@ -1,0 +1,70 @@
+---
+title: Pincer vs the Control UI
+description: Why use Pincer when your OpenClaw Gateway already serves the Control UI in a browser? What each does well, and where Pincer differs.
+sidebar:
+  label: Why Pincer?
+---
+
+Your OpenClaw Gateway already serves a web app, the **Control UI**, at its own address (by default `http://<gateway-host>:18789/`). It's built by the OpenClaw project, and it's good. So why install Pincer?
+
+The short answer: Pincer is a Mac and iPhone app, not a page. It stays out of your way until you need it, brings approvals to your notifications (even while closed, on iPhone), plugs into the share sheet, Shortcuts and Handoff, and keeps every gateway you use in one window. The Control UI is the better place to run and configure the gateway itself.
+
+## When the Control UI is the better fit
+
+- **Nothing to install.** It ships with the gateway. Open the address, pair the browser once, and you're in.
+- **Any device.** It runs in any modern browser, so it works on Windows, Linux and Android, where Pincer doesn't.
+- **Every admin surface.** The full config editor (including raw JSON5), the debug page, updates, the plugin store, the secrets store and an operator terminal (admin only) are all there. Pincer's [Gateway Settings](../../guides/gateway-settings/) covers the common pages, not all of them.
+- **New features first.** Pincer follows the gateway protocol, so a new gateway feature usually reaches the Control UI before it reaches Pincer.
+
+The Control UI isn't a bare chat window either. It's an installable web app with an offline cache, queued sending, web push, a command palette and keyboard shortcuts. Pincer has its own [local cache](../../guides/local-cache/), [outbox](../../guides/offline-outbox/) and [⌘K palette](../../guides/command-palette-and-navigation/), so those alone aren't a reason to switch.
+
+## What Pincer adds
+
+### It's part of your Mac and iPhone
+
+- **[Quick Capture](../../guides/quick-capture/):** press <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> in any app to send a message to any chat, without switching windows. macOS.
+- **[Share to Pincer](../../guides/sharing-to-pincer/):** send a page, photo or file to an agent from the system share sheet, on macOS and iOS.
+- **[Shortcuts & Siri](../../guides/shortcuts-and-siri/):** **Ask Agent**, **Send to Chat**, **Get Pending Approvals** and more, in Shortcuts, Siri, Spotlight and the Action Button. Most run without opening the app.
+- **[Deep links & Handoff](../../guides/deep-links-and-handoff/):** every chat and message has a `pincer://` link, and the chat you're reading follows you between your Mac and iPhone.
+- **[Menu bar](../../guides/menu-bar/):** what's unread, running and waiting for approval, without opening a window. macOS.
+
+### Approvals come to you
+
+- **[Approvals from a notification](../../guides/approvals-and-notifications/):** allow once, always allow or deny an exec request from a banner, a notification or the lock screen. On iOS, allowing needs Face ID, Touch ID or your passcode.
+- **[Notifications while closed on iOS](../../guides/push-notifications/):** background refresh with no server, or instant delivery through a push relay you host. On macOS, notifications arrive while Pincer is running.
+
+### One window for every gateway
+
+- **[Several gateways at once](../../guides/manage-gateways/):** home, work and a test box, all signed in, each with its own cache.
+- **[⌘K across all of them](../../guides/command-palette-and-navigation/):** jump to any chat on any gateway, and go back and forward across gateways.
+- **[Chat windows](../../guides/chat-windows/):** open a chat in its own window on the Mac, or two side by side on the Mac or iPad, to watch a long run while you work in another chat.
+
+### It's fast and it keeps your history
+
+- **[Local cache](../../guides/local-cache/):** every chat is kept on your device, so chats open instantly, older messages scroll in without the network, and you can read while offline.
+- **[Search](../../guides/search/):** full-text search over that cache, including older history.
+- **[Offline sending](../../guides/offline-outbox/):** messages you write while disconnected go out in order when Pincer reconnects.
+- Native lists and text rendering. Switching chats, scrolling and streaming have [time budgets](../../development/building/) that every change is tested against.
+
+### It's only a client
+
+Pincer connects in the gateway's `operator` role and nothing else. It never registers as a node, never runs a gateway, and has no terminal, camera, screen or `system.run` capability. Its device key and credentials live in the Keychain, not in a browser profile, and the macOS app is sandboxed. See [Security](../../reference/security/).
+
+## At a glance
+
+| | Control UI | Pincer |
+| --- | --- | --- |
+| Install | Comes with the gateway | App for macOS 15+ and iOS 18+ |
+| Platforms | Any modern browser | Mac, iPhone, iPad |
+| Gateways | The one serving it | Several at once |
+| Offline reading and queued sending | Yes | Yes |
+| Notifications | Web push | Native, with approval actions (while closed: iOS only) |
+| Share sheet, Shortcuts, Siri, Handoff | No | Yes |
+| Global shortcut and menu bar | No | Yes (macOS) |
+| Full config editor, debug, terminal, update | Yes | Common Gateway Settings pages only |
+
+## Use both
+
+You don't have to pick. Pincer and the Control UI are separate paired devices on the same gateway, and they see the same chats. An approval or question you answer in the Control UI disappears from Pincer on its own. A common split: the Control UI for setup and admin, Pincer day to day.
+
+Next: [install Pincer](../install/), or [try the demo](../try-the-demo/) without a gateway.

@@ -1,6 +1,6 @@
 ---
 title: What is Pincer?
-description: Pincer is a native macOS and iOS client for OpenClaw that shows thinking, tool calls and inline images.
+description: Pincer is a native macOS and iOS app for your OpenClaw Gateway, with Quick Capture, Shortcuts, approvals from notifications and every gateway in one window.
 sidebar:
   label: Introduction
 ---
@@ -10,34 +10,30 @@ import DocScreenshot from '../../../components/DocScreenshot.astro';
 import phone from '../../../assets/screenshots/ios/transcript.png';
 import shot from '../../../assets/screenshots/transcript.png';
 
-Pincer is a native macOS and iOS app for talking to your [OpenClaw](https://github.com/openclaw/openclaw) agents.
+Pincer is a native macOS and iOS app for your [OpenClaw](https://github.com/openclaw/openclaw) Gateway.
 
-If you already chat with OpenClaw through a messaging app, Pincer will feel familiar. It keeps what works there, like servers, `#channels` and notifications, and adds what a plain chat window can't show: the agent's **thinking**, its **tool calls**, **inline images**, and your own messages shown under **your name**.
+Your gateway already serves the Control UI in a browser. Pincer is for when you want your agents in a real app instead: one that answers a global shortcut, appears in the share sheet and Shortcuts, brings exec approvals to your notifications, and keeps every gateway you use in one window. [Pincer vs the Control UI](../why-pincer/) says when each fits.
 
 <DocScreenshot src={shot} ios={phone} alt="Pincer on macOS with agents, channels, a tool call, and a chart." iosAlt="Pincer on iPhone with a disk status reply and chart." caption="Explore a conversation in the built-in demo. All content is synthetic." />
 
-## What you get
+## What makes it different
 
 <CardGrid>
-	<Card title="Organized by channel" icon="list-format">
-		Each server gets a section with its channels. Automations and agents get their own.
+	<Card title="Built into the system" icon="laptop">
+		[Quick Capture](../../guides/quick-capture/) from any app, the [share sheet](../../guides/sharing-to-pincer/), [Shortcuts and Siri](../../guides/shortcuts-and-siri/), [Handoff](../../guides/deep-links-and-handoff/) and the [menu bar](../../guides/menu-bar/).
 	</Card>
-	<Card title="The agent's work, visible" icon="seti:pipeline">
-		Streaming thinking and tool cards with arguments and results.
+	<Card title="Approvals in a notification" icon="approve-check">
+		[Allow or deny exec requests](../../guides/approvals-and-notifications/) from a notification. On iOS, [notifications arrive while the app is closed](../../guides/push-notifications/).
 	</Card>
-	<Card title="Native and fast" icon="rocket">
-		Native lists and a background cache. Scrolling up never waits for the network.
+	<Card title="Every gateway, one window" icon="list-format">
+		[Several gateways](../../guides/manage-gateways/) signed in at once. Press ⌘K to [jump to any chat](../../guides/command-palette-and-navigation/) on any of them, or [open chats in their own windows](../../guides/chat-windows/) on the Mac.
 	</Card>
-	<Card title="Approvals anywhere" icon="approve-check">
-		Allow or deny exec requests from a banner, a notification or the lock screen.
-	</Card>
-	<Card title="Jump anywhere" icon="magnifier">
-		Press ⌘K to find any chat on any gateway, or run a command.
-	</Card>
-	<Card title="Share from any app" icon="external">
-		Send links, text, images and files to a chat from the share sheet.
+	<Card title="Instant, even offline" icon="rocket">
+		Chats open from a [local cache](../../guides/local-cache/), you can read and [search](../../guides/search/) them offline, and messages you write [wait in an outbox](../../guides/offline-outbox/) until you reconnect.
 	</Card>
 </CardGrid>
+
+Everything you'd expect from a chat with your agents is there too: [live thinking and tool calls](../../guides/transcript/), [subagent runs](../../guides/subagents-and-runs/), [slash commands](../../guides/composer/), [read aloud and dictation](../../guides/read-aloud/), and the common [Gateway Settings](../../guides/gateway-settings/) pages.
 
 ## What Pincer is (and isn't)
 
@@ -54,6 +50,7 @@ Pincer doesn't run agents itself. It talks to an OpenClaw Gateway on this machin
 
 ## Next steps
 
+<LinkCard title="Why Pincer?" description="What the Control UI does well, and where Pincer differs." href="../why-pincer/" />
 <LinkCard title="Install Pincer" description="Get the app for macOS or iOS." href="../install/" />
 <LinkCard title="Try the demo" description="Look around with sample agents. Nothing leaves your device." href="../try-the-demo/" />
 <LinkCard title="Connect a gateway" description="The first-run setup: find your gateway, sign in and approve this device." href="../connect-a-gateway/" />
