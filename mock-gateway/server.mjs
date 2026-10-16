@@ -24,6 +24,7 @@ import { handleWebPushRequest } from './webpush.mjs';
 import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
+import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
 import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserRequest } from './browser.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
@@ -61,6 +62,7 @@ const METHODS = [
   'models.list',
   'sessions.create',
   'artifacts.download',
+  LINK_PREVIEW_METHOD,
   'exec.approval.list',
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
@@ -253,6 +255,7 @@ const REQUEST_HANDLERS = [
   handleSessionListRequest,
   handleCatalogRequest,
   handleMiscRequest,
+  handleLinkPreviewRequest,
   handleReactionsRequest,
   handleQuestionRequest,
 ];

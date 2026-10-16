@@ -175,14 +175,16 @@ final class TranscriptListController {
             self.heights.removeAll()
             self.rows = []
         }
+        let tailShape = self.rows.count == newRows.count && newRows.last.map { self.rows.last?.id == $0.id } == true
+            && self.rows.dropLast() == newRows.dropLast()
+        let staleCards = self.renderer.updatePageTurns(rows: newRows, tailOnly: tailShape)
         if case .top = self.anchor, newRows.first?.id != self.rows.first?.id {
             // Rows arriving above: keep reading the same row instead of following the top.
             self.anchor = self.currentAnchor(allowTop: false)
         }
         // Streaming: same ids, only the last row differs. One pass, no diffing. The rows are
         // already unique, so the new ones are too.
-        if let last = newRows.last, self.rows.count == newRows.count, self.rows.last?.id == last.id,
-           self.rows.dropLast() == newRows.dropLast() {
+        if let last = newRows.last, tailShape, staleCards.isEmpty {
             let row = self.rows.count - 1
             guard self.rows[row] != last else { return .unchanged }
             self.premeasure.invalidateRows([last.id])
@@ -212,6 +214,11 @@ final class TranscriptListController {
         for (row, item) in unique.enumerated() {
             guard let old = oldById[item.id], old != item else { continue }
             self.heights[item.id]?.measured = false
+            changed.insert(row)
+        }
+        for id in staleCards {
+            guard let row = self.index[id] else { continue }
+            self.heights[id]?.measured = false
             changed.insert(row)
         }
         self.premeasure.invalidateRows(Set(changed.map { unique[$0].id }))

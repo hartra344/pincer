@@ -76,6 +76,17 @@ struct TranscriptRowAccessibilityAction {
         for (index, item) in layout.copyItems.enumerated() where !item.text.isEmpty {
             result.append(.init(name: index == 0 ? L("Copy message") : item.title) { Clipboard.copy(item.text) })
         }
+        let cards = layout.parts.compactMap { placed -> TranscriptPart.PagePreview? in
+            if case let .pagePreview(card) = placed.part { return card }
+            return nil
+        }
+        for card in cards {
+            let page = card.page
+            result.append(.init(name: TranscriptPagePreviewView.openName(page)) { [weak actions] in actions?.openBrowserPage(page) })
+            result.append(.init(name: cards.count == 1 ? L("Copy Link") : L("Copy Link to \(page.displayTitle)")) {
+                Clipboard.copy(page.url.absoluteString)
+            })
+        }
         guard let actions else { return result }
         let source = layout.sourceChat.map { chat in
             [TranscriptRowAccessibilityAction(name: chat.title) { [weak actions] in actions?.openChat(chat.sessionKey) }]

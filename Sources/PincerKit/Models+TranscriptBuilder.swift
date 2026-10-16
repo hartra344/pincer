@@ -6,12 +6,12 @@ import UniformTypeIdentifiers
 /// A tool invocation paired with its result, rendered as one card.
 public struct ToolActivity: Identifiable, Hashable, Sendable {
     public let id: String
-    public var name: String { didSet { self.presentationCacheRevision = UUID() } }
+    public var name: String { didSet { self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
     public var arguments: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     public var result: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     /// `details` of the result, trimmed to what a file-edit diff reads. See `ToolFileEdit.parse`.
-    public var details: JSONValue? { didSet { self.durationMs = Self.duration(details); self.presentationCacheRevision = UUID() } }
-    public var isError: Bool { didSet { self.presentationCacheRevision = UUID() } }
+    public var details: JSONValue? { didSet { self.durationMs = Self.duration(details); self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
+    public var isError: Bool { didSet { self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
     public var isRunning: Bool { didSet { self.presentationCacheRevision = UUID() } }
     /// Opaque presentation-cache identity. Copies retain it; mutations rotate it.
     /// It is intentionally excluded from semantic equality and hashing.
@@ -20,6 +20,8 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     public private(set) var summary: String?
     /// How long the call took, from `details` (`durationMs` for exec, `tookMs` for web tools). Derived when details are set.
     public private(set) var durationMs: Int?
+    /// The page card of a successful `browser` call, from `details.browserTab`.
+    public private(set) var browserPage: BrowserPagePreview?
     /// Subagent session this call started, when the call names one.
     public private(set) var spawnedSessionKey: String?
     /// `label` argument of a spawn call, for matching the run when no key is echoed back.
@@ -38,6 +40,11 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         self.isRunning = isRunning
         self.presentationCacheRevision = UUID()
         self.derive()
+        self.deriveBrowserPage()
+    }
+
+    private mutating func deriveBrowserPage() {
+        self.browserPage = BrowserPagePreview.parse(toolName: self.name, details: self.details, isError: self.isError, toolCallId: self.id)
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -80,6 +87,7 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
             || Self.statusDetailKeys.contains($0.key) && $0.value.object == nil && $0.value.array == nil }
         // web_search's results (≤ 10 rows, each ~500 B) for its link list.
         if WebSearch.isPayload(object) { kept.merge(WebSearch.trimmed(object)) { _, new in new } }
+        if let tab = BrowserPagePreview.trimmedTab(object) { kept["browserTab"] = tab }
         return kept.isEmpty ? nil : .object(kept)
     }
 

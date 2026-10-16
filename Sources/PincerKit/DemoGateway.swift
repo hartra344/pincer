@@ -41,7 +41,7 @@ actor DemoGateway {
         "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
         "sessions.groups.rename", "sessions.groups.delete", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
-        "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
+        "sessions.create", "artifacts.download", "controlUi.linkPreview", "browser.request", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",

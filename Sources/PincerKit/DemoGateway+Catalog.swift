@@ -16,6 +16,8 @@ extension DemoGateway {
             }
             return ["artifactId": .string(id), "mimeType": .string(artifact.mimeType), "encoding": "base64",
                     "data": .string(artifact.data.base64EncodedString())]
+        case "controlUi.linkPreview":
+            return Self.linkPreviewResult(params)
         case "logs.tail":
             return try self.logs.tail(params)
         case _ where DemoUsage.methods.contains(method):

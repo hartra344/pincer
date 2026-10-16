@@ -4483,6 +4483,16 @@
         }
       }
     },
+    "Copy Link to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link to %@"
+          }
+        }
+      }
+    },
     "Copy Link to Chat": {
       "localizations": {
         "en": {
@@ -19239,6 +19249,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Web Content"
+          }
+        }
+      }
+    },
+    "Web page: %@, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web page: %1$@, %2$@"
           }
         }
       }
