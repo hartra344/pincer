@@ -453,7 +453,8 @@ public final class AgentManagementModel {
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
-    @ObservationIgnored private let onAgentsChanged: @MainActor () async -> Void
+    /// Optional rather than defaulted to `{}`: see `SessionManagerModel.onSessionsChanged` (#952).
+    @ObservationIgnored private let onAgentsChanged: (@MainActor () async -> Void)?
     @ObservationIgnored private var onAgentDeleted: @MainActor (String) -> Void = { _ in }
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?,
@@ -473,7 +474,7 @@ public final class AgentManagementModel {
     public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
                 scopes: @escaping @MainActor () -> [String] = { [GatewayConnection.adminScope] },
                 allowsWritesWithoutAdmin: Bool = false,
-                onAgentsChanged: @escaping @MainActor () async -> Void = {},
+                onAgentsChanged: (@MainActor () async -> Void)? = nil,
                 request: @escaping Request)
     {
         self.request = request
@@ -535,7 +536,7 @@ public final class AgentManagementModel {
         if let error = draft.validationError { throw AgentManagementError.validation(error) }
         let result = try await self.call(AgentManagement.createMethod, draft.createParams)
         let agentId = result["agentId"]?.text ?? draft.derivedId ?? draft.trimmedName
-        await self.onAgentsChanged()
+        await self.onAgentsChanged?()
         return agentId
     }
 
@@ -545,7 +546,7 @@ public final class AgentManagementModel {
         guard let params = draft.updateParams(agentId: agentId, from: original) else { return false }
         if draft.trimmedName.isEmpty { throw AgentManagementError.validation("Enter a name.") }
         _ = try await self.call(AgentManagement.updateMethod, params)
-        await self.onAgentsChanged()
+        await self.onAgentsChanged?()
         return true
     }
 
@@ -592,7 +593,7 @@ public final class AgentManagementModel {
                                          ["agentId": .string(agentId), "deleteFiles": .bool(deleteFiles)])
         self.forget(agentId: agentId)
         self.onAgentDeleted(agentId)
-        await self.onAgentsChanged()
+        await self.onAgentsChanged?()
         return AgentDeleteResult(result, agentId: agentId)
     }
 

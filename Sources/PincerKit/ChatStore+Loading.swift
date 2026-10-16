@@ -681,7 +681,7 @@ extension ChatStore {
     /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
     func reloadAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil,
-                                 clearingCache clearCache: @MainActor () async -> Void = {}) async {
+                                 clearingCache clearCache: (@MainActor () async -> Void)? = nil) async {
         self.stopQuotePreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
@@ -701,7 +701,7 @@ extension ChatStore {
         let pending = self.items.filter(\.isPending)
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
-        await clearCache()
+        await clearCache?()
         await self.load(force: true, feedbackAuthority: feedbackAuthority)
     }
 
