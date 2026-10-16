@@ -116,6 +116,9 @@ actor DemoGateway {
     var sessionsSubscribed = false
     /// The demo's one portal ("Studio clock") until the user closes it.
     var demoPortalOpen = true
+    /// The demo browser's tabs with their history, created on first use (DemoGateway+Browser.swift).
+    var demoBrowserTabs: [DemoBrowserTab] = BrowserDemoPages.all.map(DemoBrowserTab.init)
+    var demoBrowserTabCounter = 0
     var holdsHistory = false
     var heldHistory: [CheckedContinuation<Void, Never>] = []
     var historyRequestCounts: [String: Int] = [:]

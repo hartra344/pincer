@@ -237,6 +237,18 @@ public final class ArtifactImageLoader {
         UserDefaults.standard.object(forKey: "pincer.loadWebImages") as? Bool ?? true
     }
 
+    /// A file on the Gateway host (a browser download's `path`), streamed to a temp file through `assistant-media` with Gateway auth.
+    /// The session is optional upstream, so none is sent. Returns nil when it can't be fetched.
+    func fetchGatewayFile(path: String, limit: Int = GatewayMediaClient.explicitMaxBytes) async throws -> URL? {
+        guard Self.isGatewayLocalSource(path), let gateway, let gatewayURL = try? gateway.profile.resolvedURL(),
+              let base = Self.httpBase(for: gatewayURL),
+              var components = URLComponents(url: base.appendingPathComponent("__openclaw__/assistant-media"), resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.queryItems = [URLQueryItem(name: "source", value: path)]
+        guard let url = components.url else { return nil }
+        return try await self.media.downloadGateway(url, maxBytes: limit)
+    }
+
     /// Routes a media source the way OpenClaw's Control UI does:
     /// - `data:` URIs decode in place;
     /// - Gateway-served paths and URLs on the Gateway host are fetched with Gateway auth;
@@ -291,7 +303,7 @@ public final class ArtifactImageLoader {
         return host.split(separator: ".").allSatisfy { Int($0) != nil } == false
     }
 
-    private static func httpBase(for socketURL: URL) -> URL? {
+    static func httpBase(for socketURL: URL) -> URL? {
         var components = URLComponents(url: socketURL, resolvingAgainstBaseURL: false)
         components?.scheme = socketURL.scheme == "wss" ? "https" : "http"
         components?.path = "/"

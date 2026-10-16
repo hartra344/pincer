@@ -92,6 +92,25 @@ final class GatewayMediaClient {
         return nil
     }
 
+    /// Like `fetchGateway`, but streams the body to a temporary file instead of memory.
+    /// The caller owns the file. Returns nil for non-200 responses; throws `MediaError.tooLarge` past the cap.
+    func downloadGateway(_ url: URL, maxBytes: Int? = nil) async throws -> URL? {
+        guard let (session, authorization) = self.prepare() else { return nil }
+        var request = URLRequest(url: url)
+        if let authorization { request.setValue(authorization, forHTTPHeaderField: "Authorization") }
+        let (file, response) = try await session.download(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            try? FileManager.default.removeItem(at: file)
+            return nil
+        }
+        let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
+        if size > (maxBytes ?? self.maxBytes) {
+            try? FileManager.default.removeItem(at: file)
+            throw MediaError.tooLarge
+        }
+        return file
+    }
+
     /// Fetches a public https URL without credentials; a redirect off public https hosts is refused.
     func fetchPublic(_ url: URL, accept: String, maxBytes: Int? = nil) async throws -> Data? {
         var request = URLRequest(url: url)

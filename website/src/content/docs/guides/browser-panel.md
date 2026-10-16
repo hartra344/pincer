@@ -3,13 +3,30 @@ title: Browser panel
 description: Watch the agent's live browser and open its portals in a panel next to the chat.
 ---
 
-The **Browser** panel shows what the agent's browser is looking at right now, so you can follow along while it works. The agent's browser is view-only for now: you can watch, but you can't click, type or navigate. Controls are coming.
+The **Browser** panel shows what the agent's browser is looking at right now, so you can follow along while it works. You can move around the agent's browser, open and close its tabs and save a page. Clicking and typing into the page isn't available: the picture is view-only.
 
 ## What it shows
 
 The panel shows a live picture of the page the agent is using. That's either the managed OpenClaw browser or your own Chrome, when the agent reaches it through the extension relay. Pincer doesn't care which: it shows whatever browser the agent used.
 
-The panel has a page picker for choosing between open pages, the page's address (read-only, and you can select and copy it), an **Open in Browser** button for `http` and `https` pages, and a status pill that reads **Live** while frames arrive.
+The panel has a page picker for choosing between open pages, the controls described below, and a status pill that reads **Live** while frames arrive.
+
+## Controls
+
+Navigating here steers the agent's real browser while it works. If the agent is in the middle of a task, moving it or closing its tab can change what the agent does next. The controls only appear with Full Management. Without it, you see the notice instead.
+
+The header has one row, in this order: **Back**, **Forward**, **Reload Page**, the address field, **Open in Browser** (for `http` and `https` pages) and a ⋯ menu with **Copy URL**, **Download Page**, **New Tab…** and **Close Tab**. On iPhone the row is compact: **Back**, **Forward**, the address field and ⋯, which also holds **Reload Page**, **Open in Browser**, **Copy URL**, **Download Page**, **New Tab…** and **Close Tab**.
+
+- **Go to an address:** click the address field (on Mac, press **⌘L** while the panel is focused), type, and press Return. Press Esc to put the current address back. While you type, the field isn't overwritten when the page changes. Addresses without `http://` or `https://` are completed: `example.com` becomes `https://example.com`, and `localhost:3000` or an IP address uses `http://`. Anything that isn't a web address, such as a search phrase, `javascript:` or an address with a user name and password, is refused with "Enter a web address".
+- **Reload Page:** loads the page again in the agent's browser. While a page is loading, the header shows progress and the last picture stays on screen.
+- **Back and Forward:** go through the page's history. They stay on until the gateway first refuses, because some gateways turn off the script setting these need. Then both are disabled, with "Back and Forward are turned off on this gateway". Reconnecting resets this.
+- **New Tab:** ⋯ ▸ **New Tab…**, or **New Tab…** in the page picker, asks for an address and opens it as a new tab in the agent's browser. The panel switches to it.
+- **Close Tab:** ⋯ ▸ **Close Tab** asks "Close this tab in the agent's browser?" and warns "The agent may be using it." After closing, the panel shows a neighbouring tab, or "No pages open".
+- **Start Browser:** when the agent's browser isn't running, the panel says so and offers **Start Browser**.
+- **Download Page:** saves the current page. The gateway makes a copy and Pincer fetches it, straight to a file rather than into memory. A progress indicator shows with a **Cancel** button. Cancelling stops Pincer's copy; the gateway may still have made one. When it finishes, choose where to save it: the save panel on Mac, the share sheet on iPhone and iPad. If the page changed before it could be downloaded, you'll be told. Failures show as "Couldn't download this page."
+- **Blocked addresses:** if the gateway's browser policy refuses an address, a line under the row says "This address is blocked by the gateway's browser policy." Your typed address stays so you can fix it.
+
+Errors show as a single line under the row and clear on their own after a few seconds.
 
 ## Requirements
 
@@ -57,7 +74,7 @@ Portals don't need the browser plugin. If your gateway doesn't support portals, 
 
 ## Privacy and performance
 
-The picture streams only while the panel is visible. Close it and the stream stops. Pincer keeps nothing on disk: the last frame stays in memory, so reopening the panel is instant. Pincer never sends input to the agent's browser.
+The picture streams only while the panel is visible. Close it and the stream stops. Pincer keeps nothing on disk: the last frame stays in memory, so reopening the panel is instant. Pincer never clicks or types in the agent's browser.
 
 ## Troubleshooting
 

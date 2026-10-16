@@ -2733,6 +2733,26 @@
         }
       }
     },
+    "Back and Forward are turned off on this gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back and Forward are turned off on this gateway"
+          }
+        }
+      }
+    },
+    "Back and Forward are turned off on this gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back and Forward are turned off on this gateway."
+          }
+        }
+      }
+    },
     "Background": {
       "localizations": {
         "en": {
@@ -3029,6 +3049,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Cancel Download": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel Download"
           }
         }
       }
@@ -3713,6 +3743,16 @@
         }
       }
     },
+    "Close Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Tab"
+          }
+        }
+      }
+    },
     "Close Window": {
       "localizations": {
         "en": {
@@ -3739,6 +3779,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close search"
+          }
+        }
+      }
+    },
+    "Close this tab in the agent's browser?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close this tab in the agent's browser?"
           }
         }
       }
@@ -3839,16 +3889,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colors"
-          }
-        }
-      }
-    },
-    "Coming soon": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coming soon"
           }
         }
       }
@@ -4743,6 +4783,16 @@
         }
       }
     },
+    "Copy URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy URL"
+          }
+        }
+      }
+    },
     "Copy Visible Lines": {
       "localizations": {
         "en": {
@@ -4969,6 +5019,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't connect"
+          }
+        }
+      }
+    },
+    "Couldn't download this page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't download this page."
           }
         }
       }
@@ -6043,6 +6103,26 @@
         }
       }
     },
+    "Download Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download Page"
+          }
+        }
+      }
+    },
+    "Downloading…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading…"
+          }
+        }
+      }
+    },
     "Duplicate": {
       "localizations": {
         "en": {
@@ -6369,6 +6449,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter a name."
+          }
+        }
+      }
+    },
+    "Enter a web address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a web address"
           }
         }
       }
@@ -7033,6 +7123,16 @@
         }
       }
     },
+    "Focus Address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focus Address"
+          }
+        }
+      }
+    },
     "Folder": {
       "localizations": {
         "en": {
@@ -7519,6 +7619,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Go to Chats"
+          }
+        }
+      }
+    },
+    "Go to an address in the agent's browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to an address in the agent's browser"
           }
         }
       }
@@ -8263,12 +8373,12 @@
         }
       }
     },
-    "It starts when the agent uses the browser tool.": {
+    "It starts when the agent uses the browser tool, or you can start it now.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It starts when the agent uses the browser tool."
+            "value": "It starts when the agent uses the browser tool, or you can start it now."
           }
         }
       }
@@ -8859,6 +8969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Load images the agent links from the web"
+          }
+        }
+      }
+    },
+    "Loading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
           }
         }
       }
@@ -9553,6 +9673,16 @@
         }
       }
     },
+    "More page actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More page actions"
+          }
+        }
+      }
+    },
     "Move Back Under “%@”": {
       "localizations": {
         "en": {
@@ -9839,6 +9969,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "New Group…"
+          }
+        }
+      }
+    },
+    "New Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Tab"
+          }
+        }
+      }
+    },
+    "New Tab…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Tab…"
           }
         }
       }
@@ -11329,6 +11479,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OpenClaw is running on this Mac."
+          }
+        }
+      }
+    },
+    "Opens in the agent's browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens in the agent's browser."
           }
         }
       }
@@ -13009,6 +13169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reload"
+          }
+        }
+      }
+    },
+    "Reload Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload Page"
           }
         }
       }
@@ -16213,6 +16383,16 @@
         }
       }
     },
+    "Start Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Browser"
+          }
+        }
+      }
+    },
     "Start Pincer when you log in, so Quick Capture is ready.": {
       "localizations": {
         "en": {
@@ -17163,6 +17343,16 @@
         }
       }
     },
+    "The agent may be using it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent may be using it."
+          }
+        }
+      }
+    },
     "The agent never reacts.": {
       "localizations": {
         "en": {
@@ -17219,6 +17409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The agent's browser isn't running"
+          }
+        }
+      }
+    },
+    "The browser needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The browser needs Full Management."
           }
         }
       }
@@ -17303,6 +17503,16 @@
         }
       }
     },
+    "The download took too long.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download took too long."
+          }
+        }
+      }
+    },
     "The file couldn't be prepared for sharing.": {
       "localizations": {
         "en": {
@@ -17379,6 +17589,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The name is shown to every operator of this Gateway (up to %lld characters)."
+          }
+        }
+      }
+    },
+    "The page changed before it could be downloaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page changed before it could be downloaded."
           }
         }
       }
@@ -17619,6 +17839,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't change nodes. Update OpenClaw to manage them here."
+          }
+        }
+      }
+    },
+    "This Gateway can't control its browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't control its browser."
           }
         }
       }
@@ -17909,6 +18139,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Mac"
+          }
+        }
+      }
+    },
+    "This address is blocked by the gateway's browser policy.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This address is blocked by the gateway's browser policy."
           }
         }
       }

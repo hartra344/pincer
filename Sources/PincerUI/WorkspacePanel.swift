@@ -20,6 +20,7 @@ struct WorkspacePanel: View {
     /// The panel has finished sliding in; the first web view is created only after.
     @State private var settled = false
     @State private var dismissedCloseError: String?
+    @State private var newTab = false
 
     /// How long the inspector slide takes to settle. A var so a probe can shorten or lengthen it.
     static var slideSettleDelay: Duration = .milliseconds(350)
@@ -33,7 +34,7 @@ struct WorkspacePanel: View {
         let tab = self.picked ?? (browserWorks ? .browser : portals.first.map { .portal($0.id) } ?? .browser)
         let selected = portals.first { tab == .portal($0.id) }
         VStack(spacing: 0) {
-            WorkspaceTabStrip(tab: self.$picked, model: model, portals: portals, selectedPortal: selected?.id) { self.closing = $0 }
+            WorkspaceTabStrip(tab: self.$picked, newTab: self.$newTab, model: model, portals: portals, selectedPortal: selected?.id) { self.closing = $0 }
             Divider()
             if let error = store.closeError, error != self.dismissedCloseError {
                 PortalBanner(symbol: "exclamationmark.triangle", dismiss: { self.dismissedCloseError = error }) { Text(error) }
@@ -43,13 +44,14 @@ struct WorkspacePanel: View {
                 PortalView(portal: selected, cache: self.cache, canLoad: self.settled) { self.closing = selected }
                     .id(selected.id)
             } else {
-                BrowserPanelView(model: model)
+                BrowserPanelView(model: model, newTab: self.$newTab)
             }
         }
         .task {
             try? await Task.sleep(for: Self.slideSettleDelay)
             self.settled = true
         }
+        .modifier(NewTabPrompt(isPresented: self.$newTab, model: model))
         .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
         .onChange(of: portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
         .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
@@ -65,6 +67,7 @@ struct WorkspacePanel: View {
 /// there are portals, so a Browser-only panel keeps its PR 1 look).
 private struct WorkspaceTabStrip: View {
     @Binding var tab: WorkspacePanel.Tab?
+    @Binding var newTab: Bool
     let model: BrowserPanelModel
     let portals: [PortalSummary]
     let selectedPortal: String?
@@ -76,6 +79,12 @@ private struct WorkspaceTabStrip: View {
                 if self.model.tabs.isEmpty {
                     Text("No pages open", bundle: .module)
                 }
+                Button(L("New Tab…"), systemImage: "plus") {
+                    self.tab = .browser
+                    self.newTab = true
+                }
+                .disabled(self.model.status == .needsFullManagement || self.model.status == .notRunning)
+                if !self.model.tabs.isEmpty { Divider() }
                 ForEach(self.model.tabs) { page in
                     Button {
                         self.tab = .browser

@@ -399,9 +399,10 @@ struct PanelSlideProbe {
                                    loadURL: URL(string: "http://127.0.0.1:9/?openclaw_portal=probe")!)
         let cache = PortalWebCache()
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 560, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: Harness(portal: portal, cache: cache).environment(gateway))
         window.orderBack(nil)
-        defer { window.close() }
+        defer { window.contentView = nil; window.close() }
 
         for _ in 0..<10 {
             try await Task.sleep(for: .milliseconds(30))

@@ -270,7 +270,16 @@ public final class GatewayStore: Identifiable {
     /// The agent's live browser (`browser.request`, view-only). Needs `operator.admin`; the demo counts as Full Management.
     @ObservationIgnored public private(set) lazy var browserPanel = BrowserPanelModel(
         connection: self.connection, profile: { [weak self] in self?.profile ?? GatewayProfile(name: "", url: "", authMode: .none) },
-        hello: { [weak self] in self?.hello })
+        hello: { [weak self] in self?.hello },
+        fetchDownload: { [weak self] path in
+            if let demo = DemoBrowserDownload.data(forPath: path) {
+                return try BrowserPanelModel.writeTemp(demo, name: "demo.html")
+            }
+            guard let loader = await self?.images, let file = try await loader.fetchGatewayFile(path: path) else {
+                throw BrowserPanelModel.ActionError.noDownload
+            }
+            return file
+        })
     /// The agent's portals (`portal.list`, `portal.close`); refreshed by `portal.changed`. Hidden when unavailable.
     @ObservationIgnored public private(set) lazy var portals = PortalStore(
         connection: self.connection, hello: { [weak self] in self?.hello }, isDemo: self.profile.isDemo)

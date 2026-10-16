@@ -25,7 +25,7 @@ import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePen
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
 import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
-import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserRequest } from './browser.mjs';
+import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserHttp, handleBrowserRequest } from './browser.mjs';
 import { PORTAL_EVENTS, PORTAL_METHODS, handlePortalsRequest, initPortals, portalsDisabled, stopPortals } from './portals.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
@@ -410,6 +410,8 @@ export async function startServer(opts = {}) {
 
   // The same port also serves the mock MCP OAuth consent pages.
   const httpServer = http.createServer((req, res) => {
+    const authorized = (request) => options.auth === 'none' || request.headers.authorization === `Bearer ${options.mockToken}`;
+    if (handleBrowserHttp(state, req, res, authorized)) return;
     if (mcpDisabled() || !handleMcpHttp(state, req, res, broadcast)) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('not found');

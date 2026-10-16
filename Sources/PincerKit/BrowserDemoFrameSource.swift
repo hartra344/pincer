@@ -28,6 +28,17 @@ public enum BrowserDemoPages {
     public static let all = [docs, release]
 
     public static func page(targetId: String) -> Page? { self.all.first { $0.targetId == targetId } }
+
+    /// The page for an address: the seeded pages by URL, otherwise a generic page headed by the host.
+    public static func page(targetId: String, url: String, title: String?) -> Page {
+        if let known = self.all.first(where: { $0.url == url }) {
+            return Page(targetId: targetId, title: title ?? known.title, url: url, heading: known.heading, lines: known.lines)
+        }
+        let host = URL(string: url)?.host ?? "New tab"
+        return Page(targetId: targetId, title: title ?? host, url: url, heading: host,
+                    lines: ["This is a demo page for \(host).", "The demo gateway doesn't browse the real web.",
+                            "Back, Forward and Reload work on these pages.", "Open a new tab to try the tab strip."])
+    }
 }
 
 /// An in-process stand-in for the screencast socket: draws a page with CoreGraphics at about 2 fps,
@@ -43,11 +54,24 @@ public struct BrowserDemoFrameSource: BrowserFrameSource {
         self.interval = .milliseconds(Int(1000 / max(framesPerSecond, 0.5)))
     }
 
+    /// Renders what a `demo-screencast://<targetId>?url=…&title=…` path describes.
+    public init(wsPath: String, framesPerSecond: Double = 2) {
+        let items = URLComponents(string: wsPath)?.queryItems ?? []
+        let url = items.first { $0.name == "url" }?.value
+        let id = Self.targetId(wsPath: wsPath) ?? BrowserDemoPages.docs.targetId
+        if let url {
+            self.page = BrowserDemoPages.page(targetId: id, url: url, title: items.first { $0.name == "title" }?.value)
+        } else {
+            self.page = BrowserDemoPages.page(targetId: id) ?? BrowserDemoPages.docs
+        }
+        self.interval = .milliseconds(Int(1000 / max(framesPerSecond, 0.5)))
+    }
+
     /// The target id inside a `demo-screencast://<targetId>` path.
     public static func targetId(wsPath: String) -> String? {
         let prefix = "\(Self.scheme)://"
         guard wsPath.hasPrefix(prefix) else { return nil }
-        let id = String(wsPath.dropFirst(prefix.count))
+        let id = String(wsPath.dropFirst(prefix.count).prefix { $0 != "?" })
         return id.isEmpty ? nil : id
     }
 

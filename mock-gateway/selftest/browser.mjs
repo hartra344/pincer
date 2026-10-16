@@ -102,4 +102,101 @@ export async function run() {
   } finally {
     await server.close();
   }
+  await runControls();
+}
+
+const BACK = '() => { history.go(-1); return true; }';
+const FORWARD = '() => { history.go(1); return true; }';
+
+async function withAdmin(env, body) {
+  const saved = {};
+  for (const [key, value] of Object.entries(env)) { saved[key] = process.env[key]; process.env[key] = value; }
+  const server = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token' });
+  try {
+    const port = server.address().port;
+    const admin = await connectClient(`ws://127.0.0.1:${port}`, makeDevice(), 'dev-token', true, [...BASE_SCOPES, 'operator.admin']);
+    await body(admin, port);
+    admin.ws.close();
+  } finally {
+    await server.close();
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+}
+
+// PR 3: navigation, history, tabs, evaluate, download and the hooks.
+async function runControls() {
+  await withAdmin({}, async (admin, port) => {
+    const req = (method, path, body) => admin.call('browser.request', { method, path, body });
+    const ok = async (method, path, body) => { const r = await req(method, path, body); assert.equal(r.ok, true, JSON.stringify(r.error)); return r.payload; };
+    const t1 = BROWSER_TABS[0].targetId;
+
+    const nav = await ok('POST', '/navigate', { url: 'http://example.com/', targetId: t1 });
+    assert.equal(nav.ok, true);
+    assert.equal(nav.targetId, t1);
+    assert.equal(nav.url, 'http://example.com/');
+    let list = (await ok('GET', '/tabs')).tabs;
+    assert.equal(list[0].url, 'http://example.com/');
+    assert.equal(list[0].title, 'Example Domain');
+    assert.equal((await req('POST', '/navigate', { url: 'javascript:alert(1)', targetId: t1 })).error.code, 'INVALID_REQUEST');
+
+    const blocked = await req('POST', '/navigate', { url: 'https://blocked.example/x', targetId: t1 });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.error.details.reason, 'navigation_blocked');
+
+    await ok('POST', '/act', { kind: 'evaluate', targetId: t1, fn: BACK });
+    list = (await ok('GET', '/tabs')).tabs;
+    assert.equal(list[0].url, BROWSER_TABS[0].url);
+    await ok('POST', '/act', { kind: 'evaluate', targetId: t1, fn: FORWARD });
+    assert.equal((await ok('GET', '/tabs')).tabs[0].url, 'http://example.com/');
+    assert.equal((await req('POST', '/act', { kind: 'evaluate', targetId: t1, fn: '() => document.cookie' })).error.code, 'INVALID_REQUEST');
+
+    const opened = await ok('POST', '/tabs/open', { url: 'https://docs.openclaw.ai/' });
+    assert.ok(opened.targetId && opened.title === 'OpenClaw Docs' && opened.url === 'https://docs.openclaw.ai/');
+    assert.equal((await ok('GET', '/tabs')).tabs.length, 3);
+    await ok('DELETE', `/tabs/${encodeURIComponent(opened.targetId)}`);
+    assert.equal((await ok('GET', '/tabs')).tabs.length, 2);
+    assert.equal((await req('DELETE', `/tabs/${encodeURIComponent(opened.targetId)}`)).ok, false);
+
+    // A screencast viewer follows the page: meta message on navigation, close 4004 when the tab closes.
+    const cast = await ok('POST', '/screencast', { targetId: t1 });
+    const viewer = await collect(`ws://127.0.0.1:${port}${cast.wsPath}`, 99, {
+      onOpen: () => { setTimeout(() => ok('POST', '/navigate', { url: 'https://docs.openclaw.ai/', targetId: t1 }), 100); setTimeout(() => ok('DELETE', `/tabs/${t1}`), 400); },
+    });
+    assert.ok(viewer.messages.some((m) => !m.isBinary && JSON.parse(m.data.toString()).type === 'meta'), 'meta on navigation');
+    assert.equal(viewer.close, 4004);
+
+    const t2 = BROWSER_TABS[1].targetId;
+    const dl = (await ok('POST', '/download', { targetId: t2, currentDocument: true, expectedUrl: BROWSER_TABS[1].url, timeoutMs: 10000 })).download;
+    assert.ok(dl.path.startsWith('/') && dl.suggestedFilename.endsWith('.html'));
+    assert.equal((await req('POST', '/download', { targetId: t2, currentDocument: true, expectedUrl: 'https://elsewhere.test/' })).ok, false);
+    const media = `http://127.0.0.1:${port}/__openclaw__/assistant-media?source=${encodeURIComponent(dl.path)}`;
+    assert.equal((await fetch(media)).status, 401);
+    const got = await fetch(media, { headers: { authorization: 'Bearer dev-token' } });
+    assert.equal(got.status, 200);
+    assert.match(await got.text(), /<h1>/);
+    assert.equal((await fetch(`${media}x`, { headers: { authorization: 'Bearer dev-token' } })).status, 404);
+  });
+
+  await withAdmin({ MOCK_BROWSER_RETARGET: '1' }, async (admin) => {
+    const t1 = BROWSER_TABS[0].targetId;
+    const nav = (await admin.send('browser.request', { method: 'POST', path: '/navigate', body: { url: 'https://example.com/', targetId: t1 } }));
+    assert.notEqual(nav.targetId, t1);
+    assert.equal((await admin.send('browser.request', { method: 'GET', path: '/tabs' })).tabs[0].targetId, nav.targetId);
+  });
+
+  await withAdmin({ MOCK_BROWSER_EVALUATE_DISABLED: '1' }, async (admin) => {
+    const r = await admin.call('browser.request', { method: 'POST', path: '/act', body: { kind: 'evaluate', targetId: BROWSER_TABS[0].targetId, fn: BACK } });
+    assert.equal(r.ok, false);
+    assert.equal(r.error.details.code, 'ACT_EVALUATE_DISABLED');
+  });
+
+  await withAdmin({ MOCK_BROWSER_STOPPED: '1' }, async (admin) => {
+    const stopped = await admin.send('browser.request', { method: 'GET', path: '/tabs' });
+    assert.equal(stopped.running, false);
+    assert.equal((await admin.call('browser.request', { method: 'POST', path: '/navigate', body: { url: 'https://example.com/', targetId: BROWSER_TABS[0].targetId } })).ok, false);
+    await admin.send('browser.request', { method: 'POST', path: '/start', body: {} });
+    const running = await admin.send('browser.request', { method: 'GET', path: '/tabs' });
+    assert.equal(running.running, true);
+    assert.equal(running.tabs.length, 2);
+  });
 }

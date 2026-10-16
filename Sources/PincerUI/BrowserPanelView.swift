@@ -1,10 +1,11 @@
 import PincerKit
 import SwiftUI
 
-/// The agent's browser, view-only: a toolbar row (navigation arrives in a later PR), the page URL, and the
+/// The agent's browser: you can see it live and navigate it, not click into the page. A controls row and the
 /// latest frame. Frames are decoded off-main by Kit; this view only draws `model.frame.image`.
 struct BrowserPanelView: View {
     let model: BrowserPanelModel
+    @Binding var newTab: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.displayScale) private var displayScale
@@ -15,7 +16,7 @@ struct BrowserPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            BrowserToolbarRow(model: self.model)
+            BrowserControlsRow(model: self.model, newTab: self.$newTab)
             Divider()
             self.content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -52,8 +53,24 @@ struct BrowserPanelView: View {
                 Button(L("Open Connection")) { self.openGatewaySettings(self.gateway, at: .connection) }
             }
         case .notRunning:
-            ContentUnavailableView(L("The agent's browser isn't running"), systemImage: "globe",
-                                   description: Text("It starts when the agent uses the browser tool.", bundle: .module))
+            ContentUnavailableView {
+                Label(L("The agent's browser isn't running"), systemImage: "globe")
+            } description: {
+                Text("It starts when the agent uses the browser tool, or you can start it now.", bundle: .module)
+            } actions: {
+                if self.model.isNavigating {
+                    HStack(spacing: Theme.Spacing.sm) {
+                        ProgressView().controlSize(.small)
+                        Text("Starting…", bundle: .module)
+                    }
+                } else {
+                    Button(L("Start Browser")) { Task { await self.model.startBrowser() } }
+                        .buttonStyle(.borderedProminent)
+                }
+                if let error = self.model.actionError {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                }
+            }
         case let .failed(message):
             ContentUnavailableView {
                 Label(L("Can't show the browser"), systemImage: "exclamationmark.triangle")
@@ -140,54 +157,9 @@ private struct BrowserWaiting: View {
     }
 }
 
-/// Back, forward and reload (inert until the panel can drive the page), the page URL, Open in Browser
-/// and the status pill.
-private struct BrowserToolbarRow: View {
-    let model: BrowserPanelModel
-
-    /// The empty or stale-page message carries the state, so the pill would only repeat it.
-    private var showsEmptyMessage: Bool {
-        self.model.selectedPageMissing
-            || (self.model.tabs.isEmpty && self.model.selectedTargetId == nil && (self.model.status == .live || self.model.status == .idle))
-    }
-
-    var body: some View {
-        HStack(spacing: Theme.Spacing.sm) {
-            Button(L("Back"), systemImage: "chevron.left") {}.disabled(true).help(L("Coming soon"))
-            Button(L("Forward"), systemImage: "chevron.right") {}.disabled(true).help(L("Coming soon"))
-            Button(L("Reload"), systemImage: "arrow.clockwise") {}.disabled(true).help(L("Coming soon"))
-            Text(self.model.pageURL?.absoluteString ?? "")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityLabel(L("Page address"))
-                .accessibilityValue(self.model.pageURL?.absoluteString ?? L("None"))
-            if let url = self.model.pageURL, url.scheme == "http" || url.scheme == "https" {
-                Button(L("Open in Browser"), systemImage: "arrow.up.forward.square") { Self.open(url) }
-            }
-            if !self.showsEmptyMessage { BrowserStatusPill(status: self.model.status) }
-        }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.sm)
-    }
-
-    private static func open(_ url: URL) {
-        #if os(macOS)
-        NSWorkspace.shared.open(url)
-        #else
-        UIApplication.shared.open(url)
-        #endif
-    }
-}
-
 /// Dot and word; the word carries the meaning, so colour is never the only signal. Hidden when an
 /// empty state already says what's wrong.
-private struct BrowserStatusPill: View {
+struct BrowserStatusPill: View {
     let status: BrowserPanelModel.Status
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulsing = false
