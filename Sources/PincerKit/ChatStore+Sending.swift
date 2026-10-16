@@ -456,8 +456,9 @@ extension ChatStore {
                         self.errorMessage = L("Couldn’t stop everything: \(warning)")
                     }
                     return true
-                } catch where !GatewayError.isUnknownMethod(error) {
-                    throw error
+                } catch {
+                    // An older Gateway without sessions.abort: fall through to chat.abort.
+                    guard GatewayError.isUnknownMethod(error) else { throw error }
                 }
             }
             _ = try await gateway.connection.request("chat.abort", .object(self.params(keyName: "sessionKey")))
