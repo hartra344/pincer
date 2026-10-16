@@ -103,22 +103,14 @@ lane() {
 
 # command… → runs `swift test`, failing an exit 0 unless every Swift Testing run it started printed its
 # final summary: something that stops the main run loop can end the runner mid-suite (#920).
-# A test helper that dies of SIGABRT gets one rerun: the Swift task allocator intermittently
-# corrupts its heap on CI (#952), with no test to pin it on.
 complete_swift_test() {
-    local out code started finished aborted attempts=${SWIFT_TEST_ATTEMPTS:-2}
+    local out code started finished
     out=$(mktemp)
     "$@" 2>&1 | tee "$out"
     code=${PIPESTATUS[0]}
     started=$(grep -c 'Test run started\.' "$out")
     finished=$(grep -cE 'Test run with [0-9]+ tests? .*(passed|failed) after' "$out")
-    aborted=$(grep -c 'unexpected signal code 6' "$out")
     rm -f "$out"
-    if [ "$code" -ne 0 ] && [ "$aborted" -gt 0 ] && [ "$attempts" -gt 1 ]; then
-        echo "⚠ the swift test helper aborted (signal 6, #952); running the tests once more"
-        SWIFT_TEST_ATTEMPTS=$((attempts - 1)) complete_swift_test "$@"
-        return
-    fi
     if [ "$code" -eq 0 ] && { [ "$started" -eq 0 ] || [ "$finished" -lt "$started" ]; }; then
         echo "✗ swift test exited 0 but only $finished of $started test runs finished (#920)"
         return 1
@@ -132,18 +124,28 @@ if complete_swift_test printf '◇ Test run started.\n' > /dev/null ||
     echo "complete_swift_test is broken"
     exit 1
 fi
-# …and rerun a helper abort once, but not twice.
-abort_once() {
-    if [ -e "$1" ]; then printf '◇ Test run started.\n✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\n'; return 0; fi
-    : > "$1"; printf "◇ Test run started.\nerror: Process 'helper' exited with unexpected signal code 6\n"; return 1
-}
-abort_marker=$(mktemp -u)
-if ! complete_swift_test abort_once "$abort_marker" > /dev/null ||
-    complete_swift_test sh -c "printf 'unexpected signal code 6\n'; exit 1" > /dev/null; then
-    echo "complete_swift_test's abort rerun is broken"
+# …and fail a helper abort outright: it is never retried, even when a second attempt would pass.
+abort_once=$(mktemp -u)
+if complete_swift_test sh -c "if [ -e '$abort_once' ]; then printf '◇ Test run started.\\n✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\\n'; else : > '$abort_once'; printf '◇ Test run started.\\nerror: unexpected signal code 6\\n'; exit 1; fi" > /dev/null; then
+    rm -f "$abort_once"
+    echo "complete_swift_test accepts a helper abort"
     exit 1
 fi
-rm -f "$abort_marker"
+rm -f "$abort_once"
+
+# Node makes a pipe it writes to non-blocking (O_NONBLOCK lives on the shared open file, not the fd), so
+# while the progress helper shared our stdout, printing a big lane log could fail with EAGAIN ("echo:
+# write error: Resource temporarily unavailable") and drop the log or fail CI (#1010). The helper gets
+# its own pipe, and stdout is put back to blocking before each lane's log is printed.
+# scripts/test_checks_pending_progress.py checks the helper never writes to our stdout.
+start_progress() {
+    node scripts/checks-pending-progress.mjs "$@" > >(cat) &
+    progress_pid=$!
+}
+blocking_stdout() {
+    perl -MFcntl -e 'my $f = fcntl(STDOUT, F_GETFL, 0) // exit 0;
+        exit 0 unless $f & O_NONBLOCK; fcntl(STDOUT, F_SETFL, $f & ~O_NONBLOCK) or exit 1'
+}
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
@@ -175,12 +177,12 @@ report() {
     done
     # The solo performance lanes must keep the CPU to themselves.
     if [ "$1" -eq 0 ]; then
-        node scripts/checks-pending-progress.mjs "$LOGS" "${CHECKS_PROGRESS_INTERVAL:-30}" "${progress_lanes[@]}" &
-        progress_pid=$!
+        start_progress "$LOGS" "${CHECKS_PROGRESS_INTERVAL:-30}" "${progress_lanes[@]}"
     fi
     for ((i = $1; i < ${#pids[@]}; i++)); do
         name=${names[$i]}
         if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
+        blocking_stdout
         seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
         echo "::group::$name ($result)"
         cat "$LOGS/$name.log"

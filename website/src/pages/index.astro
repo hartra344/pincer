@@ -29,7 +29,7 @@ const lines = [
 		title: 'Part of your Mac and iPhone.',
 		body: 'Pincer isn’t a tab you have to find. It answers a global shortcut, shows up in the share sheet and Shortcuts, and follows you between devices.',
 		specifics: [
-			['Quick Capture', 'opens a small composer over any app with ⌃⇧Space. Send to any chat without switching windows. macOS.'],
+			['Quick Capture', 'opens a small composer over any app with <kbd data-keys="capture">⌃⇧Space</kbd>. Send to any chat without switching windows. macOS.'],
 			['The share sheet', 'sends a page, photo or file from any app to an agent.'],
 			['Shortcuts, Siri and Spotlight', 'can ask an agent, send to a chat or count pending approvals, mostly without opening the app.'],
 			['Handoff and links', 'move the chat you’re reading between Mac and iPhone. Every chat and message has a pincer:// link.'],
@@ -43,7 +43,6 @@ const lines = [
 		],
 		mac: captureMac,
 		macAlt: 'Pincer on macOS, demo capture: the Quick Capture panel with a message ready to send.',
-		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
 	},
 	{
 		id: 'approvals',
@@ -59,14 +58,12 @@ const lines = [
 		macAlt: 'Pincer on macOS, demo capture: an exec approval request with allow once, always allow and deny.',
 		phoneAlt: 'Pincer on iPhone, demo capture: the same exec approval request.',
 		flip: true,
-		cols: 'minmax(0, 4fr) minmax(0, 8fr)',
-		pad: 'var(--space-9)',
 	},
 	{
 		id: 'gateways',
 		label: 'Gateways',
 		title: 'Every gateway in one window.',
-		body: 'Sign in to home, work and a test box at once. Press ⌘K to jump to any chat on any of them, and open chats in their own windows on the Mac, or side by side on Mac and iPad.',
+		body: 'Sign in to home, work and a test box at once. Press <kbd data-keys="palette">⌘K</kbd> to jump to any chat on any of them, and open chats in their own windows on the Mac, or side by side on Mac and iPad.',
 		links: [
 			['Manage gateways', 'guides/manage-gateways/'],
 			['Command palette and navigation', 'guides/command-palette-and-navigation/'],
@@ -76,8 +73,6 @@ const lines = [
 		phone: channelsPhone,
 		macAlt: 'Pincer on macOS, demo capture: the ⌘K palette finding a chat as you type.',
 		phoneAlt: 'Pincer on iPhone, demo capture: the chat list grouped by agent and channel.',
-		cols: 'minmax(0, 6fr) minmax(0, 6fr)',
-		pad: 'var(--space-8)',
 	},
 	{
 		id: 'offline',
@@ -97,7 +92,6 @@ const lines = [
 		macAlt: 'Pincer on macOS, demo capture: a chat with a failed message and Retry and Delete controls.',
 		phoneAlt: 'Pincer on iPhone, demo capture: the same failed message.',
 		flip: true,
-		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
 	},
 	{
 		id: 'chat',
@@ -113,20 +107,28 @@ const lines = [
 		phone: transcriptPhone,
 		macAlt: 'Pincer on macOS, demo capture: a transcript with a thinking section and tool-call cards.',
 		phoneAlt: 'Pincer on iPhone, demo capture: the details of a tool call.',
-		cols: 'minmax(0, 5fr) minmax(0, 7fr)',
 	},
 ];
 
 const facts = [
-	['Per-device identity', 'An Ed25519 key in the Keychain, this device only. The gateway approves it once.'],
-	['Encrypted transport', '<code>wss://</code> required off your LAN or tailnet, with optional TLS certificate pinning.'],
-	['Scoped access', 'Read, write and approvals by default. Admin only when you ask for it.'],
-	['Sandboxed', 'The macOS app is sandboxed and caches transcripts with complete file protection.'],
-];
+	['key', 'Per-device identity', 'An Ed25519 key in the Keychain, this device only. The gateway approves it once.'],
+	['lock', 'Encrypted transport', '<code>wss://</code> required off your LAN or tailnet, with optional TLS certificate pinning.'],
+	['sliders', 'Scoped access', 'Read, write and approvals by default. Admin only when you ask for it.'],
+	['shield', 'Sandboxed', 'The macOS app is sandboxed and caches transcripts with complete file protection.'],
+] as const;
 ---
 
 <!doctype html>
 <html lang="en">
+<!--
+	Direction contract (design pass, 2026-10)
+	THESIS: The site behaves like a Mac app, because the product's claim is "truly native capabilities and feel". No devtool glow hero, no icon-card grid, no switchboard metaphor.
+	OWN-WORLD: Apple system neutrals and SF type; Pincer coral as the one system tint; the app icon's coral-to-red gradient as the single brand field (the hero tile). Native grammar: translucent toolbar, push buttons, pop-up button, segmented control, grouped inset list, keycaps.
+	STORY: An OpenClaw operator sees Pincer as a real Mac and iPhone app, learns what it adds over the browser Control UI, trusts the pure-client model, and installs or tries the demo.
+	FIRST VIEWPORT: Toolbar; headline, lede, Install / Try the demo / Why link, fine print; the real macOS screenshot with the iPhone overlapping, on an icon-gradient tile; a sticky segmented control at the fold.
+	FORM: native macOS/iOS interface language. Signature: the segmented control's thumb follows the section in view; ⌃⇧Space and ⌘K keycaps press when you type them.
+-->
+
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -135,13 +137,13 @@ const facts = [
 			name="description"
 			content="Pincer is a native macOS and iOS app for your OpenClaw Gateway: Quick Capture, the share sheet, Shortcuts, approvals from notifications, offline reading and every gateway in one window."
 		/>
-		<meta name="theme-color" content="#17211e" media="(prefers-color-scheme: dark)" />
-		<meta name="theme-color" content="#e6ece8" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)" />
+		<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
 		<link rel="icon" href={href('favicon.svg')} type="image/svg+xml" />
 		<meta property="og:title" content="Pincer for OpenClaw" />
 		<meta
 			property="og:description"
-			content="Your OpenClaw agents as a native Mac and iPhone app, not a browser tab."
+			content="OpenClaw with truly native capabilities and feel, on your Mac and iPhone."
 		/>
 		<meta property="og:type" content="website" />
 		<script is:inline>
@@ -164,20 +166,20 @@ const facts = [
 		<main id="main">
 			<section class="hero" aria-labelledby="hero-title">
 				<div class="hero-copy">
-					<h1 id="hero-title">OpenClaw, without the browser tab.</h1>
+					<h1 id="hero-title">OpenClaw, with truly native capabilities and feel.</h1>
 					<p class="lede">
 						Pincer is a native Mac and iPhone app for your <a href={openclaw}>OpenClaw</a> Gateway. Send to an agent
 						from any app, answer exec approvals from a notification, read your chats offline, and keep every
 						gateway in one window.
 					</p>
 					<div class="cta-row">
-						<a class="btn lamp" href={href('getting-started/install/')}>Install Pincer <Icon name="arrow" size={18} /></a>
+						<a class="btn filled" href={href('getting-started/install/')}>Install Pincer <Icon name="arrow" size={18} /></a>
 						<a class="btn" href={href('getting-started/try-the-demo/')}><Icon name="play" size={18} /> Try the demo</a>
 						<a class="textlink" href={href('getting-started/why-pincer/')}>Why not just use the Control UI?</a>
 					</div>
 					<p class="fine">TestFlight beta or build from source, for macOS 15+ and iOS 18+. No gateway yet? The built-in demo runs entirely on your device.</p>
 				</div>
-				<div class="field">
+				<div class="tile">
 					<DeviceShot
 						mac={heroMac}
 						phone={heroPhone}
@@ -190,21 +192,19 @@ const facts = [
 			</section>
 
 			<div class="lines" id="features">
-				<nav class="line-index" aria-label="Feature lines">
-					<ol>
+				<nav class="line-index" aria-label="Features">
+					<div class="segmented">
+						<span class="thumb" aria-hidden="true" />
+						<ol>
 						{
 							lines.map((l) => (
 								<li>
-									<a href={`#line-${l.id}`}>
-										<span class="socket" aria-hidden="true">
-											<span class="lamp-dot" />
-										</span>
-										<span class="strip">{l.label}</span>
-									</a>
+									<a href={`#line-${l.id}`}>{l.label}</a>
 								</li>
 							))
 						}
 					</ol>
+					</div>
 				</nav>
 
 				{
@@ -214,16 +214,15 @@ const facts = [
 							id={`line-${l.id}`}
 							data-line
 							aria-labelledby={`h-${l.id}`}
-							style={`--cols:${l.cols};${l.pad ? `--pad:${l.pad}` : ''}`}
 						>
 							<div class="copy">
 								<h2 id={`h-${l.id}`}>{l.title}</h2>
-								<p class="body">{l.body}</p>
+								<p class="body" set:html={l.body} />
 								{l.specifics && (
 									<ul class="specifics">
 										{l.specifics.map(([b, t]) => (
 											<li>
-												<strong>{b}</strong> {t}
+												<strong>{b}</strong> <span set:html={t} />
 											</li>
 										))}
 									</ul>
@@ -234,7 +233,9 @@ const facts = [
 									))}
 								</p>
 							</div>
-							<DeviceShot mac={l.mac} phone={l.phone} macAlt={l.macAlt} phoneAlt={l.phoneAlt} flip={l.flip} />
+							<div class="stage">
+								<DeviceShot mac={l.mac} phone={l.phone} macAlt={l.macAlt} phoneAlt={l.phoneAlt} flip={l.flip} />
+							</div>
 						</section>
 					))
 				}
@@ -252,17 +253,17 @@ const facts = [
 						<a class="textlink" href={href('reference/security/')}>Read the security model</a>
 					</div>
 				</div>
-				<ul class="switches">
+				<ul class="grouped">
 					{
-						facts.map(([t, d]) => (
+						facts.map(([icon, t, d]) => (
 							<li>
-								<h3>
-									<span class="socket" aria-hidden="true">
-										<span class="lamp-dot" />
-									</span>
-									{t}
-								</h3>
-								<p set:html={d} />
+								<span class="glyph" aria-hidden="true">
+									<Icon name={icon} size={18} />
+								</span>
+								<div>
+									<h3>{t}</h3>
+									<p set:html={d} />
+								</div>
 							</li>
 						))
 					}
@@ -307,7 +308,7 @@ const facts = [
 				<h2 id="closing-title">Bring your agents home.</h2>
 				<p>Free and open source under the MIT license.</p>
 				<div class="cta-row">
-					<a class="btn lamp" href={href('getting-started/install/')}>Install Pincer <Icon name="arrow" size={18} /></a>
+					<a class="btn filled" href={href('getting-started/install/')}>Install Pincer <Icon name="arrow" size={18} /></a>
 					<a class="btn" href={href('getting-started/try-the-demo/')}><Icon name="play" size={18} /> Try the demo</a>
 					<a class="btn" href={repo}><Icon name="github" size={18} /> Star on GitHub</a>
 					<a class="textlink" href={href('getting-started/introduction/')}>Read the docs</a>
@@ -356,7 +357,22 @@ const facts = [
 			system.addEventListener('change', () => { if (preference === 'auto') apply(); });
 
 			const strip = document.querySelector<HTMLElement>('.line-index');
+			const seg = document.querySelector<HTMLElement>('.segmented');
 			const links = [...document.querySelectorAll<HTMLAnchorElement>('.line-index a')];
+			const choose = (a: HTMLAnchorElement | undefined) => {
+				for (const l of links) l.toggleAttribute('data-lit', l === a);
+				if (!seg) return;
+				if (!a) {
+					seg.removeAttribute('data-has-thumb');
+					return;
+				}
+				seg.style.setProperty('--thumb-x', `${a.offsetLeft}px`);
+				seg.style.setProperty('--thumb-w', `${a.offsetWidth}px`);
+				seg.setAttribute('data-has-thumb', '');
+				if (strip && strip.scrollWidth > strip.clientWidth) {
+					strip.scrollLeft = a.offsetLeft - (strip.clientWidth - a.offsetWidth) / 2;
+				}
+			};
 			if (strip) {
 				const edge = () =>
 					strip.toggleAttribute('data-end', strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
@@ -367,18 +383,33 @@ const facts = [
 				const io = new IntersectionObserver(
 					(entries) => {
 						for (const e of entries) {
-							if (!e.isIntersecting) continue;
-							for (const a of links) {
-								const on = a.hash === `#${e.target.id}`;
-								a.toggleAttribute('data-lit', on);
-								if (on) strip.scrollLeft = a.offsetLeft - (strip.clientWidth - a.offsetWidth) / 2;
-							}
+							if (e.isIntersecting) choose(links.find((a) => a.hash === `#${e.target.id}`));
 						}
 					},
 					{ rootMargin: '-45% 0px -50% 0px' },
 				);
 				document.querySelectorAll('[data-line]').forEach((s) => io.observe(s));
+				const top = new IntersectionObserver(([e]) => { if (e.isIntersecting) choose(undefined); }, { rootMargin: '-45% 0px -50% 0px' });
+				const hero = document.querySelector('.hero');
+				if (hero) top.observe(hero);
+				addEventListener('resize', () => choose(links.find((a) => a.hasAttribute('data-lit'))), { passive: true });
 			}
+
+			// The keycaps on the page press when you type the shortcut they show.
+			const caps = (name: string) => document.querySelectorAll<HTMLElement>(`kbd[data-keys="${name}"]`);
+			const press = (name: string, on: boolean) => caps(name).forEach((k) => k.toggleAttribute('data-pressed', on));
+			addEventListener('keydown', (e) => {
+				if (e.ctrlKey && e.shiftKey && e.code === 'Space') press('capture', true);
+				if (e.metaKey && e.key.toLowerCase() === 'k') press('palette', true);
+			});
+			addEventListener('keyup', () => {
+				press('capture', false);
+				press('palette', false);
+			});
+			addEventListener('blur', () => {
+				press('capture', false);
+				press('palette', false);
+			});
 		</script>
 	</body>
 </html>

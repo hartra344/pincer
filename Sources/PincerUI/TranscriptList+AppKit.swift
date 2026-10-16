@@ -210,6 +210,9 @@ struct TranscriptList: NSViewRepresentable {
             table.layoutSubtreeIfNeeded()
             self.restore(self.anchor)
             self.refreshVisibleCells()
+            // Applying cells can still move the clip (the table re-clamps it); put the anchor back last.
+            table.layoutSubtreeIfNeeded()
+            self.restore(self.anchor)
             self.refreshFocusRing()
             self.controller.schedulePrefetch()
         }

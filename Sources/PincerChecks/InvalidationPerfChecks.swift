@@ -70,7 +70,10 @@ func runInvalidationPerfChecks() {
     let sectionsMs = millis { _ = gateway.sections() }
     print(String(format: "  ms/event at %d sessions (N=%d): row change+sections=%.3f  no-op event+sections=%.3f  sections alone=%.3f",
                  rowCount, rounds, changedMs, noopMs, sectionsMs))
-    check(changedMs < 50, "sessions row event stays under 50 ms at 300 sessions")
+    // Wall-clock, so only the solo perf-smoke lane enforces 50 ms; lanes sharing the CPU
+    // (--skip-perf-budgets) fail only when it's clearly broken (#1010).
+    checkBudget(.microseconds(Int(changedMs * 1000)), .milliseconds(50), hardLimit: .milliseconds(500),
+                "sessions row event stays under 50 ms at 300 sessions")
 
     // An identical snapshot must not invalidate observers of `sessions`.
     var identical = 0

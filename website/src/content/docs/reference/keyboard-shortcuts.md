@@ -17,7 +17,7 @@ Open **Settings → Keyboard Shortcuts**: on a Mac it's a tab of **Pincer → Se
 
 Changes apply straight away to the menus, buttons, command palette and tips, in every window. New demo replies also show your current Command Palette and Find in Chat shortcuts. Clearing either shortcut leaves action guidance without advertising the old keys.
 
-If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> and <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats), can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>\</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
+If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> and <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats), can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>&#92;</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
 
 **Edit Last Message**, **Regenerate Last Reply**, **Bookmarks…**, **Swap Chats**, **Add Gateway…**, **Next Gateway** and **Previous Gateway** (under Chat and Gateway) have no shortcut by default; give them one here. <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> open pinned chats, so they can't switch gateways.
 
@@ -37,7 +37,7 @@ Quick Capture's shortcut works from any app, so it's set separately in **Setting
 | Reload Pincer | <kbd>⌘</kbd> <kbd>R</kbd> |
 | Show or Hide Sidebar | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd> |
 | Open Chat in New Window (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>N</kbd> |
-| Split Right / Close Split View (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>\</kbd> |
+| Split Right / Close Split View (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>&#92;</kbd> |
 | Show Runs | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
 | Show Browser | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>B</kbd> |
 | [Export Chat…](../../guides/export-and-bookmarks/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd> |

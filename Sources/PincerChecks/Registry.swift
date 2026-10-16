@@ -505,7 +505,7 @@ enum Suites {
             sections.insert(Section("Settings field search work (demo)") { await runDemoSettingsFieldSearchChecks() }, at: index + 1)
         }
         if let index = sections.firstIndex(where: { $0.title == "Deferred dictation send ownership (demo)" }) {
-            sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks() }, at: index + 1)
+            sections.insert(Section("Message edit completion ownership (demo)") { await runDemoMessageEditCompletionOwnershipChecks(); await runDemoStaleHistoryReplyChecks() }, at: index + 1)
         }
         if let index = sections.firstIndex(where: { $0.title == "Channel status staleness (demo)" }) {
             sections.insert(Section("Channel QR ownership (demo)") { await runDemoChannelQRLoginOwnershipChecks() }, at: index + 1)
@@ -606,5 +606,6 @@ enum Suites {
         Section("Browser frame decode perf smoke") { await checkBrowserFrameDecodePerfSmoke() },
         Section("Session files perf smoke") { await checkSessionFilesPerfSmoke() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
+        Section("Invalidation perf") { runInvalidationPerfChecks() },
     ]
 }

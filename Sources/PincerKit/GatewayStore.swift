@@ -1585,6 +1585,15 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var selfProfile: (epoch: Int, id: String?)?
 
     @ObservationIgnored var invalidatingTranscripts: Set<String> = []
+    struct PendingTranscriptChange {
+        var change: SessionTranscriptChange
+        var feedbackAuthority: ChatStore.MessageEditFeedbackAuthority?
+    }
+    /// The latest change that arrived while that session's invalidation was running; it reruns afterwards.
+    @ObservationIgnored var pendingTranscriptChanges: [String: PendingTranscriptChange] = [:]
+    @ObservationIgnored var lastTranscriptInvalidation: [String: ContinuousClock.Instant] = [:]
+    static let echoWindow: Duration = .seconds(2)
+    @ObservationIgnored var runningTranscriptAuthority: [String: ChatStore.MessageEditFeedbackAuthority] = [:]
 
     /// Dismissed Gateway Health issues, synced through `users.prefs` (`pincer.healthDismissals`).
     public var healthDismissals: [String: String] {

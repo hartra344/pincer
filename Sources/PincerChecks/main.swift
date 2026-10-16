@@ -24,7 +24,7 @@ import UserNotifications
 //   swift run PincerChecks --live-scope-upgrade URL TOKEN → operator.admin upgrade fallback
 //     (mock with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1)
 //   swift run PincerChecks --live-reconnect URL TOKEN → only the #202 reconnect/bootstrap checks (fresh mock)
-//   swift run PincerChecks --perf-smoke     → only the message index perf smoke, budgets enforced (run it alone)
+//   swift run PincerChecks --perf-smoke     → only the perf smokes (message index, browser frame decode, invalidation), budgets enforced (run it alone)
 //   swift run PincerChecks --memory-probe → footprint after opening 20 chats × 5k items (numbers only)
 //   swift run PincerChecks --memory-probe-20k-fill → peak footprint of the background full fill of a 20k-item chat
 //   swift run PincerChecks --memory-probe-20k → footprint of one 20k-item chat: open, then leave (numbers only)

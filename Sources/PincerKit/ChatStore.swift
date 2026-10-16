@@ -281,6 +281,10 @@ public final class ChatStore: Identifiable {
         self.cancelAttachmentPreparations()
     }
 #if DEBUG
+    /// Blank-and-refill reloads (`reloadAfterHistoryChange`) so far.
+    @ObservationIgnored var fullReloadCount = 0
+    /// Runs after a `chat.history` reply arrives and before it is applied (tests hold a reply here, or throw to fail it).
+    @ObservationIgnored var historyResponseProbe: (@MainActor () async throws -> Void)?
     /// Neutral test gate after edit ownership is captured, immediately before the real RPC.
     @ObservationIgnored var messageEditRewindAdmissionProbe: (@MainActor () async -> Void)?
     /// Neutral test gate after the real rewind request completes; never substitutes a response.

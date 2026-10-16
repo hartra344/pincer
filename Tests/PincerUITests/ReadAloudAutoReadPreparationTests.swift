@@ -170,11 +170,8 @@ private final class AutoReadFixture {
 
     func deliver(id: String, text: String, runID: String = UUID().uuidString, to chat: ChatStore? = nil) {
         let chat = chat ?? self.chat
-        chat.handleChat([
-            "runId": .string(runID),
-            "sessionKey": .string(chat.sessionKey),
-            "state": .string("final"),
-        ])
+        // Gateway order: the transcript append (session.message) precedes the chat final broadcast
+        // (chat-send-reply-finalization.ts appendInjectedAssistantMessageToTranscript, then broadcastChatTerminal).
         chat.handleSessionMessage([
             "message": [
                 "role": "assistant",
@@ -182,6 +179,20 @@ private final class AutoReadFixture {
                 "__openclaw": ["id": .string(id)],
             ],
         ])
+        chat.handleChat([
+            "runId": .string(runID),
+            "sessionKey": .string(chat.sessionKey),
+            "state": .string("final"),
+        ])
+    }
+
+    /// Waits until the chat's off-main live-reply preparation has delivered every accepted callback.
+    func waitForChatCallbacks(_ chat: ChatStore? = nil) async -> Bool {
+        let chat = chat ?? self.chat
+        return await eventually {
+            chat.liveReplyPreparationOutstanding == 0 && !chat.awaitingFinalReply
+                && chat.liveReplyCandidate == nil
+        }
     }
 
     func cleanup() {
@@ -193,9 +204,7 @@ private final class AutoReadFixture {
 }
 
 @MainActor
-@Suite(
-    "Read Aloud enabled callback preparation", .serialized,
-    .disabled("Fails on main, hidden by #920: https://github.com/hartra344/pincer/issues/953"))
+@Suite("Read Aloud enabled callback preparation", .serialized)
 struct ReadAloudAutoReadPreparationTests {
     private func waitForStart(_ id: String, fixture: AutoReadFixture) async -> Bool {
         let observed = await eventually { fixture.preparationObservation.startedIDs.contains(id) }
@@ -270,8 +279,8 @@ struct ReadAloudAutoReadPreparationTests {
                 "the UI callback prepares exactly its selected message on the worker")
 
         let stats = SpeechText.speakabilityDebugStats(for: itemID)
-        #expect(stats.mainThreadNormalizations == 1,
-                "Kit keeps its synchronous eligibility check while the UI callback uses prepared text")
+        #expect(stats.mainThreadNormalizations == 0,
+                "ChatStore's live-reply preparation (#705) and the UI callback both normalize off main")
         #expect(stats.offMainNormalizations >= 1,
                 "the callback's selected reply is normalized away from the main thread")
     }
@@ -353,6 +362,8 @@ struct ReadAloudAutoReadPreparationTests {
         #expect(idle)
         #expect(fixture.speaker.spokenTexts.isEmpty, "replaced callback ownership invalidates old work")
         fixture.deliver(id: "foreign-owner-next", text: "The other owner still receives events.")
+        let callbacksDrained = await fixture.waitForChatCallbacks()
+        #expect(callbacksDrained)
         #expect(foreignCalls == 1)
     }
 
@@ -422,12 +433,17 @@ struct ReadAloudAutoReadPreparationTests {
         }
 
         fixture.deliver(id: id, text: "Updated body for this transcript ID.", runID: "run-updated-body")
+        let callbacksDrained = await fixture.waitForChatCallbacks()
+        #expect(callbacksDrained)
         await fixture.preparation.release(id)
         let finished = await self.waitForFinish(id, fixture: fixture)
         #expect(finished)
         let idle = await self.waitForAutoReadIdle(fixture)
         #expect(idle)
-        #expect(fixture.speaker.spokenTexts.isEmpty,
+        // The edit is a newly accepted final reply (#936 never drops those), so only its body plays.
+        let spokeUpdate = await eventually { fixture.speaker.spokenTexts.count == 1 }
+        #expect(spokeUpdate)
+        #expect(fixture.speaker.spokenTexts == ["Updated body for this transcript ID."],
                 "a completion for a stale body cannot speak after the same transcript row changes")
     }
 
@@ -534,6 +550,7 @@ struct ReadAloudAutoReadPreparationTests {
                 "__openclaw": ["id": .string(id)],
             ],
         ])
+        _ = await fixture.waitForChatCallbacks()
         guard let staleItem = deliveredItem else {
             #expect(Bool(false), "the accepted event delivered its source item")
             return

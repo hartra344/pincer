@@ -19,6 +19,9 @@ actor DemoGateway {
     /// A long transcript used to check repair of forwarded messages outside the newest history page.
     static let forwardedSenderRefreshURL = "demo://pincer?forwardedSenderRefresh=on"
 
+    /// The demo without simulated run pacing, so tests and checks never depend on wall-clock delays.
+    static let instantPacingURL = "demo://pincer?pacing=instant"
+
     typealias Row = [String: JSONValue]
 
     struct Run {
@@ -164,10 +167,13 @@ actor DemoGateway {
     /// Whether the Gateway has `session.reactions.*` and `users.self` (an older one doesn't: the users.prefs fallback).
     let hasSessionReactions: Bool
     var failsFirstAvatarPrefsRead: Bool
+    /// Skips the simulated delays between run steps (a per-instance `PINCER_DEMO_DELAY_SCALE=0`).
+    let instantPacing: Bool
 
     init(acceptsReplyTo: Bool = true, acceptsWorkContext: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false,
-         seedsForwardedSenderRefreshHistory: Bool = false)
+         seedsForwardedSenderRefreshHistory: Bool = false, instantPacing: Bool = false)
     {
+        self.instantPacing = instantPacing
         self.acceptsReplyTo = acceptsReplyTo
         self.acceptsWorkContext = acceptsWorkContext
         self.hasSessionReactions = hasSessionReactions
