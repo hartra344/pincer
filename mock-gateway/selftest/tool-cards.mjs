@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { BROWSER_PAGE_URL } from '../link-preview.mjs';
 import { EXEC_OUTPUT, FAILED_OUTPUT, SWIFT_TEXT, TOOL_CARDS_KEY } from '../tool-cards.mjs';
 
 export async function run(ctx) {
@@ -6,7 +7,7 @@ export async function run(ctx) {
   const messages = (await client.send('chat.history', { sessionKey: TOOL_CARDS_KEY })).messages;
   const calls = messages.flatMap((m) => m.content.filter((b) => b.type === 'toolCall'));
   assert.deepEqual(calls.map((c) => c.name), ['exec', 'exec', 'read', 'edit', 'github__search_issues', 'web_fetch',
-    'linear__create_issue', 'linear__list_teams', 'linear__update_issue', 'mcp__filesystem__read_file', 'acme-docs__search', 'web_search', 'read']);
+    'linear__create_issue', 'linear__list_teams', 'linear__update_issue', 'mcp__filesystem__read_file', 'acme-docs__search', 'web_search', 'read', 'browser', 'browser']);
   const resultFor = (id) => messages.find((m) => m.role === 'toolResult' && m.toolCallId === id);
   const exec = resultFor(calls[0].id);
   assert.equal(exec.content[0].text, EXEC_OUTPUT);
@@ -42,4 +43,9 @@ export async function run(ctx) {
   assert.ok(payload.results.some((row) => !row.snippet), 'one result has no snippet');
   assert.equal(calls[12].arguments.path.endsWith('.swift'), true);
   assert.equal(resultFor(calls[12].id).content[0].text, SWIFT_TEXT);
+  const shot = resultFor(calls[14].id);
+  assert.deepEqual(Object.keys(shot.details), ['browserTab']);
+  assert.equal(shot.details.browserTab.target, 'host');
+  assert.equal(shot.details.browserTab.url, BROWSER_PAGE_URL);
+  assert.deepEqual(shot.content[1], { type: 'image', omitted: true, bytes: 184213, mimeType: 'image/png' });
 }

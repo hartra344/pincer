@@ -1,7 +1,11 @@
+import { BROWSER_PAGE_TITLE, BROWSER_PAGE_URL } from './link-preview.mjs';
+
 // A chat of upstream-shaped tool calls for the expanded tool cards (issue #324): `exec` with its
 // `details` envelope (src/agents/bash-tools.exec-types.ts), a failed `exec`, an `edit`, a bundle-MCP
 // `server__tool` call, `web_fetch` (src/agents/tools/web-fetch.ts), `web_search` (src/agents/tools/web-search-output.ts) and `read`. Mirrors the demo's
 // DemoGateway+ToolCards.swift.
+
+export const BROWSER_TAB = { targetId: 'DEMO7A1C0F3B', profile: 'openclaw', target: 'host' };
 
 export const TOOL_CARDS_KEY = 'agent:main:dashboard:tool-cards';
 export const TOOL_CARDS_TITLE = 'Check the MCP servers';
@@ -202,6 +206,18 @@ export function seededToolCards({ makeMessage, textBlock, toolCallBlock }) {
       toolCallBlock('call_seed_read_swift', 'read', { path: SWIFT_PATH }),
     ]),
     result('call_seed_read_swift', 'read', SWIFT_TEXT),
+    makeMessage('assistant', [
+      textBlock('Era signs in through a browser. Let me also open the Lisbon hotel search you asked about.'),
+      toolCallBlock('call_seed_browser_navigate', 'browser', { action: 'navigate', url: BROWSER_PAGE_URL }),
+    ]),
+    result('call_seed_browser_navigate', 'browser', JSON.stringify({ ok: true, targetId: BROWSER_TAB.targetId, url: BROWSER_PAGE_URL }), {
+      details: { browserTab: { ...BROWSER_TAB, url: BROWSER_PAGE_URL, title: BROWSER_PAGE_TITLE } },
+    }),
+    makeMessage('assistant', [toolCallBlock('call_seed_browser_shot', 'browser', { action: 'screenshot', targetId: BROWSER_TAB.targetId })]),
+    makeMessage('toolResult', [textBlock('Screenshot captured.'), { type: 'image', omitted: true, bytes: 184213, mimeType: 'image/png' }], {
+      extra: { toolCallId: 'call_seed_browser_shot', toolName: 'browser', isError: false,
+        details: { browserTab: { ...BROWSER_TAB, url: BROWSER_PAGE_URL, title: BROWSER_PAGE_TITLE } } },
+    }),
     makeMessage('assistant', [textBlock(`${TOOL_CARDS_PREVIEW} Run \`openclaw mcp auth Era\` on a machine with a browser to finish the sign-in.`)]),
   ];
 }

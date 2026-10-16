@@ -6,6 +6,7 @@ const SECTIONS = [
   'work-context',
   'file-edits',
   'tool-cards',
+  'link-preview',
   'send-hooks',
   'replies',
   'reaction-level',

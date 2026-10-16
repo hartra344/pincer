@@ -330,6 +330,20 @@ extension DemoGateway {
                 Self.toolCall(Self.toolCardsSwiftReadCall, "read", ["path": .string(Self.toolCardsSwiftPath)]),
             ], ago: start - 236),
             result(Self.toolCardsSwiftReadCall, "read", Self.toolCardsSwiftText, ago: start - 237),
+            Self.message("assistant", [
+                Self.text("Era signs in through a browser. Let me also open the Lisbon hotel search you asked about."),
+                Self.toolCall(Self.browserNavigateCall, "browser", ["action": "navigate", "url": .string(Self.browserPageURL)]),
+            ], ago: start - 238),
+            result(Self.browserNavigateCall, "browser",
+                   "{\"ok\":true,\"targetId\":\"DEMO7A1C0F3B\",\"url\":\"\(Self.browserPageURL)\"}",
+                   ago: start - 238.5, details: Self.browserTabDetails),
+            Self.message("assistant", [Self.toolCall(Self.browserShotCall, "browser", ["action": "screenshot", "targetId": "DEMO7A1C0F3B"])],
+                         ago: start - 239),
+            Self.message("toolResult", [
+                Self.text("Screenshot captured."),
+                ["type": "image", "omitted": true, "bytes": 184_213, "mimeType": "image/png"],
+            ], ago: start - 239.5, extra: ["toolCallId": .string(Self.browserShotCall), "toolName": "browser", "isError": false,
+                                          "details": Self.browserTabDetails]),
             Self.message("assistant", [Self.text("""
             \(Self.toolCardsPreview) Run `openclaw mcp auth Era` on a machine with a browser to finish the sign-in.
             """)], id: DemoBookmarks.toolsSummaryMessageId, ago: start - 240),
