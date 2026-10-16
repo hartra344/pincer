@@ -843,11 +843,20 @@ final class PinningDelegate: NSObject, URLSessionDelegate, Sendable {
               let trust = challenge.protectionSpace.serverTrust
         else { return (.performDefaultHandling, nil) }
         guard let fingerprint else { return (.performDefaultHandling, nil) }
-        guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first else {
-            return (.cancelAuthenticationChallenge, nil)
-        }
-        let der = SecCertificateCopyData(leaf) as Data
-        return Self.matches(leafDER: der, pin: fingerprint) ? (.useCredential, URLCredential(trust: trust)) : (.cancelAuthenticationChallenge, nil)
+        return TLSPin.matches(trust, fingerprint: fingerprint) ? (.useCredential, URLCredential(trust: trust)) : (.cancelAuthenticationChallenge, nil)
+    }
+}
+
+/// The one implementation of the certificate pin check: the leaf certificate's SHA-256 against a
+/// pinned fingerprint. Used by the Gateway connection, the screencast socket and web views that must
+/// trust a pinned (self-signed) Gateway.
+public enum TLSPin {
+    /// Whether the leaf certificate of `trust` has the SHA-256 `fingerprint` (hex; colons, spaces and
+    /// case are ignored). An empty or missing chain, or an empty fingerprint, never matches.
+    public static func matches(_ trust: SecTrust, fingerprint: String) -> Bool {
+        guard let pin = PinningDelegate.normalized(fingerprint),
+              let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate], let leaf = chain.first else { return false }
+        return PinningDelegate.matches(leafDER: SecCertificateCopyData(leaf) as Data, pin: pin)
     }
 }
 

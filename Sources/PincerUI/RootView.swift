@@ -624,6 +624,7 @@ struct SettingsForm: View {
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
+    @AppStorage(SessionFilesModel.showInPanelKey) private var showFilesInPanel = true
     @AppStorage(AppTheme.presetKey) private var preset = ThemePreset.standard
     @AppStorage(AppTheme.modeKey) private var mode = AppearanceMode.system
     @Environment(\.appTheme) private var theme
@@ -733,6 +734,12 @@ struct SettingsForm: View {
                 Toggle(isOn: self.$showSubagentRuns) {
                     Text("List subagent runs under their chat", bundle: .module)
                     Text("Off keeps one thread per chat. Open a run from its tool call instead.", bundle: .module)
+                }
+            }
+            SwiftUI.Section(L("Workspace panel")) {
+                Toggle(isOn: self.$showFilesInPanel) {
+                    Text("Show Files in the workspace panel", bundle: .module)
+                    Text("The files the agent changed, read and produced in this chat. Editing needs Full Management.", bundle: .module)
                 }
             }
         case .notifications:

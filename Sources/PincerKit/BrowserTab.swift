@@ -94,19 +94,22 @@ public struct BrowserPageTab: Hashable, Sendable, Identifiable {
         self.init(targetId: ref.targetId, title: ref.title ?? "", url: ref.url, route: ref.route)
     }
 
+    /// One tab object (a `/tabs` row, or the `/tabs/open` reply); nil without a `targetId`.
+    static func parse(row: JSONValue, route: BrowserRoute) -> BrowserPageTab? {
+        guard let targetId = row["targetId"]?.string, !targetId.isEmpty else { return nil }
+        let reason = row["urlUnavailableReason"]?.string
+        return BrowserPageTab(
+            targetId: targetId, title: row["title"]?.string ?? "",
+            url: row["url"]?.string.flatMap { BrowserTabRef.webURL($0) },
+            favicon: row["favicon"]?.string.flatMap { BrowserTabRef.webURL($0) },
+            urlUnavailableReason: reason == "navigation_blocked" || reason == "navigation_check_failed" ? reason : nil,
+            route: route)
+    }
+
     /// The `/tabs` reply as upstream's `listBrowserTabs` reads it: `running` is strictly `true`, rows without a `targetId` are dropped.
     static func parseList(_ reply: JSONValue, route: BrowserRoute) -> (running: Bool, tabs: [BrowserPageTab]) {
         let rows = reply["tabs"]?.array ?? []
-        let tabs: [BrowserPageTab] = rows.compactMap { row in
-            guard let targetId = row["targetId"]?.string, !targetId.isEmpty else { return nil }
-            let reason = row["urlUnavailableReason"]?.string
-            return BrowserPageTab(
-                targetId: targetId, title: row["title"]?.string ?? "",
-                url: row["url"]?.string.flatMap { BrowserTabRef.webURL($0) },
-                favicon: row["favicon"]?.string.flatMap { BrowserTabRef.webURL($0) },
-                urlUnavailableReason: reason == "navigation_blocked" || reason == "navigation_check_failed" ? reason : nil,
-                route: route)
-        }
+        let tabs: [BrowserPageTab] = rows.compactMap { Self.parse(row: $0, route: route) }
         return (reply["running"]?.bool == true, tabs)
     }
 }

@@ -25,7 +25,9 @@ import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePen
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
 import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
-import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserRequest } from './browser.mjs';
+import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserHttp, handleBrowserRequest } from './browser.mjs';
+import { PORTAL_EVENTS, PORTAL_METHODS, handlePortalsRequest, initPortals, portalsDisabled, stopPortals } from './portals.mjs';
+import { SESSION_FILES_METHODS, handleSessionFilesRequest, sessionFilesDisabled } from './sessions-files.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
 import { handleQuestionRequest } from './questions.mjs';
@@ -80,6 +82,8 @@ const METHODS = [
   ...CONFIG_METHODS,
   ...MCP_METHODS,
   ...BROWSER_METHODS,
+  ...PORTAL_METHODS,
+  ...SESSION_FILES_METHODS,
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
@@ -105,6 +109,7 @@ const EVENTS = [
   ...REACTION_EVENTS,
   'plugins.changed',
   ...MCP_EVENTS,
+  ...PORTAL_EVENTS,
   'progressCard.changed',
   'cron',
   ...DEVICE_PAIRING_EVENTS,
@@ -201,6 +206,8 @@ function advertisedMethods() {
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
     ...(browserDisabled() ? BROWSER_METHODS : []),
+    ...(portalsDisabled() ? PORTAL_METHODS : []),
+    ...(sessionFilesDisabled() ? SESSION_FILES_METHODS : []),
     ...(reactionsDisabled() ? REACTION_METHODS : []),
     ...hiddenSessionManagerMethods(),
   ];
@@ -228,6 +235,8 @@ const REQUEST_HANDLERS = [
   (state, conn, msg) => handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleBrowserRequest(state, conn, msg, { sendRes, sendErr }),
+  (state, conn, msg) => handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
+  (state, conn, msg) => handleSessionFilesRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession }),
   (state, conn, msg) => handleWebPushRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr }),
@@ -395,6 +404,7 @@ export async function startServer(opts = {}) {
   if (!['token', 'password', 'none'].includes(options.auth)) throw new Error(`MOCK_AUTH must be token, password or none, not ${options.auth}`);
   if (!['auto', 'manual', 'off', 'reject', 'reject-once'].includes(options.pairing)) throw new Error(`unknown MOCK_PAIRING: ${options.pairing}`);
   const state = createSeedState();
+  await initPortals(state);
   if (options.longChat > 0) seedLongChat(state, Math.floor(options.longChat));
   state.protocol = options.protocol;
   initControl(state);
@@ -404,6 +414,8 @@ export async function startServer(opts = {}) {
 
   // The same port also serves the mock MCP OAuth consent pages.
   const httpServer = http.createServer((req, res) => {
+    const authorized = (request) => options.auth === 'none' || request.headers.authorization === `Bearer ${options.mockToken}`;
+    if (handleBrowserHttp(state, req, res, authorized)) return;
     if (mcpDisabled() || !handleMcpHttp(state, req, res, broadcast)) {
       res.writeHead(404, { 'content-type': 'text/plain' });
       res.end('not found');
@@ -510,6 +522,7 @@ export async function startServer(opts = {}) {
         cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
         screencast.close();
+        stopPortals(state);
         wss.close(() => httpServer.close(() => resolve()));
         httpServer.closeAllConnections?.();
       }),

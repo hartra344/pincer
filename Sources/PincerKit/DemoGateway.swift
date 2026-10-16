@@ -50,7 +50,7 @@ actor DemoGateway {
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
     ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
-        + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods
+        + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods + DemoGateway.portalMethods + DemoGateway.sessionFilesMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -117,6 +117,14 @@ actor DemoGateway {
     var idempotency: [String: String] = [:]
     var runs: [String: Run] = [:]
     var sessionsSubscribed = false
+    /// The demo's one portal ("Studio clock") until the user closes it.
+    var demoPortalOpen = true
+    /// The demo browser's tabs with their history, created on first use (DemoGateway+Browser.swift).
+    var demoBrowserTabs: [DemoBrowserTab] = BrowserDemoPages.all.map(DemoBrowserTab.init)
+    var demoBrowserTabCounter = 0
+    /// The demo workspace's files (DemoGateway+SessionFiles.swift), shared by every demo session.
+    var demoSessionFiles = DemoGateway.seedSessionFiles()
+    var demoConflictTriggered = false
     var holdsHistory = false
     var heldHistory: [CheckedContinuation<Void, Never>] = []
     var historyRequestCounts: [String: Int] = [:]
@@ -302,6 +310,8 @@ actor DemoGateway {
         if let result = try self.handleQuestions(method, params) { return result }
         if let result = try self.handleHealth(method, params) { return result }
         if let result = try self.handleBrowser(method, params) { return result }
+        if let result = try self.handlePortals(method, params) { return result }
+        if let result = try self.handleSessionFiles(method, params) { return result }
         if Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method) {
             return try await self.handleSetup(method, params) ?? .null
         }

@@ -8,6 +8,7 @@ const SECTIONS = [
   'tool-cards',
   'link-preview',
   'browser',
+  'portals',
   'send-hooks',
   'replies',
   'reaction-level',
@@ -41,6 +42,7 @@ const SECTIONS = [
   'sessions',
   'message-subscriptions',
   'large-media',
+  'sessions-files',
 ];
 
 const server = await startServer({ host: '127.0.0.1', port: 0, pairing: 'auto', mockToken: 'dev-token' });

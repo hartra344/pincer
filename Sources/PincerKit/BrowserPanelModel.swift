@@ -30,38 +30,57 @@ public final class BrowserPanelModel {
     }
 
     public typealias Request = @Sendable (_ method: String, _ params: JSONValue) async throws -> JSONValue
+    /// Fetches the bytes of a file the Gateway's browser saved (`download.path`) through the Gateway's media route.
+    public typealias DownloadFetch = @Sendable (_ gatewayPath: String) async throws -> URL
     public typealias SourceFactory = @MainActor (Ticket) -> (any BrowserFrameSource)?
 
     public static let maxStreamWidth = 1600
     public static let maxStreamHeight = 1200
 
-    public private(set) var tabs: [BrowserPageTab] = []
-    public private(set) var selectedTargetId: String?
+    public internal(set) var tabs: [BrowserPageTab] = []
+    public internal(set) var selectedTargetId: String?
     /// The latest frame. Read only from the leaf view that draws it.
-    public private(set) var frame: BrowserFrame?
-    public private(set) var pageTitle: String?
-    public private(set) var pageURL: URL?
+    public internal(set) var frame: BrowserFrame?
+    public internal(set) var pageTitle: String?
+    public internal(set) var pageURL: URL?
     public private(set) var status: Status = .idle
     /// True once `/tabs` has answered: with `tabs` empty and the browser running, there are no pages open.
-    public private(set) var tabsLoaded = false
+    public internal(set) var tabsLoaded = false
     /// The selected page (a card's stale reference) isn't in the Gateway's list any more.
-    public private(set) var selectedPageMissing = false
+    public internal(set) var selectedPageMissing = false
     /// Set when a call hit a scope error although the connection claimed `operator.admin`.
-    public private(set) var deniedAdmin = false
+    public internal(set) var deniedAdmin = false
 
-    @ObservationIgnored private let request: Request
+    @ObservationIgnored let request: Request
     @ObservationIgnored private let adminCheck: @MainActor () -> Bool
     @ObservationIgnored private let makeSource: SourceFactory
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let retryDelay: Duration
-    @ObservationIgnored private var route = BrowserRoute()
+    @ObservationIgnored var route = BrowserRoute()
+    /// Receives a downscaled JPEG per tab (nil clears it); `GatewayStore` feeds it to `pagePreviews`.
+    @ObservationIgnored var thumbnailSink: (@MainActor (ImageRef?, String) -> Void)?
+    @ObservationIgnored var thumbnailLast: [String: Date] = [:]
+    @ObservationIgnored var thumbnailInFlight: Set<String> = []
+    @ObservationIgnored var thumbnailDigest: [String: Int] = [:]
     @ObservationIgnored private var viewers: [AnyHashable: CGSize] = [:]
-    @ObservationIgnored private var visible: Bool { !self.viewers.isEmpty }
+    @ObservationIgnored var visible: Bool { !self.viewers.isEmpty }
     @ObservationIgnored private var pixelSize = CGSize(width: 1280, height: 800)
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var streamTask: Task<Void, Never>?
-    @ObservationIgnored private var streamRunning = false
+    @ObservationIgnored var streamRunning = false
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
+    @ObservationIgnored let fetchDownload: DownloadFetch?
+    @ObservationIgnored var actionErrorClear: Task<Void, Never>?
+    @ObservationIgnored var mutationTokens: [String: Int] = [:]
+    @ObservationIgnored var downloadTask: Task<URL, Error>?
+
+    /// Browser controls: a navigation, open or close is in flight.
+    public internal(set) var isNavigating = false
+    /// The Gateway turned `evaluate` off, so Back and Forward can't work.
+    public internal(set) var historyUnavailable = false
+    public internal(set) var isDownloading = false
+    /// The last control action's failure, sanitised: never a token or address. Cleared by the next action.
+    public internal(set) var actionError: String?
 
     /// Full Management (or the demo).
     public var hasAdmin: Bool { !self.deniedAdmin && self.adminCheck() }
@@ -71,8 +90,9 @@ public final class BrowserPanelModel {
     /// For checks, tests and previews.
     public init(request: @escaping Request, hasAdmin: @escaping @MainActor () -> Bool = { true },
                 makeSource: @escaping SourceFactory, debounce: Duration = .milliseconds(500),
-                retryDelay: Duration = .seconds(10))
+                retryDelay: Duration = .seconds(10), fetchDownload: DownloadFetch? = nil)
     {
+        self.fetchDownload = fetchDownload
         self.request = request
         self.adminCheck = hasAdmin
         self.makeSource = makeSource
@@ -81,13 +101,18 @@ public final class BrowserPanelModel {
     }
 
     init(connection: GatewayConnection, profile: @escaping @MainActor () -> GatewayProfile,
-         hello: @escaping @MainActor () -> GatewayHello?)
+         hello: @escaping @MainActor () -> GatewayHello?, fetchDownload: DownloadFetch? = nil)
     {
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.fetchDownload = fetchDownload
+        self.request = { method, params in
+            // A request may carry its own `timeoutMs` (a page download waits for the browser), plus slack.
+            let wait = max(30, (params["timeoutMs"]?.double ?? 0) / 1000 + 10)
+            return try await connection.request(method, params, timeout: wait)
+        }
         self.adminCheck = { profile().isDemo || hello()?.scopes.contains(GatewayConnection.adminScope) == true }
         self.makeSource = { ticket in
-            if let targetId = BrowserDemoFrameSource.targetId(wsPath: ticket.wsPath) {
-                return BrowserDemoFrameSource(targetId: targetId)
+            if BrowserDemoFrameSource.targetId(wsPath: ticket.wsPath) != nil {
+                return BrowserDemoFrameSource(wsPath: ticket.wsPath)
             }
             let current = profile()
             guard !current.isDemo, let gateway = try? current.resolvedURL(),
@@ -199,6 +224,8 @@ public final class BrowserPanelModel {
     /// A reconnect may bring new scopes, and the old stream token belonged to the old connection.
     public func handleReconnect() {
         self.deniedAdmin = false
+        self.historyUnavailable = false
+        self.actionError = nil
         guard self.visible else { return }
         if self.hasAdmin {
             self.restartStream()
@@ -210,8 +237,9 @@ public final class BrowserPanelModel {
 
     // MARK: Selection and streaming
 
-    private func pageSelectionChanged(to targetId: String, title: String?, url: URL?) {
+    func pageSelectionChanged(to targetId: String, title: String?, url: URL?) {
         self.selectedTargetId = targetId
+        self.actionError = nil
         self.frame = nil
         self.pageTitle = title.flatMap { $0.isEmpty ? nil : $0 }
         self.pageURL = url
@@ -225,7 +253,7 @@ public final class BrowserPanelModel {
         }
     }
 
-    private func cancelStream() {
+    func cancelStream() {
         self.generation += 1
         self.streamTask?.cancel()
         self.streamTask = nil
@@ -234,7 +262,7 @@ public final class BrowserPanelModel {
         self.debounceTask = nil
     }
 
-    private func restartStream() {
+    func restartStream() {
         self.cancelStream()
         guard self.visible else { return }
         guard self.hasAdmin else {
@@ -329,6 +357,7 @@ public final class BrowserPanelModel {
                 case let .frame(next):
                     gotFrame = true
                     self.frame = next
+                    self.captureThumbnail(next, tab: tab)
                     self.setStatus(.live)
                     self.setPage(title: nil, url: next.pageURL)
                 case let .meta(url, title):
@@ -375,14 +404,14 @@ public final class BrowserPanelModel {
         }
     }
 
-    private func pause(_ delay: Duration) async {
+    func pause(_ delay: Duration) async {
         try? await Task.sleep(for: delay)
     }
 
     // MARK: Tabs
 
     /// `GET /tabs`. False when the call failed (the status says why).
-    private func fetchTabs() async -> Bool {
+    func fetchTabs() async -> Bool {
         guard self.hasAdmin else {
             self.setStatus(.needsFullManagement)
             return false
@@ -420,7 +449,7 @@ public final class BrowserPanelModel {
 
     // MARK: Helpers
 
-    private func setStatus(_ next: Status) {
+    func setStatus(_ next: Status) {
         if self.status != next { self.status = next }
     }
 
@@ -448,7 +477,7 @@ public final class BrowserPanelModel {
     }
 
     /// An error message with anything that could carry the screencast address or its one-time token removed.
-    public static func sanitized(_ text: String) -> String {
+    public nonisolated static func sanitized(_ text: String) -> String {
         var clean = text.replacing(/[A-Za-z][A-Za-z0-9+.\-]*:\/\/\S*/, with: "…")
         clean = clean.replacing(/\S*\/browser\/screencast\S*/, with: "…")
         clean = clean.replacing(/(?i)\S*(token|wspath)\S*/, with: "…")

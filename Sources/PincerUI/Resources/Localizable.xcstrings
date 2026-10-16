@@ -391,6 +391,16 @@
         }
       }
     },
+    "%@ portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ portal"
+          }
+        }
+      }
+    },
     "%@ rejected the key: %@": {
       "localizations": {
         "en": {
@@ -1003,6 +1013,26 @@
         }
       }
     },
+    "%lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld portals"
+          }
+        }
+      }
+    },
+    "%lld portals open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld portals open"
+          }
+        }
+      }
+    },
     "%lld problems": {
       "localizations": {
         "en": {
@@ -1239,6 +1269,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 plugin needs attention"
+          }
+        }
+      }
+    },
+    "1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 portal"
+          }
+        }
+      }
+    },
+    "1 portal open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 portal open"
           }
         }
       }
@@ -1883,6 +1933,16 @@
         }
       }
     },
+    "All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
     "All Channels": {
       "localizations": {
         "en": {
@@ -2433,6 +2493,16 @@
         }
       }
     },
+    "Artifacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artifacts"
+          }
+        }
+      }
+    },
     "Ask for deeper reasoning with /think. Expand a thinking section to read it.": {
       "localizations": {
         "en": {
@@ -2683,6 +2753,36 @@
         }
       }
     },
+    "Back and Forward are turned off on this gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back and Forward are turned off on this gateway"
+          }
+        }
+      }
+    },
+    "Back and Forward are turned off on this gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back and Forward are turned off on this gateway."
+          }
+        }
+      }
+    },
+    "Back to Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to Files"
+          }
+        }
+      }
+    },
     "Background": {
       "localizations": {
         "en": {
@@ -2699,6 +2799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bindings"
+          }
+        }
+      }
+    },
+    "Blocked a page outside the portal: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked a page outside the portal: %@"
           }
         }
       }
@@ -2933,12 +3043,42 @@
         }
       }
     },
+    "Can't load this portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't load this portal"
+          }
+        }
+      }
+    },
+    "Can't open this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't open this file"
+          }
+        }
+      }
+    },
     "Can't reach Gateway · retrying in %llds": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Can't reach Gateway · retrying in %llds"
+          }
+        }
+      }
+    },
+    "Can't show files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't show files"
           }
         }
       }
@@ -2959,6 +3099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Cancel Download": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel Download"
           }
         }
       }
@@ -3029,6 +3179,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change the Quick Capture shortcut in General."
+          }
+        }
+      }
+    },
+    "Changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changed"
           }
         }
       }
@@ -3613,12 +3773,42 @@
         }
       }
     },
+    "Close \"%@\"?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close \"%@\"?"
+          }
+        }
+      }
+    },
+    "Close Portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Portal"
+          }
+        }
+      }
+    },
     "Close Split View": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Close Split View"
+          }
+        }
+      }
+    },
+    "Close Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Tab"
           }
         }
       }
@@ -3633,12 +3823,32 @@
         }
       }
     },
+    "Close portal %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close portal %@"
+          }
+        }
+      }
+    },
     "Close search": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Close search"
+          }
+        }
+      }
+    },
+    "Close this tab in the agent's browser?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close this tab in the agent's browser?"
           }
         }
       }
@@ -3739,16 +3949,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colors"
-          }
-        }
-      }
-    },
-    "Coming soon": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coming soon"
           }
         }
       }
@@ -4483,6 +4683,16 @@
         }
       }
     },
+    "Copy Link (without access)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link (without access)"
+          }
+        }
+      }
+    },
     "Copy Link to %@": {
       "localizations": {
         "en": {
@@ -4529,6 +4739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Node ID"
+          }
+        }
+      }
+    },
+    "Copy Path": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Path"
           }
         }
       }
@@ -4629,6 +4849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Tool Name"
+          }
+        }
+      }
+    },
+    "Copy URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy URL"
           }
         }
       }
@@ -4859,6 +5089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't connect"
+          }
+        }
+      }
+    },
+    "Couldn't download this page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't download this page."
           }
         }
       }
@@ -5443,6 +5683,16 @@
         }
       }
     },
+    "Deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted"
+          }
+        }
+      }
+    },
     "Deleted %@": {
       "localizations": {
         "en": {
@@ -5783,6 +6033,16 @@
         }
       }
     },
+    "Discard changes?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard changes?"
+          }
+        }
+      }
+    },
     "Discard unsaved changes?": {
       "localizations": {
         "en": {
@@ -5929,6 +6189,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Double-click a session for details."
+          }
+        }
+      }
+    },
+    "Download Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download Page"
+          }
+        }
+      }
+    },
+    "Downloading…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading…"
           }
         }
       }
@@ -6123,6 +6403,16 @@
         }
       }
     },
+    "Editing files needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing files needs Full Management."
+          }
+        }
+      }
+    },
     "Editing message": {
       "localizations": {
         "en": {
@@ -6259,6 +6549,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter a name."
+          }
+        }
+      }
+    },
+    "Enter a web address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a web address"
           }
         }
       }
@@ -6703,6 +7003,46 @@
         }
       }
     },
+    "File contents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File contents"
+          }
+        }
+      }
+    },
+    "Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files"
+          }
+        }
+      }
+    },
+    "Files aren't available for folders on paired devices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files aren't available for folders on paired devices."
+          }
+        }
+      }
+    },
+    "Files the agent changes or reads in this chat show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files the agent changes or reads in this chat show up here."
+          }
+        }
+      }
+    },
     "Fill in the required settings below, then save, to finish setting up this plugin.": {
       "localizations": {
         "en": {
@@ -6919,6 +7259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fix the errors above first."
+          }
+        }
+      }
+    },
+    "Focus Address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Focus Address"
           }
         }
       }
@@ -7413,6 +7763,16 @@
         }
       }
     },
+    "Go to an address in the agent's browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to an address in the agent's browser"
+          }
+        }
+      }
+    },
     "Got It": {
       "localizations": {
         "en": {
@@ -7649,6 +8009,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide Browser (⌥⌘B)"
+          }
+        }
+      }
+    },
+    "Hide Browser · %lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser · %lld portals"
+          }
+        }
+      }
+    },
+    "Hide Browser · 1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser · 1 portal"
           }
         }
       }
@@ -8133,12 +8513,12 @@
         }
       }
     },
-    "It starts when the agent uses the browser tool.": {
+    "It starts when the agent uses the browser tool, or you can start it now.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "It starts when the agent uses the browser tool."
+            "value": "It starts when the agent uses the browser tool, or you can start it now."
           }
         }
       }
@@ -8729,6 +9109,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Load images the agent links from the web"
+          }
+        }
+      }
+    },
+    "Loading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading"
           }
         }
       }
@@ -9423,6 +9813,16 @@
         }
       }
     },
+    "More page actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More page actions"
+          }
+        }
+      }
+    },
     "Move Back Under “%@”": {
       "localizations": {
         "en": {
@@ -9709,6 +10109,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "New Group…"
+          }
+        }
+      }
+    },
+    "New Tab": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Tab"
+          }
+        }
+      }
+    },
+    "New Tab…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Tab…"
           }
         }
       }
@@ -10073,6 +10493,16 @@
         }
       }
     },
+    "No files yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No files yet"
+          }
+        }
+      }
+    },
     "No heartbeat yet": {
       "localizations": {
         "en": {
@@ -10129,6 +10559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No matches"
+          }
+        }
+      }
+    },
+    "No matching files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching files"
           }
         }
       }
@@ -11153,6 +11593,16 @@
         }
       }
     },
+    "Open in your browser?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in your browser?"
+          }
+        }
+      }
+    },
     "Open run": {
       "localizations": {
         "en": {
@@ -11189,6 +11639,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OpenClaw is running on this Mac."
+          }
+        }
+      }
+    },
+    "Opens in the agent's browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens in the agent's browser."
           }
         }
       }
@@ -11383,6 +11843,16 @@
         }
       }
     },
+    "Overwrite": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite"
+          }
+        }
+      }
+    },
     "Overwrite %@ on the Gateway?": {
       "localizations": {
         "en": {
@@ -11393,12 +11863,32 @@
         }
       }
     },
+    "Overwrite the file on the gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite the file on the gateway?"
+          }
+        }
+      }
+    },
     "Overwrite with Mine": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Overwrite with Mine"
+          }
+        }
+      }
+    },
+    "Overwrite…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite…"
           }
         }
       }
@@ -11813,6 +12303,26 @@
         }
       }
     },
+    "Pincer can't preview this file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't preview this file"
+          }
+        }
+      }
+    },
+    "Pincer can't save this content safely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't save this content safely."
+          }
+        }
+      }
+    },
     "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.": {
       "localizations": {
         "en": {
@@ -11869,6 +12379,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered."
+          }
+        }
+      }
+    },
+    "Pincer was connected without permission to open links. Reconnect this Gateway to fix it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer was connected without permission to open links. Reconnect this Gateway to fix it."
           }
         }
       }
@@ -12009,6 +12529,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Port, auth and reload"
+          }
+        }
+      }
+    },
+    "Portal address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portal address"
+          }
+        }
+      }
+    },
+    "Portal: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portal: %@"
           }
         }
       }
@@ -12249,6 +12789,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Probing…"
+          }
+        }
+      }
+    },
+    "Project files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project files"
           }
         }
       }
@@ -12843,6 +13393,16 @@
         }
       }
     },
+    "Reload Page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload Page"
+          }
+        }
+      }
+    },
     "Reload Pincer": {
       "localizations": {
         "en": {
@@ -12869,6 +13429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reload from Gateway"
+          }
+        }
+      }
+    },
+    "Reload to see the new version and lose your edits, or overwrite it with yours.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reload to see the new version and lose your edits, or overwrite it with yours."
           }
         }
       }
@@ -14143,6 +14713,16 @@
         }
       }
     },
+    "Save File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save File"
+          }
+        }
+      }
+    },
     "Save Key": {
       "localizations": {
         "en": {
@@ -14503,6 +15083,16 @@
         }
       }
     },
+    "Search files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search files"
+          }
+        }
+      }
+    },
     "Search in output": {
       "localizations": {
         "en": {
@@ -14639,6 +15229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Select a Gateway to search its messages."
+          }
+        }
+      }
+    },
+    "Select a chat to see its files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a chat to see its files"
           }
         }
       }
@@ -15163,6 +15763,26 @@
         }
       }
     },
+    "Show Browser · %lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser · %lld portals"
+          }
+        }
+      }
+    },
+    "Show Browser · 1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser · 1 portal"
+          }
+        }
+      }
+    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
@@ -15179,6 +15799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Details"
+          }
+        }
+      }
+    },
+    "Show Files in the workspace panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Files in the workspace panel"
           }
         }
       }
@@ -15439,6 +16069,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show this issue again"
+          }
+        }
+      }
+    },
+    "Showing the first %lld entries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the first %lld entries"
           }
         }
       }
@@ -15823,6 +16463,16 @@
         }
       }
     },
+    "Some large artifacts aren't listed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some large artifacts aren't listed."
+          }
+        }
+      }
+    },
     "Someone changed these on the Gateway while you were editing. Choose which value to keep.": {
       "localizations": {
         "en": {
@@ -16019,6 +16669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stability"
+          }
+        }
+      }
+    },
+    "Start Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Browser"
           }
         }
       }
@@ -16973,6 +17633,16 @@
         }
       }
     },
+    "The agent may be using it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent may be using it."
+          }
+        }
+      }
+    },
     "The agent never reacts.": {
       "localizations": {
         "en": {
@@ -17029,6 +17699,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The agent's browser isn't running"
+          }
+        }
+      }
+    },
+    "The browser needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The browser needs Full Management."
           }
         }
       }
@@ -17113,6 +17793,16 @@
         }
       }
     },
+    "The download took too long.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The download took too long."
+          }
+        }
+      }
+    },
     "The file couldn't be prepared for sharing.": {
       "localizations": {
         "en": {
@@ -17129,6 +17819,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The file couldn't be saved: %@"
+          }
+        }
+      }
+    },
+    "The files the agent changed, read and produced in this chat. Editing needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The files the agent changed, read and produced in this chat. Editing needs Full Management."
           }
         }
       }
@@ -17173,6 +17873,16 @@
         }
       }
     },
+    "The link stops working for everyone. The agent can open a new portal if needed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link stops working for everyone. The agent can open a new portal if needed."
+          }
+        }
+      }
+    },
     "The name is shown to every operator of this Gateway (up to %lld characters).": {
       "localizations": {
         "en": {
@@ -17183,12 +17893,52 @@
         }
       }
     },
+    "The other changes to this file will be lost.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The other changes to this file will be lost."
+          }
+        }
+      }
+    },
+    "The page changed before it could be downloaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page changed before it could be downloaded."
+          }
+        }
+      }
+    },
+    "The page didn't respond.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page didn't respond."
+          }
+        }
+      }
+    },
     "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away."
+          }
+        }
+      }
+    },
+    "The portal couldn't be closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The portal couldn't be closed."
           }
         }
       }
@@ -17399,6 +18149,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't change nodes. Update OpenClaw to manage them here."
+          }
+        }
+      }
+    },
+    "This Gateway can't control its browser.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't control its browser."
           }
         }
       }
@@ -17693,6 +18453,16 @@
         }
       }
     },
+    "This address is blocked by the gateway's browser policy.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This address is blocked by the gateway's browser policy."
+          }
+        }
+      }
+    },
     "This approval is no longer on the Gateway.": {
       "localizations": {
         "en": {
@@ -17749,6 +18519,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This chat's Gateway was removed."
+          }
+        }
+      }
+    },
+    "This connection can't open portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection can't open portals"
           }
         }
       }
@@ -17853,6 +18633,46 @@
         }
       }
     },
+    "This file can't be edited.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file can't be edited."
+          }
+        }
+      }
+    },
+    "This file can't be overwritten.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file can't be overwritten."
+          }
+        }
+      }
+    },
+    "This file changed since you opened it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file changed since you opened it"
+          }
+        }
+      }
+    },
+    "This file changed since you opened it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file changed since you opened it."
+          }
+        }
+      }
+    },
     "This file is larger than the %@ limit, so it can't be edited here.": {
       "localizations": {
         "en": {
@@ -17863,12 +18683,62 @@
         }
       }
     },
+    "This file is too large to preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is too large to preview"
+          }
+        }
+      }
+    },
+    "This file is too large to preview or edit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is too large to preview or edit."
+          }
+        }
+      }
+    },
     "This file isn’t text. Save it to open it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This file isn’t text. Save it to open it."
+          }
+        }
+      }
+    },
+    "This file no longer exists on the gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file no longer exists on the gateway"
+          }
+        }
+      }
+    },
+    "This file no longer exists on the gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file no longer exists on the gateway."
+          }
+        }
+      }
+    },
+    "This gateway doesn't support session files.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This gateway doesn't support session files."
           }
         }
       }
@@ -17973,6 +18843,26 @@
         }
       }
     },
+    "This portal link has expired or closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This portal link has expired or closed."
+          }
+        }
+      }
+    },
+    "This portal only listens on the gateway's machine, so it may not load here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This portal only listens on the gateway's machine, so it may not load here."
+          }
+        }
+      }
+    },
     "This removes the saved login. You'll need to scan a QR code again to reconnect.": {
       "localizations": {
         "en": {
@@ -18019,6 +18909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This schedule can only be changed in the Control UI or the config."
+          }
+        }
+      }
+    },
+    "This sends the portal's access link to your browser. Anyone with the link can use it until the portal closes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sends the portal's access link to your browser. Anyone with the link can use it until the portal closes."
           }
         }
       }
@@ -18439,6 +19339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Try Again"
+          }
+        }
+      }
+    },
+    "Try a different search.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try a different search."
           }
         }
       }
@@ -19473,6 +20383,26 @@
         }
       }
     },
+    "Workspace folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace folder"
+          }
+        }
+      }
+    },
+    "Workspace panel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace panel"
+          }
+        }
+      }
+    },
     "Writing": {
       "localizations": {
         "en": {
@@ -19743,6 +20673,16 @@
         }
       }
     },
+    "Your connection can't close portals.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connection can't close portals."
+          }
+        }
+      }
+    },
     "Your device doesn't have the `%@` scope. Approve it again from the Gateway with that scope.": {
       "localizations": {
         "en": {
@@ -19779,6 +20719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your edits are kept."
+          }
+        }
+      }
+    },
+    "Your edits to this file haven't been saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your edits to this file haven't been saved."
           }
         }
       }

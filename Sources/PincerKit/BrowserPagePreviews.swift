@@ -29,6 +29,9 @@ public final class BrowserPagePreviews {
     weak var gateway: GatewayStore?
     private var entries: [URL: LinkPreview] = [:]
     private var screenshots: [String: ImageRef] = [:]
+    /// Card thumbnails kept (about 40 KB each); the oldest goes first.
+    public static let maxScreenshots = 32
+    @ObservationIgnored private var screenshotOrder: [String] = []
     @ObservationIgnored private var order: [URL] = []
     @ObservationIgnored private var sizes: [URL: Int] = [:]
     @ObservationIgnored private var totalBytes = 0
@@ -66,7 +69,16 @@ public final class BrowserPagePreviews {
     public func screenshot(forTab key: String) -> ImageRef? { self.screenshots[key] }
 
     public func setScreenshot(_ ref: ImageRef?, forTab key: String) {
-        if let ref { self.screenshots[key] = ref } else { self.screenshots[key] = nil }
+        self.screenshotOrder.removeAll { $0 == key }
+        guard let ref else {
+            self.screenshots[key] = nil
+            return
+        }
+        self.screenshots[key] = ref
+        self.screenshotOrder.append(key)
+        while self.screenshotOrder.count > Self.maxScreenshots {
+            self.screenshots[self.screenshotOrder.removeFirst()] = nil
+        }
     }
 
     public func load(_ url: URL) {
@@ -124,6 +136,7 @@ public final class BrowserPagePreviews {
         self.epoch += 1
         self.entries = [:]
         self.screenshots = [:]
+        self.screenshotOrder = []
         self.order = []
         self.sizes = [:]
         self.totalBytes = 0

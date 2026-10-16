@@ -153,11 +153,11 @@ extension KeyCombo: CustomStringConvertible {
 /// stable id stored in `ShortcutStore`'s overrides, so never rename a case's raw value.
 public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // File
-    case newChat, openChatInNewWindow, addGateway, exportChat, showBookmarks
+    case newChat, openChatInNewWindow, addGateway, exportChat, showBookmarks, saveFile
     // Edit
     case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
-    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, showBrowser, reloadPincer
+    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, showBrowser, focusAddress, reloadPincer
     // Go
     case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
@@ -183,9 +183,9 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
 
     public var category: Category {
         switch self {
-        case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
+        case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks, .saveFile: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
-        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .reloadPincer: .view
+        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .focusAddress, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
         case .stopRun, .gatewaySettings, .nextGateway, .previousGateway: .chat
         }
@@ -199,6 +199,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .addGateway: L("Add Gateway…")
         case .exportChat: L("Export Chat…")
         case .showBookmarks: L("Bookmarks…")
+        case .saveFile: L("Save File")
         case .findInChat: L("Find in Chat…")
         case .findNext: L("Find Next")
         case .findPrevious: L("Find Previous")
@@ -213,6 +214,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .nextUnreadChat: L("Next Unread Chat")
         case .showRuns: L("Show Runs")
         case .showBrowser: L("Show Browser")
+        case .focusAddress: L("Focus Address")
         case .reloadPincer: L("Reload Pincer")
         case .commandPalette: L("Command Palette…")
         case .searchMessages: L("Search Messages…")
@@ -235,6 +237,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .newChat: KeyCombo("n", [.command])
         case .openChatInNewWindow: KeyCombo("n", [.option, .command])
         case .exportChat: KeyCombo("e", [.shift, .command])
+        case .saveFile: KeyCombo("s", [.command])
         case .findInChat: KeyCombo("f", [.command])
         case .findNext: KeyCombo("g", [.command])
         case .findPrevious: KeyCombo("g", [.shift, .command])
@@ -246,6 +249,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .nextUnreadChat: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .shift])
         case .showRuns: KeyCombo("r", [.option, .command])
         case .showBrowser: KeyCombo("b", [.option, .command])
+        case .focusAddress: KeyCombo("l", [.command])
         case .reloadPincer: KeyCombo("r", [.command])
         case .commandPalette: KeyCombo("k", [.command])
         case .searchMessages: KeyCombo("f", [.shift, .command])
@@ -326,7 +330,6 @@ public enum ReservedShortcuts {
             Entry(combo: combo("h", [.option, .command]), owner: L("Hide Others")),
             Entry(combo: combo("m", [.command]), owner: L("Minimize")),
             Entry(combo: combo(",", [.command]), owner: L("Settings")),
-            Entry(combo: combo("s", [.command]), owner: L("Save")),
             Entry(combo: combo("z", [.command]), owner: L("Undo")),
             Entry(combo: combo("z", [.shift, .command]), owner: L("Redo")),
             Entry(combo: combo("x", [.command]), owner: L("Cut")),

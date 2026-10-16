@@ -36,6 +36,12 @@
 	<array>
 		<string>chat.pincer.refresh</string>
 	</array>
+	<!-- Portals can be plain http on a LAN or tailnet; this lifts ATS for web views only, never for URLSession. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_openclaw-gw._tcp</string>
