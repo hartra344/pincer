@@ -30,8 +30,8 @@ export default defineConfig({
 			},
 			lastUpdated: true,
 			head: [
-				{ tag: 'meta', attrs: { name: 'theme-color', content: '#1f2b27', media: '(prefers-color-scheme: dark)' } },
-				{ tag: 'meta', attrs: { name: 'theme-color', content: '#d6dfda', media: '(prefers-color-scheme: light)' } },
+				{ tag: 'meta', attrs: { name: 'theme-color', content: '#1c1c1e', media: '(prefers-color-scheme: dark)' } },
+				{ tag: 'meta', attrs: { name: 'theme-color', content: '#f5f5f7', media: '(prefers-color-scheme: light)' } },
 			],
 			sidebar: [
 				{

@@ -1,8 +1,8 @@
 ---
-version: 1
+version: 2
 slug: "website-src-pages-index-astro"
 primary_target: "website/src/pages/index.astro"
-related_targets: ["website/src/styles/docs.css"]
+related_targets: ["website/src/styles/docs.css", "website/src/styles/tokens.css", "website/src/components/landing/landing.css"]
 ---
 
 # Surface brief: Pincer landing page and site theme
@@ -11,20 +11,20 @@ Scope: `website/src/pages/index.astro` (Persuade) and the Starlight theme for do
 
 Audience and action: an OpenClaw gateway operator decides Pincer is the native Mac and iPhone client for their gateway, then goes to Install (TestFlight or source), Try the Demo, or the docs. Proof: real demo screenshots on Mac and iPhone, the real pairing commands, the pure-client security model. No invented claims, counts or testimonials.
 
-Constraints: Starlight 0.42 overrides only; no heavy JS; light and dark; WCAG AA contrast and visible focus; reduced motion honoured.
+Constraints: Starlight overrides only; no heavy JS; light and dark; WCAG AA contrast and visible focus; reduced motion and reduced transparency honoured.
 
-Decisions taken unattended (no decision page; the maintainer's brief is the answer channel): code-led build (no image generation available), assigned direction built.
+Decisions taken unattended (the owner delegated all decisions): redesign of the visual world into native Apple platform grammar; concept seed 66dbd038 index 4 (classic Mac OS Platinum) rejected on factual grounds. Hero headline changed at the owner's request to "OpenClaw, with truly native capabilities and feel."
 
 ## Direction contract
 
-THESIS: Pincer is the operator's position on your gateway. Every chat is a line on the board, and a lamp lights when an agent needs you. Refuses the centered glow hero with a lone screenshot and the same-size icon-card grid.
+THESIS: The site behaves like a Mac app, because the product's claim is "truly native capabilities and feel". It refuses the dark-glow devtool hero and the icon-card grid, and drops the switchboard metaphor that had no native meaning.
 
-OWN-WORLD: a telephone-exchange switchboard in telephone-gray-green enamel. Panel fields in deep green-gray (dark) or pale enamel (light) own whole bands; jack fields drawn as rows of ringed sockets; designation labels set in the Apple system font, sentence case (the maintainer rejected a condensed display face as hard to read; do not reintroduce caps or condensed display type); coral lamps (the Lobster accent, brand) light only for the primary action, the active line and things that need attention; brass as the one secondary. Raise from the night-flight six-pack: lamp discipline, colour means state, never decoration. Raise from the seedbed lobes: one colour owns the viewport; the panel field is a page-scale field, not an accent.
+OWN-WORLD: Apple system neutrals (light: white + #F5F5F7 grouped ground; dark: #141416 + #1C1C1E/#2C2C2E), SF system type at Apple text-style sizes, Pincer coral as the single system tint (controlAccentColor role), and the app icon's own coral→red gradient (#FF8A5B→#D9283B) as the one drenched brand field. Native components: translucent unified toolbar header, push buttons (filled default button), segmented control (theme, line index), grouped inset lists (security facts), source-list sidebar with a tinted selection pill (docs), keycaps, Terminal-style command block.
 
-STORY: the visitor sees their agents at work in a native Mac window with the iPhone beside it, understands that thinking, tools, runs and approvals are visible, trusts that it's a pure client, and installs or tries the demo.
+STORY: An OpenClaw operator sees Pincer living as a real Mac/iPhone app, understands what it adds over the browser Control UI, trusts the pure-client model, and installs or tries the demo.
 
-FIRST VIEWPORT: keyshelf header (logo, Features, Security, Docs, GitHub, coral Install button). Left 5/12: two-line condensed headline at display scale, one-paragraph lede, primary "Install Pincer" (coral lamp button) and secondary "Try the demo", fine print "Docs" link. Right 7/12: the macOS homepage screenshot in a window frame on the panel field, the iPhone transcript screenshot overlapping its lower-right edge. Beneath, the jack-field line index begins at the fold.
+FIRST VIEWPORT: Toolbar header (icon + Pincer, Features, Security, Docs, GitHub, theme segmented control, filled Install). Left 5/12: headline at display scale, lede, filled "Install Pincer", bordered "Try the demo", "Why not just use the Control UI?" link, fine print. Right 7/12: a large continuous-corner tile drenched in the app-icon gradient, holding the real macOS homepage screenshot with the iPhone overlapping its corner. A sticky segmented control (System / Approvals / Gateways / Offline / Chat) begins at the fold; its thumb slides to the section in view.
 
-FORM: switchboard / telephone exchange operator's board, position 4 of the ordered grounded list, seed key f0d8cac7. Signature interaction: the line index, a jack field of feature lines whose lamp lights for the section in view and on hover or focus. Motion: lamp glow and a single staggered rise for the hero devices, nothing else. Raise from brick instructions: the three setup steps are oversized numerals on a strict module grid.
+FORM: native macOS/iOS interface language (brief-pinned; concept-seed key 66dbd038 rolled index 4 = classic Mac OS Platinum, rejected on factual grounds: it misstates the era of a macOS 15/iOS 18 client and has no iPhone analogue). Signature: the scroll-tracking segmented control + live keycaps (⌘K, ⌃⇧Space light when pressed). Motion: segmented thumb slide + one hero rise; reduced motion off.
 
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+Docs (Read): same tokens, restrained; 17px body, ~70ch, source-list sidebar, Apple semantic colours for asides (note blue, tip green, caution orange, danger red); coral reserved for links, selection and actions.
