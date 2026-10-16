@@ -482,8 +482,9 @@ public final class SessionManagerModel {
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
-    // Optional, not `= {}` defaults: Swift 6.2 (Xcode 26) miscompiles a sync closure literal used as the
-    // default for an `@MainActor … async` parameter; awaiting it corrupts the task allocator (#952).
+    // Optional, not `= {}` defaults: on Xcode 26.6 CI, awaiting these callbacks built from a sync closure
+    // literal default argument corrupted the task allocator, while the same closures passed explicitly
+    // didn't (#952). The toolchain root cause is unconfirmed; keep `= nil` and call with `?()`.
     @ObservationIgnored private let onTranscriptChanged: TranscriptChanged?
     @ObservationIgnored private let onSessionsChanged: (@MainActor () async -> Void)?
     @ObservationIgnored private var loadGeneration = 0

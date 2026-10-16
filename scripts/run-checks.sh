@@ -124,11 +124,14 @@ if complete_swift_test printf '◇ Test run started.\n' > /dev/null ||
     echo "complete_swift_test is broken"
     exit 1
 fi
-# …and fail a helper abort outright: it is never retried.
-if complete_swift_test sh -c "printf '◇ Test run started.\\nerror: unexpected signal code 6\\n'; exit 1" > /dev/null; then
+# …and fail a helper abort outright: it is never retried, even when a second attempt would pass.
+abort_once=$(mktemp -u)
+if complete_swift_test sh -c "if [ -e '$abort_once' ]; then printf '◇ Test run started.\\n✔ Test run with 1 test in 1 suite passed after 0.1 seconds.\\n'; else : > '$abort_once'; printf '◇ Test run started.\\nerror: unexpected signal code 6\\n'; exit 1; fi" > /dev/null; then
+    rm -f "$abort_once"
     echo "complete_swift_test accepts a helper abort"
     exit 1
 fi
+rm -f "$abort_once"
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)

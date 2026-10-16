@@ -51,8 +51,9 @@ private func checkSessionDetailDeletion(key: String, demo: Bool, oldFails: Bool,
           "\(label): old describe completion cannot resurrect metadata or attach an obsolete error")
 }
 
-/// A delete of another session, while a describe is held, keeps that describe's publication. It also
-/// awaits the model's default change callbacks, whose `= {}` defaults corrupted the task allocator (#952).
+/// A delete of another session, while a describe is held, keeps that describe's publication, through the
+/// model's default (nil) change callbacks. Behaviour coverage for #952; the crash repro itself is
+/// `SessionDetailOwnershipTests`, which aborted the Xcode 26.6 test helper before the fix.
 @MainActor
 private func checkUnrelatedDeleteKeepsDetail() async {
     let key = "agent:main:dashboard:alpha", other = "agent:main:dashboard:beta"

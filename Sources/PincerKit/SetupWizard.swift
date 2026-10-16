@@ -545,13 +545,14 @@ public final class SetupWizardModel {
         public var methods: @MainActor () -> Set<String>?
         public var agentStatus: @MainActor () -> SetupStepStatus
         /// Refreshes what the store keeps (health, agents); run alongside `load()`'s own checks.
-        public var refresh: @MainActor () async -> Void
+        /// Optional rather than defaulted to `{}`: see `SessionManagerModel.onSessionsChanged` (#952).
+        public var refresh: (@MainActor () async -> Void)?
 
         public init(request: @escaping Request,
                     hasAdmin: @escaping @MainActor () -> Bool = { false },
                     methods: @escaping @MainActor () -> Set<String>? = { nil },
                     agentStatus: @escaping @MainActor () -> SetupStepStatus = { .notChecked(nil) },
-                    refresh: @escaping @MainActor () async -> Void = {})
+                    refresh: (@MainActor () async -> Void)? = nil)
         {
             self.refresh = refresh
             self.request = request
@@ -810,7 +811,7 @@ public final class SetupWizardModel {
             self.loadState = .running
             async let skills: Void = self.loadSkills()
             let refresh = self.environment.refresh
-            async let store: Void = refresh()
+            async let store: Void? = refresh?()
             _ = await (skills, store)
         } while self.reloadRequested
         self.loadState = .idle
