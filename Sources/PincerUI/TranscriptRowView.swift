@@ -311,10 +311,10 @@ extension TranscriptRowView {
             }
         }
         var pageItems: [UIMenuElement] = []
-        var hit: UIView? = self.hitTest(location, with: nil)
-        while let view = hit, view !== self {
+        var cardHit: UIView? = self.hitTest(location, with: nil)
+        while let view = cardHit, view !== self {
             if let card = view as? TranscriptPagePreviewView { pageItems = card.menuElements }
-            hit = view.superview
+            cardHit = view.superview
         }
         let items = self.copyItems(extra: extra)
         let sendItems: [UIMenuElement] = self.sendActions().map { action in

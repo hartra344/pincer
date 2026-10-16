@@ -1163,6 +1163,16 @@
         }
       }
     },
+    ". Web page: %@, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ". Web page: %1$@, %2$@"
+          }
+        }
+      }
+    },
     "1 attachment": {
       "localizations": {
         "en": {
@@ -4399,6 +4409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Link"
+          }
+        }
+      }
+    },
+    "Copy Link to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link to %@"
           }
         }
       }

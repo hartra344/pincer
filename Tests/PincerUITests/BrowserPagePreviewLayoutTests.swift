@@ -56,9 +56,10 @@ struct BrowserPagePreviewLayoutTests {
             let (layout, _) = Self.make(tools: [Self.tool("c1")], expanded: expanded)
             let kinds = layout.parts.map(\.part.kind)
             let card = try #require(kinds.firstIndex(of: .pagePreview))
-            let header = try #require(kinds.firstIndex(of: .thinkingHeader))
             let text = try #require(kinds.lastIndex(of: .text))
-            #expect(header < card && card < text, "expanded=\(expanded)")
+            // With steps hidden by default the cards lead the reply area.
+            if let header = kinds.firstIndex(of: .thinkingHeader) { #expect(header < card) }
+            #expect(card < text, "expanded=\(expanded)")
             if expanded, let tool = kinds.firstIndex(of: .tool) { #expect(tool < card) }
             #expect(Self.cards(layout).count == 1)
         }
@@ -124,5 +125,33 @@ struct BrowserPagePreviewLayoutTests {
         let page = Self.tool("c1").browserPage!
         renderer.openBrowserPage(page)
         #expect(opened == page)
+    }
+
+    @Test func decodingTheImageDoesNotChangeTheRowHeight() throws {
+        let og = Self.ref("og-jump")
+        let url = URL(string: "https://example.com/docs?a=1")!
+        var before: CGFloat = 0
+        var after: CGFloat = 0
+        _ = Self.make(tools: [Self.tool("c1")]) { gateway in
+            gateway.pagePreviews.seed(LinkPreview(title: nil, image: og, favicon: nil), for: url)
+        }
+        let (first, _) = Self.make(tools: [Self.tool("c1")]) { gateway in
+            gateway.pagePreviews.seed(LinkPreview(title: nil, image: og, favicon: nil), for: url)
+        }
+        before = first.height
+        let (second, _) = Self.make(tools: [Self.tool("c1")]) { gateway in
+            gateway.pagePreviews.seed(LinkPreview(title: nil, image: og, favicon: nil), for: url)
+            guard let cg = Self.pixel() else { return }
+            gateway.images.store(cg, key: og.cacheKey)
+        }
+        after = second.height
+        guard case let .pagePreview(card)? = Self.cards(second).first?.part else { Issue.record("no card"); return }
+        #expect(card.image != nil, "the decoded image is drawn")
+        #expect(before == after, "arrival of pixels must not move rows below the card")
+    }
+
+    static func pixel() -> CGImage? {
+        CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 0,
+                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage()
     }
 }
