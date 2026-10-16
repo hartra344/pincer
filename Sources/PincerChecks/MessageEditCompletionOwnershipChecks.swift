@@ -146,6 +146,7 @@ import Foundation
     var arrived = false
     var held: CheckedContinuation<Void, Never>?
     chat.historyResponseProbe = { await withCheckedContinuation { arrived = true; held = $0 } }
+    // (Only the first reply is held: the probe is cleared before the switch.)
     let stale = Task { await chat.load(force: true) }
     guard await waitFor("stale history reply held", timeout: 25, { arrived }) else { check(false, "history reply was held"); return }
     chat.historyResponseProbe = nil

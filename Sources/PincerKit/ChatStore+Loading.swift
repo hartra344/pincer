@@ -142,7 +142,7 @@ extension ChatStore {
             params["limit"] = .number(Double(self.historyLimit))
             let result = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
             #if DEBUG
-            await self.historyResponseProbe?()
+            try await self.historyResponseProbe?()
             #endif
             // A newer load (a branch switch or rewind reload) owns the transcript now: this reply predates it.
             guard self.loadGeneration == generation else { return }
@@ -165,6 +165,7 @@ extension ChatStore {
         } catch is CancellationError {
             return
         } catch {
+            guard self.loadGeneration == generation else { return } // A newer load owns the outcome now.
             if self.errorMessageRevision == feedbackRevision && (feedbackAuthority?.isCurrent(in: self) ?? true) {
                 self.errorMessage = error.localizedDescription
             }

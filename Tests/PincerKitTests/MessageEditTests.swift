@@ -2,15 +2,18 @@ import Foundation
 import Testing
 @testable import PincerKit
 
+/// Holds `chat.history` replies after they arrive; every probe call parks until `release()`.
 @MainActor private final class HistoryReplyHold {
     var arrived = false
+    var failsOnRelease = false
     private var released = false
     private var held: CheckedContinuation<Void, Never>?
-    func holdFirst() async {
+    func hold() async throws {
         self.arrived = true
         await withCheckedContinuation { continuation in
             if self.released { continuation.resume() } else { self.held = continuation }
         }
+        if self.failsOnRelease { throw GatewayError.notConnected }
     }
     func release() {
         self.released = true
@@ -268,8 +271,9 @@ struct MessageEditTests {
         let edited = chat.items.map(\.plainText)
         #expect(edited != original)
 
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
         let held = HistoryReplyHold()
-        chat.historyResponseProbe = { await held.holdFirst() }
+        chat.historyResponseProbe = { try await held.hold() }
         let stale = Task { await chat.load(force: true) } // Replied with the edited branch, held before applying.
         await self.settle { held.arrived }
         chat.historyResponseProbe = nil
@@ -278,6 +282,57 @@ struct MessageEditTests {
         held.release()
         await stale.value
         #expect(chat.items.map(\.plainText) == original, "the older reply must be dropped")
+        await self.finish(gateway)
+    }
+
+    /// #1010: a branch switch arriving while another invalidation of the chat is mid-fetch must still reload last.
+    @Test func branchSwitchDuringAnInFlightInvalidationStillLoadsTheSwitchedBranch() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        await chat.refreshBranches()
+        let original = chat.items.map(\.plainText)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        guard let old = chat.branches.first(where: { !$0.active }) else { Issue.record("no old branch"); return }
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
+
+        let held = HistoryReplyHold()
+        chat.historyResponseProbe = { try await held.hold() }
+        let key = chat.sessionKey
+        let inFlight = Task { await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) }
+        await self.settle { held.arrived }
+        chat.historyResponseProbe = nil
+        #expect(await chat.switchBranch(to: old.leafEntryId))
+        held.release() // The in-flight reload now applies a reply fetched before the switch.
+        await inFlight.value
+        await self.settle { chat.items.map(\.plainText) == original }
+        #expect(chat.items.map(\.plainText) == original, "the switch's reload must run after the in-flight one")
+        await self.finish(gateway)
+    }
+
+    /// #1010: a fetch superseded by a newer load must not show its failure while the newer one is still loading.
+    @Test func supersededHistoryFailureStaysSilent() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
+        let failing = HistoryReplyHold()
+        failing.failsOnRelease = true
+        let newer = HistoryReplyHold()
+        var calls = 0
+        chat.historyResponseProbe = { calls += 1; try await (calls == 1 ? failing : newer).hold() }
+        let first = Task { await chat.load(force: true) }
+        await self.settle { failing.arrived }
+        let second = Task { await chat.load(force: true) }
+        await self.settle { newer.arrived }
+        failing.release()
+        await first.value
+        #expect(chat.errorMessage == nil, "a superseded failure shows no banner")
+        newer.release()
+        await second.value
+        #expect(chat.errorMessage == nil && chat.hasLoaded)
+        chat.historyResponseProbe = nil
         await self.finish(gateway)
     }
 

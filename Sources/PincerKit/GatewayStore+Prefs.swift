@@ -496,8 +496,25 @@ extension GatewayStore {
                 await DraftStore.save(ComposerDraft(text: text), gatewayId: self.id, sessionKey: key)
             }
         }
-        guard self.invalidatingTranscripts.insert(key).inserted else { return }
+        // An invalidation already in flight may have fetched before this change (a branch switch, a rewind):
+        // queue a rerun instead of dropping it, so the final reload always follows the last change.
+        guard self.invalidatingTranscripts.insert(key).inserted else {
+            if self.pendingTranscriptChanges[key]?.change != .deleted {
+                self.pendingTranscriptChanges[key] = PendingTranscriptChange(change: change, feedbackAuthority: feedbackAuthority)
+            }
+            return
+        }
         defer { self.invalidatingTranscripts.remove(key) }
+        var current = PendingTranscriptChange(change: change, feedbackAuthority: feedbackAuthority)
+        while true {
+            await self.invalidateTranscript(key: key, change: current.change, feedbackAuthority: current.feedbackAuthority)
+            guard let next = self.pendingTranscriptChanges.removeValue(forKey: key) else { return }
+            current = next
+        }
+    }
+
+    private func invalidateTranscript(key: String, change: SessionTranscriptChange,
+                                      feedbackAuthority: ChatStore.MessageEditFeedbackAuthority?) async {
         await self.cancelHeadlessFill(key)
         if change == .deleted {
             await self.bookmarkStore.removeConfirmedSessions([key])
