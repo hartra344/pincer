@@ -149,7 +149,7 @@ stdout_is_nonblocking() { perl -MFcntl -e 'my $f = fcntl(STDOUT, F_GETFL, 0) // 
 # The running helper must leave a piped stdout blocking, and blocking_stdout must undo O_NONBLOCK.
 if ! {
     (
-        start_progress "$(mktemp -d)" 0.05
+        start_progress "$LOGS" 0.05
         sleep 0.3
         stdout_is_nonblocking && { stop_progress; exit 1; }
         stop_progress
