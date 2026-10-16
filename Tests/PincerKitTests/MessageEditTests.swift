@@ -2,6 +2,24 @@ import Foundation
 import Testing
 @testable import PincerKit
 
+@MainActor private final class HistoryReplyHold {
+    var arrived = false
+    private var released = false
+    private var held: CheckedContinuation<Void, Never>?
+    func holdFirst() async {
+        self.arrived = true
+        await withCheckedContinuation { continuation in
+            if self.released { continuation.resume() } else { self.held = continuation }
+        }
+    }
+    func release() {
+        self.released = true
+        let continuation = self.held
+        self.held = nil
+        continuation?.resume()
+    }
+}
+
 /// #41: Branch from Here, Edit & Resend and Regenerate, against the demo Gateway's seeded garden chat
 /// (two user turns; every test forks it first so the seed stays untouched).
 @MainActor
@@ -233,6 +251,33 @@ struct MessageEditTests {
         #expect(await chat.switchBranch(to: old.leafEntryId))
         await self.settle { chat.items.map(\.plainText) == original }
         #expect(chat.items.map(\.plainText) == original)
+        await self.finish(gateway)
+    }
+
+    /// #1010: a history reply that left the Gateway before a branch switch must not overwrite the switched branch.
+    @Test func staleHistoryReplyCannotOverwriteASwitchedBranch() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        await chat.refreshBranches()
+        let original = chat.items.map(\.plainText)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        guard let old = chat.branches.first(where: { !$0.active }) else { Issue.record("no old branch"); return }
+        let edited = chat.items.map(\.plainText)
+        #expect(edited != original)
+
+        let held = HistoryReplyHold()
+        chat.historyResponseProbe = { await held.holdFirst() }
+        let stale = Task { await chat.load(force: true) } // Replied with the edited branch, held before applying.
+        await self.settle { held.arrived }
+        chat.historyResponseProbe = nil
+        #expect(await chat.switchBranch(to: old.leafEntryId))
+        await self.settle { chat.items.map(\.plainText) == original }
+        held.release()
+        await stale.value
+        #expect(chat.items.map(\.plainText) == original, "the older reply must be dropped")
         await self.finish(gateway)
     }
 

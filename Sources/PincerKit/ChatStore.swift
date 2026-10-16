@@ -281,6 +281,8 @@ public final class ChatStore: Identifiable {
         self.cancelAttachmentPreparations()
     }
 #if DEBUG
+    /// Runs after a `chat.history` reply arrives and before it is applied (tests hold a reply here).
+    @ObservationIgnored var historyResponseProbe: (@MainActor () async -> Void)?
     /// Neutral test gate after edit ownership is captured, immediately before the real RPC.
     @ObservationIgnored var messageEditRewindAdmissionProbe: (@MainActor () async -> Void)?
     /// Neutral test gate after the real rewind request completes; never substitutes a response.

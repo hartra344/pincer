@@ -115,4 +115,45 @@ import Foundation
         } catch { check(false, "actual history read succeeds") }
     }
 }
+
+/// #1010: a `chat.history` reply that predates a branch switch is dropped instead of overwriting the switched branch.
+@MainActor func runDemoStaleHistoryReplyChecks() async {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demoInstantPacing(), defaults: defaults)
+    gateway.cacheRoot = nil; gateway.outboxRoot = nil; gateway.notifier = nil
+    gateway.start(); gateway.reconnectIfNeeded()
+    defer { gateway.stop() }
+    guard await waitFor("stale history Demo connection", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
+        check(false, "stale history Demo is connected"); return
+    }
+    let source = gateway.chat(for: "agent:main:dashboard:garden")
+    await source.load()
+    guard let assistant = source.items.last(where: { $0.role == .assistant && $0.isCommittedEntry }),
+          let key = await source.branch(from: assistant.id) else { check(false, "actual Demo fork succeeds"); return }
+    let chat = gateway.chat(for: key)
+    await chat.load()
+    await chat.refreshBranches()
+    let original = chat.items.map(\.plainText)
+    guard let user = chat.items.last(where: { $0.role == .user && $0.isCommittedEntry }), chat.beginEdit(user.id) else {
+        check(false, "edit begins"); return
+    }
+    _ = await chat.sendEdit("something else", attachments: [])
+    let branched = await waitFor("edit branch settles", timeout: 25) {
+        !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2
+    }
+    guard branched, let old = chat.branches.first(where: { !$0.active }) else { check(false, "edit created a second branch"); return }
+    var arrived = false
+    var held: CheckedContinuation<Void, Never>?
+    chat.historyResponseProbe = { await withCheckedContinuation { arrived = true; held = $0 } }
+    let stale = Task { await chat.load(force: true) }
+    guard await waitFor("stale history reply held", timeout: 25, { arrived }) else { check(false, "history reply was held"); return }
+    chat.historyResponseProbe = nil
+    let didSwitch = await chat.switchBranch(to: old.leafEntryId)
+    check(didSwitch, "branch switch succeeds while an older history reply is held")
+    let switched = await waitFor("switched branch loads", timeout: 25) { chat.items.map(\.plainText) == original }
+    held?.resume()
+    await stale.value
+    check(switched && chat.items.map(\.plainText) == original, "an older history reply cannot overwrite the switched branch")
+}
 #endif
