@@ -35,6 +35,7 @@ if name == "swift":
 if name == "node":
     if any(x.endswith("checks-pending-progress.mjs") for x in sys.argv[1:]):
         with open(root / "progress-readers", "a") as readers: readers.write(str(os.getpid()) + "\n")
+        with open(root / "progress-stdout", "a") as stdout: stdout.write(str(os.fstat(1).st_ino) + "\n")
         os.execv(os.environ["CHECKS_FIXTURE_REAL_NODE"], [os.environ["CHECKS_FIXTURE_REAL_NODE"]] + sys.argv[1:])
     port = os.environ["PORT"]
     (root / "mocks" / (port + ".pid")).write_text(str(os.getpid()))
@@ -87,11 +88,28 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                    CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "", CHECKS_LOG_DIR=str(root / "logs"),
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
+        # The runner's own pipe, so the fixture knows which stdout the progress helper must not share:
+        # Node makes a pipe non-blocking for every writer, and the runner's output then fails with EAGAIN.
+        read_end, write_end = os.pipe()
+        runner_stdout = os.fstat(write_end).st_ino
         process = subprocess.Popen(["/bin/bash", str(root / "scripts" / "run-checks.sh")],
-                                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   env=env, stdout=write_end, stderr=subprocess.STDOUT,
                                    start_new_session=True, bufsize=0)
+        os.close(write_end)
         selector = selectors.DefaultSelector()
-        selector.register(process.stdout, selectors.EVENT_READ)
+        selector.register(read_end, selectors.EVENT_READ)
+
+        def read_to_end(timeout):
+            deadline, output = time.monotonic() + timeout, bytearray()
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0: raise subprocess.TimeoutExpired(process.args, timeout)
+                if selector.select(timeout=remaining):
+                    chunk = os.read(read_end, 65536)
+                    if not chunk: break
+                    output.extend(chunk)
+            process.wait(timeout=max(deadline - time.monotonic(), 0.1))
+            return bytes(output)
         before_release = bytearray()
         released = False
         try:
@@ -114,13 +132,15 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
             else:
                 with open(root / "unit-gate", "w") as gate: gate.write("release")
                 released = True
-            after_release, _ = process.communicate(timeout=10)
+            after_release = read_to_end(10)
             wait_until(lambda: len(list((root / "mocks").glob("*.stopped"))) == 6)
             output = bytes(before_release) + after_release
             text = output.decode("utf-8", errors="replace")
             progress_lines = [line for line in bytes(before_release).splitlines() if b"[checks progress]" in line]
             reader_file = root / "progress-readers"
             reader_alive = False
+            stdout_file = root / "progress-stdout"
+            progress_stdout = stdout_file.read_text().splitlines() if stdout_file.exists() else []
             reader_count = 0
             if reader_file.exists():
                 readers = reader_file.read_text().splitlines()
@@ -140,8 +160,9 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 "allMocksCleaned": len(list((root / "mocks").glob("*.stopped"))) == 6,
                 "progressReaderCleaned": not reader_alive,
                 "soloPerformanceHasNoReader": reader_count == 1 if helper.exists() else reader_count == 0,
+                "progressHasItsOwnStdout": str(runner_stdout) not in progress_stdout,
             }
-            assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader"]
+            assertions = ["pendingOutputBounded", "pendingContainsNoLogPayload", "allLanesCompleted", "statusPreserved", "allMocksCleaned", "progressReaderCleaned", "soloPerformanceHasNoReader", "progressHasItsOwnStdout"]
             if interrupt: assertions.remove("allLanesCompleted")
             if require_progress: assertions.append("pendingVisible")
             if require_identity: assertions.append("safeUnitIdentityVisible")
@@ -154,6 +175,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
             return 0
         finally:
             selector.close()
+            os.close(read_end)
             if process.poll() is None:
                 if not released:
                     try:

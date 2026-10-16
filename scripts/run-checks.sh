@@ -137,6 +137,7 @@ rm -f "$abort_once"
 # while the progress helper shared our stdout, printing a big lane log could fail with EAGAIN ("echo:
 # write error: Resource temporarily unavailable") and drop the log or fail CI (#1010). The helper gets
 # its own pipe, and stdout is put back to blocking before each lane's log is printed.
+# scripts/test_checks_pending_progress.py checks the helper never writes to our stdout.
 start_progress() {
     node scripts/checks-pending-progress.mjs "$@" > >(cat) &
     progress_pid=$!
@@ -145,27 +146,6 @@ blocking_stdout() {
     perl -MFcntl -e 'my $f = fcntl(STDOUT, F_GETFL, 0) // exit 0;
         exit 0 unless $f & O_NONBLOCK; fcntl(STDOUT, F_SETFL, $f & ~O_NONBLOCK) or exit 1'
 }
-stdout_is_nonblocking() { perl -MFcntl -e 'my $f = fcntl(STDOUT, F_GETFL, 0) // exit 1; exit(($f & O_NONBLOCK) ? 0 : 1)'; }
-# The running helper must leave a piped stdout blocking, and blocking_stdout must undo O_NONBLOCK.
-if ! {
-    (
-        start_progress "$LOGS" 0.05
-        sleep 0.3
-        stdout_is_nonblocking && { stop_progress; exit 1; }
-        stop_progress
-        node -e 'process.stdout.write(""); setTimeout(() => {}, 1000)' &
-        node_pid=$!
-        sleep 0.3
-        stdout_is_nonblocking || { kill $node_pid; exit 0; } # this Node no longer sets it: nothing to undo
-        blocking_stdout
-        stdout_is_nonblocking && { kill $node_pid; exit 1; }
-        kill $node_pid
-    ) | cat
-    [ "${PIPESTATUS[0]}" -eq 0 ]
-}; then
-    echo "the progress helper or blocking_stdout leaves stdout non-blocking"
-    exit 1
-fi
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
