@@ -518,9 +518,8 @@ enum Suites {
         LiveSection("Location transport (live)") { url, token in await runLiveLocationTransportChecks(url: url, token: token) },
         LiveSection("Demo removal offer (live)") { url, token in await runLiveDemoRemovalOfferChecks(url: url, token: token) },
         LiveSection("Gateway Settings sidebar (live)") { url, token in await runLiveGatewaySettingsSidebarChecks(url: url, token: token) },
-        // Before the full live run, which stops the seeded run and helper itself.
-        LiveSection("Session abort (live)") { url, token in await runLiveSessionAbortChecks(url: url, token: token) },
         LiveSection(title: { "Live against \($0)" }) { url, token in await runLive(url: url, token: token) },
+        LiveSection("Session abort (live)") { url, token in await runLiveSessionAbortChecks(url: url, token: token) },
     ]
 
     /// Against a (mock) Gateway, second half.

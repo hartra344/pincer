@@ -135,6 +135,44 @@ struct SessionAbortTests {
         #expect(chat.errorMessage == nil)
     }
 
+    @Test func emptyMethodsListTriesSessionsAbort() async throws {
+        let h = try await Harness(methods: [])
+        defer { h.finish() }
+        #expect(await h.store.chat(for: Self.key).abortSession())
+        #expect(h.fake.requests("sessions.abort").count == 1)
+        #expect(h.fake.requests("chat.abort").isEmpty)
+    }
+
+    @Test func emptyMethodsListFallsBackOnUnknownMethod() async throws {
+        let h = try await Harness(methods: [])
+        defer { h.finish() }
+        h.fake.reply(to: "sessions.abort", .error(code: "INVALID_REQUEST", message: "unknown method: sessions.abort"))
+        let chat = h.store.chat(for: Self.key)
+        #expect(await chat.abortSession())
+        #expect(h.fake.requests("chat.abort").count == 1)
+        #expect(chat.errorMessage == nil)
+    }
+
+    @Test func warningSurfacesButStillSucceeds() async throws {
+        let h = try await Harness()
+        defer { h.finish() }
+        h.fake.reply(to: "sessions.abort", .result(["ok": true, "abortedRunId": "run-1", "status": "aborted", "warning": "1 child could not be stopped"]))
+        let chat = h.store.chat(for: Self.key)
+        #expect(await chat.abortSession())
+        #expect(chat.errorMessage?.hasPrefix("Couldn’t stop everything:") == true)
+        #expect(chat.errorMessage?.contains("1 child could not be stopped") == true)
+    }
+
+    @Test func exactRunAbortFailureSetsCouldntStop() async throws {
+        let h = try await Harness()
+        defer { h.finish() }
+        h.fake.reply(to: "chat.abort", .error(code: "INVALID_REQUEST", message: "boom"))
+        let chat = h.store.chat(for: Self.key)
+        chat.live = LiveRun(runId: "run-live")
+        await chat.abort()
+        #expect(chat.errorMessage?.hasPrefix("Couldn’t stop") == true)
+    }
+
     // MARK: Failure
 
     @Test func errorSetsErrorMessageAndReturnsFalse() async throws {
