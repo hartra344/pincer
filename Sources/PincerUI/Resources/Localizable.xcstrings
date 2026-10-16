@@ -5073,6 +5073,36 @@
         }
       }
     },
+    "Couldn’t stop everything: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t stop everything: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t stop: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t stop: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t stop: not connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t stop: not connected"
+          }
+        }
+      }
+    },
     "Couldn’t switch branch: %@": {
       "localizations": {
         "en": {
