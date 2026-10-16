@@ -201,6 +201,15 @@ struct UsageExportTests {
         #expect(UsageExport.csvCell("\r\n=1") == "\"'\r\n=1\"")
     }
 
+    /// `new Date(ms).toISOString()` keeps the exact millisecond; a fractional `Date` lost one.
+    @Test func isoTimestampsKeepExactMilliseconds() {
+        #expect(UsageExport.isoTimestamp(.number(1_760_635_090_007)) == "2025-10-16T17:18:10.007Z")
+        #expect(UsageExport.isoTimestamp(.number(1_763_831_890_001)) == "2025-11-22T17:18:10.001Z")
+        #expect(UsageExport.isoTimestamp(.number(1_763_831_890_000)) == "2025-11-22T17:18:10.000Z")
+        #expect(UsageExport.isoTimestamp(.number(-1)) == "1969-12-31T23:59:59.999Z")
+        #expect(UsageExport.isoTimestamp(.string("x")) == nil)
+    }
+
     @Test func jsNumbers() {
         #expect(UsageExport.csvCell(.number(1)) == "1")
         #expect(UsageExport.csvCell(.number(1e-5)) == "0.00001")

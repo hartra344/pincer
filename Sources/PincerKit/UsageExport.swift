@@ -261,7 +261,11 @@ public enum UsageExport {
     /// `new Date(ms).toISOString()`: UTC with milliseconds.
     static func isoTimestamp(_ value: JSONValue?) -> String? {
         guard let ms = value?.double, ms.isFinite, abs(ms) <= 8.64e15 else { return nil }
-        let date = Date(timeIntervalSince1970: (ms.rounded(.down)) / 1000)
-        return date.formatted(Date.ISO8601FormatStyle(includingFractionalSeconds: true, timeZone: .gmt))
+        // Whole milliseconds: a fractional Date would be truncated a millisecond early.
+        let whole = Int64(ms.rounded(.down))
+        let millis = ((whole % 1000) + 1000) % 1000
+        let date = Date(timeIntervalSince1970: TimeInterval((whole - millis) / 1000))
+        let seconds = date.formatted(Date.ISO8601FormatStyle(timeZone: .gmt))
+        return String(seconds.dropLast()) + String(format: ".%03lldZ", millis)
     }
 }

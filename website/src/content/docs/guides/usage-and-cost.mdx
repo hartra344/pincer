@@ -109,7 +109,7 @@ The CSV columns use the same names as the Control UI's exports, so files from ei
 
 Costs are in US dollars, as the gateway estimated them: requests without pricing aren't included, so check the JSON's `missingCostEntries` before treating a cost as complete. A cell is empty when the gateway didn't report that value or says the session's usage is unavailable. Text that a spreadsheet could run as a formula, such as a label starting with `=`, is prefixed with `'`.
 
-Pincer fetches a fresh copy of the range for each export and builds the file in the background, so the page stays responsive. If the gateway is still counting some sessions, the export stops with *Usage data is incomplete* rather than saving partial numbers: refresh and try again in a moment, or pick a shorter range. **Export** is unavailable while you're not connected or the gateway doesn't report session usage.
+Pincer fetches a fresh copy of the range for each export and builds the file in the background, so the page stays responsive. If the gateway is still counting some sessions, the export stops with *Usage data is incomplete* rather than saving partial numbers: refresh and try again in a moment, or pick a shorter range. **Export** is unavailable while you're not connected or the gateway doesn't report session usage. Older gateways that don't report daily figures can't make a **Daily CSV**; Pincer says so instead of saving an empty file.
 
 ## Session usage
 
