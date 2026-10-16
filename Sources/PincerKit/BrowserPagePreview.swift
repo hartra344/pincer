@@ -9,6 +9,8 @@ public struct BrowserPagePreview: Hashable, Sendable {
     public let tabKey: String
 
     public var host: String { self.url.host(percentEncoded: false) ?? self.url.absoluteString }
+    /// Host with its port when the URL has one (`example.com:8443`).
+    var hostAndPort: String { self.url.port.map { "\(self.host):\($0)" } ?? self.host }
     public var displayTitle: String { self.title ?? self.host }
     public var displayURL: String {
         var text = self.host
@@ -60,10 +62,10 @@ public struct BrowserPagePreview: Hashable, Sendable {
             return (linkTitle, self.displayURL)
         }
         let path = self.url.path(percentEncoded: false)
-        guard path != "/" else { return (self.host, self.displayURL) }
+        guard path != "/" else { return (self.hostAndPort, self.displayURL) }
         var rest = path
         if let query = self.url.query(percentEncoded: false), !query.isEmpty { rest += "?\(query)" }
-        return (self.host, rest)
+        return (self.hostAndPort, rest)
     }
 
     /// The latest successful result per tab, ordered by when that result came, at most `limit` (the most recent tabs).

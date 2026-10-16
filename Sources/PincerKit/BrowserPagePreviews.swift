@@ -52,6 +52,15 @@ public final class BrowserPagePreviews {
         self.finishStore(preview: preview, url: url, bytes: bytes)
     }
 
+    /// Test seam: completes a request as `load` would, without the network.
+    package func complete(_ url: URL, response: JSONValue?, responded: Bool) {
+        self.inFlight.insert(url)
+        self.active += 1
+        self.finish(url, response.flatMap { Self.parse($0) }, responded: responded, epoch: self.epoch)
+    }
+
+    package func isBackingOff(_ url: URL) -> Bool { self.failedAt[url] != nil }
+
     public func preview(for url: URL) -> LinkPreview? { self.entries[url] }
 
     public func screenshot(forTab key: String) -> ImageRef? { self.screenshots[key] }
@@ -84,9 +93,16 @@ public final class BrowserPagePreviews {
             let epoch = self.epoch
             let connection = gateway.connection
             Task { [weak self] in
-                let result = try? await connection.request(Self.method, .object(["url": .string(url.absoluteString)]), timeout: 20)
+                var result: JSONValue?
+                var responded = true
+                do {
+                    result = try await connection.request(Self.method, .object(["url": .string(url.absoluteString)]), timeout: 20)
+                } catch {
+                    // Only an answer from the Gateway counts as a failure to back off from.
+                    responded = !(error is CancellationError) && !Task.isCancelled && (self?.gateway?.state.isConnected ?? false)
+                }
                 let parsed = await Task.detached(priority: .utility) { result.flatMap { Self.parse($0) } }.value
-                self?.finish(url, parsed, epoch: epoch)
+                self?.finish(url, parsed, responded: responded, epoch: epoch)
             }
         }
     }
@@ -117,13 +133,13 @@ public final class BrowserPagePreviews {
         self.failedAt = [:]
     }
 
-    private func finish(_ url: URL, _ parsed: (LinkPreview, Int)?, epoch: Int) {
+    private func finish(_ url: URL, _ parsed: (LinkPreview, Int)?, responded: Bool = true, epoch: Int) {
         guard epoch == self.epoch else { return }
         self.inFlight.remove(url)
         self.active -= 1
         defer { self.pump() }
         guard let (preview, bytes) = parsed else {
-            self.failedAt[url] = Date()
+            if responded { self.failedAt[url] = Date() }
             return
         }
         self.failedAt[url] = nil
