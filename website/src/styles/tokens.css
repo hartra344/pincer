@@ -1,31 +1,37 @@
 /*
- * Pincer site tokens: a switchboard in telephone-gray-green enamel with coral lamps.
- * Coral (the Lobster accent) means "lit": primary action, active line, needs attention.
- * Shared by the landing page and the Starlight theme (docs.css). Type is the Apple system stack
- * throughout (SF Pro on Apple devices), matching the native app; no web fonts.
- * Contrast (WCAG): text/bg ≥ 13:1, muted/bg ≥ 5.3:1, lamp-text ≥ 5.3:1 on bg and panel in both modes.
+ * Pincer site tokens: the Mac and iPhone system look, with Pincer coral as the one system tint.
+ * Neutrals follow Apple's system grays (window ground, grouped ground, separators, labels).
+ * Coral is the accent colour role: filled default buttons, links, selection and the current item.
+ * The app icon's coral-to-red gradient is the single brand field (the hero tile and closing).
+ * Type is the Apple system stack throughout (SF Pro on Apple devices), matching the app; no web fonts.
+ * Contrast (WCAG): text/bg ≥ 15:1, muted ≥ 4.6:1 on bg and grouped, tint-text ≥ 4.8:1,
+ * white on the tint fill 4.7:1, in both modes.
  */
 :root {
 	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
 	--font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 
-	/* Dark enamel (default) */
-	--pc-bg: #17211e;
-	--pc-panel: #1f2b27;
-	--pc-raised: #283632;
-	--pc-line: rgb(200 230 215 / 0.13);
-	--pc-line-strong: rgb(200 230 215 / 0.24);
-	--pc-text: #e9f0ec;
-	--pc-muted: #a9b8b1;
-	--pc-lamp: #f2674f; /* fill for lit lamps and the primary button */
-	--pc-lamp-ink: #1a0e0b; /* text on a lamp fill */
-	--pc-lamp-text: #ff8a70; /* coral used as text/links on the ground */
-	--pc-lamp-glow: rgb(242 103 79 / 0.45);
-	--pc-lamp-off: #3a4a44;
-	--pc-brass: #c9a45c;
-	--pc-socket: #0e1513;
-	--pc-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 18px 40px -12px rgb(0 0 0 / 0.55);
+	/* Dark (default) */
+	--pc-bg: #161618; /* window ground */
+	--pc-grouped: #1c1c1e; /* grouped ground: sidebars, bands */
+	--pc-panel: #232325; /* inset group rows, cards on grouped */
+	--pc-raised: #2c2c2e; /* control fill: bordered buttons, keycaps */
+	--pc-bar: rgb(28 28 30 / 0.78); /* translucent toolbar */
+	--pc-line: rgb(255 255 255 / 0.09);
+	--pc-line-strong: rgb(255 255 255 / 0.16);
+	--pc-text: #f5f5f7;
+	--pc-muted: #a1a1a6;
+	--pc-tint: #d6391f; /* filled default buttons, selection pill */
+	--pc-tint-ink: #ffffff;
+	--pc-tint-text: #ff8a70; /* tint used as text and links */
+	--pc-tint-soft: rgb(255 120 90 / 0.16); /* tinted selection background */
+	--pc-code-bg: #0e0e10;
+	--pc-code-text: #f5f5f7;
+	--pc-brand: linear-gradient(160deg, #ff8a5b 0%, #d9283b 100%);
+	--pc-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px -10px rgb(0 0 0 / 0.6);
+	--pc-shadow-window: 0 0 0 0.5px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.25), 0 24px 60px -12px rgb(0 0 0 / 0.55);
+	--pc-ring: 0 0 0 3px rgb(255 138 112 / 0.55);
 
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;
@@ -37,29 +43,32 @@
 	--space-8: 4.5rem;
 	--space-9: 7rem;
 
-	--radius-s: 0.375rem;
-	--radius-m: 0.625rem;
-	--radius-l: 1rem;
+	--radius-s: 0.4375rem; /* small controls, keycaps */
+	--radius-m: 0.625rem; /* buttons, windows */
+	--radius-l: 1.375rem; /* tiles, grouped lists */
 
 	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 	color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-	--pc-bg: #e6ece8;
-	--pc-panel: #d6dfda;
-	--pc-raised: #f4f7f5;
-	--pc-line: rgb(20 40 32 / 0.12);
-	--pc-line-strong: rgb(20 40 32 / 0.22);
-	--pc-text: #14201c;
-	--pc-muted: #4a5a54;
-	--pc-lamp: #b33a25;
-	--pc-lamp-ink: #ffffff;
-	--pc-lamp-text: #a02e1c;
-	--pc-lamp-glow: rgb(214 70 45 / 0.35);
-	--pc-lamp-off: #b7c3bd;
-	--pc-brass: #7a5c22;
-	--pc-socket: #24302c;
-	--pc-shadow: 0 1px 2px rgb(20 40 32 / 0.12), 0 18px 40px -14px rgb(20 40 32 / 0.3);
+	--pc-bg: #ffffff;
+	--pc-grouped: #f5f5f7;
+	--pc-panel: #ffffff;
+	--pc-raised: #e8e8ed;
+	--pc-bar: rgb(250 250 252 / 0.8);
+	--pc-line: rgb(0 0 0 / 0.08);
+	--pc-line-strong: rgb(0 0 0 / 0.15);
+	--pc-text: #1d1d1f;
+	--pc-muted: #636366;
+	--pc-tint: #d6391f;
+	--pc-tint-ink: #ffffff;
+	--pc-tint-text: #c0311b;
+	--pc-tint-soft: rgb(214 57 31 / 0.1);
+	--pc-code-bg: #1d1d1f;
+	--pc-code-text: #f5f5f7;
+	--pc-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 10px 30px -12px rgb(0 0 0 / 0.22);
+	--pc-shadow-window: 0 0 0 0.5px rgb(0 0 0 / 0.22), 0 2px 6px rgb(0 0 0 / 0.08), 0 24px 60px -16px rgb(0 0 0 / 0.35);
+	--pc-ring: 0 0 0 3px rgb(214 57 31 / 0.4);
 	color-scheme: light;
 }

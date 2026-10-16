@@ -12,20 +12,20 @@ const installHref = `${base}/getting-started/install/`;
 	.install-link {
 		display: none;
 		align-items: center;
-		padding: 0.35rem 0.95rem;
+		padding: 0.3rem 0.85rem;
 		border-radius: var(--radius-s);
-		background: var(--pc-lamp);
-		color: var(--pc-lamp-ink);
+		background: var(--pc-tint);
+		color: var(--pc-tint-ink);
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.9375rem;
+		font-size: 0.875rem;
 		letter-spacing: 0;
 		text-decoration: none;
 		box-shadow: none;
-		transition: filter 0.15s var(--ease-out);
+		transition: background-color 0.15s var(--ease-out);
 	}
 	.install-link:hover {
-		filter: brightness(1.1);
+		background: color-mix(in srgb, var(--pc-tint) 88%, #000);
 	}
 	@media (min-width: 50rem) {
 		.install-link {

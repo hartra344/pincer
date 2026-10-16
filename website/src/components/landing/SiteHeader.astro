@@ -9,7 +9,7 @@ interface Props {
 const { href, repo } = Astro.props;
 ---
 
-<header class="keyshelf">
+<header class="toolbar">
 	<a class="brand" href={href('/')}>
 		<img src={logo.src} alt="" width="28" height="28" />
 		<span>Pincer</span>
@@ -19,11 +19,13 @@ const { href, repo } = Astro.props;
 		<a class="wide" href="#security">Security</a>
 		<a href={href('getting-started/introduction/')}>Docs</a>
 		<a class="icon-link" href={repo} aria-label="Pincer on GitHub"><Icon name="github" size={20} /></a>
-		<select id="theme-select" aria-label="Theme" hidden>
-			<option value="auto">Auto</option>
-			<option value="light">Light</option>
-			<option value="dark">Dark</option>
-		</select>
-		<a class="btn lamp install" href={href('getting-started/install/')}>Install</a>
+		<span class="popup">
+			<select id="theme-select" aria-label="Theme" hidden>
+				<option value="auto">Auto</option>
+				<option value="light">Light</option>
+				<option value="dark">Dark</option>
+			</select>
+		</span>
+		<a class="btn filled install" href={href('getting-started/install/')}>Install</a>
 	</nav>
 </header>
