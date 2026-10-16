@@ -1,11 +1,30 @@
 import PincerKit
 import SwiftUI
 
-/// Adds the Runs toolbar button and the Runs inspector to the selected chat. Applied by
+/// What the chat's single inspector slot shows. Opening one panel closes the other.
+enum ChatInspectorPanel: Hashable {
+    case runs, workspace
+}
+
+extension Binding where Value == ChatInspectorPanel? {
+    /// A Bool view of one panel: on while that panel is shown; off only clears the slot if it still holds it.
+    func isShowing(_ panel: ChatInspectorPanel) -> Binding<Bool> {
+        Binding<Bool>(get: { self.wrappedValue == panel },
+                      set: { shown in
+                          if shown { if self.wrappedValue != panel { self.wrappedValue = panel } }
+                          else if self.wrappedValue == panel { self.wrappedValue = nil }
+                      })
+    }
+}
+
+/// Adds the Runs and Browser toolbar buttons and the inspector slot to the selected chat. Applied by
 /// `ChatChrome`, outside the per-chat `.id`, so the panel stays open across chat switches.
-struct RunsPanelChrome: ViewModifier {
-    @Binding var isPresented: Bool
-    /// False while the split view's headers show their own Runs buttons (#427).
+struct ChatInspectorChrome: ViewModifier {
+    @Binding var panel: ChatInspectorPanel?
+    /// The last panel shown, so dismissal animates out the content it had instead of flashing Runs.
+    @State private var shown: ChatInspectorPanel = .runs
+    private var current: ChatInspectorPanel { self.panel ?? self.shown }
+    /// False while the split view's headers show their own Runs and Browser buttons (#427).
     var showsToolbarButton = true
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -16,8 +35,8 @@ struct RunsPanelChrome: ViewModifier {
 
     /// Trailing inspector on macOS and regular-width iPad; a sheet on compact iPhone.
     private func presented(_ compact: Bool) -> Binding<Bool> {
-        Binding(get: { self.isPresented && self.isCompact == compact },
-                set: { if $0 != self.isPresented { self.isPresented = $0 } })
+        Binding(get: { self.panel != nil && self.isCompact == compact },
+                set: { if !$0, self.panel != nil { self.panel = nil } })
     }
 
     func body(content: Content) -> some View {
@@ -25,34 +44,51 @@ struct RunsPanelChrome: ViewModifier {
             .toolbar {
                 #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {
-                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
+                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$panel.isShowing(.runs), isCompact: self.isCompact) }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if self.showsToolbarButton { BrowserToolbarButton(isPresented: self.$panel.isShowing(.workspace), isCompact: self.isCompact) }
                 }
                 #else
                 if self.showsToolbarButton {
                     ToolbarItem(placement: .primaryAction) {
-                        RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact)
+                        RunsToolbarButton(isPresented: self.$panel.isShowing(.runs), isCompact: self.isCompact)
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        BrowserToolbarButton(isPresented: self.$panel.isShowing(.workspace), isCompact: self.isCompact)
                     }
                 }
                 #endif
             }
+            .onChange(of: self.panel) { _, new in if let new { self.shown = new } }
             .inspector(isPresented: self.presented(false)) {
-                RunsPanel()
-                    .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                Group {
+                    switch self.current {
+                    case .workspace:
+                        WorkspacePanel()
+                            .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
+                    default:
+                        RunsPanel()
+                            .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
+                    }
+                }
             }
             .sheet(isPresented: self.presented(true)) {
                 NavigationStack {
-                    RunsPanel()
-                        .navigationTitle(L("Runs"))
-                        #if os(iOS)
-                        .navigationBarTitleDisplayMode(.inline)
-                        #endif
-                        .toolbar {
-                            ToolbarItem(placement: .confirmationAction) {
-                                Button(L("Done")) { self.isPresented = false }
-                            }
+                    Group {
+                        if self.current == .workspace { WorkspacePanel() } else { RunsPanel() }
+                    }
+                    .navigationTitle(self.current == .workspace ? L("Browser") : L("Runs"))
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(L("Done")) { self.panel = nil }
                         }
+                    }
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents(self.current == .workspace ? [.large] : [.medium, .large])
             }
     }
 }

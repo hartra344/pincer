@@ -267,6 +267,10 @@ public final class GatewayStore: Identifiable {
         allowsWritesWithoutAdmin: self.profile.isDemo,
         onAgentsChanged: { [weak self] in await self?.agentsDidChange() },
         onAgentDeleted: { [weak self] in self?.clearAvatarChoices(for: $0) })
+    /// The agent's live browser (`browser.request`, view-only). Needs `operator.admin`; the demo counts as Full Management.
+    @ObservationIgnored public private(set) lazy var browserPanel = BrowserPanelModel(
+        connection: self.connection, profile: { [weak self] in self?.profile ?? GatewayProfile(name: "", url: "", authMode: .none) },
+        hello: { [weak self] in self?.hello })
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
@@ -561,6 +565,7 @@ public final class GatewayStore: Identifiable {
         self.bootstrapTask = Task { await self.bootstrap(epoch: epoch) }
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
+        self.browserPanel.handleReconnect()
         self.devices.handleReconnect()
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()

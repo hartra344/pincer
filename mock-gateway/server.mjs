@@ -25,6 +25,7 @@ import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePen
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
 import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
+import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserRequest } from './browser.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
 import { handleQuestionRequest } from './questions.mjs';
@@ -78,6 +79,7 @@ const METHODS = [
   'progressCard.put',
   ...CONFIG_METHODS,
   ...MCP_METHODS,
+  ...BROWSER_METHODS,
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
@@ -198,6 +200,7 @@ function advertisedMethods() {
     ...(secretsDisabled() ? SECRETS_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
+    ...(browserDisabled() ? BROWSER_METHODS : []),
     ...(reactionsDisabled() ? REACTION_METHODS : []),
     ...hiddenSessionManagerMethods(),
   ];
@@ -224,6 +227,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
 const REQUEST_HANDLERS = [
   (state, conn, msg) => handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
+  (state, conn, msg) => handleBrowserRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession }),
   (state, conn, msg) => handleWebPushRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr }),
@@ -405,7 +409,10 @@ export async function startServer(opts = {}) {
       res.end('not found');
     }
   });
-  const wss = new WebSocketServer({ server: httpServer });
+  const wss = new WebSocketServer({ noServer: true });
+  const screencast = attachScreencastUpgrade(httpServer, state, (req, socket, head) => {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  });
   const ready = new Promise((resolve, reject) => {
     httpServer.once('listening', resolve);
     httpServer.once('error', reject);
@@ -502,6 +509,7 @@ export async function startServer(opts = {}) {
         stopLogs(state.logsState);
         cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
+        screencast.close();
         wss.close(() => httpServer.close(() => resolve()));
         httpServer.closeAllConnections?.();
       }),

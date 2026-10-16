@@ -96,6 +96,7 @@ enum Suites {
             Section("Rewind history ownership") { await runRewindHistoryOwnershipChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
+            Section("Browser panel wire, tabs and decode") { runBrowserOfflineChecks() },
             Section("Composer sizing") { runComposerSizingChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
@@ -343,6 +344,7 @@ enum Suites {
     /// The built-in demo, second half.
     static var demoExtras: [Section] {
         var sections: [Section] = [
+        Section("Browser panel (demo, #974)") { await runDemoBrowserChecks() },
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
         Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
         Section("Effective tools agent validation (demo)") { await runDemoEffectiveAgentValidationChecks() },
@@ -542,6 +544,7 @@ enum Suites {
         LiveSection("Deep links (live)") { url, token in await runLiveDeepLinks(url: url, token: token) },
         LiveSection("Cold-launch routes (live)") { url, token in await runLiveColdLaunchRouteChecks(url: url, token: token) },
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
+        LiveSection("Browser panel (live, #974)") { url, token in await runLiveBrowserChecks(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Browser page preview (live)") { url, token in await runLiveBrowserPagePreview(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
@@ -591,6 +594,7 @@ enum Suites {
 
     /// Budgets enforced; run it alone.
     static let perfSmoke: [Section] = [
+        Section("Browser frame decode perf smoke") { await checkBrowserFrameDecodePerfSmoke() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
     ]
 }
