@@ -596,5 +596,6 @@ enum Suites {
     static let perfSmoke: [Section] = [
         Section("Browser frame decode perf smoke") { await checkBrowserFrameDecodePerfSmoke() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
+        Section("Invalidation perf") { runInvalidationPerfChecks() },
     ]
 }
