@@ -344,6 +344,9 @@ struct TranscriptRowLayout {
         var imageKey: String?
         var faviconKey: String?
         var screenshotKey: String?
+        /// Whether this is the latest turn for its tab, the only card the screenshot hook applies to.
+        var screenshotEligible = false
+        let turnId: String
     }
 
     let id: String
@@ -480,6 +483,8 @@ struct TranscriptLayoutBuilder {
     var highlight = TranscriptHighlight()
     /// The message to flash, after jumping to it from a quote.
     var flash: String?
+    /// For each browser tab, the id of the latest turn that shows its card (`BrowserPagePreview.latestTurnIds`).
+    var pageTurns: [String: String] = [:]
     var messagePartExcerptCache: MessagePartExcerptCache = .shared
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
@@ -689,7 +694,8 @@ struct TranscriptLayoutBuilder {
         }
         let pages = Self.pageCards(turn.tools)
         for page in pages {
-            layout.accessibilityLabel += L(". Web page: \(page.displayTitle), \(page.host)")
+            let suffix = L("Web page: \(page.displayTitle), \(page.host)")
+            layout.accessibilityLabel = layout.accessibilityLabel.isEmpty ? suffix : layout.accessibilityLabel + ". " + suffix
         }
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty

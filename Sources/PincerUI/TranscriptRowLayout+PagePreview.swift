@@ -47,12 +47,12 @@ extension TranscriptLayoutBuilder {
         let linkPreview = previews.preview(for: page.url)
 
         // The screenshot hook only applies to the latest turn; older cards keep their og:image.
-        var screenshot: ImageRef?
-        if turn.isStreaming || self.context.chat?.items.last(where: { $0.role == .assistant })?.id == turn.id {
-            screenshot = previews.screenshot(forTab: page.tabKey)
-        }
+        let latest = self.pageTurns[page.tabKey]
+        let eligible = latest.map { $0 == turn.id } ?? turn.isStreaming
+        let screenshot = eligible ? previews.screenshot(forTab: page.tabKey) : nil
         layout.pages.append(.init(url: page.url, tabKey: page.tabKey, imageKey: linkPreview?.image?.cacheKey,
-                                  faviconKey: linkPreview?.favicon?.cacheKey, screenshotKey: screenshot?.cacheKey))
+                                  faviconKey: linkPreview?.favicon?.cacheKey, screenshotKey: screenshot?.cacheKey,
+                                  screenshotEligible: eligible, turnId: turn.id))
 
         // Box height comes from which image exists, never from decoded pixels, so a decode can't move the row.
         var kind = TranscriptPart.PagePreview.ImageKind.none

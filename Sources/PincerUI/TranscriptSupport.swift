@@ -279,6 +279,9 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var filePreviews: [String: FileContentLoader.Preview?] = [:]
     private var spawnRows: Set<String> = []
     private var pageRows: Set<String> = []
+    private var pageTurns: [String: String] = [:]
+    /// URLs a card asked to load, kept (bounded) so they load again once the Gateway connects.
+    private var requestedPages: [URL] = []
     private var observers: [NSObjectProtocol] = []
     #if os(macOS)
     private var accessibilityObservation: NSObjectProtocol?
@@ -319,6 +322,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.settings = .current(for: context)
         self.observeImages()
         self.observePagePreviews()
+        self.observeConnection()
         self.observeFiles()
         self.observeSessions()
         self.observeDecorations()
@@ -463,7 +467,8 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.layoutBuildCount += 1
         var layout = TranscriptSignposts.measure("RowLayout") {
             TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight,
-                                    flash: self.flash, messagePartExcerptCache: self.messagePartExcerptCache)
+                                    flash: self.flash, pageTurns: self.pageTurns,
+                                    messagePartExcerptCache: self.messagePartExcerptCache)
                 .layout(row, width: width)
         }
         self.serial += 1
@@ -565,6 +570,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.filePreviews.removeAll()
         self.spawnRows.removeAll()
         self.pageRows.removeAll()
+        self.pageTurns = [:]
     }
 
     private func invalidate(_ ids: Set<String>, keepInPlace: String? = nil) {
@@ -648,8 +654,9 @@ final class TranscriptRenderer: TranscriptRowActions {
             guard let entry = self.cache[id] else { continue }
             for page in entry.layout.pages {
                 let link = previews.preview(for: page.url)
+                let screenshotKey = page.screenshotEligible ? previews.screenshot(forTab: page.tabKey)?.cacheKey : nil
                 if link?.image?.cacheKey != page.imageKey || link?.favicon?.cacheKey != page.faviconKey
-                    || previews.screenshot(forTab: page.tabKey)?.cacheKey != page.screenshotKey
+                    || screenshotKey != page.screenshotKey
                 {
                     stale.insert(id)
                     break
@@ -872,7 +879,47 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func loadPagePreview(_ url: URL) {
-        self.context.gateway.pagePreviews.load(url)
+        let previews = self.context.gateway.pagePreviews
+        if previews.preview(for: url) == nil, !self.requestedPages.contains(url) {
+            self.requestedPages.append(url)
+            if self.requestedPages.count > 32 { self.requestedPages.removeFirst() }
+        }
+        previews.load(url)
+    }
+
+    /// Updates which turn owns each tab's screenshot, and returns the rows whose card eligibility
+    /// changed (their cached layouts are marked stale; the caller re-measures them).
+    func updatePageTurns(rows: [TranscriptRow], tailOnly: Bool) -> Set<String> {
+        var turns = tailOnly ? self.pageTurns : [:]
+        let source = tailOnly ? Array(rows.suffix(1)) : rows
+        for row in source {
+            guard case let .entry(.assistant(turn)) = row else { continue }
+            for page in BrowserPagePreview.latestPerTab(turn.tools) { turns[page.tabKey] = turn.id }
+        }
+        guard turns != self.pageTurns else { return [] }
+        self.pageTurns = turns
+        var stale: Set<String> = []
+        for id in self.pageRows {
+            guard let entry = self.cache[id] else { continue }
+            if entry.layout.pages.contains(where: { $0.screenshotEligible != (turns[$0.tabKey] == $0.turnId) }) {
+                stale.insert(id)
+            }
+        }
+        self.markLayoutInvalidated(stale)
+        return stale
+    }
+
+    private func observeConnection() {
+        let gateway = self.context.gateway
+        let connected = withObservationTracking {
+            gateway.state.isConnected
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeConnection() }
+        }
+        guard connected, !self.requestedPages.isEmpty else { return }
+        for url in self.requestedPages where gateway.pagePreviews.preview(for: url) == nil {
+            gateway.pagePreviews.load(url)
+        }
     }
 
     func loadImage(_ ref: ImageRef) {

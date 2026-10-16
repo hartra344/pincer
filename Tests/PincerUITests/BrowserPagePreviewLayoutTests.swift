@@ -19,7 +19,7 @@ struct BrowserPagePreviewLayoutTests {
     }
 
     static func make(tools: [ToolActivity], streaming: Bool = false, expanded: Bool = false, thinking: String = "hm",
-                     text: [String] = ["Here is the page."], width: CGFloat = 600,
+                     text: [String] = ["Here is the page."], width: CGFloat = 600, latest: Bool = false,
                      configure: (GatewayStore) -> Void = { _ in }) -> (TranscriptRowLayout, GatewayStore)
     {
         let scratch = ScratchDefaults()
@@ -39,7 +39,8 @@ struct BrowserPagePreviewLayoutTests {
         turn.text = text
         turn.textIds = text.map { _ in nil }
         turn.isStreaming = streaming
-        let builder = TranscriptLayoutBuilder(context: context, settings: .current(for: context))
+        let pageTurns = latest ? BrowserPagePreview.latestTurnIds([.assistant(turn)]) : [:]
+        let builder = TranscriptLayoutBuilder(context: context, settings: .current(for: context), pageTurns: pageTurns)
         return (builder.layout(.entry(.assistant(turn)), width: width), gateway)
     }
 
@@ -95,6 +96,26 @@ struct BrowserPagePreviewLayoutTests {
         guard case let .pagePreview(card)? = Self.cards(layout).first?.part else { Issue.record("no card"); return }
         #expect(card.kind == .screenshot && card.imageHeight == 240)
         #expect(!card.loadsPreview, "nothing is fetched while the turn streams")
+    }
+
+    @Test func finishedLatestTurnShowsTheScreenshot() {
+        let shot = Self.ref("shot-done", width: 1000, height: 3000)
+        let (latest, _) = Self.make(tools: [Self.tool("c1")], latest: true) { gateway in
+            gateway.pagePreviews.setScreenshot(shot, forTab: "host|openclaw|t1")
+        }
+        guard case let .pagePreview(card)? = Self.cards(latest).first?.part else { Issue.record("no card"); return }
+        #expect(card.kind == .screenshot && card.imageHeight == 240)
+        let (older, _) = Self.make(tools: [Self.tool("c1")]) { gateway in
+            gateway.pagePreviews.setScreenshot(shot, forTab: "host|openclaw|t1")
+        }
+        guard case let .pagePreview(old)? = Self.cards(older).first?.part else { Issue.record("no card"); return }
+        #expect(old.kind == .none, "an older turn keeps its og:image, not the live screenshot")
+    }
+
+    @Test func accessibilityLabelHasNoLeadingSeparator() {
+        let (layout, _) = Self.make(tools: [Self.tool("c1")], thinking: "", text: [])
+        #expect(!layout.accessibilityLabel.hasPrefix("."))
+        #expect(!layout.accessibilityLabel.contains(".."))
     }
 
     @Test func oneCardPerTabAndAtMostThree() {
