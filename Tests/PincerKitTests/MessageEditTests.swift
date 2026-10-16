@@ -11,12 +11,31 @@ struct MessageEditTests {
     let temp = TempDir()
     static let garden = "agent:main:dashboard:garden"
 
-    func settle(_ condition: () -> Bool) async {
-        for _ in 0..<1000 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+    /// Polls until `condition` holds and records a loud failure if it never does, so a starved
+    /// scheduler shows up as a timeout naming the wait rather than as a later, unrelated assertion.
+    func settle(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("settle timed out after 30s", sourceLocation: sourceLocation)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test func instantPacingDemoIsADemoWithoutRunDelays() async {
+        #expect(GatewayProfile.demoInstantPacing().isDemo)
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        let before = self.messages(chat, .assistant).count
+        _ = await chat.sendMessage("pacing probe", attachments: [])
+        await self.settle { !chat.isRunning && self.messages(chat, .assistant).count > before }
+        await self.finish(gateway)
     }
 
     func connected() async -> GatewayStore {
-        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let gateway = GatewayStore(profile: GatewayProfile.demoInstantPacing(), defaults: self.scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = self.temp.url
         gateway.start()
         await self.settle { gateway.state.isConnected && gateway.sessions[Self.garden] != nil }
@@ -209,6 +228,8 @@ struct MessageEditTests {
         #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
         _ = await chat.sendEdit("something else", attachments: [])
         await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
+        // The branch list is refreshed on load, which can precede the reply: re-read it once the run is done.
+        await chat.refreshBranches()
         #expect(chat.branches.count == 2 && chat.activeBranchNumber == 2, "the newest branch is last and active")
         guard let old = chat.branches.first(where: { !$0.active }) else { return }
         #expect(await chat.switchBranch(to: old.leafEntryId))

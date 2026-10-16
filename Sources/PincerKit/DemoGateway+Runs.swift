@@ -324,7 +324,7 @@ extension DemoGateway {
 
     /// Sleeps, then reports whether the run should keep going.
     func pause(_ runId: String, milliseconds: Int) async -> Bool {
-        let scaled = Int((Double(milliseconds) * Self.delayScale).rounded())
+        let scaled = self.instantPacing ? 0 : Int((Double(milliseconds) * Self.delayScale).rounded())
         if scaled > 0 {
             try? await Task.sleep(for: .milliseconds(scaled))
         } else {

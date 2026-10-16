@@ -154,7 +154,8 @@ public actor GatewayConnection {
             acceptsWorkContext: !profile.url.contains("workContext=off"),
             hasSessionReactions: profile.url != DemoGateway.noSessionReactionsURL,
             failsFirstAvatarPrefsRead: profile.url == DemoGateway.avatarPrefsReadFailureURL,
-            seedsForwardedSenderRefreshHistory: profile.url == DemoGateway.forwardedSenderRefreshURL) : nil
+            seedsForwardedSenderRefreshHistory: profile.url == DemoGateway.forwardedSenderRefreshURL,
+            instantPacing: profile.url == DemoGateway.instantPacingURL) : nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
