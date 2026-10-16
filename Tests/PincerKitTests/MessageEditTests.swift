@@ -227,9 +227,7 @@ struct MessageEditTests {
         let original = chat.items.map(\.plainText)
         #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
         _ = await chat.sendEdit("something else", attachments: [])
-        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
-        // The branch list is refreshed on load, which can precede the reply: re-read it once the run is done.
-        await chat.refreshBranches()
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
         #expect(chat.branches.count == 2 && chat.activeBranchNumber == 2, "the newest branch is last and active")
         guard let old = chat.branches.first(where: { !$0.active }) else { return }
         #expect(await chat.switchBranch(to: old.leafEntryId))
@@ -246,7 +244,7 @@ struct MessageEditTests {
         #expect(!chat.hasBranches && chat.branchAnchorId == nil)
         #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
         _ = await chat.sendEdit("something else", attachments: [])
-        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
         #expect(chat.hasBranches)
         let edited = self.messages(chat, .user).last?.transcriptId
         #expect(chat.branchAnchorId != nil && chat.branchAnchorId == edited)
