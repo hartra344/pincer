@@ -228,7 +228,7 @@ struct BrowserToolbarButton: View {
 
     static func help(isPresented: Bool, count: Int) -> String {
         let base = isPresented ? L("Hide Browser (⌥⌘B)") : L("Show Browser (⌥⌘B)")
-        return count > 0 ? L("\(base) — \(Self.portalsOpen(count))") : base
+        return count > 0 ? "\(base) — \(Self.portalsOpen(count))" : base
     }
 
     static func portalsOpen(_ count: Int) -> String {
