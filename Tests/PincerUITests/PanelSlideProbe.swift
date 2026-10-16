@@ -145,14 +145,15 @@ struct PanelSlideProbe {
     @discardableResult
     static func waitQuiet(_ host: Host, minimum: Double = 0.3) async -> Double {
         let start = ProbeMeter.wall()
-        var last = builds(host), quiet = 0
+        var last = builds(host), quiet = 0, settled = false
         while ProbeMeter.wall() - start < 2 {
             try? await Task.sleep(for: .milliseconds(60))
             let now = builds(host)
             quiet = now == last ? quiet + 1 : 0
             last = now
-            if quiet >= 3, ProbeMeter.wall() - start >= minimum { break }
+            if quiet >= 3, ProbeMeter.wall() - start >= minimum { settled = true; break }
         }
+        if !settled { Issue.record("waitQuiet: layout builds never went quiet within 2 s") }
         return ProbeMeter.wall() - start
     }
 
@@ -174,6 +175,7 @@ struct PanelSlideProbe {
             last = now
             lastBuilds = nowBuilds
         }
+        if stable < 5 { Issue.record("waitAnchorStable: the anchor never held still within 5 s") }
     }
 
     /// Polls (every 5 ms, up to 10 s) until a thaw after `thaws` has run and the width is no longer frozen.
@@ -275,6 +277,26 @@ struct PanelSlideProbe {
         let close = await Self.toggle(host, name: "sidebar close \(Int(Self.narrow))->\(Int(Self.wide))", to: Self.wide, mid: false)
         Self.table("bottom-anchored", [open, close])
         Self.check([open, close])
+    }
+
+    /// #1010: on a starved runner the quiet timer thaws mid-slide, so the thaw's relayout runs several
+    /// times at intermediate widths. Each one must leave a bottom-anchored reader at the bottom: applying
+    /// cells in `settle` used to re-clamp the clip after the last restore and strand it ~27 pt short, with
+    /// the anchor still `.bottom`, so nothing ever corrected it.
+    @Test func stalledSlideKeepsBottomPin() async {
+        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        await Self.waitAnchorStable(host, row: nil)
+        #expect(abs(Self.bottomGap(host)) <= 1, "fixture starts pinned to the bottom")
+        for target in [Self.narrow, Self.wide, Self.workspaceNarrow, Self.wide] {
+            let from = host.scroll.frame.width
+            for i in 1...Self.frames {
+                Self.setWidth(host, (from + (target - from) * CGFloat(i) / CGFloat(Self.frames)).rounded())
+                if i % 3 == 0 { host.coordinator.thawWidthNow() }
+            }
+            host.coordinator.thawWidthNow()
+            #expect(host.coordinator.controller.isAnchoredAtBottom)
+            #expect(abs(Self.bottomGap(host)) <= 1, "\(Int(target)): bottom gap \(Self.bottomGap(host)) pt after a thaw")
+        }
     }
 
     @Test func workspacePanelBottomAnchored() async {

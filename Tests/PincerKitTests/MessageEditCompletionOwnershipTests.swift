@@ -62,7 +62,7 @@ struct MessageEditCompletionOwnershipTests {
     private func exercise(change: String, fail: Bool, holdAdmission: Bool = false) async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
+        let gateway = GatewayStore(profile: .demoInstantPacing(), defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
         gateway.outboxRoot = nil
         gateway.notifier = nil
@@ -117,6 +117,12 @@ struct MessageEditCompletionOwnershipTests {
         try await self.wait { gate.arrived != nil }
         #expect(gate.arrived == !fail, "gate follows the actual request success/error")
         #expect(chat.isSendingEdit)
+        if change == "replacement" && !fail {
+            // The real rewind already emitted sessions.changed: its reload empties the committed rows until it
+            // lands, so the composer can only target another message once that reload has finished.
+            let rewound = try #require(original.transcriptId)
+            try await self.wait { chat.hasLoaded && !chat.items.contains { $0.transcriptId == rewound } }
+        }
         if change != "current" && change != "ABA" {
             chat.cancelEdit()
             #expect(chat.draft.text == normalDraft.text)

@@ -133,6 +133,20 @@ if complete_swift_test sh -c "if [ -e '$abort_once' ]; then printf '◇ Test run
 fi
 rm -f "$abort_once"
 
+# Node makes a pipe it writes to non-blocking (O_NONBLOCK lives on the shared open file, not the fd), so
+# while the progress helper shared our stdout, printing a big lane log could fail with EAGAIN ("echo:
+# write error: Resource temporarily unavailable") and drop the log or fail CI (#1010). The helper gets
+# its own pipe, and stdout is put back to blocking before each lane's log is printed.
+# scripts/test_checks_pending_progress.py checks the helper never writes to our stdout.
+start_progress() {
+    node scripts/checks-pending-progress.mjs "$@" > >(cat) &
+    progress_pid=$!
+}
+blocking_stdout() {
+    perl -MFcntl -e 'my $f = fcntl(STDOUT, F_GETFL, 0) // exit 0;
+        exit 0 unless $f & O_NONBLOCK; fcntl(STDOUT, F_SETFL, $f & ~O_NONBLOCK) or exit 1'
+}
+
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # Only the plain run does the offline suite (including Shortcuts & Siri); mode runs use their own suites.
@@ -163,12 +177,12 @@ report() {
     done
     # The solo performance lanes must keep the CPU to themselves.
     if [ "$1" -eq 0 ]; then
-        node scripts/checks-pending-progress.mjs "$LOGS" "${CHECKS_PROGRESS_INTERVAL:-30}" "${progress_lanes[@]}" &
-        progress_pid=$!
+        start_progress "$LOGS" "${CHECKS_PROGRESS_INTERVAL:-30}" "${progress_lanes[@]}"
     fi
     for ((i = $1; i < ${#pids[@]}; i++)); do
         name=${names[$i]}
         if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
+        blocking_stdout
         seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
         echo "::group::$name ($result)"
         cat "$LOGS/$name.log"

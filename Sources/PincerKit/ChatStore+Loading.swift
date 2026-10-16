@@ -96,7 +96,7 @@ extension ChatStore {
         let generation = self.loadGeneration
         // Waiters await this task; only the caller that started it passes its cancellation on.
         let task = Task {
-            await self.fetchHistory(gateway, feedbackAuthority: feedbackAuthority)
+            await self.fetchHistory(gateway, generation: generation, feedbackAuthority: feedbackAuthority)
             if self.loadGeneration == generation { self.loadTask = nil }
         }
         self.loadTask = task
@@ -119,12 +119,12 @@ extension ChatStore {
         }
     }
 
-    private func fetchHistory(_ gateway: GatewayStore, feedbackAuthority: MessageEditFeedbackAuthority?) async {
+    private func fetchHistory(_ gateway: GatewayStore, generation: Int, feedbackAuthority: MessageEditFeedbackAuthority?) async {
         // Ordinary refreshes keep their existing feedback behavior unless a newer assignment
         // arrives while awaiting history. Only an explicit edit refresh also checks selection.
         let feedbackRevision = self.errorMessageRevision
         self.isLoading = !self.hasLoaded
-        defer { self.isLoading = false }
+        defer { if self.loadGeneration == generation { self.isLoading = false } }
         do {
             let epoch = gateway.connectionEpoch
             if self.subscribedEpoch != epoch {
@@ -141,7 +141,13 @@ extension ChatStore {
             var params = self.params(keyName: "sessionKey")
             params["limit"] = .number(Double(self.historyLimit))
             let result = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
+            #if DEBUG
+            try await self.historyResponseProbe?()
+            #endif
+            // A newer load (a branch switch or rewind reload) owns the transcript now: this reply predates it.
+            guard self.loadGeneration == generation else { return }
             let parsed = await Self.parseDetached(result["messages"]?.array ?? [], fallbackBase: 0)
+            guard self.loadGeneration == generation else { return }
             self.apply(history: result, parsed: parsed)
             self.hasLoaded = true
             self.stale = false
@@ -159,6 +165,7 @@ extension ChatStore {
         } catch is CancellationError {
             return
         } catch {
+            guard self.loadGeneration == generation else { return } // A newer load owns the outcome now.
             if self.errorMessageRevision == feedbackRevision && (feedbackAuthority?.isCurrent(in: self) ?? true) {
                 self.errorMessage = error.localizedDescription
             }
@@ -682,6 +689,9 @@ extension ChatStore {
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
     func reloadAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil,
                                  clearingCache clearCache: (@MainActor () async -> Void)? = nil) async {
+        #if DEBUG
+        self.fullReloadCount += 1
+        #endif
         self.stopQuotePreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
@@ -702,6 +712,12 @@ extension ChatStore {
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
         await clearCache?()
+        await self.load(force: true, feedbackAuthority: feedbackAuthority)
+    }
+
+    /// A follow-up refetch for a change already handled by `reloadAfterHistoryChange`: no cache wipe and the
+    /// transcript stays on screen; the newest fetch (by load generation) wins.
+    func refetchAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil) async {
         await self.load(force: true, feedbackAuthority: feedbackAuthority)
     }
 

@@ -99,7 +99,7 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     /// The built-in demo, which runs a simulated Gateway on the device.
     public var isDemo: Bool { self.url == DemoGateway.url || self.url == DemoGateway.noReplyToURL
             || self.url == DemoGateway.noSessionReactionsURL || self.url == DemoGateway.avatarPrefsReadFailureURL
-            || self.url == DemoGateway.forwardedSenderRefreshURL
+            || self.url == DemoGateway.forwardedSenderRefreshURL || self.url == DemoGateway.instantPacingURL
             || self.url == DemoGateway.noWorkContextURL || self.url == DemoGateway.noWorkContextAndReplyToURL
     }
 
@@ -112,6 +112,11 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     /// A check-only demo profile with a transient avatar-prefs read failure and older remote seed.
     static func demoAvatarPrefsReadFailure() -> GatewayProfile {
         GatewayProfile(name: "Demo (avatar prefs recovery)", url: DemoGateway.avatarPrefsReadFailureURL, authMode: .none)
+    }
+
+    /// A test/check-only demo whose runs skip the simulated delays.
+    static func demoInstantPacing() -> GatewayProfile {
+        GatewayProfile(name: "Demo (instant pacing)", url: DemoGateway.instantPacingURL, authMode: .none)
     }
 
     /// A check-only demo with Kiko's exchange older than the newest `chat.history` page.
