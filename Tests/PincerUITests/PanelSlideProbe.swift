@@ -277,6 +277,26 @@ struct PanelSlideProbe {
         Self.check([open, close])
     }
 
+    /// #1010: on a starved runner the quiet timer thaws mid-slide, so the thaw's relayout runs several
+    /// times at intermediate widths. Each one must leave a bottom-anchored reader at the bottom: applying
+    /// cells in `settle` used to re-clamp the clip after the last restore and strand it ~27 pt short, with
+    /// the anchor still `.bottom`, so nothing ever corrected it.
+    @Test func stalledSlideKeepsBottomPin() async {
+        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        await Self.waitAnchorStable(host, row: nil)
+        #expect(abs(Self.bottomGap(host)) <= 1, "fixture starts pinned to the bottom")
+        for target in [Self.narrow, Self.wide, Self.workspaceNarrow, Self.wide] {
+            let from = host.scroll.frame.width
+            for i in 1...Self.frames {
+                Self.setWidth(host, (from + (target - from) * CGFloat(i) / CGFloat(Self.frames)).rounded())
+                if i % 3 == 0 { host.coordinator.thawWidthNow() }
+            }
+            host.coordinator.thawWidthNow()
+            #expect(host.coordinator.controller.isAnchoredAtBottom)
+            #expect(abs(Self.bottomGap(host)) <= 1, "\(Int(target)): bottom gap \(Self.bottomGap(host)) pt after a thaw")
+        }
+    }
+
     @Test func workspacePanelBottomAnchored() async {
         let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
         let name = "workspace"
