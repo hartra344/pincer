@@ -482,8 +482,10 @@ public final class SessionManagerModel {
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
-    @ObservationIgnored private let onTranscriptChanged: TranscriptChanged
-    @ObservationIgnored private let onSessionsChanged: @MainActor () async -> Void
+    // Optional, not `= {}` defaults: Swift 6.2 (Xcode 26) miscompiles a sync closure literal used as the
+    // default for an `@MainActor … async` parameter; awaiting it corrupts the task allocator (#952).
+    @ObservationIgnored private let onTranscriptChanged: TranscriptChanged?
+    @ObservationIgnored private let onSessionsChanged: (@MainActor () async -> Void)?
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var previewsInFlight: Set<String> = []
     /// Only active detail requests retain ownership; terminal and invalidated entries are removed.
@@ -510,8 +512,8 @@ public final class SessionManagerModel {
                 scopes: @escaping @MainActor () -> [String] = { [GatewayConnection.adminScope] },
                 allowsWritesWithoutAdmin: Bool = false,
                 request: @escaping Request,
-                onTranscriptChanged: @escaping TranscriptChanged = { _, _ in },
-                onSessionsChanged: @escaping @MainActor () async -> Void = {})
+                onTranscriptChanged: TranscriptChanged? = nil,
+                onSessionsChanged: (@MainActor () async -> Void)? = nil)
     {
         self.request = request
         self.methods = methods
@@ -728,7 +730,7 @@ public final class SessionManagerModel {
         self.apply(archived: archived, to: Set(outcome.succeeded))
         let failureTitles = await Self.failureTitles(outcome.failed, targets: targets)
         self.finish(outcome, verb: archived ? "Archived" : "Unarchived", failureTitles: failureTitles)
-        await self.onSessionsChanged()
+        await self.onSessionsChanged?()
         return outcome
     }
 
@@ -771,14 +773,14 @@ public final class SessionManagerModel {
                 }
                 outcome.succeeded.append(row.key)
                 self.forget(row.key)
-                await self.onTranscriptChanged(row.key, .deleted)
+                await self.onTranscriptChanged?(row.key, .deleted)
             } catch {
                 outcome.failed.append(.init(key: row.key, message: Self.message(error)))
             }
         }
         let failureTitles = await Self.failureTitles(outcome.failed, targets: targets)
         self.finish(outcome, verb: "Deleted", failureTitles: failureTitles)
-        await self.onSessionsChanged()
+        await self.onSessionsChanged?()
         return outcome
     }
 
@@ -816,8 +818,8 @@ public final class SessionManagerModel {
             self.lastMessage = "Recovered the session"
             if let error = result.continuationError { self.actionError = error }
             self.forgetCaches(key)
-            await self.onTranscriptChanged(key, .changed(editorText: nil))
-            await self.onSessionsChanged()
+            await self.onTranscriptChanged?(key, .changed(editorText: nil))
+            await self.onSessionsChanged?()
             await self.reload()
             return result
         } catch {
@@ -834,7 +836,7 @@ public final class SessionManagerModel {
             self.lastMessage = success
             self.lastEditorText = method == SessionManager.rewindMethod ? result["editorText"]?.string : nil
             self.forgetCaches(key)
-            await self.onTranscriptChanged(key, .changed(editorText: self.lastEditorText))
+            await self.onTranscriptChanged?(key, .changed(editorText: self.lastEditorText))
             async let branches: Void = self.loadBranches(key: key)
             async let points: Void = self.loadRewindPoints(key: key)
             async let details: Void = self.loadDetails(key: key)
