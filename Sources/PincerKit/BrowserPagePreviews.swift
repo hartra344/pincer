@@ -6,6 +6,12 @@ public struct LinkPreview: Hashable, Sendable {
     public let title: String?
     public let image: ImageRef?
     public let favicon: ImageRef?
+
+    public init(title: String?, image: ImageRef?, favicon: ImageRef?) {
+        self.title = title
+        self.image = image
+        self.favicon = favicon
+    }
 }
 
 /// Page images for browser cards, fetched with `controlUi.linkPreview` (operator.read) as a
@@ -39,6 +45,12 @@ public final class BrowserPagePreviews {
     #endif
 
     public init() {}
+
+    /// Test seam: stores a preview without any network, as if `load` had finished.
+    package func seed(_ preview: LinkPreview, for url: URL) {
+        let bytes = (preview.image?.base64?.utf8.count ?? 0) + (preview.favicon?.base64?.utf8.count ?? 0)
+        self.finishStore(preview: preview, url: url, bytes: bytes)
+    }
 
     public func preview(for url: URL) -> LinkPreview? { self.entries[url] }
 
@@ -115,6 +127,14 @@ public final class BrowserPagePreviews {
             return
         }
         self.failedAt[url] = nil
+        self.finishStore(preview: preview, url: url, bytes: bytes)
+    }
+
+    private func finishStore(preview: LinkPreview, url: URL, bytes: Int) {
+        if self.entries[url] != nil {
+            self.totalBytes -= self.sizes[url] ?? 0
+            self.order.removeAll { $0 == url }
+        }
         self.entries[url] = preview
         self.sizes[url] = bytes
         self.totalBytes += bytes
