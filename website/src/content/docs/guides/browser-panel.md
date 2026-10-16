@@ -23,6 +23,7 @@ Without Full Management, the panel asks for it instead of showing the page.
 - Click **Browser** in the chat toolbar, next to **Runs** (Runs comes first). On iPhone, use the ⋯ menu instead.
 - On macOS, press **⌥⌘B**.
 - Choose **Show Browser** from the chat's ⋯ menu. When the panel is open it reads **Hide Browser**.
+- Click or tap a [browser page card](../tool-calls/#browser-page-previews) in the chat. The panel opens on that card's page.
 
 The Browser panel shares its slot with [Runs](../subagents-and-runs/#opening-the-runs-panel). Opening one closes the other.
 

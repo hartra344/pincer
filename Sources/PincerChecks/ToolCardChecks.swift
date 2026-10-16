@@ -19,13 +19,13 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
     check(gateway.sessions[toolCardsKey] != nil, "\(label): has the Check the MCP servers chat")
     let chat = gateway.chat(for: toolCardsKey)
     await chat.load()
-    let loaded = await waitFor("\(label) tool-cards history") { cardTools(chat).count >= 13 }
+    let loaded = await waitFor("\(label) tool-cards history") { cardTools(chat).count >= 15 }
     let calls = cardTools(chat)
     check(loaded && calls.map(\.name) == ["exec", "exec", "read", "edit", "github__search_issues", "web_fetch", "linear__create_issue", "linear__list_teams",
-                           "linear__update_issue", "mcp__filesystem__read_file", "acme-docs__search", "web_search", "read"],
+                           "linear__update_issue", "mcp__filesystem__read_file", "acme-docs__search", "web_search", "read", "browser", "browser"],
           "\(label): tool calls in order (\(calls.map(\.name)))")
-    guard calls.count >= 13 else { return }
-    check(calls.map(\.isError) == [false, true, false, false, false, false, false, false, true, false, false, false, false] && calls.allSatisfy { !$0.isRunning },
+    guard calls.count >= 15 else { return }
+    check(calls.map(\.isError) == [false, true, false, false, false, false, false, false, true, false, false, false, false, false, false] && calls.allSatisfy { !$0.isRunning },
           "\(label): only the second exec failed (\(calls.map(\.isError)))")
     check(calls[0].arguments?.contains("openclaw mcp status --verbose") == true
           && calls[0].arguments?.contains("workdir") == true, "\(label): exec arguments carry command and workdir")
@@ -48,6 +48,8 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
     let contextMenuMCP = calls.first { $0.name == "mcp__filesystem__read_file" }
     check(contextMenuMCP.map { MCPToolName.split($0.name).server == "filesystem" } == true,
           "\(label): seeded MCP tool card retains the exact raw name and server for its native context actions")
+    check(calls[13].browserPage?.host == "www.marriott.com" && calls[14].browserPage?.tabKey == "host|openclaw|DEMO7A1C0F3B"
+          && calls[14].browserPage?.title?.hasPrefix("Find & Book Hotels in Lisbon") == true, "\(label): browser calls keep browserTab details")
     checkToolCardPresentations(calls, label: label)
 }
 

@@ -264,6 +264,7 @@ enum TranscriptPart {
 
     case image(Image)
     case imageLink(title: String, url: URL)
+    case pagePreview(PagePreview)
     case file(File)
     case typing
     case footer(Footer)
@@ -277,7 +278,7 @@ enum TranscriptPart {
 
     enum Kind: Hashable {
         case avatar, header, text, quote, thinkingBody, rule, code, table, thinkingHeader, tool, image,
-             imageLink, file, typing, footer, marker, loading, replyQuote, reactions, sendStatus, flash
+             imageLink, pagePreview, file, typing, footer, marker, loading, replyQuote, reactions, sendStatus, flash
     }
 
     var kind: Kind {
@@ -294,6 +295,7 @@ enum TranscriptPart {
         case .tool: .tool
         case .image: .image
         case .imageLink: .imageLink
+        case .pagePreview: .pagePreview
         case .file: .file
         case .typing: .typing
         case .footer: .footer
@@ -335,6 +337,18 @@ struct TranscriptRowLayout {
         let title: String
     }
 
+    /// What a page card was built from: the preview's and screenshot's image refs at layout time.
+    struct PageSource: Equatable {
+        let url: URL
+        let tabKey: String
+        var imageKey: String?
+        var faviconKey: String?
+        var screenshotKey: String?
+        /// Whether this is the latest turn for its tab, the only card the screenshot hook applies to.
+        var screenshotEligible = false
+        let turnId: String
+    }
+
     let id: String
     let width: CGFloat
     var parts: [Placed] = []
@@ -343,6 +357,8 @@ struct TranscriptRowLayout {
     var copyItems: [CopyItem] = []
     /// Images this row shows, so it can be laid out again when one loads.
     var images: [ImageRef] = []
+    /// Browser page cards this row shows, so it can be laid out again when their images arrive.
+    var pages: [PageSource] = []
     /// Expanded file previews this row shows, so it can be laid out again when one loads.
     var files: [FileRef] = []
     /// Subagent runs this row links to, so it can update when the run shows up.
@@ -467,6 +483,8 @@ struct TranscriptLayoutBuilder {
     var highlight = TranscriptHighlight()
     /// The message to flash, after jumping to it from a quote.
     var flash: String?
+    /// For each browser tab, the id of the latest turn that shows its card (`BrowserPagePreview.latestTurnIds`).
+    var pageTurns: [String: String] = [:]
     var messagePartExcerptCache: MessagePartExcerptCache = .shared
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
@@ -674,6 +692,11 @@ struct TranscriptLayoutBuilder {
         if let quote = firstQuote {
             layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
         }
+        let pages = Self.pageCards(turn.tools)
+        for page in pages {
+            let suffix = L("Web page: \(page.displayTitle), \(page.host)")
+            layout.accessibilityLabel = layout.accessibilityLabel.isEmpty ? suffix : layout.accessibilityLabel + ". " + suffix
+        }
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
@@ -702,6 +725,8 @@ struct TranscriptLayoutBuilder {
             case .grouped:
                 self.thinkingGroup(reasoning, turn: turn, into: &stack, layout: &layout)
             }
+            // One stable spot for the page cards: after the steps, before the reply text.
+            for page in pages { self.pageCard(page, turn: turn, into: &stack, layout: &layout) }
             // Each message gets its own footer, which with the gap after it keeps back-to-back
             // messages apart. The last footer goes under the turn's images and files.
             let showFooters = !turn.isStreaming
