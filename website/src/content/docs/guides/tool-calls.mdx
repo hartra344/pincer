@@ -73,6 +73,21 @@ When a provider or OpenClaw shortens or omits part of the search output to fit i
 
 Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → General → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
 
+## Browser page previews
+
+When the agent uses the `browser` tool to open, navigate, screenshot or otherwise work with a web page, the chat shows a page card for it, as the OpenClaw Control UI does. The card's footer shows the site's icon (or a globe), the page title and its address. Click or tap the card to open the page in your browser. Right-click it on Mac, or touch and hold it on iPhone, for **Open in Browser** and **Copy Link**.
+
+- The card sits right after the turn's tool calls and before the reply. It stays in the same place while the agent is working, after the turn finishes, and whether the tool calls are collapsed or expanded.
+- Each turn shows one card per browser tab, for the last page the agent visited in that tab, and at most three cards.
+- Only `http` and `https` pages get a card. Failed browser calls don't.
+- The title and address come from the tool result itself, so the card also works offline and from the local cache, and it needs no admin access. Chats cached by an earlier version of Pincer don't have the page details; to get cards for them, clear the cache under **Settings → General → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
+
+When your gateway supports link previews (`controlUi.linkPreview`), Pincer asks it for the page's site icon and preview image (its `og:image`) once the turn finishes. When the gateway sends an image, the card shows it above the footer. The gateway fetches the page itself, without your cookies, and you can turn this off on the gateway with `gateway.controlUi.automaticallyFetchFavicons: false`. Pincer doesn't ask for previews of pages at local hostnames (such as `localhost` or `.local` names) or bare IP addresses. Without a preview, the card shows just the footer.
+
+The gateway never sends the agent's own page screenshots to chat clients, so the preview image is the site's chosen image rather than a live capture of the page.
+
+Pincer keeps a small number of recent previews in memory and decodes them in the background, so scrolling past cards never stalls.
+
 ## MCP tools
 
 Tools that come from an MCP server show the server and the tool separately, `github · search_issues`, so you can see which server handled the call. The server is also a chip in the expanded card, followed by the tool's arguments. Choose **Open MCP Server** in the expanded card to jump to that server in [MCP Servers](../mcp-servers/). If the server isn't in your config, for example one a plugin declares, the control reads **Show MCP Servers** and opens the list. Right-click a tool row on Mac, or touch and hold it on iPhone, to open the same server action or copy the raw tool name, such as `github__search_issues`.
