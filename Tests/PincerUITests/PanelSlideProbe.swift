@@ -145,14 +145,15 @@ struct PanelSlideProbe {
     @discardableResult
     static func waitQuiet(_ host: Host, minimum: Double = 0.3) async -> Double {
         let start = ProbeMeter.wall()
-        var last = builds(host), quiet = 0
+        var last = builds(host), quiet = 0, settled = false
         while ProbeMeter.wall() - start < 2 {
             try? await Task.sleep(for: .milliseconds(60))
             let now = builds(host)
             quiet = now == last ? quiet + 1 : 0
             last = now
-            if quiet >= 3, ProbeMeter.wall() - start >= minimum { break }
+            if quiet >= 3, ProbeMeter.wall() - start >= minimum { settled = true; break }
         }
+        if !settled { Issue.record("waitQuiet: layout builds never went quiet within 2 s") }
         return ProbeMeter.wall() - start
     }
 
@@ -174,6 +175,7 @@ struct PanelSlideProbe {
             last = now
             lastBuilds = nowBuilds
         }
+        if stable < 5 { Issue.record("waitAnchorStable: the anchor never held still within 5 s") }
     }
 
     /// Polls (every 5 ms, up to 10 s) until a thaw after `thaws` has run and the width is no longer frozen.
