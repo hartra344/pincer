@@ -78,6 +78,7 @@ export default defineConfig({
 						{ slug: 'guides/read-aloud' },
 						{ slug: 'guides/gateway-voice' },
 						{ slug: 'guides/subagents-and-runs' },
+						{ slug: 'guides/browser-panel' },
 						{ slug: 'guides/appearance' },
 						{ slug: 'guides/agent-avatars' },
 						{ slug: 'guides/accessibility' },

@@ -15,6 +15,8 @@ struct PanelSlideProbe {
     static let frames = 20
     static let wide: CGFloat = 900
     static let narrow: CGFloat = 640
+    /// The workspace (browser) panel's ideal width is 560, so it narrows the transcript much further than Runs (#974).
+    static let workspaceNarrow: CGFloat = 340
     /// Tearing the table down mid-test crashes AppKit; the probe leaks its windows instead.
     static var keepAlive: [(NSWindow, TranscriptList.Coordinator)] = []
 
@@ -272,6 +274,31 @@ struct PanelSlideProbe {
         let open = await Self.toggle(host, name: "sidebar open \(Int(Self.wide))->\(Int(Self.narrow))", to: Self.narrow, mid: false)
         let close = await Self.toggle(host, name: "sidebar close \(Int(Self.narrow))->\(Int(Self.wide))", to: Self.wide, mid: false)
         Self.table("bottom-anchored", [open, close])
+        Self.check([open, close])
+    }
+
+    @Test func workspacePanelBottomAnchored() async {
+        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        let name = "workspace"
+        let open = await Self.toggle(host, name: "\(name) open \(Int(Self.wide))->\(Int(Self.workspaceNarrow))", to: Self.workspaceNarrow, mid: false)
+        let close = await Self.toggle(host, name: "\(name) close \(Int(Self.workspaceNarrow))->\(Int(Self.wide))", to: Self.wide, mid: false)
+        Self.table("workspace panel, bottom-anchored", [open, close])
+        Self.check([open, close])
+    }
+
+    @Test func workspacePanelMidTranscriptAnchor() async {
+        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        host.clip.scroll(to: NSPoint(x: 0, y: host.table.rect(ofRow: 10_000).minY))
+        host.scroll.reflectScrolledClipView(host.clip)
+        _ = await TranscriptPrefetchProbe.spinUntilIdle(cap: 10)
+        await Self.waitQuiet(host)
+        host.clip.scroll(to: NSPoint(x: 0, y: host.clip.bounds.minY + 1))
+        host.scroll.reflectScrolledClipView(host.clip)
+        await Self.waitQuiet(host)
+        await Self.waitAnchorStable(host, row: Self.midAnchor(host).row)
+        let open = await Self.toggle(host, name: "workspace open \(Int(Self.wide))->\(Int(Self.workspaceNarrow))", to: Self.workspaceNarrow, mid: true)
+        let close = await Self.toggle(host, name: "workspace close \(Int(Self.workspaceNarrow))->\(Int(Self.wide))", to: Self.wide, mid: true)
+        Self.table("workspace panel, mid-transcript", [open, close])
         Self.check([open, close])
     }
 

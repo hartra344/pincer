@@ -157,7 +157,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // Edit
     case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
-    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, reloadPincer
+    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, showBrowser, reloadPincer
     // Go
     case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
@@ -185,7 +185,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
-        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
+        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
         case .stopRun, .gatewaySettings, .nextGateway, .previousGateway: .chat
         }
@@ -212,6 +212,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .swapSplitChats: L("Swap Chats")
         case .nextUnreadChat: L("Next Unread Chat")
         case .showRuns: L("Show Runs")
+        case .showBrowser: L("Show Browser")
         case .reloadPincer: L("Reload Pincer")
         case .commandPalette: L("Command Palette…")
         case .searchMessages: L("Search Messages…")
@@ -244,6 +245,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .toggleSplitView: KeyCombo("\\", [.option, .command])
         case .nextUnreadChat: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .shift])
         case .showRuns: KeyCombo("r", [.option, .command])
+        case .showBrowser: KeyCombo("b", [.option, .command])
         case .reloadPincer: KeyCombo("r", [.command])
         case .commandPalette: KeyCombo("k", [.command])
         case .searchMessages: KeyCombo("f", [.shift, .command])
