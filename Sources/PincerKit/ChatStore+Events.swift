@@ -331,14 +331,21 @@ extension ChatStore {
     }
 
     func handleSessionMessage(_ payload: JSONValue) {
+        if let hidden = payload["message"], hidden.isHiddenFromChat {
+            if hidden["role"]?.string == "user" { self.hiddenPromptPending = true }
+            return
+        }
         // A dehydrated chat has no transcript to append to; the next load fetches what it missed.
         guard !self.isDehydrated else {
             self.stale = true
             return
         }
-        guard let message = payload["message"], let item = ChatItem(message, fallbackIndex: self.items.count) else {
+        guard let message = payload["message"], var item = ChatItem(message, fallbackIndex: self.items.count) else {
             self.scheduleReload()
             return
+        }
+        if item.role == .user { self.hiddenPromptPending = false } else if item.role == .assistant && self.hiddenPromptPending {
+            item.followsHiddenPrompt = true
         }
         let acceptedIndex: Int
         if let transcriptId = item.transcriptId,

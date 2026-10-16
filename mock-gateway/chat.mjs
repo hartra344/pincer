@@ -4,6 +4,7 @@ import { noteApprovalForLogs, noteChatForLogs } from './logs.mjs';
 import { markSubagentAborted, simulateSpawn } from './subagents.mjs';
 import { liveFileEditCall } from './file-edits.mjs';
 import { rowModel } from './catalog.mjs';
+import { emitHiddenConsult, isHiddenConsultTrigger } from './talk.mjs';
 import { simulateQuestion, simulateSecretQuestion } from './questions.mjs';
 import { makeSessionRow } from './seed.mjs';
 import { broadcastSessionChanged, broadcastSessionMessage, markRunEnded, markRunStarted, updateSessionRow } from './session-list.mjs';
@@ -222,6 +223,7 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
     updateSessionRow(row, { lastActivityAt: nowMs() });
     broadcastSessionMessage(state, sessionKey, userMsg, transcript.length);
     broadcastSessionChanged(state, sessionKey, 'send', row);
+    if (isHiddenConsultTrigger(text)) emitHiddenConsult(state, run, sessionKey, transcript);
 
     const compact = /^\/compact(?:\s+([\s\S]*))?$/i.exec(String(text ?? '').trim());
     if (compact) return await simulateCompactCommand(state, run, sessionKey, row, compact[1]?.trim() ?? '');

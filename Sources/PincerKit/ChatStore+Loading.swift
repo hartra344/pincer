@@ -1073,8 +1073,10 @@ extension ChatStore {
             let older = await Self.parseDetached(raw, fallbackBase: -(offset + raw.count))
             let known = Set(self.items.map(\.id))
             let fresh = older.filter { !known.contains($0.id) }
-            self.olderOffset = page["nextOffset"]?.int ?? (offset + older.count)
-            self.hasMoreHistory = (page["hasMore"]?.bool ?? (older.count >= self.historyLimit)) && !older.isEmpty
+            let next = Self.olderPageContinuation(rawCount: raw.count, filteredCount: older.count,
+                                                  hasMore: page["hasMore"]?.bool, offset: offset, limit: self.historyLimit)
+            self.olderOffset = page["nextOffset"]?.int ?? next.nextOffset
+            self.hasMoreHistory = next.hasMore
             self.hasPagedOlder = true
             if !fresh.isEmpty { self.items = fresh + self.items }
             self.recoverCappedMessages()
@@ -1083,6 +1085,15 @@ extension ChatStore {
             self.errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Paging fallback when the Gateway sends no `hasMore`/`nextOffset`. It counts raw records, not the
+    /// displayed ones (`filteredCount` is informational), so hidden records never end paging early.
+    nonisolated static func olderPageContinuation(rawCount: Int, filteredCount: Int, hasMore: Bool?, offset: Int,
+                                                  limit: Int) -> (hasMore: Bool, nextOffset: Int)
+    {
+        _ = filteredCount
+        return ((hasMore ?? (rawCount >= limit)) && rawCount > 0, offset + rawCount)
     }
 
     /// Parsing a page off the main actor keeps scrolling smooth while history streams in.
@@ -1094,8 +1105,14 @@ extension ChatStore {
         var parsed: [ChatItem] = []
         parsed.reserveCapacity(messages.count)
         var seen: [String: Int] = [:]
+        var afterHiddenPrompt = false
         for (index, message) in messages.enumerated() {
+            if message.isHiddenFromChat {
+                if message["role"]?.string == "user" { afterHiddenPrompt = true }
+                continue
+            }
             guard var item = ChatItem(message, fallbackIndex: fallbackBase + index, projectLegacyLocation: true) else { continue }
+            if item.role == .user { afterHiddenPrompt = false } else if item.role == .assistant && afterHiddenPrompt { item.followsHiddenPrompt = true }
             let count = seen[item.id, default: 0]
             seen[item.id] = count + 1
             if count > 0 { item.id += "#\(count)" }

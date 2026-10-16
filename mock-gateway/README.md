@@ -134,6 +134,7 @@ Text-to-speech (`tts.mjs`):
 - `config.patch` follows JSON merge patch: `null` deletes a key (e.g. `tts.providers.elevenlabs.apiKey`, `env.vars.ELEVENLABS_API_KEY`); `secrets.store.delete` removes a stored secret. A key whose reference no longer resolves makes the provider unconfigured again.
 - `tts.status.auto` is `off|always|inbound|tagged`, `enabled` is `auto != off`. It is the prefs value (`tts.enable` writes `always`, `tts.disable` writes `off`), else config `messages.tts.auto` (or `tts.auto`), else `off`. There is no RPC to set `inbound`/`tagged`; seed one with `MOCK_TTS_AUTO=inbound` (written to `messages.tts.auto`) or `config.patch`.
 - `MOCK_NO_TTS=1` drops all nine methods from `hello-ok` and answers them with `UNKNOWN_METHOD`.
+- `talk.catalog` returns an upstream-shaped Talk catalog (OpenAI realtime provider, `gateway-relay` + `agent-consult`); `talk.session.create` is advertised but answers `UNAVAILABLE` until the call lands. `MOCK_TALK=unconfigured` lists the provider as not configured (`ready: false`); `MOCK_NO_TALK=1` drops both methods. Sending the chat message `/mock hidden-consult` also emits one hidden `display: false` user record (internal_system provenance) before the normal visible reply.
 
 Usage & cost (`usage.mjs`):
 

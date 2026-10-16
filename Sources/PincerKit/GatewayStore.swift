@@ -290,6 +290,10 @@ public final class GatewayStore: Identifiable {
         if self.profile.isDemo { voice.voiceLister = DemoGateway.demoVoiceLister }
         return voice
     }()
+    /// Talk availability (`talk.catalog`); the call itself arrives in a later change.
+    @ObservationIgnored public private(set) lazy var talk = GatewayTalkModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        persistence: self.profile.isDemo ? .none : .defaults(self.defaults, gatewayId: self.profile.id.uuidString))
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -562,6 +566,7 @@ public final class GatewayStore: Identifiable {
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()
         self.voice.handleReconnect()
+        self.talk.handleReconnect()
     }
 
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
@@ -1162,7 +1167,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private func notifyReply(sessionKey: String, runId: String?, snapshot: JSONValue?) {
-        guard let row = self.sessions[sessionKey], !row.isNestedHelper else { return }
+        guard snapshot?.isHiddenFromChat != true, let row = self.sessions[sessionKey], !row.isNestedHelper else { return }
         let text = snapshot.flatMap { ChatItem($0, fallbackIndex: 0) }?.plainText
         self.notifier?.notifyReply(row: row, text: text ?? row.preview, dedupe: runId, gateway: self)
     }

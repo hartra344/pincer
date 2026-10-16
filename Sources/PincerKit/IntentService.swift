@@ -795,7 +795,7 @@ public final class IntentService {
     static func lastAssistantText(sessionKey: String, on connection: any IntentConnection) async -> String? {
         guard let history = try? await connection.request(
             "chat.history", ["sessionKey": .string(sessionKey), "limit": 20], timeout: 20) else { return nil }
-        let items = (history["messages"]?.array ?? []).enumerated().compactMap { ChatItem($1, fallbackIndex: $0) }
+        let items = (history["messages"]?.array ?? []).enumerated().compactMap { $1.isHiddenFromChat ? nil : ChatItem($1, fallbackIndex: $0) }
         return items.last { $0.role == .assistant && !$0.plainText.isEmpty }?.plainText
     }
 

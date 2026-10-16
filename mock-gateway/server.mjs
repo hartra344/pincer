@@ -12,6 +12,7 @@ import { CRON_METHODS, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, handleLogsRequest, logsDisabled, stopLogs } from './logs.mjs';
 import { EXEC_APPROVALS_METHODS, execApprovalsDisabled, handleExecApprovalsRequest } from './exec-approvals.mjs';
 import { SECRETS_METHODS, handleSecretsRequest, secretsDisabled } from './secrets.mjs';
+import { TALK_METHODS, handleTalkRequest, talkDisabled } from './talk.mjs';
 import { TTS_METHODS, handleTtsRequest, ttsDisabled } from './tts.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, handleChannelPairingRequest } from './pairing.mjs';
@@ -66,6 +67,7 @@ const METHODS = [
   ...EXEC_APPROVALS_METHODS,
   ...USAGE_METHODS,
   ...TTS_METHODS,
+  ...TALK_METHODS,
   ...SECRETS_METHODS,
   'question.list',
   'question.resolve',
@@ -193,6 +195,7 @@ function advertisedMethods() {
     ...(nodesDisabled() ? NODE_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
     ...(ttsDisabled() ? TTS_METHODS : []),
+    ...(talkDisabled() ? TALK_METHODS : []),
     ...(secretsDisabled() ? SECRETS_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
@@ -230,6 +233,7 @@ const REQUEST_HANDLERS = [
   (state, conn, msg) => handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleSkillsRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleTtsRequest(state, conn, msg, { sendRes, sendErr }),
+  (state, conn, msg) => handleTalkRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleSecretsRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleUsageRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr }),

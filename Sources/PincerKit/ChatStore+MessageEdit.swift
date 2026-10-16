@@ -64,7 +64,8 @@ extension ChatStore {
     /// The last assistant reply, when a user message precedes it and no run is streaming.
     public func canRegenerate(_ messageId: String) -> Bool {
         guard self.canRewindMessages, !self.isBusyForHistoryChange,
-              let found = self.committedItem(messageId), found.item.role == .assistant else { return false }
+              let found = self.committedItem(messageId), found.item.role == .assistant,
+              found.item.followsHiddenPrompt != true else { return false }
         guard self.items.lastIndex(where: { $0.role == .assistant && !$0.isPending }) == found.index else { return false }
         return self.precedingUser(before: found.index) != nil
     }
