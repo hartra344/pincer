@@ -504,6 +504,7 @@ private struct TranscriptPane: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
+    @Environment(\.chatChromeActions) private var chromeActions
 
     private var agent: AgentSummary {
         self.gateway.agent(self.chat.sessionRow?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main")
@@ -593,6 +594,9 @@ private struct TranscriptPane: View {
                     openMCPServer: { [opener = self.openGatewaySettings, gateway = self.gateway,
                                       sessionKey = self.chat.sessionKey] in
                         opener.mcpServer(gateway, name: $0, sessionKey: sessionKey)
+                    },
+                    openBrowserPage: { [chrome = self.chromeActions, gateway = self.gateway] page in
+                        chrome?.openBrowserPage(page, in: gateway) ?? false
                     }),
                 isConnected: self.gateway.state.isConnected,
                 bottomInset: self.bottomInset,

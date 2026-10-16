@@ -102,6 +102,9 @@ private func checkBrowserCards(_ gateway: GatewayStore, label: String) async {
           && ["http", "https"].contains(page.url.scheme ?? ""),
           "\(label): browser card has a title (\(page.displayTitle)) and http(s) URL (\(page.url))")
     check(page.title?.isEmpty == false, "\(label): browser card carries a page title (\(page.title ?? "nil"))")
+    #if DEBUG && os(macOS)
+    if gateway.profile.isDemo { checkBrowserCardRouting(gateway, page: page, label: label) }
+    #endif
     check(gateway.advertises("controlUi.linkPreview"), "\(label): the gateway advertises controlUi.linkPreview")
     gateway.pagePreviews.load(page.url)
     let resolved = await waitFor("\(label) link preview", timeout: 10) { gateway.pagePreviews.preview(for: page.url)?.image != nil }

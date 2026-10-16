@@ -50,6 +50,20 @@ struct ChatChromeActions {
         }
         self.showWorkspace.wrappedValue = true
     }
+
+    /// The transcript card's tap (#976): the browser panel when it can stream the page (`browser.request`
+    /// advertised and `operator.admin`), else false so the card opens the URL externally.
+    @MainActor
+    func openBrowserPage(_ page: BrowserPagePreview, in gateway: GatewayStore) -> Bool {
+        guard Self.panelCanShow(gateway) else { return false }
+        self.openBrowserPage(page.tab, in: gateway)
+        return true
+    }
+
+    @MainActor
+    static func panelCanShow(_ gateway: GatewayStore) -> Bool {
+        gateway.advertises("browser.request") && gateway.browserPanel.hasAdmin
+    }
 }
 
 /// A chat's title for headers, before the sessions list arrives too (#407): the row's title, else

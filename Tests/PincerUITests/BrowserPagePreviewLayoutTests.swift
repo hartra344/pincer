@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 @testable import PincerKit
 @testable import PincerUI
@@ -146,6 +147,21 @@ struct BrowserPagePreviewLayoutTests {
         let page = Self.tool("c1").browserPage!
         renderer.openBrowserPage(page)
         #expect(opened == page)
+    }
+
+    @Test func cardCarriesThePanelsTabRef() {
+        let page = Self.tool("c1").browserPage!
+        #expect(page.tab.targetId == "t1" && page.tab.url == page.url)
+    }
+
+    @Test func tapFallsBackToExternalWhenThePanelCannotShowPages() {
+        let (_, gateway) = Self.make(tools: [])
+        var showWorkspace = false
+        let actions = ChatChromeActions(showRuns: .constant(false),
+                                        showWorkspace: Binding(get: { showWorkspace }, set: { showWorkspace = $0 }),
+                                        toolsInspector: .constant(nil))
+        #expect(!actions.openBrowserPage(Self.tool("c1").browserPage!, in: gateway))
+        #expect(!showWorkspace && gateway.browserPanel.selectedTargetId == nil)
     }
 
     @Test func decodingTheImageDoesNotChangeTheRowHeight() throws {

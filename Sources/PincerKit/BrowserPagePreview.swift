@@ -7,6 +7,8 @@ public struct BrowserPagePreview: Hashable, Sendable {
     public let url: URL
     public let title: String?
     public let tabKey: String
+    /// The same tab as the browser panel's `BrowserTabRef.parse` reads it, for routing a tap to the panel.
+    public let tab: BrowserTabRef
 
     public var host: String { self.url.host(percentEncoded: false) ?? self.url.absoluteString }
     /// Host with its port when the URL has one (`example.com:8443`).
@@ -35,6 +37,7 @@ public struct BrowserPagePreview: Hashable, Sendable {
 
     public static func parse(toolName: String, details: JSONValue?, isError: Bool, toolCallId: String) -> BrowserPagePreview? {
         guard toolName == "browser", !isError, let tab = details?["browserTab"]?.object,
+              let ref = BrowserTabRef.parse(details),
               let targetId = tab["targetId"]?.string, !targetId.isEmpty,
               let profile = tab["profile"]?.string, !profile.isEmpty,
               let target = tab["target"]?.string,
@@ -51,7 +54,7 @@ public struct BrowserPagePreview: Hashable, Sendable {
         default: return nil
         }
         let title = tab["title"]?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return BrowserPagePreview(toolCallId: toolCallId, url: url, title: title?.isEmpty == false ? title : nil, tabKey: key)
+        return BrowserPagePreview(toolCallId: toolCallId, url: url, title: title?.isEmpty == false ? title : nil, tabKey: key, tab: ref)
     }
 
     /// Footer lines: `browserTab.title`, else the link preview's title, else the host; the subtitle is the
