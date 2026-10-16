@@ -3,14 +3,14 @@ import crypto from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from '../server.mjs';
-import { FAILED_DELIVERY_QUEUE, addFailedDelivery, createHealthState, healthSummary } from '../health.mjs';
+import { FAILED_DELIVERY_QUEUE, addFailedDelivery, createHealthState, healthSummary, systemInfo } from '../health.mjs';
 import { makeDevice, connectClient } from './helpers.mjs';
 
 export async function run(ctx) {
   const { server, port, url, device, deviceToken, agents, sessions, failed, delivery, message, system, snapshot, adminScopes, restart, again, nothing, status, one } = ctx;
   // Health, presence and a safe restart.
   const watcher = await connectClient(url, device, deviceToken, true);
-  for (const method of ['health', 'status', 'last-heartbeat', 'system-presence', 'gateway.restart.request']) {
+  for (const method of ['health', 'status', 'last-heartbeat', 'system-presence', 'system.info', 'gateway.restart.request']) {
     assert.ok(watcher.hello.features.methods.includes(method), method);
   }
   for (const event of ['health', 'heartbeat', 'presence', 'shutdown']) assert.ok(watcher.hello.features.events.includes(event), event);
@@ -40,6 +40,12 @@ export async function run(ctx) {
   assert.equal((await watcher.send('last-heartbeat')).status, 'ok-token');
   assert.ok((await watcher.send('system-presence')).some((p) => p.mode === 'node'));
   assert.ok((await watcher.send('status')).uptimeMs > 0);
+  const info = await watcher.send('system.info');
+  assertSystemInfoShape(info);
+  assert.equal(info.osLabel, 'Ubuntu 24.04');
+  assert.equal(info.cpuCount, 8);
+  assert.equal(info.disks.length, 2);
+  const instanceBefore = info.processInstanceId;
   const restartDenied = await watcher.call('gateway.restart.request', { reason: 'nope' });
   assert.equal(restartDenied.error.details.code, 'MISSING_SCOPE');
 
@@ -69,6 +75,9 @@ export async function run(ctx) {
   await delay(1700);
   const back = await connectClient(url, device, deviceToken, true, adminScopes);
   assert.ok(back.hello.snapshot.uptimeMs < 60_000, 'fresh uptime after restart');
+  const infoAfter = await back.send('system.info');
+  assert.notEqual(infoAfter.processInstanceId, instanceBefore, 'a restart is a new process instance');
+  assert.ok(infoAfter.uptimeMs < 60_000);
   // Nothing running: scheduled right away.
   const backClosed = new Promise((resolve) => back.ws.once('close', (code) => resolve(code)));
   const scheduled = await back.send('gateway.restart.request', { reason: 'selftest again' });
@@ -89,6 +98,19 @@ export async function run(ctx) {
     old.ws.close();
   } finally {
     delete process.env.MOCK_NO_HEALTH;
+  }
+
+  // MOCK_NO_SYSTEM_INFO=1 drops only system.info.
+  process.env.MOCK_NO_SYSTEM_INFO = '1';
+  try {
+    const older = await connectClient(url, device, deviceToken, true);
+    assert.ok(!older.hello.features.methods.includes('system.info'));
+    assert.ok(older.hello.features.methods.includes('health'));
+    assert.equal((await older.call('system.info')).error.code, 'UNKNOWN_METHOD');
+    assert.equal((await older.send('health')).ok, true);
+    older.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_SYSTEM_INFO;
   }
 
   // The failed delivery survived the restarts; MOCK_FAILED_DELIVERY_EVERY adds more, MOCK_FAILED_DELIVERY=off drops it.
@@ -135,4 +157,34 @@ export async function run(ctx) {
   } finally {
     await offServer.close();
   }
+}
+
+function assertSystemInfoShape(info) {
+  const allowed = new Set(['machineName', 'hostname', 'platform', 'release', 'arch', 'osLabel', 'lanAddress', 'port',
+    'nodeVersion', 'pid', 'processInstanceId', 'uptimeMs', 'cpuCount', 'cpuModel', 'loadAverage', 'memoryTotalBytes',
+    'memoryFreeBytes', 'eventLoop', 'processMemory', 'diskTotalBytes', 'diskAvailableBytes', 'diskPath', 'disks']);
+  for (const key of Object.keys(info)) assert.ok(allowed.has(key), `unexpected system.info field ${key}`);
+  for (const key of ['machineName', 'hostname', 'platform', 'release', 'arch', 'osLabel', 'nodeVersion']) {
+    assert.equal(typeof info[key], 'string', key);
+  }
+  for (const key of ['pid', 'uptimeMs', 'cpuCount', 'memoryTotalBytes', 'memoryFreeBytes', 'diskTotalBytes', 'diskAvailableBytes']) {
+    assert.ok(Number.isInteger(info[key]), `${key} is an integer`);
+  }
+  assert.ok(info.processInstanceId.length > 0);
+  assert.equal(info.loadAverage.length, 3);
+  assert.ok(info.loadAverage.every((n) => typeof n === 'number' && n >= 0));
+  assert.ok(info.memoryFreeBytes >= 0 && info.memoryFreeBytes <= info.memoryTotalBytes);
+  const host = info.eventLoop.cpuBreakdown.hostUtilization;
+  assert.ok(host >= 0 && host <= 1);
+  assert.ok(info.eventLoop.cpuCoreRatio >= 0);
+  assert.ok(Number.isInteger(info.eventLoop.cpuBreakdown.hostCpuCount));
+  for (const key of ['rssBytes', 'heapUsedBytes', 'heapTotalBytes']) assert.ok(Number.isInteger(info.processMemory[key]) && info.processMemory[key] >= 0);
+  for (const disk of info.disks) {
+    assert.ok(disk.path.length > 0 && Number.isInteger(disk.totalBytes) && disk.totalBytes >= 1);
+    assert.ok(Number.isInteger(disk.availableBytes) && disk.availableBytes >= 0);
+  }
+  assert.deepEqual(info.disks[0].path, info.diskPath);
+  // Drifts with the clock but stays in range.
+  const later = systemInfo({ healthState: { processInstanceId: 'x', startedAt: 0 } }, Date.now() + 600_000);
+  assert.ok(later.eventLoop.cpuBreakdown.hostUtilization <= 1 && later.eventLoop.cpuBreakdown.hostUtilization >= 0);
 }

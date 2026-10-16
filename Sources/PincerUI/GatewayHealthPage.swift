@@ -6,6 +6,7 @@ import SwiftUI
 struct GatewayHealthPage: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
+    @Environment(\.scenePhase) private var scenePhase
     @State private var confirmRestart = false
     @State private var confirmForce = false
     @State private var showDismissed = false
@@ -20,6 +21,7 @@ struct GatewayHealthPage: View {
                 self.restartBanner(model)
             }
             self.summary(model, connected: connected)
+            GatewayHostVitalsSection(model: model.host, connected: connected)
             self.issues(model)
             self.rejectedPreferences(self.gateway.rejectedPrefHealthRows)
             self.channels(model)
@@ -30,13 +32,19 @@ struct GatewayHealthPage: View {
         .navigationTitle(L("Health"))
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
+                Button { Task { async let host: Void = model.host.sample(); await model.load(); await host } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                     .disabled(!connected || model.loadState.isRunning)
                     .help(L("Refresh"))
             }
         }
         #if os(iOS)
-        .refreshable { if connected { await model.load() } }
+        .refreshable {
+            if connected {
+                async let host: Void = model.host.sample()
+                await model.load()
+                await host
+            }
+        }
         #endif
         .task(id: connected) {
             guard connected else { return }
@@ -46,6 +54,14 @@ struct GatewayHealthPage: View {
                 try? await Task.sleep(for: GatewayHealthModel.refreshInterval)
                 guard !Task.isCancelled else { return }
                 await model.refreshIfStale()
+            }
+        }
+        .task(id: connected && self.scenePhase == .active) {
+            guard connected, self.scenePhase == .active, model.host.isAvailable else { return }
+            while !Task.isCancelled {
+                await model.host.sample()
+                guard model.host.isAvailable, !model.host.missingScope else { return }
+                try? await Task.sleep(for: GatewayHostVitalsModel.pollInterval)
             }
         }
         .confirmationDialog(L("Restart Gateway?"), isPresented: self.$confirmRestart, titleVisibility: .visible) {
