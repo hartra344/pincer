@@ -52,13 +52,38 @@ public struct BrowserPagePreview: Hashable, Sendable {
         return BrowserPagePreview(toolCallId: toolCallId, url: url, title: title?.isEmpty == false ? title : nil, tabKey: key)
     }
 
-    /// The latest successful result per tab, keyed by tool call id.
-    public static func latestPerTab(_ tools: [ToolActivity]) -> [String: BrowserPagePreview] {
-        var latest: [String: BrowserPagePreview] = [:]
-        for tool in tools {
-            guard let page = tool.browserPage else { continue }
-            latest[page.tabKey] = page
+    /// Footer lines: `browserTab.title`, else the link preview's title, else the host; the subtitle is the
+    /// URL, or just path + query when line 1 already is the host (unless the path is "/").
+    public func footer(linkTitle: String?) -> (title: String, subtitle: String) {
+        if let title { return (title, self.displayURL) }
+        if let linkTitle = linkTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !linkTitle.isEmpty {
+            return (linkTitle, self.displayURL)
         }
-        return Dictionary(latest.values.map { ($0.toolCallId, $0) }, uniquingKeysWith: { first, _ in first })
+        let path = self.url.path(percentEncoded: false)
+        guard path != "/" else { return (self.host, self.displayURL) }
+        var rest = path
+        if let query = self.url.query(percentEncoded: false), !query.isEmpty { rest += "?\(query)" }
+        return (self.host, rest)
+    }
+
+    /// The latest successful result per tab, ordered by when that result came, at most `limit` (the most recent tabs).
+    public static func latestPerTab(_ tools: [ToolActivity], limit: Int = 3) -> [BrowserPagePreview] {
+        var latest: [String: (index: Int, page: BrowserPagePreview)] = [:]
+        for (index, tool) in tools.enumerated() {
+            guard let page = tool.browserPage else { continue }
+            latest[page.tabKey] = (index, page)
+        }
+        return latest.values.sorted { $0.index < $1.index }.suffix(max(limit, 0)).map(\.page)
+    }
+
+    /// For each tab, the id of the latest assistant turn that shows a card for it. The screenshot hook
+    /// (`BrowserPagePreviews.setScreenshot`) applies only to that turn's card; older turns keep their og:image.
+    public static func latestTurnIds(_ entries: [TranscriptEntry]) -> [String: String] {
+        var turns: [String: String] = [:]
+        for entry in entries {
+            guard case let .assistant(turn) = entry else { continue }
+            for page in latestPerTab(turn.tools) { turns[page.tabKey] = turn.id }
+        }
+        return turns
     }
 }

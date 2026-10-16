@@ -27,6 +27,9 @@ public final class BrowserPagePreviews {
     @ObservationIgnored private var sizes: [URL: Int] = [:]
     @ObservationIgnored private var totalBytes = 0
     @ObservationIgnored private var inFlight: Set<URL> = []
+    @ObservationIgnored private var queue: [URL] = []
+    @ObservationIgnored private var active = 0
+    static let maxInFlight = 4
     @ObservationIgnored private var failedAt: [URL: Date] = [:]
     @ObservationIgnored private var epoch = 0
     #if DEBUG
@@ -50,20 +53,42 @@ public final class BrowserPagePreviews {
             if let index = self.order.firstIndex(of: url) { self.order.append(self.order.remove(at: index)) }
             return
         }
-        guard !self.inFlight.contains(url), let gateway = self.gateway,
+        guard !self.inFlight.contains(url), !self.queue.contains(url), Self.isFetchable(url), let gateway = self.gateway,
               gateway.state.isConnected, gateway.advertises(Self.method) else { return }
         if let failed = self.failedAt[url], Date().timeIntervalSince(failed) < Self.retryInterval { return }
-        self.inFlight.insert(url)
-        #if DEBUG
-        self.requestCount += 1
-        #endif
-        let epoch = self.epoch
-        let connection = gateway.connection
-        Task { [weak self] in
-            let result = try? await connection.request(Self.method, .object(["url": .string(url.absoluteString)]), timeout: 20)
-            let parsed = await Task.detached(priority: .utility) { result.flatMap { Self.parse($0) } }.value
-            self?.finish(url, parsed, epoch: epoch)
+        self.queue.append(url)
+        self.pump()
+    }
+
+    private func pump() {
+        while self.active < Self.maxInFlight, !self.queue.isEmpty {
+            guard let gateway = self.gateway, gateway.state.isConnected else { self.queue = []; return }
+            let url = self.queue.removeFirst()
+            self.inFlight.insert(url)
+            self.active += 1
+            #if DEBUG
+            self.requestCount += 1
+            #endif
+            let epoch = self.epoch
+            let connection = gateway.connection
+            Task { [weak self] in
+                let result = try? await connection.request(Self.method, .object(["url": .string(url.absoluteString)]), timeout: 20)
+                let parsed = await Task.detached(priority: .utility) { result.flatMap { Self.parse($0) } }.value
+                self?.finish(url, parsed, epoch: epoch)
+            }
         }
+    }
+
+    /// Public http(s) hosts only: no loopback, private, link-local or `.local` names, and no raw IP literals.
+    nonisolated static func isFetchable(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host(percentEncoded: false)?.lowercased(), !host.isEmpty else { return false }
+        if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") || host.hasSuffix(".internal")
+            || host.hasSuffix(".lan") || host.hasSuffix(".home.arpa") || !host.contains(".") { return false }
+        if host.contains(":") { return false }
+        let parts = host.split(separator: ".")
+        if parts.allSatisfy({ $0.allSatisfy(\.isNumber) }) || (parts.last?.allSatisfy(\.isNumber) ?? false) { return false }
+        return true
     }
 
     /// Drops everything: the gateway profile changed.
@@ -75,12 +100,16 @@ public final class BrowserPagePreviews {
         self.sizes = [:]
         self.totalBytes = 0
         self.inFlight = []
+        self.queue = []
+        self.active = 0
         self.failedAt = [:]
     }
 
     private func finish(_ url: URL, _ parsed: (LinkPreview, Int)?, epoch: Int) {
         guard epoch == self.epoch else { return }
         self.inFlight.remove(url)
+        self.active -= 1
+        defer { self.pump() }
         guard let (preview, bytes) = parsed else {
             self.failedAt[url] = Date()
             return
