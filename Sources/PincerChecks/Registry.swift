@@ -123,6 +123,7 @@ enum Suites {
             Section("Agent file reload ownership") { await runAgentFileReloadOwnershipChecks() },
             Section("Agent file write authority") { await runAgentFileWriteAuthorityChecks() },
             Section(nil) { checkSubagents() },
+            Section("Session abort") { runSessionAbortOfflineChecks() },
             Section("Runs duration boundary") { runRunDurationOverflowChecks() },
             Section("Runs duration safe bounds") { runRunDurationBoundsChecks() },
             Section(nil) { checkForwardedMessages() },
@@ -319,6 +320,7 @@ enum Suites {
     /// The built-in demo, first half.
     static let demoCore: [Section] = [
         Section("Built-in demo") { await runDemo() },
+        Section("Session abort (demo)") { await runDemoSessionAbortChecks() },
         Section("Location transport (demo)") { await runDemoLocationTransportChecks() },
         Section("Demo message search with the cache off") { await checkDemoSearchWithoutCache() },
         Section("Shortcuts on the demo") { await runDemoIntents() },
@@ -516,6 +518,8 @@ enum Suites {
         LiveSection("Location transport (live)") { url, token in await runLiveLocationTransportChecks(url: url, token: token) },
         LiveSection("Demo removal offer (live)") { url, token in await runLiveDemoRemovalOfferChecks(url: url, token: token) },
         LiveSection("Gateway Settings sidebar (live)") { url, token in await runLiveGatewaySettingsSidebarChecks(url: url, token: token) },
+        // Before the full live run, which stops the seeded run and helper itself.
+        LiveSection("Session abort (live)") { url, token in await runLiveSessionAbortChecks(url: url, token: token) },
         LiveSection(title: { "Live against \($0)" }) { url, token in await runLive(url: url, token: token) },
     ]
 
