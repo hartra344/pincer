@@ -97,6 +97,7 @@ enum Suites {
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
             Section("Browser panel wire, tabs and decode") { runBrowserOfflineChecks() },
+            Section("Portal origin policy and parsing") { runPortalOfflineChecks() },
             Section("Composer sizing") { runComposerSizingChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
@@ -344,6 +345,7 @@ enum Suites {
     static var demoExtras: [Section] {
         var sections: [Section] = [
         Section("Browser panel (demo, #974)") { await runDemoBrowserChecks() },
+        Section("Portals (demo, #974)") { await runDemoPortalChecks() },
         Section("Tools catalog plugin validation (demo)") { await runDemoToolsCatalogPluginValidationChecks() },
         Section("Tools catalog agent validation (demo)") { await runDemoToolsCatalogAgentValidationChecks() },
         Section("Effective tools agent validation (demo)") { await runDemoEffectiveAgentValidationChecks() },
@@ -543,6 +545,7 @@ enum Suites {
         LiveSection("Cold-launch routes (live)") { url, token in await runLiveColdLaunchRouteChecks(url: url, token: token) },
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
         LiveSection("Browser panel (live, #974)") { url, token in await runLiveBrowserChecks(url: url, token: token) },
+        LiveSection("Portals (live, #974)") { url, token in await runLivePortalChecks(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
         LiveSection("Skill API key validation (live)") { url, token in await runLiveSkillApiKeyChecks(url: url, token: token) },

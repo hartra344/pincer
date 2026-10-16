@@ -269,6 +269,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var browserPanel = BrowserPanelModel(
         connection: self.connection, profile: { [weak self] in self?.profile ?? GatewayProfile(name: "", url: "", authMode: .none) },
         hello: { [weak self] in self?.hello })
+    /// The agent's portals (`portal.list`, `portal.close`); refreshed by `portal.changed`. Hidden when unavailable.
+    @ObservationIgnored public private(set) lazy var portals = PortalStore(
+        connection: self.connection, hello: { [weak self] in self?.hello }, isDemo: self.profile.isDemo)
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
@@ -563,6 +566,7 @@ public final class GatewayStore: Identifiable {
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
         self.browserPanel.handleReconnect()
+        self.portals.handleReconnect()
         self.devices.handleReconnect()
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()
@@ -1039,6 +1043,8 @@ public final class GatewayStore: Identifiable {
         for tap in self.eventTaps.values { tap(event) }
         let payload = event.payload
         switch event.name {
+        case PortalStore.changedEvent:
+            self.portals.handle(event: event.name)
         case "sessions.changed":
             self.applySessionChange(payload)
         case "users.prefs.changed":

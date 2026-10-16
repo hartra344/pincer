@@ -7,6 +7,7 @@ const SECTIONS = [
   'file-edits',
   'tool-cards',
   'browser',
+  'portals',
   'send-hooks',
   'replies',
   'reaction-level',

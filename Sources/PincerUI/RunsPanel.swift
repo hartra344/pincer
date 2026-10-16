@@ -23,6 +23,8 @@ struct ChatInspectorChrome: ViewModifier {
     @Binding var panel: ChatInspectorPanel?
     /// The last panel shown, so dismissal animates out the content it had instead of flashing Runs.
     @State private var shown: ChatInspectorPanel = .runs
+    /// This window's portal web views; they outlive the panel, so reopening it is instant.
+    @State private var portalCache = PortalWebCache()
     private var current: ChatInspectorPanel { self.panel ?? self.shown }
     /// False while the split view's headers show their own Runs and Browser buttons (#427).
     var showsToolbarButton = true
@@ -65,7 +67,7 @@ struct ChatInspectorChrome: ViewModifier {
                 Group {
                     switch self.current {
                     case .workspace:
-                        WorkspacePanel()
+                        WorkspacePanel(cache: self.portalCache)
                             .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
                     default:
                         RunsPanel()
@@ -76,7 +78,7 @@ struct ChatInspectorChrome: ViewModifier {
             .sheet(isPresented: self.presented(true)) {
                 NavigationStack {
                     Group {
-                        if self.current == .workspace { WorkspacePanel() } else { RunsPanel() }
+                        if self.current == .workspace { WorkspacePanel(cache: self.portalCache) } else { RunsPanel() }
                     }
                     .navigationTitle(self.current == .workspace ? L("Browser") : L("Runs"))
                     #if os(iOS)
@@ -89,6 +91,8 @@ struct ChatInspectorChrome: ViewModifier {
                     }
                 }
                 .presentationDetents(self.current == .workspace ? [.large] : [.medium, .large])
+                // Pulling down inside a portal page scrolls it; Done closes the sheet.
+                .presentationContentInteraction(self.current == .workspace ? .scrolls : .automatic)
             }
     }
 }

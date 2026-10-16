@@ -130,6 +130,14 @@ Live browser panel (`browser.mjs`, #974):
 - Malformed-frame hooks: mint with `POST /screencast` body `targetId` `bad-header-length` (header length larger than the data) or `oversized-header` (a 70000-byte header, over the 64 KiB cap); the token then starts with that name. Appending `&case=<name>` to the socket URL does the same for a normal token. Both send `ready` first, then the bad frame repeatedly.
 - `MOCK_NO_BROWSER=1` drops `browser.request` from `hello-ok` and answers it with `UNKNOWN_METHOD`; the upgrade answers 404.
 
+Portals (`portals.mjs`, #974):
+
+- `portal.list {environmentId?}` (operator.read) → `{portals}`; `portal.close {id, environmentId?}` (operator.write) → `{closed}` (`false` for an unknown id). `portal.open` is not mocked: the agent opens portals, Pincer doesn't. Connections without `operator.write`/`operator.admin` get summaries without `url` and `tokenQuery`, as upstream.
+- Two seeded portals, `portal_studio_clock` and `portal_build_dashboard` "Build dashboard" (own port and token, so one portal's cookie is a 401 on the other). The first is `portal_studio_clock` "Studio clock" (description, `path: "/"`, `exposure {kind: "non-loopback", browserReachability: "unverified"}`), backed by a real HTTP server on a random 127.0.0.1 port (`listenPort`; `publicUrl` is `http://127.0.0.1:<listenPort>/`, `url` adds `?openclaw_portal=<token>`). The page is a ticking clock. A request with the `openclaw_portal` query token gets 200 and `Set-Cookie: openclaw_portal_<listenPort>=<token>; HttpOnly; SameSite=Lax; Path=/`; the cookie alone also works; neither is 401.
+- `GET /redirect-out` on a portal (token or cookie required, else 401) answers 302 to `http://example.com/`. `MOCK_PORTAL_LOOPBACK=1` makes Studio clock report `exposure.kind: "loopback-only"`.
+- `portal.close` stops that portal's HTTP server and broadcasts `portal.changed {portals}` (always redacted) to every connection. The servers also stop with the mock.
+- `MOCK_NO_PORTALS=1` drops both methods from `hello-ok` (and starts no HTTP server), like an older Gateway.
+
 Text-to-speech (`tts.mjs`):
 
 - `tts.status`, `tts.providers` (`openai` configured with voices `alloy`/`verse`, `elevenlabs` not configured), `tts.personas` (`narrator`, `concise`), `tts.enable`/`tts.disable` (flip `enabled` and `auto` between `always` and `off`), `tts.setProvider`, `tts.setPersona` (`off`/`none`/`default`/empty clears) and `tts.convert` (fake gateway-local `audioPath`). Provider, persona and enabled state are mutable per server. Bad ids fail with the Gateway's `Invalid provider. Use a registered TTS provider id.` / `Invalid persona. Use a configured TTS persona id.`.

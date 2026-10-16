@@ -4,32 +4,71 @@ import SwiftUI
 /// The workspace inspector: a tab strip over what the agent is working with. Only Browser for now;
 /// Portals and Files come later, so tabs are an enum rather than a hardcoded view.
 struct WorkspacePanel: View {
-    enum Tab: String, CaseIterable, Identifiable {
+    enum Tab: Hashable {
         case browser
-        var id: String { self.rawValue }
-        var title: String { L("Browser") }
+        case portal(String)
     }
 
     @Environment(GatewayStore.self) private var gateway
-    @State private var tab: Tab = .browser
+    /// nil until the user picks a tab: then Browser, or the first portal when the browser needs Full Management.
+    @State private var picked: Tab?
+    @Environment(\.scenePhase) private var scenePhase
+    /// Owned by the window's inspector chrome, so loaded portals survive reopening the panel.
+    let cache: PortalWebCache
+    @State private var closing: PortalSummary?
+    @State private var lastClosingTitle = ""
+    /// The panel has finished sliding in; the first web view is created only after.
+    @State private var settled = false
+    @State private var dismissedCloseError: String?
+
+    /// How long the inspector slide takes to settle. A var so a probe can shorten or lengthen it.
+    static var slideSettleDelay: Duration = .milliseconds(350)
 
     var body: some View {
         let model = self.gateway.browserPanel
+        let store = self.gateway.portals
+        let portals = store.unavailable ? [] : store.portals
+        // A portal that closed falls back to Browser.
+        let browserWorks = model.status != .needsFullManagement
+        let tab = self.picked ?? (browserWorks ? .browser : portals.first.map { .portal($0.id) } ?? .browser)
+        let selected = portals.first { tab == .portal($0.id) }
         VStack(spacing: 0) {
-            WorkspaceTabStrip(tab: self.$tab, model: model)
+            WorkspaceTabStrip(tab: self.$picked, model: model, portals: portals, selectedPortal: selected?.id) { self.closing = $0 }
             Divider()
-            switch self.tab {
-            case .browser:
+            if let error = store.closeError, error != self.dismissedCloseError {
+                PortalBanner(symbol: "exclamationmark.triangle", dismiss: { self.dismissedCloseError = error }) { Text(error) }
+                Divider()
+            }
+            if let selected {
+                PortalView(portal: selected, cache: self.cache, canLoad: self.settled) { self.closing = selected }
+                    .id(selected.id)
+            } else {
                 BrowserPanelView(model: model)
             }
+        }
+        .task {
+            try? await Task.sleep(for: Self.slideSettleDelay)
+            self.settled = true
+        }
+        .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
+        .onChange(of: portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
+        .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
+        .portalCloseConfirmation(title: self.closing?.title ?? self.lastClosingTitle, isPresented: Binding(get: { self.closing != nil }, set: { if !$0 { self.closing = nil } })) {
+            guard let portal = self.closing else { return }
+            self.closing = nil
+            Task { await store.close(portal.id) }
         }
     }
 }
 
-/// `Browser ▾`: the tab name with a menu of the agent's open pages.
+/// `Browser ▾`: the tab name with a menu of the agent's open pages, then one tab per portal (only when
+/// there are portals, so a Browser-only panel keeps its PR 1 look).
 private struct WorkspaceTabStrip: View {
-    @Binding var tab: WorkspacePanel.Tab
+    @Binding var tab: WorkspacePanel.Tab?
     let model: BrowserPanelModel
+    let portals: [PortalSummary]
+    let selectedPortal: String?
+    let close: (PortalSummary) -> Void
 
     var body: some View {
         HStack(spacing: Theme.Spacing.md) {
@@ -39,6 +78,7 @@ private struct WorkspaceTabStrip: View {
                 }
                 ForEach(self.model.tabs) { page in
                     Button {
+                        self.tab = .browser
                         self.model.select(targetId: page.id)
                     } label: {
                         let text = Self.menuTitle(of: page)
@@ -50,13 +90,25 @@ private struct WorkspaceTabStrip: View {
                     }
                 }
             } label: {
-                Label(self.tab.title, systemImage: "globe")
-                    .font(.callout.weight(.semibold))
+                Label(L("Browser"), systemImage: "globe")
+                    .font(.callout.weight(self.selectedPortal == nil ? .semibold : .regular))
+            } primaryAction: {
+                self.tab = .browser
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             .accessibilityLabel(self.model.selectedTab.map { L("Browser, \(Self.title(of: $0))") } ?? L("Browser"))
             .accessibilityHint(L("Choose a page"))
+            if !self.portals.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: Theme.Spacing.md) {
+                        ForEach(self.portals) { portal in
+                            PortalTab(portal: portal, isSelected: self.selectedPortal == portal.id,
+                                      select: { self.tab = .portal(portal.id) }, close: { self.close(portal) })
+                        }
+                    }
+                }
+            }
             Spacer(minLength: 0)
         }
         .padding(Theme.Spacing.lg)
@@ -75,6 +127,56 @@ private struct WorkspaceTabStrip: View {
     }
 }
 
+private struct PortalTab: View {
+    let portal: PortalSummary
+    let isSelected: Bool
+    let select: () -> Void
+    let close: () -> Void
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            Button(action: self.select) {
+                Label(Self.shortened(self.portal.title), systemImage: "globe")
+                    .font(.callout.weight(self.isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .help(self.portal.title)
+            .accessibilityLabel(L("Portal: \(self.portal.title)"))
+            .accessibilityAddTraits(self.isSelected ? .isSelected : [])
+            if !self.portal.isRedacted {
+                Button(action: self.close) {
+                    Image(systemName: "xmark").font(.caption2.weight(.semibold))
+                        .frame(minWidth: Self.closeTarget, minHeight: Self.closeTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .help(L("Close Portal"))
+                .accessibilityLabel(L("Close portal \(self.portal.title)"))
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.xs)
+        .background(self.isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.18)) : AnyShapeStyle(Color.clear), in: Capsule())
+        .contextMenu {
+            if !self.portal.isRedacted {
+                Button(L("Close Portal"), systemImage: "xmark.circle", role: .destructive, action: self.close)
+            }
+        }
+    }
+
+    #if os(iOS)
+    static let closeTarget: CGFloat = 44
+    #else
+    static let closeTarget: CGFloat = 24
+    #endif
+
+    /// One line, about 24 characters; the full title is in the help.
+    static func shortened(_ title: String) -> String {
+        title.count > 24 ? title.prefix(23) + "…" : title
+    }
+}
+
 /// The Browser toolbar button (⌥⌘B). On compact iPhone it only shows while the panel is open; "Show
 /// Browser" in the chat's ⋯ menu covers the rest.
 struct BrowserToolbarButton: View {
@@ -82,9 +184,11 @@ struct BrowserToolbarButton: View {
     let isCompact: Bool
     var isFocused = true
     var focus: () -> Void = {}
+    @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
         if !self.isCompact || self.isPresented {
+            let count = self.gateway.portals.unavailable ? 0 : self.gateway.portals.portals.count
             let title = self.isPresented ? L("Hide Browser") : L("Show Browser")
             self.focusedPaneShortcut(Button {
                 if self.isFocused {
@@ -94,15 +198,45 @@ struct BrowserToolbarButton: View {
                     self.isPresented = true
                 }
             } label: {
-                Label(L("Browser"), systemImage: "globe")
-                    .foregroundStyle(self.isPresented ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                Label {
+                    Text(L("Browser"))
+                } icon: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "globe")
+                        if count > 0 {
+                            Text(count > 99 ? "99+" : "\(count)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, count > 9 ? 3 : 0)
+                                .frame(minWidth: 14, minHeight: 14)
+                                .background(Color.accentColor, in: Capsule())
+                                .offset(x: 8, y: -6)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .foregroundStyle(self.isPresented ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
             })
             #if os(iOS)
             .buttonStyle(.plain)
             #endif
-            .help(self.isPresented ? L("Hide Browser (⌥⌘B)") : L("Show Browser (⌥⌘B)"))
-            .accessibilityLabel(title)
+            .help(Self.help(isPresented: self.isPresented, count: count))
+            .accessibilityLabel(count > 0 ? "\(L("Browser")) — \(Self.portalsOpen(count))" : title)
         }
+    }
+
+    static func help(isPresented: Bool, count: Int) -> String {
+        let base = isPresented ? L("Hide Browser (⌥⌘B)") : L("Show Browser (⌥⌘B)")
+        return count > 0 ? L("\(base) — \(Self.portalsOpen(count))") : base
+    }
+
+    static func portalsOpen(_ count: Int) -> String {
+        count == 1 ? L("1 portal open") : L("\(count) portals open")
+    }
+
+    static func portalCount(_ count: Int) -> String {
+        count == 1 ? L("1 portal") : L("\(count) portals")
     }
 
     @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {
@@ -117,9 +251,19 @@ struct BrowserToolbarButton: View {
 /// "Show Browser" for the chat's session menu.
 struct ShowBrowserButton: View {
     @Binding var isPresented: Bool
+    @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        Button(self.isPresented ? L("Hide Browser") : L("Show Browser"), systemImage: "globe") {
+        let count = self.gateway.portals.unavailable ? 0 : self.gateway.portals.portals.count
+        let title = self.isPresented ? L("Hide Browser") : L("Show Browser")
+        let shown = switch (self.isPresented, count) {
+        case (_, 0): title
+        case (true, 1): L("Hide Browser · 1 portal")
+        case (true, _): L("Hide Browser · \(count) portals")
+        case (false, 1): L("Show Browser · 1 portal")
+        case (false, _): L("Show Browser · \(count) portals")
+        }
+        Button(shown, systemImage: "globe") {
             self.isPresented.toggle()
         }
     }

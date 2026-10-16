@@ -4,6 +4,7 @@ import Testing
 @testable import PincerUI
 #if os(macOS)
 import AppKit
+import SwiftUI
 
 /// #347: a sidebar/inspector slide changes the transcript width every frame. The transcript must not
 /// re-lay out per frame; it lays out once, around the viewport, when the width settles.
@@ -371,6 +372,44 @@ struct PanelSlideProbe {
         #expect(measured.isCurrent(at: finalLayoutWidth), "the streamed tail is measured at the final window width")
         #expect(abs(measured.value - expectedHeight) <= 0.5, "the streamed tail has its final-width height")
         #expect(abs(Self.bottomGap(host) - gapBefore) <= 1, "the reader remains bottom-anchored through the stream and thaw")
+    }
+
+    /// #974 PR 2: opening the panel on a portal tab must not create its WKWebView (a WebContent process
+    /// spin-up on main) until the slide has settled, so the slide stays inside its budget.
+    @Test func portalWebViewIsCreatedOnlyAfterTheSlideSettles() async throws {
+        struct Harness: View {
+            let portal: PortalSummary
+            let cache: PortalWebCache
+            @State private var settled = false
+            var body: some View {
+                PortalView(portal: self.portal, cache: self.cache, canLoad: self.settled) {}
+                    .task {
+                        try? await Task.sleep(for: WorkspacePanel.slideSettleDelay)
+                        self.settled = true
+                    }
+            }
+        }
+        let scratch = ScratchDefaults()
+        let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let saved = WorkspacePanel.slideSettleDelay
+        WorkspacePanel.slideSettleDelay = .milliseconds(600)
+        defer { WorkspacePanel.slideSettleDelay = saved }
+        let portal = PortalSummary(id: "probe-portal", title: "Probe", publicURL: URL(string: "http://127.0.0.1:9/")!,
+                                   loadURL: URL(string: "http://127.0.0.1:9/?openclaw_portal=probe")!)
+        let cache = PortalWebCache()
+        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 560, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: Harness(portal: portal, cache: cache).environment(gateway))
+        window.orderBack(nil)
+        defer { window.close() }
+
+        for _ in 0..<10 {
+            try await Task.sleep(for: .milliseconds(30))
+            #expect(cache.liveWebViewCount == 0, "no web view while the panel is still sliding")
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while cache.liveWebViewCount == 0, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(cache.liveWebViewCount == 1, "the web view appears once the slide has settled")
     }
 
     static func streamingTail(_ rows: [TranscriptRow], append: String) -> [TranscriptRow] {

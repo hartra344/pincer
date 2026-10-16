@@ -391,6 +391,16 @@
         }
       }
     },
+    "%@ portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ portal"
+          }
+        }
+      }
+    },
     "%@ rejected the key: %@": {
       "localizations": {
         "en": {
@@ -1003,6 +1013,26 @@
         }
       }
     },
+    "%lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld portals"
+          }
+        }
+      }
+    },
+    "%lld portals open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld portals open"
+          }
+        }
+      }
+    },
     "%lld problems": {
       "localizations": {
         "en": {
@@ -1239,6 +1269,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 plugin needs attention"
+          }
+        }
+      }
+    },
+    "1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 portal"
+          }
+        }
+      }
+    },
+    "1 portal open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 portal open"
           }
         }
       }
@@ -2703,6 +2753,16 @@
         }
       }
     },
+    "Blocked a page outside the portal: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked a page outside the portal: %@"
+          }
+        }
+      }
+    },
     "Blue": {
       "localizations": {
         "en": {
@@ -2929,6 +2989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calculating…"
+          }
+        }
+      }
+    },
+    "Can't load this portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't load this portal"
           }
         }
       }
@@ -3613,6 +3683,26 @@
         }
       }
     },
+    "Close \"%@\"?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close \"%@\"?"
+          }
+        }
+      }
+    },
+    "Close Portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Portal"
+          }
+        }
+      }
+    },
     "Close Split View": {
       "localizations": {
         "en": {
@@ -3629,6 +3719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close Window"
+          }
+        }
+      }
+    },
+    "Close portal %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close portal %@"
           }
         }
       }
@@ -4479,6 +4579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Link"
+          }
+        }
+      }
+    },
+    "Copy Link (without access)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link (without access)"
           }
         }
       }
@@ -7639,6 +7749,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide Browser (⌥⌘B)"
+          }
+        }
+      }
+    },
+    "Hide Browser · %lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser · %lld portals"
+          }
+        }
+      }
+    },
+    "Hide Browser · 1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser · 1 portal"
           }
         }
       }
@@ -11143,6 +11273,16 @@
         }
       }
     },
+    "Open in your browser?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in your browser?"
+          }
+        }
+      }
+    },
     "Open run": {
       "localizations": {
         "en": {
@@ -11863,6 +12003,16 @@
         }
       }
     },
+    "Pincer was connected without permission to open links. Reconnect this Gateway to fix it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer was connected without permission to open links. Reconnect this Gateway to fix it."
+          }
+        }
+      }
+    },
     "Pincer will connect to %@": {
       "localizations": {
         "en": {
@@ -11999,6 +12149,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Port, auth and reload"
+          }
+        }
+      }
+    },
+    "Portal address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portal address"
+          }
+        }
+      }
+    },
+    "Portal: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portal: %@"
           }
         }
       }
@@ -15153,6 +15323,26 @@
         }
       }
     },
+    "Show Browser · %lld portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser · %lld portals"
+          }
+        }
+      }
+    },
+    "Show Browser · 1 portal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser · 1 portal"
+          }
+        }
+      }
+    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
@@ -17163,6 +17353,16 @@
         }
       }
     },
+    "The link stops working for everyone. The agent can open a new portal if needed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The link stops working for everyone. The agent can open a new portal if needed."
+          }
+        }
+      }
+    },
     "The name is shown to every operator of this Gateway (up to %lld characters).": {
       "localizations": {
         "en": {
@@ -17173,12 +17373,32 @@
         }
       }
     },
+    "The page didn't respond.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The page didn't respond."
+          }
+        }
+      }
+    },
     "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away."
+          }
+        }
+      }
+    },
+    "The portal couldn't be closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The portal couldn't be closed."
           }
         }
       }
@@ -17743,6 +17963,16 @@
         }
       }
     },
+    "This connection can't open portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection can't open portals"
+          }
+        }
+      }
+    },
     "This device": {
       "localizations": {
         "en": {
@@ -17963,6 +18193,26 @@
         }
       }
     },
+    "This portal link has expired or closed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This portal link has expired or closed."
+          }
+        }
+      }
+    },
+    "This portal only listens on the gateway's machine, so it may not load here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This portal only listens on the gateway's machine, so it may not load here."
+          }
+        }
+      }
+    },
     "This removes the saved login. You'll need to scan a QR code again to reconnect.": {
       "localizations": {
         "en": {
@@ -18009,6 +18259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This schedule can only be changed in the Control UI or the config."
+          }
+        }
+      }
+    },
+    "This sends the portal's access link to your browser. Anyone with the link can use it until the portal closes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This sends the portal's access link to your browser. Anyone with the link can use it until the portal closes."
           }
         }
       }
@@ -19719,6 +19979,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your changes will be lost if you don't save them."
+          }
+        }
+      }
+    },
+    "Your connection can't close portals.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connection can't close portals."
           }
         }
       }
