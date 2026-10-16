@@ -79,6 +79,9 @@ struct TranscriptContext {
     var quickLook: (URL) -> Void = { _ in }
     /// Opens an MCP server in Gateway Settings. Provided by `ChatView`.
     var openMCPServer: (String) -> Void = { _ in }
+    /// Opens a browser tool's page card. Return true when handled (e.g. in an in-app browser panel);
+    /// otherwise the page opens in the system browser.
+    var openBrowserPage: (BrowserPagePreview) -> Bool = { _ in false }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -115,6 +118,10 @@ protocol TranscriptRowActions: AnyObject {
     /// Shows an ```html fence as a page in the sandboxed preview.
     func previewHTML(_ html: String)
     func open(_ url: URL)
+    /// A browser page card was tapped.
+    func openBrowserPage(_ page: BrowserPagePreview)
+    /// Asks for the page's image and favicon when the card is shown.
+    func loadPagePreview(_ url: URL)
     func loadImage(_ ref: ImageRef)
     func loadFilePreview(_ file: FileRef)
     /// Downloads HTML/SVG and opens it in the sandboxed preview; false when it couldn't be loaded as text.
@@ -169,6 +176,8 @@ protocol TranscriptRowActions: AnyObject {
 }
 
 extension TranscriptRowActions {
+    func openBrowserPage(_ page: BrowserPagePreview) { self.open(page.url) }
+    func loadPagePreview(_ url: URL) {}
     var messagePartExcerptCache: MessagePartExcerptCache { .shared }
     func canReadAloud(_ messageId: String, rowID: String) -> Bool { self.canReadAloud(messageId) }
     func readAloud(_ messageId: String, rowID: String) { self.readAloud(messageId) }
@@ -269,6 +278,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var fileRows: [String: Set<String>] = [:]
     private var filePreviews: [String: FileContentLoader.Preview?] = [:]
     private var spawnRows: Set<String> = []
+    private var pageRows: Set<String> = []
     private var observers: [NSObjectProtocol] = []
     #if os(macOS)
     private var accessibilityObservation: NSObjectProtocol?
@@ -308,6 +318,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.messagePartExcerptCache = messagePartExcerptCache ?? .shared
         self.settings = .current(for: context)
         self.observeImages()
+        self.observePagePreviews()
         self.observeFiles()
         self.observeSessions()
         self.observeDecorations()
@@ -473,6 +484,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             self.fileRows[file.cacheKey, default: []].insert(row.id)
             self.filePreviews[file.cacheKey] = .some(files.preview(file))
         }
+        if layout.pages.isEmpty { self.pageRows.remove(row.id) } else { self.pageRows.insert(row.id) }
         if layout.hasSpawns { self.spawnRows.insert(row.id) } else { self.spawnRows.remove(row.id) }
         self.evictIfNeeded()
         if wasEvicted { self.onRelayout?(row.id, width, layout.height) }
@@ -516,6 +528,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             }
         }
         self.spawnRows.subtract(gone)
+        self.pageRows.subtract(gone)
         for (key, rows) in self.imageRows {
             let left = rows.subtracting(gone)
             if left.isEmpty {
@@ -551,6 +564,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.fileRows.removeAll()
         self.filePreviews.removeAll()
         self.spawnRows.removeAll()
+        self.pageRows.removeAll()
     }
 
     private func invalidate(_ ids: Set<String>, keepInPlace: String? = nil) {
@@ -606,6 +620,40 @@ final class TranscriptRenderer: TranscriptRowActions {
             if now != old {
                 self.imageStates[key] = now
                 stale.formUnion(rows)
+            }
+        }
+        self.invalidate(stale)
+    }
+
+    private func observePagePreviews() {
+        let previews = self.context.gateway.pagePreviews
+        withObservationTracking {
+            // Reading either store property tracks the whole property.
+            _ = previews.preview(for: Self.pagePreviewProbeURL)
+            _ = previews.screenshot(forTab: "")
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.pagePreviewsChanged()
+                self?.observePagePreviews()
+            }
+        }
+    }
+
+    private static let pagePreviewProbeURL = URL(string: "https://pincer.invalid/")!
+
+    private func pagePreviewsChanged() {
+        let previews = self.context.gateway.pagePreviews
+        var stale: Set<String> = []
+        for id in self.pageRows {
+            guard let entry = self.cache[id] else { continue }
+            for page in entry.layout.pages {
+                let link = previews.preview(for: page.url)
+                if link?.image?.cacheKey != page.imageKey || link?.favicon?.cacheKey != page.faviconKey
+                    || previews.screenshot(forTab: page.tabKey)?.cacheKey != page.screenshotKey
+                {
+                    stale.insert(id)
+                    break
+                }
             }
         }
         self.invalidate(stale)
@@ -817,6 +865,14 @@ final class TranscriptRenderer: TranscriptRowActions {
         #else
         UIApplication.shared.open(url)
         #endif
+    }
+
+    func openBrowserPage(_ page: BrowserPagePreview) {
+        if !self.context.openBrowserPage(page) { self.open(page.url) }
+    }
+
+    func loadPagePreview(_ url: URL) {
+        self.context.gateway.pagePreviews.load(url)
     }
 
     func loadImage(_ ref: ImageRef) {

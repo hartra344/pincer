@@ -120,6 +120,7 @@ final class TranscriptRowView: TranscriptBaseView {
         case .tool: TranscriptToolView()
         case .image: TranscriptImagePartView()
         case .imageLink: TranscriptImageLinkView()
+        case .pagePreview: TranscriptPagePreviewView()
         case .file: TranscriptFileView()
         case .typing: TranscriptTypingView()
         case .footer: TranscriptFooterView()
@@ -309,12 +310,18 @@ extension TranscriptRowView {
                 view = current.superview
             }
         }
+        var pageItems: [UIMenuElement] = []
+        var hit: UIView? = self.hitTest(location, with: nil)
+        while let view = hit, view !== self {
+            if let card = view as? TranscriptPagePreviewView { pageItems = card.menuElements }
+            hit = view.superview
+        }
         let items = self.copyItems(extra: extra)
         let sendItems: [UIMenuElement] = self.sendActions().map { action in
             UIAction(title: action.title, image: UIImage(systemName: action.symbol),
                      attributes: action.isDestructive ? .destructive : []) { _ in action.run() }
         }
-        let messageItems = self.messageMenuElements(at: location)
+        let messageItems = pageItems + self.messageMenuElements(at: location)
             + (sendItems.isEmpty ? [] : [UIMenu(options: .displayInline, children: sendItems)])
         guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
