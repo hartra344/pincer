@@ -88,6 +88,29 @@ Providers can also report billing, such as a credit balance, spend or a monthly 
 
 Rate limits are live, not tied to the range, so changing the range doesn't reload them. **Refresh** does.
 
+## Exporting usage
+
+**Export** in the toolbar, next to **Refresh**, saves the range you picked as a file. It has three choices, matching the OpenClaw Control UI:
+
+| Choice | File | What's in it |
+| --- | --- | --- |
+| **Sessions CSV** | `openclaw-usage-sessions-2025-09-26.csv` | One row per session with usage in the range. |
+| **Daily CSV** | `openclaw-usage-daily-2025-09-26.csv` | One row per day, with tokens and cost split by type. |
+| **JSON** | `openclaw-usage-2025-09-26.json` | Every session, the totals, the breakdowns and the daily figures, exactly as the gateway reported them. |
+
+The date in the name is today's date. Exports cover every session in the range, not just the top 200 on the dashboard, and every agent.
+
+On macOS a save panel asks where to put the file. On iOS the share sheet opens, so you can save it to Files, AirDrop it or send it to another app.
+
+The CSV columns use the same names as the Control UI's exports, so files from either open the same way in a spreadsheet:
+
+- **Sessions CSV:** `key`, `label`, `agentId`, `channel`, `provider`, `model`, `updatedAt` (UTC, ISO 8601), `durationMs`, `messages`, `errors`, `toolCalls`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `totalCost`.
+- **Daily CSV:** `date`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`, `totalTokens`, `inputCost`, `outputCost`, `cacheReadCost`, `cacheWriteCost`, `totalCost`.
+
+Costs are in US dollars, as the gateway estimated them: requests without pricing aren't included, so check the JSON's `missingCostEntries` before treating a cost as complete. A cell is empty when the gateway didn't report that value or says the session's usage is unavailable. Text that a spreadsheet could run as a formula, such as a label starting with `=`, is prefixed with `'`.
+
+Pincer fetches a fresh copy of the range for each export and builds the file in the background, so the page stays responsive. If the gateway is still counting some sessions, the export stops with *Usage data is incomplete* rather than saving partial numbers: refresh and try again in a moment, or pick a shorter range. **Export** is unavailable while you're not connected or the gateway doesn't report session usage.
+
 ## Session usage
 
 Opening a session shows its name, agent and model, and three parts:
@@ -123,6 +146,6 @@ Each part of the page loads on its own, so one problem never hides the rest:
 
 ## In the demo
 
-The [demo](../../getting-started/try-the-demo/) has 90 days of sample usage across several models and agents, including a partially priced model, an unpriced local model, a rate limit above 90% and a provider with an error. Choose **Session Usage…** from a demo chat to see its drill-down.
+The [demo](../../getting-started/try-the-demo/) has 90 days of sample usage across several models and agents, including a partially priced model, an unpriced local model, a rate limit above 90% and a provider with an error. Choose **Session Usage…** from a demo chat to see its drill-down. **Export** works for ranges up to 30 days; the demo is still counting one session on longer ranges, so **90 Days** shows the *incomplete* message.
 
 Canceling a Usage refresh keeps the last completed report. A canceled request cannot replace a newer refresh or turn its result into an error; each usage section refreshes independently.
