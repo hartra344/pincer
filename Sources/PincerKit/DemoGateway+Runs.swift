@@ -46,7 +46,7 @@ extension DemoGateway {
         var aborted: String?
         if let runId {
             aborted = runId
-            self.abort(sessionKey: nil, runId: runId)
+            self.abort(sessionKey: key, runId: runId)
             self.stopStubRun(key)
         } else {
             aborted = own.first

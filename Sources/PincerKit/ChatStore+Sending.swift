@@ -421,7 +421,11 @@ extension ChatStore {
         if let runId = self.live?.runId {
             var params = self.params(keyName: "sessionKey")
             params["runId"] = .string(runId)
-            _ = try? await gateway.connection.request("chat.abort", .object(params))
+            do {
+                _ = try await gateway.connection.request("chat.abort", .object(params))
+            } catch {
+                self.errorMessage = L("Couldn’t stop: \(error.localizedDescription)")
+            }
         } else {
             await self.abortSession()
         }
@@ -435,7 +439,8 @@ extension ChatStore {
             self.errorMessage = L("Couldn’t stop: not connected")
             return false
         }
-        let fallback = gateway.hello != nil && !gateway.advertises("sessions.abort")
+        let methods = gateway.hello?.methods ?? []
+        let fallback = !methods.isEmpty && !methods.contains("sessions.abort")
         do {
             if !fallback {
                 var params = self.params(keyName: "key")
@@ -444,8 +449,11 @@ extension ChatStore {
                 }
                 do {
                     let result = try await gateway.connection.request("sessions.abort", .object(params))
-                    if result["status"]?.text == "no-active-run" || result["aborted"]?.bool == false {
-                        Task { await gateway.refreshSessions() }
+                    // sessions.changed doesn't update the row store, so re-read: clears a stale Stop button
+                    // (no-active-run) and the rows of stopped subagents.
+                    Task { await gateway.refreshSessions() }
+                    if let warning = result["warning"]?.text, !warning.isEmpty {
+                        self.errorMessage = L("Couldn’t stop everything: \(warning)")
                     }
                     return true
                 } catch where !GatewayError.isUnknownMethod(error) {
