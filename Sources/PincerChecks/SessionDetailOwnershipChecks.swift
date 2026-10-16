@@ -51,8 +51,41 @@ private func checkSessionDetailDeletion(key: String, demo: Bool, oldFails: Bool,
           "\(label): old describe completion cannot resurrect metadata or attach an obsolete error")
 }
 
+/// A delete of another session, while a describe is held, keeps that describe's publication. It also
+/// awaits the model's default change callbacks, whose `= {}` defaults corrupted the task allocator (#952).
+@MainActor
+private func checkUnrelatedDeleteKeepsDetail() async {
+    let key = "agent:main:dashboard:alpha", other = "agent:main:dashboard:beta"
+    let row: JSONValue = ["key": .string(key), "agentId": "main", "sessionId": "s-alpha"]
+    let otherRow: JSONValue = ["key": .string(other), "agentId": "main", "sessionId": "s-beta"]
+    let gate = DetailCheckGate()
+    let model = SessionManagerModel(request: { method, _ in
+        switch method {
+        case SessionManager.listMethod: return ["sessions": [row, otherRow]]
+        case SessionManager.describeMethod:
+            gate.entered = true
+            try await gate.hold()
+            return ["session": row]
+        case SessionManager.deleteMethod: return ["deleted": true]
+        default: throw GatewayError.closed("Unexpected session detail check method")
+        }
+    })
+    await model.load(filter: .all)
+    let old = Task { await model.loadDetails(key: key) }
+    defer { gate.release(); old.cancel() }
+    let entered = await waitFor("unrelated delete held describe", { gate.entered })
+    check(entered, "unrelated delete: describe reaches its held publication boundary")
+    guard entered else { return }
+    let result = await model.delete([other])
+    check(result.succeeded == [other] && result.failed.isEmpty, "unrelated delete: the other session is deleted")
+    gate.release(); await old.value
+    check(model.details[key]?.raw == row && model.detailErrors[key] == nil && model.row(key) != nil,
+          "unrelated delete: the held describe still publishes its session")
+}
+
 @MainActor
 func runSessionDetailOwnershipChecks() async {
+    await checkUnrelatedDeleteKeepsDetail()
     let key = "agent:main:dashboard:alpha"
     for oldFails in [false, true] {
         await checkSessionDetailDeletion(key: key, demo: false, oldFails: oldFails,
