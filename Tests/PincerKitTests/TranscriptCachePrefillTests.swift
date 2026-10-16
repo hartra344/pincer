@@ -20,7 +20,7 @@ struct TranscriptCachePrefillTests {
         temp.remove()
     }
 
-    @Test(.disabled("Fails on main, hidden by the #920 early exit: https://github.com/hartra344/pincer/issues/959"))
+    @Test
     func headlessRestorePrimesBeforeTailSave() async throws {
         let temp = TempDir()
         let scratch = ScratchDefaults()
@@ -76,7 +76,11 @@ struct TranscriptCachePrefillTests {
 
             let stats = index.lastIndexStats
             #expect(stats.path == .tail, "expected an incremental update, got \(stats)")
-            #expect(stats.documentsBuilt <= 2, "built \(stats.documentsBuilt) documents for a one-item tail")
+            // The tail rebuilds from the latest user row (u5997): its question, plus the assistant turn that
+            // a5998, the tool result t5999 and the new item merge into (two text sections). Anything near
+            // the 6,000-item transcript would mean the prime was lost and the index rebuilt in full.
+            #expect(stats.documentsBuilt == 3, "built \(stats.documentsBuilt) documents for a one-item tail")
+            #expect(stats.rowsWritten <= 1, "wrote \(stats.rowsWritten) rows; only the new section should change")
             #expect(!(try await index.search("question 0")).isEmpty, "older indexed messages remain searchable")
             #expect(!(try await index.search("prefill tail sentinel")).isEmpty, "the new tail is searchable")
         } catch {
