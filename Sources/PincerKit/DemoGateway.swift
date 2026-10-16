@@ -295,6 +295,7 @@ actor DemoGateway {
         if let result = try self.handleChannelPairing(method, params) { return result }
         if let result = try self.handleQuestions(method, params) { return result }
         if let result = try self.handleHealth(method, params) { return result }
+        if let result = try self.handleBrowser(method, params) { return result }
         if Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method) {
             return try await self.handleSetup(method, params) ?? .null
         }

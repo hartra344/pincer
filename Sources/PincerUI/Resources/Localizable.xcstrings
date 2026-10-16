@@ -1833,6 +1833,26 @@
         }
       }
     },
+    "Agent's browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent's browser"
+          }
+        }
+      }
+    },
+    "Agent's browser: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent's browser: %@"
+          }
+        }
+      }
+    },
     "Agents": {
       "localizations": {
         "en": {
@@ -2833,6 +2853,26 @@
         }
       }
     },
+    "Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browser"
+          }
+        }
+      }
+    },
+    "Browser, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browser, %@"
+          }
+        }
+      }
+    },
     "By agent": {
       "localizations": {
         "en": {
@@ -2899,6 +2939,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Can't reach Gateway · retrying in %llds"
+          }
+        }
+      }
+    },
+    "Can't show the browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't show the browser"
           }
         }
       }
@@ -3373,6 +3423,16 @@
         }
       }
     },
+    "Choose a page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a page"
+          }
+        }
+      }
+    },
     "Choose a provider to set it up below. Providers that need a key show Needs Key until you add one.": {
       "localizations": {
         "en": {
@@ -3679,6 +3739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Colors"
+          }
+        }
+      }
+    },
+    "Coming soon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coming soon"
           }
         }
       }
@@ -4159,6 +4229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected · 1 tool"
+          }
+        }
+      }
+    },
+    "Connecting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting"
           }
         }
       }
@@ -7543,6 +7623,26 @@
         }
       }
     },
+    "Hide Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser"
+          }
+        }
+      }
+    },
+    "Hide Browser (⌥⌘B)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Browser (⌥⌘B)"
+          }
+        }
+      }
+    },
     "Hide Others": {
       "localizations": {
         "en": {
@@ -8019,6 +8119,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "It runs with the Gateway's permissions."
+          }
+        }
+      }
+    },
+    "It starts when the agent uses the browser tool.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It starts when the agent uses the browser tool."
           }
         }
       }
@@ -8559,6 +8669,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Listening"
+          }
+        }
+      }
+    },
+    "Live": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        }
+      }
+    },
+    "Live view": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live view"
           }
         }
       }
@@ -10043,6 +10173,16 @@
         }
       }
     },
+    "No pages open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No pages open"
+          }
+        }
+      }
+    },
     "No paired nodes": {
       "localizations": {
         "en": {
@@ -11259,6 +11399,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "Page address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page address"
+          }
+        }
+      }
+    },
+    "Pages the agent opens show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages the agent opens show up here."
           }
         }
       }
@@ -12489,6 +12649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reconnect and discard unsaved settings?"
+          }
+        }
+      }
+    },
+    "Reconnecting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecting"
           }
         }
       }
@@ -14963,6 +15133,26 @@
         }
       }
     },
+    "Show Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser"
+          }
+        }
+      }
+    },
+    "Show Browser (⌥⌘B)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Browser (⌥⌘B)"
+          }
+        }
+      }
+    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
@@ -15019,6 +15209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show More"
+          }
+        }
+      }
+    },
+    "Show Other Pages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Other Pages"
           }
         }
       }
@@ -16653,6 +16853,16 @@
         }
       }
     },
+    "The Gateway sent an unreadable browser stream reply.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway sent an unreadable browser stream reply."
+          }
+        }
+      }
+    },
     "The Gateway sent usage data Pincer couldn't read.": {
       "localizations": {
         "en": {
@@ -16683,6 +16893,26 @@
         }
       }
     },
+    "The Gateway's browser policy blocked this navigation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway's browser policy blocked this navigation."
+          }
+        }
+      }
+    },
+    "The Gateway's browser stream address isn't usable.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway's browser stream address isn't usable."
+          }
+        }
+      }
+    },
     "The Gateway's config is invalid. Fix it before logging out.": {
       "localizations": {
         "en": {
@@ -16699,6 +16929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway's scheduler is off, so automations only run when you start them."
+          }
+        }
+      }
+    },
+    "The agent closed it, or the browser restarted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent closed it, or the browser restarted."
           }
         }
       }
@@ -16769,6 +17009,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "The agent sees your reactions on its next turn."
+          }
+        }
+      }
+    },
+    "The agent's browser isn't running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent's browser isn't running"
+          }
+        }
+      }
+    },
+    "The browser stream failed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The browser stream failed."
           }
         }
       }
@@ -17213,6 +17473,16 @@
         }
       }
     },
+    "This Gateway can't show its browser. Update OpenClaw to use the browser panel.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't show its browser. Update OpenClaw to use the browser panel."
+          }
+        }
+      }
+    },
     "This Gateway can't sign in from Pincer. Sign in on the Gateway host with `openclaw mcp login <name>`.": {
       "localizations": {
         "en": {
@@ -17443,6 +17713,16 @@
         }
       }
     },
+    "This browser can't be streamed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This browser can't be streamed."
+          }
+        }
+      }
+    },
     "This chat was deleted.": {
       "localizations": {
         "en": {
@@ -17649,6 +17929,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "This node was already removed."
+          }
+        }
+      }
+    },
+    "This page is blocked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This page is blocked"
+          }
+        }
+      }
+    },
+    "This page is no longer open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This page is no longer open"
           }
         }
       }
@@ -18423,6 +18723,16 @@
         }
       }
     },
+    "Untitled page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled page"
+          }
+        }
+      }
+    },
     "Untitled session": {
       "localizations": {
         "en": {
@@ -18773,6 +19083,16 @@
         }
       }
     },
+    "Viewing the agent's browser needs Full Management": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewing the agent's browser needs Full Management"
+          }
+        }
+      }
+    },
     "Voice": {
       "localizations": {
         "en": {
@@ -18879,6 +19199,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for approval…"
+          }
+        }
+      }
+    },
+    "Waiting for page…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for page…"
           }
         }
       }

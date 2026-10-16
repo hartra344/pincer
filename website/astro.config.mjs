@@ -63,6 +63,7 @@ export default defineConfig({
 						{ slug: 'guides/read-aloud' },
 						{ slug: 'guides/gateway-voice' },
 						{ slug: 'guides/subagents-and-runs' },
+						{ slug: 'guides/browser-panel' },
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/menu-bar' },
 						{ slug: 'guides/shortcuts-and-siri' },

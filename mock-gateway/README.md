@@ -123,6 +123,13 @@ MCP servers (`mcp.mjs`, #323):
 - `tools.effective` lists tools of connected servers only, adds a `mcp-server-diagnostic:<name>` warning for a server in `error` and an info `mcp-not-yet-connected` notice while servers connect.
 - `MOCK_NO_MCP=1` drops the methods from `hello-ok` and answers them with `UNKNOWN_METHOD`.
 
+Live browser panel (`browser.mjs`, #974):
+
+- `browser.request {method, path, query?, body?, timeoutMs?, target?, node?}` needs `operator.admin` (`FORBIDDEN` with `details {code: "MISSING_SCOPE", scope: "operator.admin"}` otherwise). `GET /tabs` → `{running: true, tabs, canAutoResizeViewport: true}` with two tabs: `tab-docs-0001` "OpenClaw Docs" (`https://docs.openclaw.ai/`) and `tab-release-0002` "Release v2026.5 · openclaw/openclaw" (`https://github.com/openclaw/openclaw/releases/tag/v2026.5`). `POST /screencast {targetId, maxWidth, maxHeight}` → `{token, wsPath: "/browser/screencast?token=…", expiresAtMs, targetId, url}`; an unknown `targetId` is `INVALID_REQUEST`.
+- The `/browser/screencast` WebSocket upgrade (same port) consumes the one-time token (unknown or reused → HTTP 401), sends `{type:"ready", targetId, url, title}`, then a binary frame every ~200 ms cycling four tiny baseline JPEGs: UInt32 BE header length, JSON header `{url, cssWidth, cssHeight, scrollX, scrollY, ts}`, JPEG bytes (upstream `screencast/wire.ts`). A binary message from the client closes the socket with 1003.
+- Malformed-frame hooks: mint with `POST /screencast` body `targetId` `bad-header-length` (header length larger than the data) or `oversized-header` (a 70000-byte header, over the 64 KiB cap); the token then starts with that name. Appending `&case=<name>` to the socket URL does the same for a normal token. Both send `ready` first, then the bad frame repeatedly.
+- `MOCK_NO_BROWSER=1` drops `browser.request` from `hello-ok` and answers it with `UNKNOWN_METHOD`; the upgrade answers 404.
+
 Text-to-speech (`tts.mjs`):
 
 - `tts.status`, `tts.providers` (`openai` configured with voices `alloy`/`verse`, `elevenlabs` not configured), `tts.personas` (`narrator`, `concise`), `tts.enable`/`tts.disable` (flip `enabled` and `auto` between `always` and `off`), `tts.setProvider`, `tts.setPersona` (`off`/`none`/`default`/empty clears) and `tts.convert` (fake gateway-local `audioPath`). Provider, persona and enabled state are mutable per server. Bad ids fail with the Gateway's `Invalid provider. Use a registered TTS provider id.` / `Invalid persona. Use a configured TTS persona id.`.

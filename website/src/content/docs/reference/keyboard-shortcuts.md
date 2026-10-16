@@ -39,6 +39,7 @@ Quick Capture's shortcut works from any app, so it's set separately in **Setting
 | Open Chat in New Window (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>N</kbd> |
 | Split Right / Close Split View (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>\</kbd> |
 | Show Runs | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
+| Show Browser | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>B</kbd> |
 | [Export Chat…](../../guides/export-and-bookmarks/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd> |
 | Quick Capture, from any app (macOS) | <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> |
 

@@ -637,7 +637,7 @@ struct ChatChrome: ViewModifier {
     /// Whether the window is wide enough for both sides of the split view.
     @State private var fitsSplit = false
     /// Per window, and kept across chat switches.
-    @State private var showRuns = false
+    @State private var panel: ChatInspectorPanel?
     /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
     /// session row briefly going away (refresh, reconnect) doesn't dismiss it.
     @State private var toolsInspector: ChatToolsInspection?
@@ -682,7 +682,8 @@ struct ChatChrome: ViewModifier {
         let split = self.showsSplit
         content
             .environment(\.showsChatSplit, split)
-            .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
+            .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$panel.isShowing(.runs), showWorkspace: self.$panel.isShowing(.workspace),
+                                                                     toolsInspector: self.$toolsInspector))
             .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
             .navigationTitle(self.showsCompactIdentity ? "" : ChatWindowTitle.title(
@@ -725,7 +726,7 @@ struct ChatChrome: ViewModifier {
                 }
                 #endif
                 ToolbarItem(placement: .primaryAction) {
-                    ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row, compactActions: self.showsCompactIdentity)
+                    ChatSessionMenu(showRuns: self.$panel.isShowing(.runs), showWorkspace: self.$panel.isShowing(.workspace), toolsInspector: self.$toolsInspector, row: split ? nil : self.row, compactActions: self.showsCompactIdentity)
                 }
             }
             .sheet(item: self.$toolsInspector) { inspection in
@@ -734,7 +735,7 @@ struct ChatChrome: ViewModifier {
             #if os(iOS)
             .modifier(CompactChatIdentityChrome(active: self.showsCompactIdentity, gateway: self.gateway, key: self.key, row: self.row))
             #endif
-            .modifier(RunsPanelChrome(isPresented: self.$showRuns, showsToolbarButton: !split && !self.showsCompactIdentity))
+            .modifier(ChatInspectorChrome(panel: self.$panel, showsToolbarButton: !split && !self.showsCompactIdentity))
             .onChange(of: self.key.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
                 if let row { self.lastRow = row }
             }
@@ -765,6 +766,7 @@ private struct ChatModelItem: View {
 /// on that side's chat, through its `handles`.
 struct ChatSessionMenu: View {
     @Binding var showRuns: Bool
+    @Binding var showWorkspace: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var focusedFind
@@ -802,6 +804,10 @@ struct ChatSessionMenu: View {
                     self.willAct()
                     self.showRuns = $0
                 }), sessionKey: row.key)
+                ShowBrowserButton(isPresented: Binding(get: { self.showWorkspace }, set: {
+                    self.willAct()
+                    self.showWorkspace = $0
+                }))
                 Divider()
                 Button(L("Reload"), systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: row.key).load(force: true) }

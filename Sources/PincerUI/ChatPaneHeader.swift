@@ -38,7 +38,18 @@ final class ChatPaneHandles {
 /// The window-level presentations `ChatChrome` owns.
 struct ChatChromeActions {
     var showRuns: Binding<Bool>
+    var showWorkspace: Binding<Bool>
     var toolsInspector: Binding<ChatToolsInspection?>
+
+    /// Shows a page the agent's browser touched in the workspace panel. The hook for the transcript's
+    /// browser card (#976). Doesn't restart the stream when that page is already showing.
+    @MainActor
+    func openBrowserPage(_ ref: BrowserTabRef, in gateway: GatewayStore) {
+        if !self.showWorkspace.wrappedValue || gateway.browserPanel.selectedTargetId != ref.targetId {
+            gateway.browserPanel.select(ref)
+        }
+        self.showWorkspace.wrappedValue = true
+    }
 }
 
 /// A chat's title for headers, before the sessions list arrives too (#407): the row's title, else
@@ -97,7 +108,9 @@ struct ChatPaneHeader: View {
             if let actions {
                 RunsToolbarButton(isPresented: actions.showRuns, isCompact: false, sessionKey: self.key, isFocused: self.isFocused) { self.focus() }
                     .labelStyle(.iconOnly)
-                ChatSessionMenu(showRuns: actions.showRuns, toolsInspector: actions.toolsInspector, row: row, handles: self.handles) {
+                BrowserToolbarButton(isPresented: actions.showWorkspace, isCompact: false, isFocused: self.isFocused) { self.focus() }
+                    .labelStyle(.iconOnly)
+                ChatSessionMenu(showRuns: actions.showRuns, showWorkspace: actions.showWorkspace, toolsInspector: actions.toolsInspector, row: row, handles: self.handles) {
                     self.focus()
                 }
                 .labelStyle(.iconOnly)
