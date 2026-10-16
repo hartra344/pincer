@@ -485,8 +485,11 @@ extension GatewayStore {
 
     /// A session's history changed on the Gateway (rewind, branch switch, recovery) or it was deleted:
     /// its cached transcript is dropped, and an open chat reloads from scratch. A rewind's cut message
-    /// goes back into an empty composer. Deduplicated per key while one is under way (the RPC reply
-    /// and its `sessions.changed` both land here).
+    /// goes back into an empty composer. One invalidation runs per key at a time (the RPC reply and its
+    /// `sessions.changed` echo both land here). A change arriving mid-run is queued, never dropped, as the
+    /// run may have fetched before it; the queued rerun is a plain refetch that keeps the transcript on
+    /// screen and the cache, so an edit or switch blanks the chat once. The same holds for a change
+    /// arriving within `echoWindow` after an invalidation finished (the echo that trails the RPC path).
     func transcriptChanged(key: String, change: SessionTranscriptChange,
                            feedbackAuthority: ChatStore.MessageEditFeedbackAuthority? = nil) async {
         if case let .changed(text?) = change, !text.isEmpty {
@@ -496,25 +499,40 @@ extension GatewayStore {
                 await DraftStore.save(ComposerDraft(text: text), gatewayId: self.id, sessionKey: key)
             }
         }
-        // An invalidation already in flight may have fetched before this change (a branch switch, a rewind):
-        // queue a rerun instead of dropping it, so the final reload always follows the last change.
         guard self.invalidatingTranscripts.insert(key).inserted else {
-            if self.pendingTranscriptChanges[key]?.change != .deleted {
-                self.pendingTranscriptChanges[key] = PendingTranscriptChange(change: change, feedbackAuthority: feedbackAuthority)
+            let pending = self.pendingTranscriptChanges[key]
+            if pending?.change != .deleted {
+                // An authority-less echo never erases the authority of the edit it echoes.
+                let authority = feedbackAuthority ?? pending?.feedbackAuthority ?? self.runningTranscriptAuthority[key]
+                self.pendingTranscriptChanges[key] = PendingTranscriptChange(change: change, feedbackAuthority: authority)
             }
             return
         }
-        defer { self.invalidatingTranscripts.remove(key) }
+        defer {
+            self.invalidatingTranscripts.remove(key)
+            self.runningTranscriptAuthority[key] = nil
+            self.lastTranscriptInvalidation[key] = ContinuousClock.now
+        }
         var current = PendingTranscriptChange(change: change, feedbackAuthority: feedbackAuthority)
+        // The `sessions.changed` echo of a change we just reloaded for lands after the RPC path finished.
+        var isRerun = self.lastTranscriptInvalidation[key].map { $0.duration(to: .now) < Self.echoWindow } ?? false
         while true {
-            await self.invalidateTranscript(key: key, change: current.change, feedbackAuthority: current.feedbackAuthority)
+            self.runningTranscriptAuthority[key] = current.feedbackAuthority
+            await self.invalidateTranscript(key: key, change: current.change, feedbackAuthority: current.feedbackAuthority, isRerun: isRerun)
             guard let next = self.pendingTranscriptChanges.removeValue(forKey: key) else { return }
             current = next
+            isRerun = true
         }
     }
 
     private func invalidateTranscript(key: String, change: SessionTranscriptChange,
-                                      feedbackAuthority: ChatStore.MessageEditFeedbackAuthority?) async {
+                                      feedbackAuthority: ChatStore.MessageEditFeedbackAuthority?, isRerun: Bool) async {
+        if isRerun, change != .deleted {
+            if let chat = self.chats[key], !chat.isDehydrated {
+                await chat.refetchAfterHistoryChange(feedbackAuthority: feedbackAuthority)
+            }
+            return
+        }
         await self.cancelHeadlessFill(key)
         if change == .deleted {
             await self.bookmarkStore.removeConfirmedSessions([key])

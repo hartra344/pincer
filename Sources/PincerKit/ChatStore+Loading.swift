@@ -689,6 +689,9 @@ extension ChatStore {
     /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
     func reloadAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil,
                                  clearingCache clearCache: (@MainActor () async -> Void)? = nil) async {
+        #if DEBUG
+        self.fullReloadCount += 1
+        #endif
         self.stopQuotePreviewPublication()
         self.cancelScheduledSave()
         self.backfillTask?.cancel()
@@ -709,6 +712,12 @@ extension ChatStore {
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
         await clearCache?()
+        await self.load(force: true, feedbackAuthority: feedbackAuthority)
+    }
+
+    /// A follow-up refetch for a change already handled by `reloadAfterHistoryChange`: no cache wipe and the
+    /// transcript stays on screen; the newest fetch (by load generation) wins.
+    func refetchAfterHistoryChange(feedbackAuthority: MessageEditFeedbackAuthority? = nil) async {
         await self.load(force: true, feedbackAuthority: feedbackAuthority)
     }
 

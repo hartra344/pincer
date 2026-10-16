@@ -336,6 +336,67 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
+    /// #1010: the `sessions.changed` echo of an edit or switch (during or after the RPC path's reload) must not blank twice.
+    @Test(arguments: [true, false]) func echoOfABranchSwitchBlanksTheTranscriptOnce(_ duringReload: Bool) async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        await chat.refreshBranches()
+        let original = chat.items.map(\.plainText)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
+        let key = chat.sessionKey
+        gateway.lastTranscriptInvalidation[key] = nil // The setup's own echo window is over.
+        let before = chat.fullReloadCount
+        let held = HistoryReplyHold()
+        if duringReload { chat.historyResponseProbe = { try await held.hold() } }
+        let rpc = Task { await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) }
+        if duringReload {
+            await self.settle { held.arrived }
+            chat.historyResponseProbe = nil
+            await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) // The echo, queued.
+            held.release()
+            await rpc.value
+        } else {
+            await rpc.value
+            await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) // The echo, after.
+        }
+        #expect(chat.fullReloadCount - before == 1, "one blank-and-refill for a change and its echo")
+        await self.settle { !chat.items.isEmpty && chat.hasLoaded }
+        await self.finish(gateway)
+    }
+
+    /// #1010: an authority-less echo queued behind an edit's reload keeps the edit's feedback authority.
+    @Test func echoKeepsTheEditsFeedbackAuthorityForTheRerun() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        gateway.lastTranscriptInvalidation[chat.sessionKey] = nil
+        let owner = UUID()
+        chat.messageEditSendOwner = owner
+        let authority = ChatStore.MessageEditFeedbackAuthority(owner: owner, selection: chat.messageEditSelection)
+        let first = HistoryReplyHold()
+        let second = HistoryReplyHold()
+        second.failsOnRelease = true
+        var calls = 0
+        chat.historyResponseProbe = { calls += 1; try await (calls == 1 ? first : second).hold() }
+        let key = chat.sessionKey
+        let rpc = Task { await gateway.transcriptChanged(key: key, change: .changed(editorText: nil), feedbackAuthority: authority) }
+        await self.settle { first.arrived }
+        await gateway.transcriptChanged(key: key, change: .changed(editorText: nil)) // The echo, no authority.
+        first.release()
+        await self.settle { second.arrived }
+        chat.cancelEdit() // The edit is no longer current when the rerun's fetch fails.
+        second.release()
+        await rpc.value
+        chat.historyResponseProbe = nil
+        #expect(chat.errorMessage == nil, "the rerun's failure is the departed edit's, so no banner")
+        await self.finish(gateway)
+    }
+
     @Test func branchAnchorIsTheLastUserMessageOnceThereAreBranches() async {
         let gateway = await self.connected()
         let source = await self.loaded(gateway, Self.garden)
