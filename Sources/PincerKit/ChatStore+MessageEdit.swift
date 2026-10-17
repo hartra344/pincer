@@ -172,19 +172,23 @@ extension ChatStore {
         let savedDraft = self.editTarget?.savedDraft ?? target.savedDraft
         self.editTarget = nil
         self.draft = savedDraft
-        return await self.sendMarkingBranchAnchor { await self.sendMessage(text, attachments: attachments + outcome.attachments) }
+        return await self.sendMarkingBranchAnchor(forkedFrom: target.entryId) {
+            await self.sendMessage(text, attachments: attachments + outcome.attachments)
+        }
     }
 
     private func obsoleteEditOutcome() -> SendOutcome {
         .failed(L("Couldn’t edit: \(CancellationError().localizedDescription)"))
     }
 
-    /// Sends, then remembers the sent message's key as the place the chat's branches fork.
-    private func sendMarkingBranchAnchor(_ send: () async -> SendOutcome) async -> SendOutcome {
+    /// Sends, then remembers where the chat's branches fork: the sent message's key on the new path and
+    /// `entryId`, the message it replaces, on the old one.
+    private func sendMarkingBranchAnchor(forkedFrom entryId: String, _ send: () async -> SendOutcome) async -> SendOutcome {
         let before = Set(self.items.compactMap(\.idempotencyKey))
         let outcome = await send()
         if let key = self.items.last(where: { $0.role == .user && $0.idempotencyKey.map { !before.contains($0) } == true })?.idempotencyKey {
             self.branchAnchorKey = key
+            self.branchForkEntryId = entryId
         }
         return outcome
     }
@@ -199,7 +203,7 @@ extension ChatStore {
         do {
             let outcome = try await self.rewind(to: entryId)
             let text = outcome.editorText ?? user.plainText
-            switch await self.sendMarkingBranchAnchor({ await self.sendMessage(text, attachments: outcome.attachments) }) {
+            switch await self.sendMarkingBranchAnchor(forkedFrom: entryId, { await self.sendMessage(text, attachments: outcome.attachments) }) {
             case .failed(let message), .failedInline(let message):
                 self.errorMessage = L("Couldn’t regenerate: \(message)")
                 return false

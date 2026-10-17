@@ -309,6 +309,8 @@ public final class ChatStore: Identifiable {
     public internal(set) var isSendingEdit = false
     /// Idempotency key of the message the latest Edit & Resend or Regenerate sent: where its branches fork.
     var branchAnchorKey: String?
+    /// Transcript id of the message that Edit & Resend or Regenerate replaced: the fork on the earlier branch.
+    var branchForkEntryId: String?
     @ObservationIgnored var branchRefreshGeneration = 0
     @ObservationIgnored var branchRefreshTask: Task<Void, Never>?
     /// A passing, non-error note for the chat's notice bar (not a send failure).
