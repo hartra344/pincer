@@ -38,7 +38,7 @@ struct BrowserPanelView: View {
     private func updateVisibility() {
         let visible = self.appeared && self.scenePhase == .active && self.size.width > 0
         let pixels = CGSize(width: self.size.width * self.displayScale, height: self.size.height * self.displayScale)
-        self.model.setVisible(visible, pixelSize: visible ? pixels : .zero, viewer: self.viewerID)
+        self.model.setVisible(visible, pixelSize: visible ? pixels : .zero, viewer: self.viewerID, viewport: visible ? self.size : nil)
     }
 
     /// Reads `status` and `tabs` only; the per-frame `model.frame` is read by `BrowserFrameView` alone.
@@ -121,10 +121,9 @@ private struct BrowserFrameView: View {
                 .resizable()
                 .interpolation(.medium)
                 .aspectRatio(contentMode: .fit)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black.opacity(0.04))
-                // Shown dimmed, not blanked, while paused or reconnecting.
-                .opacity(self.model.status == .live ? 1 : 0.5)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Dimmed, not blanked, only while the stream is down or paused. A live static page is full strength.
+                .opacity(self.model.frameIsStale ? 0.5 : 1)
                 .transaction { $0.animation = nil }
                 .accessibilityElement()
                 .accessibilityLabel(self.label)

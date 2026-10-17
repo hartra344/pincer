@@ -11,6 +11,10 @@ The panel shows a live picture of the page the agent is using. That's either the
 
 The panel has a page picker for choosing between open pages, the controls described below, and a status pill that reads **Live** while frames arrive.
 
+If the stream drops, the last picture stays on screen dimmed and the pill reads **Reconnecting…**. Pincer retries a few times with a growing pause, then stops and shows the reason (for example "This browser can't be streamed." for an extension-relay or existing-session browser) with **Try Again**. A page that isn't repainting is still **Live** and shown at full strength.
+
+When the gateway supports it (a local managed browser), the panel asks it to resize the page to the panel, as the OpenClaw Control UI does, so the picture fills the panel without empty bands. This changes the agent's browser window size. If the gateway refuses, the picture is shown at its own size, aligned to the top, and Pincer doesn't ask again.
+
 ## Controls
 
 Navigating here steers the agent's real browser while it works. If the agent is in the middle of a task, moving it or closing its tab can change what the agent does next. The controls only appear with Full Management. Without it, you see the notice instead.

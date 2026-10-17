@@ -80,4 +80,35 @@ struct BrowserStreamResilienceTests {
         #expect(first <= 8)
         model.stop()
     }
+
+    @Test func theViewportIsMatchedToThePanelOnce() async {
+        let harness = BrowserModelHarness()
+        let model = harness.model()
+        model.setVisible(true, pixelSize: size, viewport: CGSize(width: 740, height: 1000))
+        #expect(await eventually { harness.latestSource != nil })
+        harness.latestSource?.send(.frame(FakeBrowserSource.frame()))
+        #expect(await eventually(timeout: .seconds(3)) { harness.paths("/act") == 1 })
+        let body = harness.calls.withLock { $0.first { $0.params["path"]?.string == "/act" }?.params["body"] }
+        #expect(body?["kind"]?.string == "resize" && body?["width"]?.int == 740 && body?["height"]?.int == 1000)
+        harness.latestSource?.send(.frame(FakeBrowserSource.frame(sequence: 2)))
+        try? await Task.sleep(for: .milliseconds(700))
+        #expect(harness.paths("/act") == 1, "the same size is not requested again")
+        model.stop()
+    }
+
+    @Test func aFrameDimsOnlyWhileStale() async {
+        let harness = BrowserModelHarness()
+        let model = harness.model()
+        #expect(model.frameIsStale)
+        model.setVisible(true, pixelSize: size)
+        #expect(await eventually { harness.latestSource != nil })
+        harness.latestSource?.send(.meta(url: nil, title: nil))
+        #expect(await eventually { !model.frameIsStale })
+        model.stop()
+    }
+
+    @Test func resizeTargetIsClamped() {
+        #expect(BrowserPanelModel.resizeTarget(for: CGSize(width: 10, height: 99999)) == (100, 8192))
+        #expect(BrowserPanelModel.resizeTarget(for: CGSize(width: 740.4, height: 1000.6)) == (740, 1001))
+    }
 }

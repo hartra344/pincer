@@ -2,14 +2,15 @@ import CoreGraphics
 import Foundation
 @testable import PincerKit
 
-/// A source that plays a fixed script and then ends.
+/// A source that plays a fixed script and then stays open, like a socket on a page that isn't repainting,
+/// unless the script ends in a close.
 private struct ScriptedBrowserSource: BrowserFrameSource {
     let events: [BrowserStreamEvent]
     func frames() -> AsyncThrowingStream<BrowserStreamEvent, Error> {
         let events = self.events
         return AsyncThrowingStream { continuation in
             for event in events { continuation.yield(event) }
-            continuation.finish()
+            if case .closed = events.last { continuation.finish() }
         }
     }
 }
