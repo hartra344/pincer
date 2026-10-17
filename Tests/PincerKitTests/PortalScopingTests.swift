@@ -86,6 +86,8 @@ struct ChatStoreOpenedPortalsTests {
         #expect(chat.openedPortals == PortalRefs())
         chat.items = turn("1", call: "c1", args: #"{"action":"open","port":4173}"#, result: openResult())
         #expect(chat.openedPortals.ids == ["clock"])
+        // The chat feeds the per-agent attribution map.
+        #expect(gateway.portals.attributedAgent(for: PortalSummary.parse(portalEntry(id: "clock"))!) == "main")
         #expect(chat.openedPortals.publicURLs.count == 1 && chat.openedPortals.publicURLs.first?.hasPrefix("https://portal.test:4173") == true)
     }
 
@@ -167,6 +169,116 @@ private actor FakeScopedGateway {
 }
 
 @MainActor
+struct PortalAgentScopingTests {
+    private let clock = portalEntry(id: "clock", title: "Studio clock", port: 4173, createdAtMs: 10)
+    private let board = portalEntry(id: "board", title: "Build dashboard", port: 4174, createdAtMs: 20)
+    private static let all: Set<String> = ["portal.list", "portal.close", "environments.session.status", "portal.session.list", "portal.session.close"]
+
+    private func makeStore(_ fake: FakeScopedGateway, file: URL? = nil, sessions: [String] = []) -> PortalStore {
+        PortalStore(request: { try await fake.request($0, $1) }, methods: { Self.all }, debounce: .milliseconds(30),
+                    attributionFile: file, agentSessions: { _ in sessions })
+    }
+
+    private func scope(_ key: String, agent: String? = nil, refs: PortalRefs = .empty) -> PortalScope {
+        PortalScope(sessionKey: key, agentId: agent, opened: refs)
+    }
+
+    private func openedRefs(_ id: String = "clock") -> PortalRefs {
+        PortalRefs(tools: [portalCall(result: openResult(id: id))])
+    }
+
+    @Test func anyChatOfTheOpeningAgentSeesThePortalAndOtherAgentsDoNot() async {
+        let fake = FakeScopedGateway(global: [clock, board])
+        let store = makeStore(fake)
+        await store.refresh()
+        store.recordOpened(openedRefs(), agentId: "coder", sessionKey: "agent:coder:main")
+        #expect(store.attributedAgent(for: store.portals[0]) == "coder")
+        // Another session of the same agent, with an empty transcript, still shows it.
+        #expect(store.portals(for: scope("agent:coder:dashboard:x", agent: "coder")).map(\.id) == ["clock"])
+        #expect(store.portals(for: scope("agent:coder:main")).map(\.id) == ["clock"])
+        #expect(store.portals(for: scope("agent:research:main", agent: "research")).isEmpty)
+        #expect(store.portals(for: scope("agent:main:main")).isEmpty)
+    }
+
+    @Test func attributionSurvivesAnEmptiedTranscript() async {
+        let fake = FakeScopedGateway(global: [clock])
+        let store = makeStore(fake)
+        await store.refresh()
+        store.recordOpened(openedRefs(), agentId: "coder", sessionKey: "agent:coder:main")
+        // /new or compaction: the chat's own refs are empty now.
+        #expect(store.portals(for: scope("agent:coder:main", refs: .empty)).map(\.id) == ["clock"])
+    }
+
+    @Test func aSiblingSessionsOwnedPortalShowsInTheSameAgentOnly() async {
+        let fake = FakeScopedGateway(global: [])
+        await fake.setOwned("agent:coder:dashboard:x", env: "env-9", [board])
+        let store = makeStore(fake)
+        await store.refresh()
+        await store.refreshOwned(sessionKey: "agent:coder:dashboard:x", agentId: "coder")
+        #expect(store.portals(for: scope("agent:coder:main", agent: "coder")).map(\.id) == ["board"])
+        #expect(store.portals(for: scope("agent:main:main", agent: "main")).isEmpty)
+        #expect(await store.close("board", scope: scope("agent:coder:main", agent: "coder")))
+        let closes = await fake.params("portal.session.close")
+        #expect(closes.first?["sessionKey"]?.string == "agent:coder:dashboard:x" && closes.first?["environmentId"]?.string == "env-9")
+    }
+
+    @Test func trackingAChatAlsoFetchesItsAgentsOtherSessions() async {
+        let fake = FakeScopedGateway(global: [])
+        await fake.setOwned("agent:coder:main", env: nil, [])
+        await fake.setOwned("agent:coder:dashboard:x", env: "env-9", [board])
+        let store = makeStore(fake, sessions: ["agent:coder:main", "agent:coder:dashboard:x"])
+        await store.refresh()
+        store.trackOwned(sessionKey: "agent:coder:main", agentId: "coder")
+        #expect(await portalWait { !store.portals(for: scope("agent:coder:main", agent: "coder")).isEmpty })
+        store.untrackOwned(sessionKey: "agent:coder:main")
+    }
+
+    @Test func aGoneGlobalPortalIsPrunedButAFailedListIsNot() async {
+        let fake = FakeScopedGateway(global: [clock])
+        let store = makeStore(fake)
+        await store.refresh()
+        store.recordOpened(openedRefs(), agentId: "coder", sessionKey: "agent:coder:main")
+        let portal = store.portals[0]
+        // A refused list never prunes.
+        let failing = PortalStore(request: { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "x", details: nil) },
+                                  methods: { Self.all }, debounce: .milliseconds(30))
+        failing.recordOpened(openedRefs(), agentId: "coder", sessionKey: "agent:coder:main")
+        await failing.refresh()
+        #expect(failing.attributedAgent(for: portal) == "coder")
+        // A successful list without the portal does.
+        await fake.setGlobal([])
+        await store.refresh()
+        #expect(store.attributedAgent(for: portal) == nil)
+        await fake.setGlobal([clock])
+        await store.refresh()
+        #expect(store.portals(for: scope("agent:coder:main", agent: "coder")).isEmpty)
+    }
+
+    @Test func theAttributionMapIsBoundedAndPersisted() async throws {
+        let dir = URL(filePath: FileManager.default.currentDirectoryPath).appending(path: ".build/portal-attr-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appending(path: "gw.json")
+        let fake = FakeScopedGateway(global: [clock])
+        let first = makeStore(fake, file: file)
+        await first.refresh()
+        first.recordOpened(openedRefs(), agentId: "coder", sessionKey: "agent:coder:main")
+        #expect(await portalWait { FileManager.default.fileExists(atPath: file.path) })
+        let second = makeStore(fake, file: file)
+        await second.refresh()
+        second.recordOpened(PortalRefs(ids: ["unrelated"]), agentId: "x", sessionKey: "agent:x:main") // triggers the lazy load
+        #expect(await portalWait { second.portals(for: scope("agent:coder:main", agent: "coder")).map(\.id) == ["clock"] })
+        // Bound: 300 distinct ids keep at most 256 entries.
+        let big = makeStore(fake)
+        big.recordOpened(PortalRefs(ids: Set((0..<300).map { "p\($0)" })), agentId: "coder", sessionKey: "agent:coder:main")
+        let kept = (0..<300).filter { i in
+            let probe = PortalSummary.parse(portalEntry(id: "p\(i)", port: 7000 + i))!
+            return big.attributedAgent(for: probe) != nil
+        }
+        #expect(kept.count == 256)
+    }
+}
+
+@MainActor
 struct PortalScopingTests {
     private static let allMethods: Set<String> = ["portal.list", "portal.close", "environments.session.status", "portal.session.list", "portal.session.close"]
     private static let legacyMethods: Set<String> = ["portal.list", "portal.close"]
@@ -179,8 +291,8 @@ struct PortalScopingTests {
         PortalStore(request: { try await fake.request($0, $1) }, methods: { methods }, debounce: .milliseconds(30))
     }
 
-    private func scope(_ key: String, agent: String? = "main", ids: Set<String> = [], refs: PortalRefs? = nil) -> PortalScope {
-        PortalScope(sessionKey: key, agentId: agent, opened: refs ?? PortalRefs(ids: ids))
+    private func scope(_ key: String, agent: String? = nil, ids: Set<String> = [], refs: PortalRefs? = nil) -> PortalScope {
+        PortalScope(sessionKey: key, agentId: agent ?? (key == "B" ? "other" : "main"), opened: refs ?? PortalRefs(ids: ids))
     }
 
     @Test func aChatSeesOnlyThePortalsItOpened() async {
@@ -321,8 +433,8 @@ struct PortalScopingTests {
         for i in 0..<40 { await fake.setOwned("S\(i)", env: "e\(i)", [portalEntry(id: "p\(i)", port: 5000 + i)]) }
         let store = makeStore(fake)
         await store.refresh()
-        for i in 0..<40 { await store.refreshOwned(sessionKey: "S\(i)", agentId: "main") }
-        let kept = (0..<40).filter { !store.portals(for: scope("S\($0)")).isEmpty }
+        for i in 0..<40 { await store.refreshOwned(sessionKey: "S\(i)", agentId: "a\(i)") }
+        let kept = (0..<40).filter { !store.portals(for: scope("S\($0)", agent: "a\($0)")).isEmpty }
         #expect(kept.count == 32)
         #expect(kept.first == 8 && kept.last == 39)
     }
