@@ -52,27 +52,7 @@ func runSettingsSaveRebaseChecks() async {
 
 #if DEBUG
 @testable import PincerKit
-@MainActor
-private final class SettingsSaveRequestGate {
-    var entered = false
-    private var released = false
-    private var waiter: CheckedContinuation<Void, Never>?
-    func wait() async {
-        self.entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { waiter in
-                if self.released || Task.isCancelled { waiter.resume() }
-                else { self.waiter = waiter }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        self.released = true
-        let waiter = self.waiter
-        self.waiter = nil
-        waiter?.resume()
-    }
-}
+private typealias SettingsSaveRequestGate = CheckGate
 
 @MainActor
 func runSettingsSaveRebaseDemoChecks() async {
@@ -104,7 +84,7 @@ func runSettingsSaveRebaseDemoChecks() async {
     // Only timing is controlled: the real client params go unchanged to the connected Demo.
     let gate = SettingsSaveRequestGate()
     let model = GatewaySettingsModel(request: { method, params, timeout in
-        if method == "config.patch" { await gate.wait() }
+        if method == "config.patch" { await gate.hold() }
         return try await gateway.connection.request(method, params, timeout: timeout)
     }, scopes: { gateway.hello?.scopes ?? [] }, rootWritableWithoutAdmin: "mcp")
     await model.reloadConfig()

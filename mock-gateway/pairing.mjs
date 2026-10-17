@@ -6,6 +6,8 @@
 // MOCK_CHANNEL_PAIRING=off makes the mock look like a Gateway without these methods;
 // MOCK_CHANNEL_PAIRING_EVERY=<seconds> adds a new request every so often.
 import crypto from 'node:crypto';
+import { hasScope } from './scopes.mjs';
+import { isObject } from './util.mjs';
 
 export const CHANNEL_PAIRING_METHODS = ['channels.pairing.list', 'channels.pairing.approve', 'channels.pairing.dismiss'];
 export const PAIRING_SCOPE = 'operator.pairing';
@@ -98,15 +100,6 @@ export function addChannelPairingRequest(state, now = Date.now()) {
   });
   pairing.requests.push(request);
   return request;
-}
-
-function hasScope(conn, scope) {
-  const scopes = conn.scopes ?? [];
-  return scopes.includes(scope) || scopes.includes(ADMIN_SCOPE);
-}
-
-function isObject(params) {
-  return params && typeof params === 'object' && !Array.isArray(params);
 }
 
 export function handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr }) {

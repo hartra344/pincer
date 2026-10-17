@@ -78,9 +78,7 @@ public enum CronSchedule: Equatable, Sendable {
     }
 
     static func date(fromISO text: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+        GatewayDates.iso(text)
     }
 }
 
@@ -123,7 +121,7 @@ public struct CronJob: Identifiable, Equatable, Sendable {
         guard let id = json["id"]?.text ?? json["jobId"]?.text else { return nil }
         let state = json["state"]
         func field(_ key: String) -> JSONValue? { state?[key] ?? json[key] }
-        func date(_ key: String) -> Date? { field(key)?.double.map { Date(timeIntervalSince1970: $0 / 1000) } }
+        func date(_ key: String) -> Date? { field(key)?.epochMillisDate() }
         self.id = id
         self.name = json["displayName"]?.text ?? json["name"]?.text ?? id
         self.description = json["description"]?.text
@@ -193,7 +191,7 @@ public struct CronRun: Identifiable, Equatable, Sendable {
         self.id = json["runId"]?.text ?? "\(jobId)@\(Self.timestampIdentity(ts))"
         self.jobId = jobId
         self.jobName = json["jobName"]?.text
-        self.startedAt = Date(timeIntervalSince1970: started / 1000)
+        self.startedAt = GatewayDates.date(epochMillis: started)
         self.status = json["status"]?.text.flatMap(CronRunOutcome.init)
         self.error = json["error"]?.text
         self.summary = json["summary"]?.text
@@ -217,7 +215,7 @@ public struct CronSchedulerStatus: Equatable, Sendable {
     public init(_ json: JSONValue) {
         self.enabled = json["enabled"]?.bool ?? true
         self.jobCount = json["jobs"]?.int
-        self.nextWakeAt = json["nextWakeAtMs"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.nextWakeAt = json["nextWakeAtMs"]?.epochMillisDate()
     }
 }
 

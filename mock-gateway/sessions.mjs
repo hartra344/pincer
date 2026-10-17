@@ -25,6 +25,7 @@
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
 import { MOCK_STATE_DIR } from './agents.mjs';
+import { scopeApproved } from './scopes.mjs';
 
 export const SESSION_MANAGER_METHODS = [
   'sessions.preview',
@@ -61,10 +62,6 @@ export function hiddenSessionManagerMethods() {
     ...(process.env.MOCK_NO_SESSIONS_RECOVER === '1' ? ['sessions.recover'] : []),
     ...(process.env.MOCK_NO_PATCH_MANY === '1' ? ['sessions.patchMany'] : []),
   ];
-}
-
-function scopeApproved(scopes, scope) {
-  return scopes.includes(scope) || scopes.includes(ADMIN_SCOPE) || (scope === READ_SCOPE && scopes.includes(WRITE_SCOPE));
 }
 
 export function deleteRequiredScope(params) {

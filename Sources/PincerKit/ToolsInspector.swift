@@ -541,8 +541,7 @@ public final class ToolsInspectorModel: Identifiable {
     }
 
     private func supports(_ method: String) -> Bool {
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(method)
+        GatewayMethodSupport.supports(method, advertised: self.methods())
     }
 
     public func loadIfNeeded() async {

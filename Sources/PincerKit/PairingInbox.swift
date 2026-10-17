@@ -120,11 +120,7 @@ public struct PairingRequest: Identifiable, Hashable, Sendable {
         guard let value else { return nil }
         if case let .number(ms) = value { return Date(timeIntervalSince1970: ms / 1000) }
         guard let text = value.text else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: text) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: text)
+        return GatewayDates.iso(text)
     }
 
     static func ago(_ date: Date, now: Date) -> String {

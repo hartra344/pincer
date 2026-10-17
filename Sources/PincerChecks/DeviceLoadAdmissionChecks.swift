@@ -1,24 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class DeviceAdmissionGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                if released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        released = true
-        continuation?.resume(); continuation = nil
-    }
-}
+private typealias DeviceAdmissionGate = CheckGate
 
 /// The held request has already obtained its response. Only local delivery is deferred.
 @MainActor private func checkDeviceLoadAdmission(request: @escaping DeviceManagementModel.Request) async {

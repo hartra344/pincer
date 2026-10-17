@@ -9,6 +9,7 @@
 // `channelAccountSnapshots` (setup.mjs); every change broadcasts a `health` event.
 import { ADMIN_SCOPE } from './config.mjs';
 import { CHANNEL_META } from './setup.mjs';
+import { isObject } from './util.mjs';
 
 export const CHANNEL_LIFECYCLE_METHODS = ['channels.start', 'channels.stop', 'channels.logout'];
 /** Channels whose plugin implements `logoutAccount` (upstream: WhatsApp and Telegram, not Discord or Slack). */
@@ -32,10 +33,6 @@ export function resetChannelsForRestart(state) {
   rt.telegram.degraded = false;
   rt.telegram.lastStartAt = null;
   rt.whatsapp.stopped = false;
-}
-
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function checkParams(params, method) {

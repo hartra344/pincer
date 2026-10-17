@@ -1,20 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class FileWriteAuthorityGate {
-    var arrived = false
-    private var released = false
-    private var held: CheckedContinuation<Void, Never>?
-    func wait() async {
-        arrived = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released || Task.isCancelled { continuation.resume() } else { held = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { released = true; let old = held; held = nil; old?.resume() }
-}
+private typealias FileWriteAuthorityGate = CheckGate
 
 @MainActor func runAgentFileWriteAuthorityChecks() async {
     for failed in [false, true] {
@@ -26,13 +13,13 @@ import Foundation
                 return ["file": ["name": "SOUL.md", "content": "saved version", "hash": "saved"]]
             }
             gets += 1
-            if gets == 2 { await gate.wait() }
+            if gets == 2 { await gate.hold() }
             return ["file": ["name": "SOUL.md", "content": "old version", "hash": "old"]]
         }
         let editor = management.editor(agentId: "main", name: "SOUL.md")
         await editor.load()
         let reload = Task { await editor.load() }; defer { reload.cancel(); gate.release() }
-        let ready = await waitFor("older file read", timeout: 20) { gate.arrived }
+        let ready = await waitFor("older file read", timeout: 20) { gate.entered }
         check(ready, "actual older file read reaches completion gate")
         guard ready else { return }
         editor.text = "saved version"
@@ -65,14 +52,14 @@ import Foundation
     // Established Demo write allowance; hello/scopes and every real RPC remain unchanged.
     let management = AgentManagementModel(scopes: { gateway.hello?.scopes ?? [] }, allowsWritesWithoutAdmin: true) { method, params in
         let response = try await gateway.connection.request(method, params)
-        if method == "agents.files.get" { gets += 1; if gets == 2 { await gate.wait() } }
+        if method == "agents.files.get" { gets += 1; if gets == 2 { await gate.hold() } }
         return response
     }
     let editor = management.editor(agentId: "main", name: "SOUL.md")
     await editor.load()
     guard let original = editor.entry?.content else { check(false, "actual Demo file loads"); return }
     let reload = Task { await editor.load() }; defer { reload.cancel(); gate.release() }
-    let ready = await waitFor("real old Demo file response", timeout: 20) { gate.arrived }
+    let ready = await waitFor("real old Demo file response", timeout: 20) { gate.entered }
     check(ready, "real Demo read is computed before Save")
     guard ready else { return }
     editor.text = original + "\n<!-- local write authority check -->\n"

@@ -13,6 +13,7 @@
 // commands keep the approved set and park a node pairing request (`node.pair.requested`) until
 // `node.pair.approve`. Node sockets only receive node events, never operator broadcasts.
 import { randHex, sendErr, sendEvent, sendRes } from './util.mjs';
+import { hasPairingScope, hasScope } from './scopes.mjs';
 
 export const NODE_INVOKE_METHODS = ['node.invoke', 'node.pair.list', 'node.pair.approve', 'node.pair.reject'];
 export const NODE_ROLE_METHODS = ['node.invoke.result'];
@@ -27,10 +28,6 @@ const PLATFORM_ALLOWLIST = new Set([
 const DEFAULT_INVOKE_TIMEOUT_MS = 30_000;
 
 // devices.mjs imports this module, so the pairing-scope check lives here too.
-function hasPairingScope(conn) {
-  return hasScope(conn, 'operator.pairing');
-}
-
 export function pendingNodeRequestId(state, nodeId) {
   return [...pendingNodes(state).values()].find((p) => p.nodeId === nodeId)?.requestId;
 }
@@ -169,11 +166,6 @@ function nodeErrorMessage(error) {
 function parsePayload(payloadJSON) {
   if (!payloadJSON) return undefined;
   try { return JSON.parse(payloadJSON); } catch { return undefined; }
-}
-
-function hasScope(conn, scope) {
-  const scopes = conn.scopes ?? [];
-  return scopes.includes(scope) || scopes.includes('operator.admin');
 }
 
 /// Operator-side node methods; returns true when it handled `msg`.

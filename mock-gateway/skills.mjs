@@ -15,6 +15,7 @@
 import { ADMIN_SCOPE, REDACTED } from './config.mjs';
 import { MOCK_STATE_DIR, defaultWorkspaceDir } from './agents.mjs';
 import { mcpEffectiveTools, mcpNotices } from './mcp.mjs';
+import { scopeApproved } from './scopes.mjs';
 
 export const SKILLS_METHODS = ['skills.status', 'skills.search', 'skills.detail', 'skills.install', 'skills.update'];
 export const TOOLS_METHODS = ['tools.catalog', 'tools.effective'];
@@ -749,10 +750,6 @@ export function toolsEffectivePayload(agentId, sessionKey, state) {
 }
 
 // --- Handler ---
-
-function scopeApproved(scopes, scope) {
-  return scopes.includes(scope) || scopes.includes(ADMIN_SCOPE) || (scope === READ_SCOPE && scopes.includes('operator.write'));
-}
 
 function sessionAgentId(sessionKey) {
   return /^agent:([^:]+):/.exec(sessionKey)?.[1] ?? 'main';

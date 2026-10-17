@@ -58,6 +58,10 @@ export function clone(value) {
   return structuredClone(value);
 }
 
+export function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function sendJson(ws, obj) {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
 }

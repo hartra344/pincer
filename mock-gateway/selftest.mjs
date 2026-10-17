@@ -44,6 +44,7 @@ const SECTIONS = [
   'message-subscriptions',
   'large-media',
   'sessions-files',
+  'shared-helpers',
 ];
 
 const server = await startServer({ host: '127.0.0.1', port: 0, pairing: 'auto', mockToken: 'dev-token' });

@@ -5,15 +5,7 @@ import UIKit
 final class ShareViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
-        let items = self.extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
-        let root = ShareRoot(
-            items: items,
-            onCancel: { [weak self] in
-                self?.extensionContext?.cancelRequest(withError: NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError))
-            },
-            onDone: { [weak self] in
-                self?.extensionContext?.completeRequest(returningItems: nil)
-            })
+        let root = ShareRoot(extensionContext: self.extensionContext)
         let host = UIHostingController(rootView: root)
         self.addChild(host)
         host.view.translatesAutoresizingMaskIntoConstraints = false

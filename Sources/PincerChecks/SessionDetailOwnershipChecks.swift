@@ -1,20 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class DetailCheckGate {
-    var entered = false
-    var released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func release() { released = true; let old = waiter; waiter = nil; old?.resume() }
-    func hold() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released || Task.isCancelled { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-}
+private typealias DetailCheckGate = CheckGate
 
 @MainActor
 private func checkSessionDetailDeletion(key: String, demo: Bool, oldFails: Bool,
@@ -28,7 +15,7 @@ private func checkSessionDetailDeletion(key: String, demo: Bool, oldFails: Bool,
             if method == SessionManager.describeMethod {
                 check(response["session"]?["key"] == .string(key), "\(label): actual describe supplies the selected session")
                 gate.entered = true
-                try await gate.hold()
+                try await gate.holdThrowing()
                 if oldFails { throw GatewayError.closed("old describe fixture failure") }
             }
             return response
@@ -65,7 +52,7 @@ private func checkUnrelatedDeleteKeepsDetail() async {
         case SessionManager.listMethod: return ["sessions": [row, otherRow]]
         case SessionManager.describeMethod:
             gate.entered = true
-            try await gate.hold()
+            try await gate.holdThrowing()
             return ["session": row]
         case SessionManager.deleteMethod: return ["deleted": true]
         default: throw GatewayError.closed("Unexpected session detail check method")

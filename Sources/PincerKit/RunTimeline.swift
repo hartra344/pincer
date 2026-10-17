@@ -403,8 +403,7 @@ public struct RunTimeline: Sendable, Hashable {
     }
 
     private static func date(_ value: JSONValue?) -> Date? {
-        guard let ms = value?.double, ms.isFinite, ms > 0 else { return nil }
-        return Date(timeIntervalSince1970: ms / 1000)
+        value?.epochMillisDate(positiveOnly: true, requireFinite: true)
     }
 
     static func firstLine(_ text: String?) -> String? {

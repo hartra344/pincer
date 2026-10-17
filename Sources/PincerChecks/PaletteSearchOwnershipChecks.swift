@@ -2,14 +2,9 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class PaletteCheckGate {
-    var entered = false, open = false
-    private var held: CheckedContinuation<Void, Never>?
-    func hold() async { entered = true; await withCheckedContinuation { if open { $0.resume() } else { held = $0 } } }
-    func release() { open = true; held?.resume(); held = nil }
-}
+
 @MainActor private func checkPaletteOwnership(_ items: [PaletteItem], query: String, expected: [String]) async {
-    let coordinator = PaletteSearchCoordinator(), gate = PaletteCheckGate(), owner = UUID()
+    let coordinator = PaletteSearchCoordinator(), gate = CheckGate(releasesOnCancel: false), owner = UUID()
     coordinator.appear(); coordinator.didPrepare = { await gate.hold() }
     let revision = coordinator.source.current
     let request = Task { await coordinator.prepare(items, bookmarks: [], query: query, page: .models,

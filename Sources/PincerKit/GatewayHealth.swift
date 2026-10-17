@@ -57,7 +57,7 @@ public struct GatewayChannelAccountHealth: Identifiable, Hashable, Sendable {
     public var id: String { self.accountId }
 
     public init(_ json: JSONValue, fallbackId: String) {
-        func date(_ key: String) -> Date? { json[key]?.double.map { Date(timeIntervalSince1970: $0 / 1000) } }
+        func date(_ key: String) -> Date? { json[key]?.epochMillisDate() }
         self.accountId = json["accountId"]?.text ?? fallbackId
         self.name = json["name"]?.text
         self.enabled = json["enabled"]?.bool
@@ -212,7 +212,7 @@ public struct GatewayHealthSummary: Hashable, Sendable {
     public init?(_ json: JSONValue) {
         guard json.object != nil else { return nil }
         self.ok = json["ok"]?.bool
-        self.checkedAt = json["ts"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.checkedAt = json["ts"]?.epochMillisDate()
         self.durationMs = json["durationMs"]?.int
         let channels = json["channels"]?.object ?? [:]
         let labels = json["channelLabels"]?.object ?? [:]
@@ -311,7 +311,7 @@ public struct GatewayHeartbeat: Hashable, Sendable {
     /// Nil for `null` (no heartbeat yet) and anything that isn't an object.
     public init?(_ json: JSONValue?) {
         guard let json, json.object != nil else { return nil }
-        self.at = json["ts"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.at = json["ts"]?.epochMillisDate()
         self.status = Status(json["status"]?.text ?? "unknown")
         self.to = json["to"]?.text
         self.channel = json["channel"]?.text
@@ -353,7 +353,7 @@ public struct GatewayPresenceEntry: Identifiable, Hashable, Sendable {
 
     public init?(_ json: JSONValue, index: Int = 0) {
         guard json.object != nil else { return nil }
-        func date(_ key: String) -> Date? { json[key]?.double.map { Date(timeIntervalSince1970: $0 / 1000) } }
+        func date(_ key: String) -> Date? { json[key]?.epochMillisDate() }
         self.text = json["text"]?.text
         self.host = json["host"]?.text
         self.clientId = json["clientId"]?.text

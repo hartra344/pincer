@@ -7,6 +7,8 @@
 // clients. MOCK_DEVICE_PAIRING=off (or MOCK_NODES=off) makes the mock look like a Gateway without them.
 import crypto from 'node:crypto';
 import { NODE_INVOKE_METHODS, dropNode, pendingNodeRequestId } from './nodes.mjs';
+import { hasPairingScope, hasScope } from './scopes.mjs';
+import { isObject } from './util.mjs';
 
 export const DEVICE_PAIRING_METHODS = ['device.pair.list', 'device.pair.approve', 'device.pair.reject', 'device.pair.remove', 'device.pair.rename'];
 export const NODE_METHODS = ['node.list', 'node.describe', 'node.rename', 'node.pair.remove', ...NODE_INVOKE_METHODS];
@@ -24,14 +26,7 @@ export function nodesDisabled() {
   return process.env.MOCK_NODES === 'off';
 }
 
-function hasScope(scopes, scope) {
-  const list = scopes ?? [];
-  return list.includes(scope) || list.includes(ADMIN_SCOPE) || (scope === READ_SCOPE && list.includes('operator.write'));
-}
-
-export function hasPairingScope(conn) {
-  return hasScope(conn.scopes, PAIRING_SCOPE);
-}
+export { hasPairingScope };
 
 // Seeded devices never connect, so a stable made-up key is enough; the id is its sha256 like upstream.
 function seededIdentity(name) {
@@ -251,10 +246,6 @@ export function approvePendingDevice(state, requestId, broadcast) {
   return { requestId, device };
 }
 
-function isObject(params) {
-  return params && typeof params === 'object' && !Array.isArray(params);
-}
-
 // Closed-object validation with upstream's message shape.
 function paramsError(method, params, required, optional = []) {
   if (!isObject(params)) return `invalid ${method} params: at root: must be object`;
@@ -314,7 +305,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
   const isNode = NODE_METHODS.includes(method) && !nodesDisabled();
   if (!isDevice && !isNode) return false;
   const requiredScope = method === 'node.list' || method === 'node.describe' ? READ_SCOPE : PAIRING_SCOPE;
-  if (!hasScope(conn.scopes, requiredScope)) {
+  if (!hasScope(conn, requiredScope)) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${requiredScope}`, { code: 'MISSING_SCOPE', missingScope: requiredScope, requiredScopes: [requiredScope] });
     return true;
   }
@@ -342,7 +333,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
         if (hasNonOperatorRole(pending)) return invalid('device pairing approval denied'), true;
       }
       if (!pending) return invalid('unknown requestId'), true;
-      const missing = (pending.scopes ?? []).find((scope) => scope.startsWith('operator.') && !hasScope(conn.scopes, scope));
+      const missing = (pending.scopes ?? []).find((scope) => scope.startsWith('operator.') && !hasScope(conn, scope));
       if (missing) return invalid(`missing scope: ${missing}`), true;
       const approved = approvePendingDevice(state, requestId, broadcast);
       sendRes(conn, id, { requestId, device: pairedView(state, approved.device, { withConnected: false }) });

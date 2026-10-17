@@ -229,9 +229,7 @@ extension DemoGateway {
         var branch: Row = ["leafEntryId": .string(leaf), "headline": .string(Self.headline(path)),
                            "messageCount": JSONValue(path.count), "active": .bool(active)]
         if let ms = path.last?["timestamp"]?.double {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            branch["updatedAt"] = .string(formatter.string(from: Date(timeIntervalSince1970: ms / 1000)))
+            branch["updatedAt"] = .string(GatewayDates.isoString(GatewayDates.date(epochMillis: ms)))
         }
         return .object(branch)
     }

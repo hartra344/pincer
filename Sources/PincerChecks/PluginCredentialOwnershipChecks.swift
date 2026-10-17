@@ -1,20 +1,8 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class CredentialInspectionGate {
-    var entered = false
+private final class CredentialInspectionGate: CheckGate {
     var calls = 0
-    var released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func release() { released = true; waiter?.resume(); waiter = nil }
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released || Task.isCancelled { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
 }
 
 @MainActor private func checkCredentialOwnership(plugin: PluginInfo,

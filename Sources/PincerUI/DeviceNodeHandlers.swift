@@ -91,10 +91,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
 
     static func date(_ iso: String?) -> Date?? {
         guard let iso, !iso.isEmpty else { return .some(nil) }
-        let plain = ISO8601DateFormatter()
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = plain.date(from: iso) ?? fractional.date(from: iso) else { return nil }
+        guard let date = GatewayDates.iso(iso) else { return nil }
         return .some(date)
     }
 

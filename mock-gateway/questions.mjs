@@ -37,6 +37,15 @@ function publishQuestion(state, record) {
   broadcast(state, 'question.requested', clone(record), hasQuestionsScope);
 }
 
+// Publishes the question and waits for it to settle; false when the run was aborted meanwhile.
+async function askQuestion(state, run, record) {
+  publishQuestion(state, record);
+  await waitForQuestion(state, run, record);
+  if (!run.aborted) return true;
+  settleQuestion(state, record, 'cancelled');
+  return false;
+}
+
 // Asks an ask_user question like OpenClaw does (question.requested), then blocks the run until it's settled.
 export async function simulateQuestion(state, run, sessionKey, row) {
   const toolCallId = shortId('call_');
@@ -57,12 +66,7 @@ export async function simulateQuestion(state, run, sessionKey, row) {
     expiresAtMs: nowMs() + 900_000,
     status: 'pending',
   };
-  publishQuestion(state, record);
-  await waitForQuestion(state, run, record);
-  if (run.aborted) {
-    settleQuestion(state, record, 'cancelled');
-    return null;
-  }
+  if (!(await askQuestion(state, run, record))) return null;
   const picked = record.answers?.answers?.discord_remove ?? [];
   const output = record.status === 'answered' ? `User answered: ${picked.join(', ')}` : `User ${record.status === 'expired' ? "didn't answer in time" : 'skipped the question'}`;
   broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'result', name: 'ask_user', toolCallId, isError: false, result: output } });
@@ -100,12 +104,7 @@ export async function simulateSecretQuestion(state, run, sessionKey, row) {
     expiresAtMs: nowMs() + 900_000,
     status: 'pending',
   };
-  publishQuestion(state, record);
-  await waitForQuestion(state, run, record);
-  if (run.aborted) {
-    settleQuestion(state, record, 'cancelled');
-    return null;
-  }
+  if (!(await askQuestion(state, run, record))) return null;
   const stored = record.status === 'answered';
   const output = stored
     ? `Stored; value hidden. Use the returned ref for config SecretRefs.\n\n${JSON.stringify({ status: 'stored', name, kind: 'secret', ref: { source: 'store', provider: 'default', id: name } })}`

@@ -175,23 +175,9 @@ struct PairingRequestsPage: View {
 
     @ViewBuilder private func noticeView(_ model: PairingInboxModel) -> some View {
         if let notice = model.notice {
-            SettingsNoticeBanner(id: notice.id, text: notice.text, severity: notice.severity,
-                                 announces: true, dismiss: {
-                guard model.notice?.id == notice.id else { return }
-                withAnimation { model.clearNotice() }
-            }) {
-                Text(notice.text).font(.callout).multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, Theme.Spacing.xxl)
-            .padding(.vertical, Theme.Spacing.lg)
-            .glassSurface(in: Capsule())
-            .padding(.horizontal)
-            .padding(.bottom, Theme.Spacing.section)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .onTapGesture {
-                guard model.notice?.id == notice.id else { return }
-                withAnimation { model.clearNotice() }
-            }
+            SettingsNoticeToast(id: notice.id, text: notice.text, severity: notice.severity,
+                                isCurrent: { model.notice?.id == notice.id },
+                                clear: { model.clearNotice() })
         }
     }
 

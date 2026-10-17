@@ -1,5 +1,4 @@
-import zlib from 'node:zlib';
-import { pngChunk } from './seed.mjs';
+import { encodePng } from './png.mjs';
 import { sendErr, sendRes } from './util.mjs';
 
 // `controlUi.linkPreview` (openclaw src/gateway/control-ui-contract.ts): params exactly {url};
@@ -20,17 +19,7 @@ function solidPng(width, height, pixel) {
       raw.set([r, g, b, 255], row + 1 + x * 4);
     }
   }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-  return Buffer.concat([
-    Buffer.from('89504e470d0a1a0a', 'hex'),
-    pngChunk('IHDR', ihdr),
-    pngChunk('IDAT', zlib.deflateSync(raw)),
-    pngChunk('IEND', Buffer.alloc(0)),
-  ]);
+  return encodePng(width, height, 6, raw);
 }
 
 const dataUrl = (png) => `data:image/png;base64,${png.toString('base64')}`;

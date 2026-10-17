@@ -1,18 +1,7 @@
 import Foundation
 import PincerKit
 
-@MainActor private final class PairingCanceledReplyGate {
-    var entered = false, open = false
-    var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        // Intentionally delivers a computed reply after cancellation.
-        await withCheckedContinuation { continuation in
-            if open { continuation.resume() } else { self.continuation = continuation }
-        }
-    }
-    func release() { open = true; continuation?.resume(); continuation = nil }
-}
+
 
 @MainActor func runPairingInboxLoadCancellationChecks() async {
     let source: JSONValue = [
@@ -23,7 +12,7 @@ import PincerKit
         "commandOwnerConfigured": false, "limits": ["pendingPerAccount": 3, "ttlMs": 3600000],
     ]
     for outcome in ["success", "UNKNOWN_METHOD", "missing-scope", "UNAVAILABLE"] {
-        let gate = PairingCanceledReplyGate()
+        let gate = CheckGate(releasesOnCancel: false) // Intentionally delivers a computed reply after cancellation.
         var attempts = 0
         let model = PairingInboxModel { method, params in
             check(method == PairingInboxModel.listMethod && params == [:], "canceled pairing reply retains exact read request")

@@ -83,9 +83,7 @@ public final class GatewayVoiceModel {
 
     /// Whether the Gateway has `method`: advertised (or the list is unknown) and not rejected.
     public func supports(_ method: String) -> Bool {
-        if self.rejectedMethods.contains(method) { return false }
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(method)
+        GatewayMethodSupport.supports(method, advertised: self.methods(), rejected: self.rejectedMethods)
     }
 
     /// Whether the Voice settings page applies.

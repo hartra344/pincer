@@ -2,17 +2,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class CacheRestoreCheckGate {
-    var entered = false, open = false
-    private var held: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { if open || Task.isCancelled { $0.resume() } else { held = $0 } }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { open = true; held?.resume(); held = nil }
-}
+private typealias CacheRestoreCheckGate = CheckGate
 @MainActor private func checkCacheRestorePublication(source: [ChatItem]) async {
     let (defaults, suite) = scratchDefaults()
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("cache-restore-owner-\(UUID())", isDirectory: true)

@@ -727,8 +727,7 @@ struct SessionDetailPage: View {
     }
 
     private static func date(_ value: JSONValue?) -> Date? {
-        guard let ms = value?.double, ms > 0 else { return nil }
-        return Date(timeIntervalSince1970: ms / 1000)
+        value?.epochMillisDate(positiveOnly: true)
     }
 
     /// Presents while `value` is set; dismissing clears it (only when set).

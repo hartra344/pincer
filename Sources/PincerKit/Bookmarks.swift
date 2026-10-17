@@ -85,7 +85,7 @@ extension Bookmark {
     }
 
     private static func ms(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
-    private static func date(_ ms: Int64) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
+    private static func date(_ ms: Int64) -> Date { GatewayDates.date(epochMillis: Double(ms)) }
 }
 
 /// One gateway's bookmarks, newest first, saved in `UserDefaults`.

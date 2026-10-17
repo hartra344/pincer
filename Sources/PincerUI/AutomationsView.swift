@@ -210,11 +210,7 @@ private struct AutomationsRoot: View {
     private func openChat(_ key: String) {
         self.app.open(Notifier.Target(gatewayId: self.gateway.id, sessionKey: key))
         #if os(macOS)
-        if let window = NSApplication.shared.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) {
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            self.openWindow(id: "main")
-        }
+        MainWindow.bringToFront(openWindow: self.openWindow)
         #else
         self.close?()
         #endif
