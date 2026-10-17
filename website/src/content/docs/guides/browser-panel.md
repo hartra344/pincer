@@ -11,9 +11,11 @@ The panel shows a live picture of the page the agent is using. That's either the
 
 The panel has a page picker for choosing between open pages, the controls described below, and a status pill that reads **Live** while frames arrive.
 
-If the stream drops, the last picture stays on screen dimmed and the pill reads **Reconnecting…**. Pincer retries a few times with a growing pause, then stops and shows the reason (for example "This browser can't be streamed." for an extension-relay or existing-session browser) with **Try Again**. A page that isn't repainting is still **Live** and shown at full strength.
+If the stream drops, the last picture stays on screen dimmed and the pill reads **Reconnecting (1/5)…**, counting up. Pincer retries five times, waiting 2, 4, 8, 16 and 30 seconds (about a minute), then stops and shows the reason with **Try Again**. A page that isn't repainting is still **Live** and shown at full strength, with "Waiting for the page to draw…" until its first picture arrives.
 
-When the gateway supports it (a local managed browser), the panel asks it to resize the page to the panel, as the OpenClaw Control UI does, so the picture fills the panel without empty bands. This changes the agent's browser window size. If the gateway refuses, the picture is shown at its own size, aligned to the top, and Pincer doesn't ask again.
+Some browsers can't be streamed at all: an extension-relay or existing-session browser. Then the panel says "This browser can't be streamed. Extension-relay and existing-session browsers aren't supported; use a managed browser profile." It doesn't retry and has no **Try Again**.
+
+When the gateway supports it (a local managed browser), the Mac app and the iPad (at regular width, including the inspector) ask it to resize the page to the panel, as the OpenClaw Control UI does, so the picture fills the panel without empty bands. This changes the agent's browser window size, so it only happens while the panel is visible. **On iPhone, and in any compact layout, Pincer never resizes the agent's browser:** reflowing its page to a phone-sized window in the middle of a task could change what the agent sees. The picture is shown at its own size, fitted and aligned to the top. Pincer asks for a given size once and never re-asserts a size another viewer has since changed, so two devices don't fight over the window. If the gateway refuses a size, Pincer doesn't ask for that size again and shows the picture at its own size. A timeout or a dropped connection isn't a refusal.
 
 ## Controls
 
