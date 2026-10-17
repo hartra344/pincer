@@ -12553,12 +12553,12 @@
         }
       }
     },
-    "Portals this chat's agent opens show here.": {
+    "Portals this agent opens show here.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Portals this chat's agent opens show here."
+            "value": "Portals this agent opens show here."
           }
         }
       }
