@@ -739,7 +739,7 @@ struct ChatChrome: ViewModifier {
             #if os(iOS)
             .modifier(CompactChatIdentityChrome(active: self.showsCompactIdentity, gateway: self.gateway, key: self.key, row: self.row))
             #endif
-            .modifier(ChatInspectorChrome(panel: self.$panel, showsToolbarButton: !split && !self.showsCompactIdentity))
+            .modifier(ChatInspectorChrome(panel: self.$panel, showsToolbarButton: !split && !self.showsCompactIdentity, tracksPortals: !split))
             .onChange(of: self.key.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
                 if let row { self.lastRow = row }
             }

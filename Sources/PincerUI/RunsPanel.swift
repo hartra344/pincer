@@ -50,6 +50,8 @@ struct ChatInspectorChrome: ViewModifier {
     private var current: ChatInspectorPanel { self.panel ?? self.shown }
     /// False while the split view's headers show their own Runs and Browser buttons (#427).
     var showsToolbarButton = true
+    /// False in a split view, whose headers follow each side's chat themselves.
+    var tracksPortals = true
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { self.sizeClass == .compact }
@@ -65,6 +67,7 @@ struct ChatInspectorChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .modifier(PortalsTracking(key: self.tracksPortals ? self.gateway.portalChatKey(window: self.windowKey) : nil))
             .toolbar {
                 #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {

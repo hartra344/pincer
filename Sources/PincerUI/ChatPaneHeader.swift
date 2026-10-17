@@ -155,6 +155,7 @@ struct ChatPaneHeader: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.sm)
         .frame(minHeight: 44)
+        .modifier(PortalsTracking(key: self.key))
         // Marks the side menu commands act on (#404).
         .overlay(alignment: .bottom) {
             Rectangle()

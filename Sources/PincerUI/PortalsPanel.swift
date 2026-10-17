@@ -8,6 +8,9 @@ extension GatewayStore {
         return PortalScope(sessionKey: key, agentId: chat.agentId, opened: chat.openedPortals)
     }
 
+    /// The chat the Portals panel and its buttons act on: the window's, else the focused one.
+    func portalChatKey(window: String?) -> String? { window ?? self.focusedKey ?? self.selectedKey }
+
     func chatPortals(for key: String?) -> [PortalSummary] {
         guard let key, !self.portals.unavailable else { return [] }
         return self.portals.portals(for: self.portalScope(for: key))
@@ -28,7 +31,7 @@ struct PortalsPanel: View {
     @State private var settled = false
     @State private var dismissedCloseError: String?
 
-    private var key: String? { self.windowKey ?? self.gateway.focusedKey ?? self.gateway.selectedKey }
+    private var key: String? { self.gateway.portalChatKey(window: self.windowKey) }
 
     var body: some View {
         let store = self.gateway.portals
@@ -50,7 +53,7 @@ struct PortalsPanel: View {
                 ContentUnavailableView {
                     Label(L("No portals"), systemImage: "rectangle.on.rectangle")
                 } description: {
-                    Text("Portals this chat's agent opens show here.", bundle: .module)
+                    Text("Portals this agent opens show here.", bundle: .module)
                 }
             }
         }
@@ -58,17 +61,7 @@ struct PortalsPanel: View {
             try? await Task.sleep(for: WorkspacePanel.slideSettleDelay)
             self.settled = true
         }
-        .task(id: self.key) {
-            guard let key = self.key else { return }
-            let agentId = self.gateway.chat(for: key).agentId
-            store.trackOwned(sessionKey: key, agentId: agentId)
-            await store.refreshOwned(sessionKey: key, agentId: agentId)
-        }
-        .onChange(of: self.key) { old, _ in
-            self.picked = nil
-            if let old { store.untrackOwned(sessionKey: old) }
-        }
-        .onDisappear { if let key = self.key { store.untrackOwned(sessionKey: key) } }
+        .onChange(of: self.key) { self.picked = nil }
         .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
         .onChange(of: self.gateway.portals.portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
         .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
@@ -164,7 +157,7 @@ struct PortalsToolbarButton: View {
     @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
-        let key = self.sessionKey ?? self.windowKey ?? self.gateway.selectedKey
+        let key = self.sessionKey ?? self.gateway.portalChatKey(window: self.windowKey)
         let count = self.gateway.chatPortals(for: key).count
         let open = self.isPresented && self.isFocused
         Group {
@@ -205,11 +198,6 @@ struct PortalsToolbarButton: View {
                 .accessibilityLabel(count > 0 ? "\(title) — \(Self.portalCount(count))" : title)
             }
         }
-        // Learns which portals the chat owns on the Gateway, so the button can appear before the panel opens.
-        .task(id: key) {
-            guard let key else { return }
-            await self.gateway.portals.refreshOwned(sessionKey: key, agentId: self.gateway.chat(for: key).agentId)
-        }
     }
 
     static func portalCount(_ count: Int) -> String {
@@ -225,14 +213,33 @@ struct PortalsToolbarButton: View {
     }
 }
 
+/// Follows the chat's owned portals on the Gateway while it is shown. Attached to a view that is always
+/// present (not to a button that only appears once portals exist), so owned-only chats get their button.
+struct PortalsTracking: ViewModifier {
+    let key: String?
+    @Environment(GatewayStore.self) private var gateway
+
+    func body(content: Content) -> some View {
+        content.task(id: self.key) {
+            guard let key = self.key else { return }
+            let store = self.gateway.portals
+            store.trackOwned(sessionKey: key, agentId: self.gateway.chat(for: key).agentId)
+            // Parked until the chat changes or the view goes away.
+            try? await Task.sleep(for: .seconds(1_000_000_000))
+            store.untrackOwned(sessionKey: key)
+        }
+    }
+}
+
 /// "Show Portals" for the chat's session menu, only when the chat has portals (or the panel is open).
 struct ShowPortalsButton: View {
     @Binding var isPresented: Bool
     var sessionKey: String?
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
-        if self.isPresented || !self.gateway.chatPortals(for: self.sessionKey).isEmpty {
+        if self.isPresented || !self.gateway.chatPortals(for: self.sessionKey ?? self.gateway.portalChatKey(window: self.windowKey)).isEmpty {
             Button(self.isPresented ? L("Hide Portals") : L("Show Portals"), systemImage: "rectangle.on.rectangle") {
                 self.isPresented.toggle()
             }
