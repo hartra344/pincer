@@ -182,6 +182,20 @@ jobs:
             -only-testing:PincerUITests/SVGRasterizerTests \
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
+      # Drives the real app on the simulator: the Browser sheet must leave the compact chat header untouched (#1026).
+      - name: UI-test the Browser sheet header on iOS
+        run: |
+          set -o pipefail
+          brew install xcodegen
+          xcodegen generate --quiet
+          xcodebuild test \
+            -project Pincer.xcodeproj \
+            -scheme PincerAppUITests-iOS \
+            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
+            -derivedDataPath .build/xcode-app-uitests \
+            CODE_SIGNING_ALLOWED=NO \
+            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
   swift:
     name: Swift build and checks
     needs: changes

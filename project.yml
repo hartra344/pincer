@@ -98,6 +98,20 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
         TARGETED_DEVICE_FAMILY: "1,2"
+  # Drives the real app on a simulator for regressions the hosted UIKit tests can't reach (#1026).
+  PincerAppUITests-iOS:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests/PincerAppUITests]
+    dependencies:
+      - target: Pincer-iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.appuitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Pincer-iOS
+    scheme:
+      testTargets: [PincerAppUITests-iOS]
   # Share extensions: send text, links and files into a chat. They connect as the app's paired
   # device, reading gateways from the App Group and credentials from the shared Keychain group.
   PincerShare-macOS:
