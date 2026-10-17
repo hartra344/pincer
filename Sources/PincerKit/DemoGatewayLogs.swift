@@ -67,9 +67,7 @@ struct DemoGatewayLogs {
     }
 
     private static func iso(_ date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        GatewayDates.isoString(date)
     }
 
     /// Time passing on the demo host: 1–4 plausible lines since the last read.

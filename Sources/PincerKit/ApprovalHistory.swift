@@ -234,7 +234,7 @@ public struct ApprovalRecord: Identifiable, Hashable, Sendable {
         }
         func date(_ keys: String...) -> Date? {
             for key in keys {
-                if let ms = json[key]?.double { return Date(timeIntervalSince1970: ms / 1000) }
+                if let date = json[key]?.epochMillisDate() { return date }
             }
             return nil
         }

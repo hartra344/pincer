@@ -24,9 +24,7 @@ extension DemoGateway {
     static let pairingTTL: TimeInterval = 60 * 60
 
     static func iso(_ date: Date) -> JSONValue {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return .string(formatter.string(from: date))
+        .string(GatewayDates.isoString(date))
     }
 
     static func seedPairingRequests(now: Date = Date()) -> [JSONValue] {

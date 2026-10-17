@@ -351,11 +351,7 @@ public struct SessionBranch: Identifiable, Equatable, Sendable {
     static func date(_ value: JSONValue) -> Date? {
         if let ms = value.double, value.string == nil { return Date(timeIntervalSince1970: ms / 1000) }
         guard let text = value.string else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: text) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: text) ?? Double(text).map { Date(timeIntervalSince1970: $0 / 1000) }
+        return GatewayDates.iso(text) ?? Double(text).map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 }
 
@@ -528,9 +524,7 @@ public final class SessionManagerModel {
 
     /// Whether the Gateway has `method`: advertised (or the list is unknown) and not rejected.
     public func supports(_ method: String) -> Bool {
-        if self.rejectedMethods.contains(method) { return false }
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(method)
+        GatewayMethodSupport.supports(method, advertised: self.methods(), rejected: self.rejectedMethods)
     }
 
     public var supportsList: Bool { self.supports(SessionManager.listMethod) }

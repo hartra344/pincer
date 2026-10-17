@@ -129,16 +129,8 @@ public struct GatewayLogLine: Hashable, Sendable {
         return String(decoding: data, as: UTF8.self)
     }
 
-    private nonisolated(unsafe) static let isoFractional: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private nonisolated(unsafe) static let isoPlain = ISO8601DateFormatter()
-
     static func date(_ text: String) -> Date? {
-        Self.isoFractional.date(from: text) ?? Self.isoPlain.date(from: text)
+        GatewayDates.iso(text)
     }
 }
 
