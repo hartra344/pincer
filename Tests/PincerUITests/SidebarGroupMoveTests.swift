@@ -37,8 +37,10 @@ struct SidebarGroupMoveTests {
         model.groups.flatMap { [$0.header.id] + $0.childIds }
     }
 
+    /// Waits for the move's `sessions.changed` to land. The bound only catches a move that never does:
+    /// on a loaded runner the main actor can lag by many seconds (#1022), like `connectedDemo` allows.
     private func settle(_ gateway: GatewayStore, _ key: String, category: String?) async throws {
-        let moved = await eventually(timeout: .seconds(10)) { gateway.sessions[key]?.category == category }
+        let moved = await eventually(timeout: .seconds(60)) { gateway.sessions[key]?.category == category }
         try #require(moved, "\(key) category=\(gateway.sessions[key]?.category ?? "nil"), wanted \(category ?? "nil")")
     }
 

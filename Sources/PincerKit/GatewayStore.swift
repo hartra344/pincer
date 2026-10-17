@@ -647,14 +647,18 @@ public final class GatewayStore: Identifiable {
     #endif
 
 
-    /// Row changes seen while the bootstrap's session list is being read; they win over that snapshot.
+    /// Row changes seen while a session list is being read (the bootstrap's or a refresh's); they win
+    /// over that snapshot, which may have been computed before them.
     private struct ListReconcile {
         var rows: [String: SessionRow] = [:]
         var deleted: [String: String?] = [:]
         var needsTrailingRefresh = false
+        /// Opened by `refreshSessions` rather than the bootstrap, which manages its own.
+        var ownedByRefresh = false
     }
 
     @ObservationIgnored private var listReconcile: ListReconcile?
+    @ObservationIgnored private var refreshesInFlight = 0
 
     private func recordReconciledRow(_ key: String) {
         self.listReconcile?.rows[key] = self.sessions[key]
@@ -955,6 +959,17 @@ public final class GatewayStore: Identifiable {
     }
 
     public func refreshSessions() async {
+        // A row event can reach the main actor before this response even though the Gateway read the
+        // list first (#1022), so row changes seen meanwhile are kept over the snapshot.
+        if self.listReconcile == nil { self.listReconcile = ListReconcile(ownedByRefresh: true) }
+        self.refreshesInFlight += 1
+        defer {
+            self.refreshesInFlight -= 1
+            if self.refreshesInFlight == 0, let reconcile = self.listReconcile, reconcile.ownedByRefresh {
+                self.listReconcile = nil
+                if reconcile.needsTrailingRefresh { self.scheduleRefresh() }
+            }
+        }
         guard let list = try? await self.connection.request("sessions.list", .object(self.listParams), timeout: 30) else {
             return
         }

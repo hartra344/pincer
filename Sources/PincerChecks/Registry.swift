@@ -220,6 +220,7 @@ enum Suites {
             Section("Find in chat") { await runFindInChatChecks() },
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
+            Section("Transcript measure work") { await runTranscriptMeasureWorkChecks() },
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Tool diff line number boundary") { await runToolDiffLineNumberBoundaryChecks(); await runToolDiffCursorExhaustionChecks() },
             Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
@@ -498,6 +499,7 @@ enum Suites {
         sections.append(Section("Share target ownership (demo)") { await runDemoShareTargetOwnershipChecks() })
         sections.append(Section("Embedded image base64 preparation (demo)") { await runDemoEmbeddedImageBase64PreparationChecks() })
         sections.append(Section("Log Copy preparation (demo)") { await runDemoGatewayLogCopyPreparationChecks() })
+        sections.append(Section("Session list refresh reconcile (demo)") { await runDemoSessionListRefreshReconcileChecks() })
         sections.append(Section("Log Export preparation (demo)") { await runDemoGatewayLogExportPreparationChecks() })
         sections.append(Section("Export file staging (demo)") { await runDemoExportFileStagingChecks() })
         sections.append(Section("Chat text Export preparation (demo)") { await runDemoChatTextExportPreparationChecks() })
