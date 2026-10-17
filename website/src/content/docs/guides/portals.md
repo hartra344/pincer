@@ -10,7 +10,7 @@ A portal is a small web app the agent started on the gateway's machine and share
 A chat shows a portal when either of these is true:
 
 - **The chat's agent opened it.** The agent opened it with a successful `portal` tool call in any of its chats. Pincer remembers which agent opened each portal, so the portal stays with that agent after you start a new chat or the call scrolls out of the history. Once the portal closes, it disappears.
-- **The chat's session owns it.** When a chat runs on a dedicated cloud worker, the gateway knows which portals belong to that session, and Pincer asks for them.
+- **One of the agent's sessions owns it.** When a chat runs on a dedicated cloud worker, the gateway knows which portals belong to that session, and Pincer asks for them. They show in that chat and in the agent's other chats.
 
 A portal opened somewhere else, such as from the OpenClaw Control UI, doesn't show in any chat. The gateway doesn't record which agent opened most portals, so Pincer relies on the agent's own tool calls to tell.
 
