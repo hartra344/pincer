@@ -65,7 +65,6 @@ struct PortalsPanel: View {
         .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
         .onChange(of: self.gateway.portals.portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
         .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
-        .modifier(SheetTitle(title: L("Portals")))
         .portalCloseConfirmation(title: self.closing?.title ?? self.lastClosingTitle, isPresented: Binding(get: { self.closing != nil }, set: { if !$0 { self.closing = nil } })) {
             guard let portal = self.closing, let key = self.key else { return }
             self.closing = nil

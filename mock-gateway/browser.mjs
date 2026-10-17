@@ -1,9 +1,10 @@
 // Mock of the Gateway's browser tool surface for the live browser panel (#974): `browser.request`
 // (operator.admin) with `GET /tabs`, `POST /screencast`, `/navigate`, `/tabs/open`, `DELETE /tabs/<id>`, `/start`,
-// `/act` (history.go(±1) only) and `/download`, the `/browser/screencast` WebSocket upgrade, and the assistant-media
+// `/act` (history.go(±1) and `resize`) and `/download`, the `/browser/screencast` WebSocket upgrade, and the assistant-media
 // route that serves downloads.
 // Shapes follow upstream extensions/browser/src/browser/{routes/agent.screencast.ts,screencast/{wire,upgrade}.ts}.
 import crypto from 'node:crypto';
+import jpegJs from 'jpeg-js';
 import { WebSocketServer } from 'ws';
 
 export const BROWSER_METHODS = ['browser.request'];
@@ -22,16 +23,49 @@ export const BROWSER_TABS = [
   { targetId: 'tab-release-0002', tabId: 't2', title: 'Release v2026.5 · openclaw/openclaw', url: 'https://github.com/openclaw/openclaw/releases/tag/v2026.5' },
 ];
 const FRAME_INTERVAL_MS = 200;
-const CSS_SIZE = { width: 1280, height: 800 };
+// The agent browser window's size before anyone resizes it: landscape, like the real managed browser.
+const DEFAULT_VIEWPORT = { width: 1230, height: 670 };
+const VIEWPORT_LIMIT = 8192; // upstream ACT_MAX_VIEWPORT_DIMENSION
 
-// Valid baseline JPEGs (192x120), generated once offline with `sips`: one per color.
-const FRAMES_B64 = [
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+OaKKK+uPFCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/R8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/S8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/T8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/U8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/V8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/W8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/Z',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+S6KKK8s+uCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//0eXooor4k/oQK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI//9Ll6KKK+JP6ECuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiP//T5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//1OXooor4k/oQK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI//9Xl6KKK+JP6ECuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiP//W5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//2Q==',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+TaKKK5z5sKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Q8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//R8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//S8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//T8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//U8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//V8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//W8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//Z',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+Z6KKK+RPUCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//0eoooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9LqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//T6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//1Ooooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9XqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//W6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//2Q==',
-];
-export const FRAMES = FRAMES_B64.map((b64) => Buffer.from(b64, 'base64'));
+// Page behaviours chosen by the tab's host, so one mock covers every stream case:
+//   static.example      ready, then frames only when the page repaints (navigation, resize), like upstream
+//   unsupported.example the socket is closed with 4005 (SCREENCAST_UNSUPPORTED) right after ready
+//   dead.example        the socket drops before `ready`, every time (a stream that never connects)
+export const STATIC_HOST = 'static.example';
+export const UNSUPPORTED_HOST = 'unsupported.example';
+export const DEAD_HOST = 'dead.example';
+const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
+
+// Frames are painted at the page's viewport aspect (scaled so the long edge is 320 px), like upstream repaints
+// at the CSS size. Vertical stripes in one of four hues, no chrome, so aspect-fit is visible at a glance.
+const FRAME_HUES = [[36, 99, 235], [22, 163, 74], [217, 119, 6], [147, 51, 234]];
+const frameCache = new Map();
+export function frameFor(viewport, index) {
+  const scale = 320 / Math.max(viewport.width, viewport.height);
+  const width = Math.max(8, Math.round(viewport.width * scale));
+  const height = Math.max(8, Math.round(viewport.height * scale));
+  const hue = index % FRAME_HUES.length;
+  const key = `${width}x${height}:${hue}`;
+  let jpeg = frameCache.get(key);
+  if (!jpeg) {
+    const data = Buffer.alloc(width * height * 4);
+    const stripe = Math.max(4, Math.round(width / 8));
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const shade = Math.floor(x / stripe) % 2 === 0 ? 1 : 0.72;
+        const o = (y * width + x) * 4;
+        data[o] = FRAME_HUES[hue][0] * shade;
+        data[o + 1] = FRAME_HUES[hue][1] * shade;
+        data[o + 2] = FRAME_HUES[hue][2] * shade;
+        data[o + 3] = 255;
+      }
+    }
+    jpeg = jpegJs.encode({ data, width, height }, 85).data;
+    frameCache.set(key, jpeg);
+  }
+  return jpeg;
+}
+const DEFAULT_FRAME = () => frameFor(DEFAULT_VIEWPORT, 0);
 
 export function browserDisabled() {
   return process.env.MOCK_NO_BROWSER === '1';
@@ -54,7 +88,7 @@ function browserState(state) {
     tokens: new Map(),
     running: process.env.MOCK_BROWSER_STOPPED !== '1',
     // Per-tab history so Back and Forward move through pages.
-    tabs: BROWSER_TABS.map((tab) => ({ targetId: tab.targetId, tabId: tab.tabId, history: [{ url: tab.url, title: tab.title }], index: 0 })),
+    tabs: BROWSER_TABS.map((tab) => ({ targetId: tab.targetId, tabId: tab.tabId, history: [{ url: tab.url, title: tab.title }], index: 0, viewport: { ...DEFAULT_VIEWPORT } })),
     sockets: new Map(),
     downloads: new Map(),
     nextTab: 3,
@@ -92,11 +126,17 @@ function parseNavigationURL(value) {
   }
 }
 
+/** Sends one fresh frame to every viewer of the tab: what CDP does when the page repaints. */
+function repaint(bs, tab) {
+  for (const ws of bs.sockets.get(tab.targetId) ?? []) ws.sendFrame?.();
+}
+
 function pushMeta(bs, tab) {
   const page = currentPage(tab);
   for (const ws of bs.sockets.get(tab.targetId) ?? []) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'meta', url: page.url, title: page.title }));
   }
+  repaint(bs, tab);
 }
 
 /** Moves a tab to a new page; with MOCK_BROWSER_RETARGET=1 its targetId changes and old viewers close with 4004. */
@@ -157,9 +197,9 @@ function scopeApproved(scopes, scope) {
 }
 
 /** Upstream wire.ts: UInt32 BE header length, UTF-8 JSON header, JPEG bytes. */
-export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0) {
+export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0, css = DEFAULT_VIEWPORT) {
   const header = Buffer.from(
-    JSON.stringify({ url, cssWidth: CSS_SIZE.width, cssHeight: CSS_SIZE.height, scrollX: 0, scrollY, ts }),
+    JSON.stringify({ url, cssWidth: css.width, cssHeight: css.height, scrollX: 0, scrollY, ts }),
     'utf8',
   );
   const wire = Buffer.allocUnsafe(4 + header.length + jpeg.length);
@@ -171,7 +211,7 @@ export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0) {
 
 function malformedFrame(kind, url) {
   if (kind === CASE_BAD_LENGTH) {
-    const wire = encodeFrame(url, FRAMES[0]);
+    const wire = encodeFrame(url, DEFAULT_FRAME());
     wire.writeUInt32BE(wire.length + 1000, 0);
     return wire;
   }
@@ -179,10 +219,10 @@ function malformedFrame(kind, url) {
   const prefix = Buffer.from(`{"url":${JSON.stringify(url)},"pad":"`, 'utf8');
   const suffix = Buffer.from('"}', 'utf8');
   const header = Buffer.concat([prefix, filler.subarray(0, 70_000 - prefix.length - suffix.length), suffix]);
-  const wire = Buffer.allocUnsafe(4 + header.length + FRAMES[0].length);
+  const wire = Buffer.allocUnsafe(4 + header.length + DEFAULT_FRAME().length);
   wire.writeUInt32BE(header.length, 0);
   header.copy(wire, 4);
-  FRAMES[0].copy(wire, 4 + header.length);
+  DEFAULT_FRAME().copy(wire, 4 + header.length);
   return wire;
 }
 
@@ -219,7 +259,7 @@ export function handleBrowserRequest(state, conn, msg, { sendRes, sendErr }) {
 
   if (route === 'GET /tabs') {
     sendRes(conn, id, bs.running
-      ? { running: true, tabs: bs.tabs.map(tabInfo), canAutoResizeViewport: true }
+      ? { running: true, tabs: bs.tabs.map(tabInfo), canAutoResizeViewport: process.env.MOCK_BROWSER_NO_RESIZE !== '1' }
       : { running: false, tabs: [], canAutoResizeViewport: false });
     return true;
   }
@@ -263,6 +303,19 @@ export function handleBrowserRequest(state, conn, msg, { sendRes, sendErr }) {
     for (const ws of bs.sockets.get(tab.targetId) ?? []) ws.close(4004, 'target closed');
     bs.sockets.delete(tab.targetId);
     sendRes(conn, id, { ok: true });
+    return true;
+  }
+  if (route === 'POST /act' && body.kind === 'resize') {
+    // Upstream: positive integer width and height, each up to ACT_MAX_VIEWPORT_DIMENSION; it resizes the page's viewport.
+    const dims = [body.width, body.height];
+    if (!dims.every((n) => Number.isInteger(n) && n > 0 && n <= VIEWPORT_LIMIT)) return invalid('resize requires positive width and height');
+    if (process.env.MOCK_BROWSER_NO_RESIZE === '1') return fail('INVALID_REQUEST', 'viewport resize is not supported for this profile');
+    const tab = tabFor();
+    if (!tab) return true;
+    tab.viewport = { width: body.width, height: body.height };
+    bs.resizes = (bs.resizes ?? 0) + 1;
+    repaint(bs, tab);
+    sendRes(conn, id, { ok: true, targetId: tab.targetId, url: currentPage(tab).url });
     return true;
   }
   if (route === 'POST /act') {
@@ -357,23 +410,33 @@ export function attachScreencastUpgrade(httpServer, state, fallback) {
         if (binary) ws.close(1003, 'view_only');
       });
       const first = currentPage(liveTab());
+      if (hostOf(first.url) === DEAD_HOST) {
+        ws.terminate();
+        return;
+      }
       ws.send(JSON.stringify({ type: 'ready', targetId: grant.targetId, url: first.url, title: first.title }));
+      const host = hostOf(first.url);
+      if (host === UNSUPPORTED_HOST) {
+        ws.close(4005, 'unsupported');
+        ws.on('close', () => bs.sockets.get(grant.targetId)?.delete(ws));
+        return;
+      }
       let n = 0;
       const send = () => {
         const tab = liveTab();
         if (ws.readyState !== ws.OPEN || !tab) return;
         const { url: pageUrl } = currentPage(tab);
-        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, FRAMES[(n + pageUrl.length) % FRAMES.length], Date.now(), (n % 4) * 40);
+        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, frameFor(tab.viewport, n + pageUrl.length), Date.now(), (n % 4) * 40, tab.viewport);
         n += 1;
         ws.send(frame, { binary: true });
       };
-      send();
-      const timer = setInterval(send, FRAME_INTERVAL_MS);
-      timers.add(timer);
+      ws.sendFrame = send;
+      // A static page paints nothing after `ready` until something changes it.
+      const timer = hostOf(currentPage(liveTab()).url) === STATIC_HOST ? undefined : setInterval(send, FRAME_INTERVAL_MS);
+      if (timer) { send(); timers.add(timer); }
       ws.on('close', () => {
         bs.sockets.get(grant.targetId)?.delete(ws);
-        clearInterval(timer);
-        timers.delete(timer);
+        if (timer) { clearInterval(timer); timers.delete(timer); }
       });
     });
   });

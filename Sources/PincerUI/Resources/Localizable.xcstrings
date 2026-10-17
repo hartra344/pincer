@@ -5173,6 +5173,16 @@
         }
       }
     },
+    "Couldn't connect to the browser stream. Check the Gateway, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't connect to the browser stream. Check the Gateway, then try again."
+          }
+        }
+      }
+    },
     "Couldn't download this page.": {
       "localizations": {
         "en": {
@@ -13463,6 +13473,16 @@
         }
       }
     },
+    "Reconnecting (%lld/%lld)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecting (%lld/%lld)…"
+          }
+        }
+      }
+    },
     "Reconnecting…": {
       "localizations": {
         "en": {
@@ -18773,12 +18793,12 @@
         }
       }
     },
-    "This browser can't be streamed.": {
+    "This browser can't be streamed. Extension-relay and existing-session browsers aren't supported; use a managed browser profile.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This browser can't be streamed."
+            "value": "This browser can't be streamed. Extension-relay and existing-session browsers aren't supported; use a managed browser profile."
           }
         }
       }
@@ -20409,6 +20429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for page…"
+          }
+        }
+      }
+    },
+    "Waiting for the page to draw…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the page to draw…"
           }
         }
       }

@@ -14,6 +14,8 @@ import Observation
 public final class BrowserPanelModel {
     public enum Status: Equatable, Sendable {
         case idle, loading, live, reconnecting, needsFullManagement, notRunning, navigationBlocked
+        /// The Gateway can't stream this browser (extension relay, existing session): final, retrying can't help.
+        case unstreamable
         case failed(String)
     }
 
@@ -66,6 +68,19 @@ public final class BrowserPanelModel {
     @ObservationIgnored var visible: Bool { !self.viewers.isEmpty }
     @ObservationIgnored private var pixelSize = CGSize(width: 1280, height: 800)
     @ObservationIgnored private var generation = 0
+    /// Streams in a row that never became live or dropped at once. Reset by a healthy stream or a user restart.
+    @ObservationIgnored private var streamFailures = 0
+    /// Which retry of `maxStreamFailures` the pill is waiting for; 0 when not retrying. Shown as "Reconnecting (n/5)…".
+    public private(set) var retryAttempt = 0
+    @ObservationIgnored private var lastFailure: String?
+    /// How long to wait before looking again after `fetchTabs` failed transiently; nil when the failure is final.
+    @ObservationIgnored private var retryHint: Duration?
+    @ObservationIgnored var canAutoResizeViewport = false
+    @ObservationIgnored var viewport: CGSize?
+    @ObservationIgnored var resizeRequested: [String: CGSize] = [:]
+    /// Sizes the Gateway refused to resize a page to, per page. Only a repeat of the same size is suppressed.
+    @ObservationIgnored var resizeRefused: [String: CGSize] = [:]
+    @ObservationIgnored var resizeTask: Task<Void, Never>?
     @ObservationIgnored private var streamTask: Task<Void, Never>?
     @ObservationIgnored var streamRunning = false
     @ObservationIgnored private var debounceTask: Task<Void, Never>?
@@ -81,6 +96,9 @@ public final class BrowserPanelModel {
     public internal(set) var isDownloading = false
     /// The last control action's failure, sanitised: never a token or address. Cleared by the next action.
     public internal(set) var actionError: String?
+
+    /// The shown frame isn't being kept current: the socket is down or the stream is paused.
+    public var frameIsStale: Bool { self.status == .reconnecting || self.status == .idle }
 
     /// Full Management (or the demo).
     public var hasAdmin: Bool { !self.deniedAdmin && self.adminCheck() }
@@ -168,7 +186,14 @@ public final class BrowserPanelModel {
     /// runs while any viewer is visible, at the largest visible size (capped when requested), and stops only when
     /// the last viewer leaves. `pixelSize` is the viewer's frame area in pixels; sizes are debounced (500 ms),
     /// the first one too, so a panel slide doesn't start a burst of streams.
-    public func setVisible(_ visible: Bool, pixelSize: CGSize, viewer: AnyHashable = "default") {
+    public func setVisible(_ visible: Bool, pixelSize: CGSize, viewer: AnyHashable = "default", viewport: CGSize? = nil, compact: Bool = false) {
+        // A compact (phone) panel only views: reflowing the agent's real browser to a phone-sized window mid-task
+        // would change what the agent sees. Resizing needs a regular-width host (Mac, iPad, the inspector).
+        if compact { self.viewport = nil }
+        if !compact, visible, let viewport, viewport.width > 0, viewport.height > 0, viewport != self.viewport {
+            self.viewport = viewport
+            self.scheduleViewportSync()
+        }
         guard visible else {
             guard self.viewers.removeValue(forKey: viewer) != nil else { return }
             if self.viewers.isEmpty {
@@ -224,6 +249,8 @@ public final class BrowserPanelModel {
     /// A reconnect may bring new scopes, and the old stream token belonged to the old connection.
     public func handleReconnect() {
         self.deniedAdmin = false
+        self.resizeRefused = [:]
+        self.resizeRequested = [:]
         self.historyUnavailable = false
         self.actionError = nil
         guard self.visible else { return }
@@ -264,6 +291,10 @@ public final class BrowserPanelModel {
 
     func restartStream() {
         self.cancelStream()
+        self.streamFailures = 0
+        self.retryAttempt = 0
+        self.lastFailure = nil
+        self.retryHint = nil
         guard self.visible else { return }
         guard self.hasAdmin else {
             self.setStatus(.needsFullManagement)
@@ -285,8 +316,9 @@ public final class BrowserPanelModel {
         while self.isCurrent(generation) {
             if self.selectedTargetId == nil || !self.tabsLoaded {
                 guard await self.fetchTabs(), self.isCurrent(generation) else {
-                    if self.isCurrent(generation), self.status.isRetryable {
-                        await self.pause(self.retryDelay)
+                    if self.isCurrent(generation), let delay = self.retryHint {
+                        self.retryHint = nil
+                        await self.pause(delay)
                         continue
                     }
                     return
@@ -340,27 +372,32 @@ public final class BrowserPanelModel {
         }
         guard self.isCurrent(generation) else { return .stop }
         guard let wsPath = reply["wsPath"]?.text, reply["token"]?.text != nil else {
-            self.setStatus(.failed(L("The Gateway sent an unreadable browser stream reply.")))
-            return .retry(self.retryDelay)
+            self.lastFailure = L("The Gateway sent an unreadable browser stream reply.")
+            return self.retryOrGiveUp(self.retryDelay / 5)
         }
         let ticket = Ticket(wsPath: wsPath, targetId: tab.targetId, url: reply["url"]?.string, maxWidth: width, maxHeight: height)
         guard let source = self.makeSource(ticket) else {
             self.setStatus(.failed(L("The Gateway's browser stream address isn't usable.")))
-            return .retry(self.retryDelay)
+            return .stop
         }
-        var gotFrame = false
+        var delivered = false
+        let started = ContinuousClock.now
         var closeCode: Int?
         do {
             for try await event in source.frames() {
                 guard self.isCurrent(generation) else { return .stop }
                 switch event {
                 case let .frame(next):
-                    gotFrame = true
+                    delivered = true
                     self.frame = next
                     self.captureThumbnail(next, tab: tab)
-                    self.setStatus(.live)
+                    if self.resizeRequested[tab.targetId] == nil { self.scheduleViewportSync() }
+                    self.markLive()
                     self.setPage(title: nil, url: next.pageURL)
                 case let .meta(url, title):
+                    // `ready` and `meta` arrive once the socket is up; a static page sends no frame after them.
+                    delivered = true
+                    self.markLive()
                     self.setPage(title: title, url: url)
                 case let .closed(code):
                     closeCode = code
@@ -377,12 +414,19 @@ public final class BrowserPanelModel {
             return .stop
         case 4004:
             return .refreshTabs
+        case 4005:
+            self.setStatus(.unstreamable)
+            return .stop
         default:
-            return .retry(gotFrame ? self.retryDelay / 10 : self.retryDelay)
+            // A stream that went live and held for a moment was healthy; anything else counts against the limit.
+            if delivered, ContinuousClock.now - started >= Self.healthyStream { self.streamFailures = 0 }
+            self.lastFailure = nil
+            return self.retryOrGiveUp(delivered ? self.retryDelay / 50 : self.retryDelay / 5)
         }
     }
 
     private func handleFailure(_ error: Error) -> Outcome {
+        self.retryHint = nil
         switch GatewayError.classify(error) {
         case .missingScope:
             self.deniedAdmin = true
@@ -395,13 +439,35 @@ public final class BrowserPanelModel {
             if case GatewayError.notConnected = error {
                 self.setStatus(.reconnecting)
             } else if Self.isScreencastUnsupported(error) {
-                self.setStatus(.failed(L("This browser can't be streamed.")))
+                self.setStatus(.unstreamable)
                 return .stop
             } else {
-                self.setStatus(.failed(Self.sanitized(text)))
+                self.lastFailure = Self.sanitized(text)
+                return self.retryOrGiveUp(self.retryDelay / 5)
             }
+            self.retryHint = self.retryDelay
             return .retry(self.retryDelay)
         }
+    }
+
+    public static let maxStreamFailures = 5
+    static let retrySteps = [1, 2, 4, 8, 15]
+    static let healthyStream = Duration.seconds(1)
+
+    /// Waits 1, 2, 4, 8 and 15 times `base` (2, 4, 8, 16, 30 s: about a minute in all) and keeps trying until
+    /// `maxStreamFailures` attempts in a row went nowhere, then stops with the last error. "Try Again" starts over.
+    private func retryOrGiveUp(_ base: Duration) -> Outcome {
+        self.streamFailures += 1
+        guard self.streamFailures <= Self.maxStreamFailures else {
+            self.retryHint = nil
+            self.retryAttempt = 0
+            self.setStatus(.failed(self.lastFailure ?? L("Couldn't connect to the browser stream. Check the Gateway, then try again.")))
+            return .stop
+        }
+        self.retryAttempt = self.streamFailures
+        let delay = base * Self.retrySteps[self.streamFailures - 1]
+        self.retryHint = delay
+        return .retry(delay)
     }
 
     func pause(_ delay: Duration) async {
@@ -422,6 +488,8 @@ public final class BrowserPanelModel {
             guard route == self.route else { return false }
             let parsed = BrowserPageTab.parseList(reply, route: route)
             self.tabsLoaded = true
+            self.canAutoResizeViewport = reply["canAutoResizeViewport"]?.bool == true
+            if self.canAutoResizeViewport { self.scheduleViewportSync() }
             guard parsed.running else {
                 if !self.tabs.isEmpty { self.tabs = [] }
                 self.selectedPageMissing = false
@@ -448,6 +516,11 @@ public final class BrowserPanelModel {
     }
 
     // MARK: Helpers
+
+    private func markLive() {
+        if self.retryAttempt != 0 { self.retryAttempt = 0 }
+        self.setStatus(.live)
+    }
 
     func setStatus(_ next: Status) {
         if self.status != next { self.status = next }
@@ -484,15 +557,6 @@ public final class BrowserPanelModel {
         clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
         if clean.count > 200 { clean = String(clean.prefix(200)) + "…" }
         return clean.isEmpty ? L("The browser stream failed.") : clean
-    }
-}
-
-private extension BrowserPanelModel.Status {
-    var isRetryable: Bool {
-        switch self {
-        case .failed, .reconnecting, .notRunning: true
-        default: false
-        }
     }
 }
 

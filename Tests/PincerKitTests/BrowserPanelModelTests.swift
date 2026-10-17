@@ -48,6 +48,8 @@ final class BrowserModelHarness: Sendable {
     let running = Mutex(true)
     let admin = Mutex(true)
     let failScreencast = Mutex(false)
+    /// What `/act` throws, when set (nil: it succeeds).
+    let actError = Mutex<(any Error)?>(nil)
 
     func paths(_ path: String) -> Int { calls.withLock { $0.filter { $0.params["path"]?.string == path }.count } }
     var latestSource: FakeBrowserSource? { sources.withLock { $0.last } }
@@ -62,6 +64,9 @@ final class BrowserModelHarness: Sendable {
             if failScreencast.withLock({ $0 }) { throw URLError(.cannotConnectToHost) }
             let target = params["body"]?["targetId"]?.string ?? "T1"
             return Fixtures.json(#"{"token":"tok","wsPath":"/browser/screencast?token=tok\#(calls.withLock { $0.count })","targetId":"\#(target)","url":"https://one.test/"}"#)
+        case "/act":
+            if let error = actError.withLock({ $0 }) { throw error }
+            return .null
         default:
             return .null
         }

@@ -22,6 +22,15 @@ function collect(url, count, { timeoutMs = 3000, onOpen } = {}) {
   });
 }
 
+function jpegSize(jpeg) {
+  for (let i = 2; i < jpeg.length - 9; ) {
+    if (jpeg[i] !== 0xff) { i += 1; continue; }
+    if (jpeg[i + 1] >= 0xc0 && jpeg[i + 1] <= 0xc3) return { height: jpeg.readUInt16BE(i + 5), width: jpeg.readUInt16BE(i + 7) };
+    i += 2 + jpeg.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
 function decodeFrame(buf) {
   const headerLength = buf.readUInt32BE(0);
   const header = JSON.parse(buf.subarray(4, 4 + headerLength).toString('utf8'));
@@ -103,6 +112,7 @@ export async function run() {
     await server.close();
   }
   await runControls();
+  await runStreamShapes();
 }
 
 const BACK = '() => { history.go(-1); return true; }';
@@ -198,5 +208,43 @@ async function runControls() {
     const running = await admin.send('browser.request', { method: 'GET', path: '/tabs' });
     assert.equal(running.running, true);
     assert.equal(running.tabs.length, 2);
+  });
+}
+
+// #1027: upstream-shaped stream behaviour: static pages, unsupported browsers and viewport resize.
+async function runStreamShapes() {
+  await withAdmin({}, async (admin, port) => {
+    const ok = async (method, path, body) => { const r = await admin.call('browser.request', { method, path, body }); assert.equal(r.ok, true, JSON.stringify(r.error)); return r.payload; };
+    const tabs = await ok('GET', '/tabs');
+    assert.equal(tabs.canAutoResizeViewport, true);
+    const t1 = tabs.tabs[0].targetId;
+    const open = async (url) => (await ok('POST', '/tabs/open', { url })).targetId;
+    const wsFor = async (targetId) => `ws://127.0.0.1:${port}${(await ok('POST', '/screencast', { targetId })).wsPath}`;
+
+    // A static page: ready, then nothing until it repaints.
+    const staticId = await open('https://static.example/');
+    const quiet = await collect(await wsFor(staticId), 2, { timeoutMs: 700 }).catch((e) => e);
+    assert.ok(quiet instanceof Error, 'a static page sends no frames after ready');
+    const repainted = collect(await wsFor(staticId), 2);
+    await new Promise((r) => setTimeout(r, 150));
+    await ok('POST', '/act', { kind: 'resize', targetId: staticId, width: 500, height: 900 });
+    const got = await repainted;
+    assert.equal(JSON.parse(got.messages[0].data.toString('utf8')).type, 'ready');
+    const resized = decodeFrame(got.messages[1].data).header;
+    assert.deepEqual([resized.cssWidth, resized.cssHeight], [500, 900]);
+    // The repainted image has the requested viewport's aspect, as upstream repaints at the CSS size.
+    const size = jpegSize(decodeFrame(got.messages[1].data).jpeg);
+    assert.ok(Math.abs(size.width / size.height - 500 / 900) < 0.01, `repaint aspect ${size.width}x${size.height}`);
+
+    // The default viewport is landscape; resize is validated like upstream.
+    const first = decodeFrame((await collect(await wsFor(t1), 2)).messages[1].data).header;
+    assert.ok(first.cssWidth > first.cssHeight);
+    const bad = await admin.call('browser.request', { method: 'POST', path: '/act', body: { kind: 'resize', targetId: t1, width: 0, height: 10 } });
+    assert.equal(bad.ok, false);
+
+    // An unsupported browser: ready, then close 4005.
+    const unsupportedId = await open('https://unsupported.example/');
+    const closed = await collect(await wsFor(unsupportedId), 99);
+    assert.equal(closed.close, 4005);
   });
 }
