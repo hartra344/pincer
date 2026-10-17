@@ -8,8 +8,9 @@ import UIKit
 
 /// #1026: opening and closing the Browser panel must not leave "Browser" in the chat's navigation item.
 @MainActor
-private final class InspectorPanelDriver: ObservableObject {
-    @Published var panel: ChatInspectorPanel?
+@Observable
+private final class InspectorPanelDriver {
+    var panel: ChatInspectorPanel?
 }
 
 /// Captures the real ChatChrome's panel binding so the test can open and close the workspace panel.
@@ -44,7 +45,7 @@ private struct RealChromeHost: View {
 
 @MainActor
 private struct InspectorTitleHost: View {
-    @ObservedObject var driver: InspectorPanelDriver
+    let driver: InspectorPanelDriver
     let app: AppModel
     let gateway: GatewayStore
     let sizeClass: UserInterfaceSizeClass
@@ -75,9 +76,12 @@ private struct ChatInspectorTitleLeakTests {
             .flatMap(\.viewControllers).compactMap { $0.navigationItem.title }
     }
 
-    private func barTitles(_ root: UIView) -> [String] {
-        let own = (root as? UINavigationBar).map { [$0.topItem?.title ?? "nil"] } ?? []
-        return own + root.subviews.flatMap(self.barTitles)
+    /// Lets pending SwiftUI/UIKit updates run: a bounded number of layout passes, each after a main-actor yield.
+    private func settle(_ window: UIWindow) async {
+        for _ in 0..<20 {
+            await Task.yield()
+            window.layoutIfNeeded()
+        }
     }
 
     /// Text of every label/accessibility label in the window, to catch a title drawn in the bar's views.
@@ -126,19 +130,25 @@ private struct ChatInspectorTitleLeakTests {
             try #require(captured != nil)
             captured?.showWorkspace.wrappedValue = true
         } else { driver.panel = .workspace }
-        // Give the sheet or inspector time to present and publish its title.
-        try await Task.sleep(for: .seconds(1.5))
+        // The compact sheet reports its presentation; the inspector has no UIKit signal, so let layout settle.
+        if sizeClass == .compact {
+            let presented = await eventually(timeout: .seconds(10)) { controller.presentedViewController != nil }
+            try #require(presented)
+        } else {
+            await self.settle(window)
+        }
         window.layoutIfNeeded()
-        print("1026 open \(sizeClass) titles=\(self.chatTitles(controller)) presented=\(controller.presentedViewController != nil) bars=\(self.barTitles(window))")
         if realChrome, sizeClass == .compact, let sheet = controller.presentedViewController {
             // Like the sheet's Done button: UIKit dismisses, SwiftUI's binding follows.
             sheet.dismiss(animated: true)
         } else if realChrome { captured?.showWorkspace.wrappedValue = false } else { driver.panel = nil }
-        try await Task.sleep(for: .seconds(1.5))
-        window.layoutIfNeeded()
+        if sizeClass == .compact {
+            // Best effort: the hosted sheet may keep its controller around; the title check below is what matters.
+            _ = await eventually(timeout: .seconds(5)) { controller.presentedViewController == nil }
+        }
+        await self.settle(window)
 
         let titles = self.chatTitles(controller) + self.labels(window).filter { $0 == "Browser" }
-        print("1026 closed \(sizeClass) titles=\(titles) bars=\(self.barTitles(window))")
         #expect(!titles.contains("Browser"),
                 "closing the Browser panel (\(sizeClass == .compact ? "compact sheet" : "regular inspector")) left the chat title as \(titles)")
     }
