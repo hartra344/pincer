@@ -69,6 +69,16 @@ gateway must be managed on that gateway and, where applicable, with its provider
   those requests. Turn the option off in Settings to prevent these image loads.
 - **Location:** only enabled location-sharing features provide location context
   to your gateway. You can disable sharing in Pincer or revoke OS permission.
+- **Device mode (off by default):** if you turn it on for a gateway in **Gateway
+  Settings → This Device**, Pincer also connects to that gateway as a node and
+  answers requests from its agents for the data you check: location, contacts
+  search results, calendar events, reminders, motion and step data (iPhone), and
+  device info with battery, thermal and network state. That data goes only to your
+  own gateway, only while Pincer is open and connected, and only for the
+  capabilities you check. Each needs its own OS permission, which you can revoke.
+  The Pincer developer receives none of it, and your gateway and its providers
+  may retain it under their own settings. Turning device mode off disconnects
+  the node.
 - **Notifications:** while the app is open, notifications may include previews.
   Optional background push uses a relay you configure and Apple's APNs service.
   The relay routes encrypted payloads; gateway content is encrypted to device

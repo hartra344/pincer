@@ -186,13 +186,27 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
         }
     }
 
+    /// The `node`-role device token, issued when device mode connects (tokens are per role).
+    public var nodeDeviceToken: String? {
+        get { Keychain.get("nodeDeviceToken.\(self.id.uuidString)") }
+        nonmutating set {
+            if let newValue, !newValue.isEmpty {
+                Keychain.set(newValue, for: "nodeDeviceToken.\(self.id.uuidString)")
+            } else {
+                Keychain.delete("nodeDeviceToken.\(self.id.uuidString)")
+            }
+        }
+    }
+
     public func forgetDeviceToken() {
         self.deviceToken = nil
+        self.nodeDeviceToken = nil
     }
 
     public func forgetCredentials() {
         self.secret = nil
         self.deviceToken = nil
+        self.nodeDeviceToken = nil
     }
 }
 

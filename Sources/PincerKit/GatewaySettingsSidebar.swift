@@ -93,7 +93,7 @@ public enum GatewaySettingsSidebar {
         case .activity:
             return (capabilities.sessions ? [.sessions] : []) + [.approvals, .usage]
         case .peopleAndDevices:
-            return [.pairing, .devices]
+            return [.pairing, .devices, .deviceMode]
         case .security:
             return [.execPolicy] + (capabilities.nodes ? [.nodes] : [])
         case .configure:
@@ -133,6 +133,8 @@ public enum GatewaySettingsSidebar {
             (title, subtitle, symbol) = (L("Message Requests"), L("People waiting to message your agents"), "person.badge.key")
         case .devices:
             (title, subtitle, symbol) = (L("Operator Devices"), L("Apps signed in to this Gateway"), "laptopcomputer.and.iphone")
+        case .deviceMode:
+            (title, subtitle, symbol) = (L("This Device"), L("Data this device shares with agents"), "iphone.gen3.radiowaves.left.and.right")
         case .execPolicy:
             (title, subtitle, symbol) = (L("Command Policy"), L("Which commands agents may run"), "lock.shield")
         case .nodes: (title, subtitle, symbol) = (L("Nodes"), L("Machines that run commands for your agents"), "cpu")

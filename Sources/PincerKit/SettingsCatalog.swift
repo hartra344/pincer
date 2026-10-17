@@ -30,6 +30,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case devices
     /// Nodes: devices that run commands for agents (`node.list`).
     case nodes
+    /// This Device: opt-in device mode, sharing only the data the user checks with this Gateway's agents (#1030).
+    case deviceMode
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins
@@ -196,6 +198,9 @@ public enum SettingsCatalog {
                                             "approve", "dismiss", "people"]),
         SettingsDestinationMatch(destination: .nodes, title: "Nodes", symbol: "cpu",
                                  keywords: ["nodes", "node", "paired nodes", "companion", "rename", "unpair"]),
+        SettingsDestinationMatch(destination: .deviceMode, title: "This Device", symbol: "iphone.gen3.radiowaves.left.and.right",
+                                 keywords: ["this device", "device mode", "share", "location", "calendar", "contacts",
+                                            "reminders", "motion", "steps", "pedometer", "battery", "node"]),
         SettingsDestinationMatch(destination: .skills, title: "Skills", symbol: "wand.and.stars",
                                  keywords: ["skills", "clawhub", "install skill", "skill", "tools", "api key"]),
         SettingsDestinationMatch(destination: .mcpServers, title: "MCP Servers", symbol: "point.3.connected.trianglepath.dotted",

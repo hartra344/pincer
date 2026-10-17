@@ -89,7 +89,7 @@ export function broadcast(state, event, payload, predicate = () => true) {
   // Upstream stamps every agent event with its emit time.
   if (event === 'agent' && payload.ts === undefined) payload = { ...payload, ts: nowMs() };
   for (const conn of state.connections) {
-    if (conn.authenticated && predicate(conn)) sendEvent(conn, event, payload);
+    if (conn.authenticated && conn.role !== 'node' && predicate(conn)) sendEvent(conn, event, payload);
   }
   handleWebPushEvent(state, event, payload);
 }

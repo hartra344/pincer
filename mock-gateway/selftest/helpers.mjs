@@ -18,24 +18,25 @@ export function makeDevice() {
 
 export const BASE_SCOPES = ['operator.read', 'operator.write', 'operator.approvals', 'operator.questions'];
 
-export function signConnect(device, challenge, token, scopes = BASE_SCOPES) {
+export function signConnect(device, challenge, token, scopes = BASE_SCOPES, node) {
   const client = {
     id: 'openclaw-macos',
     displayName: 'Pincer Selftest',
     version: '0.0.0',
     platform: 'macos',
-    mode: 'ui',
+    mode: node ? 'node' : 'ui',
     deviceFamily: 'desktop',
     instanceId: 'selftest',
   };
-  const payload = `v2|${device.id}|${client.id}|${client.mode}|operator|${scopes.join(',')}|${challenge.ts}|${token}|${challenge.nonce}`;
+  const payload = `v2|${device.id}|${client.id}|${client.mode}|${node ? 'node' : 'operator'}|${scopes.join(',')}|${challenge.ts}|${token}|${challenge.nonce}`;
   return {
     minProtocol: 4,
     maxProtocol: 4,
     client,
-    role: 'operator',
+    role: node ? 'node' : 'operator',
     scopes,
-    caps: ['tool-events'],
+    caps: node ? node.caps : ['tool-events'],
+    ...(node ? { commands: node.commands, permissions: node.permissions } : {}),
     auth: { token },
     device: {
       id: device.id,
@@ -47,7 +48,7 @@ export function signConnect(device, challenge, token, scopes = BASE_SCOPES) {
   };
 }
 
-export async function connectClient(url, device, token, expectOk = true, scopes = BASE_SCOPES) {
+export async function connectClient(url, device, token, expectOk = true, scopes = BASE_SCOPES, node = undefined) {
   const ws = new WebSocket(url);
   const emitter = new EventEmitter();
   const pending = new Map();
@@ -77,7 +78,7 @@ export async function connectClient(url, device, token, expectOk = true, scopes 
   await waitUntil(() => challenge, 1000, 'challenge');
   const id = `req_${nextId++}`;
   const connectResP = new Promise((resolve) => pending.set(id, resolve));
-  ws.send(JSON.stringify({ type: 'req', id, method: 'connect', params: signConnect(device, challenge, token, scopes) }));
+  ws.send(JSON.stringify({ type: 'req', id, method: 'connect', params: signConnect(device, challenge, token, node ? [] : scopes, node) }));
   const connectRes = await connectResP;
   if (expectOk) {
     assert.equal(connectRes.ok, true, JSON.stringify(connectRes));

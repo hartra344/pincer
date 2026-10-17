@@ -19,7 +19,7 @@ struct GatewaySettingsSidebarTests {
         #expect(Set(shown).count == shown.count)
         let fixed: [SettingsDestination] = [.connection, .overview, .health, .approvals, .logs, .execPolicy, .skills,
                                             .sessions, .mcpServers, .usage, .voice, .pairing, .channelStatus, .devices,
-                                            .nodes, .plugins, .allSettings, .raw]
+                                            .deviceMode, .nodes, .plugins, .allSettings, .raw]
         let pages = SettingsCatalog.pages.map { SettingsDestination.page($0.id) }
         #expect(Set(shown) == Set(fixed + pages))
     }
@@ -31,7 +31,7 @@ struct GatewaySettingsSidebarTests {
         #expect(rows(.top) == [.connection])
         #expect(rows(.status) == [.overview, .health, .channelStatus, .logs])
         #expect(rows(.activity) == [.sessions, .approvals, .usage])
-        #expect(rows(.peopleAndDevices) == [.pairing, .devices])
+        #expect(rows(.peopleAndDevices) == [.pairing, .devices, .deviceMode])
         #expect(rows(.security) == [.execPolicy, .nodes])
         #expect(rows(.configure) == [.page("agents"), .page("channels"), .page("tools"), .skills, .page("sessions"),
                                      .voice, .page("automation"), .plugins, .mcpServers, .page("gateway")])
@@ -41,7 +41,7 @@ struct GatewaySettingsSidebarTests {
     @Test func conditionalRowsHideWithoutSupport() {
         let bare = self.destinations(GatewaySettingsSidebar.Capabilities())
         #expect(bare == [.connection, .overview, .health, .channelStatus, .logs, .approvals, .usage, .pairing,
-                         .devices, .execPolicy])
+                         .devices, .deviceMode, .execPolicy])
         // Plugins, MCP Servers and the curated pages wait for the config.
         let unloaded = GatewaySettingsSidebar.Capabilities(skills: true, voice: true, plugins: true, mcpServers: true,
                                                            pageIds: ["gateway"])

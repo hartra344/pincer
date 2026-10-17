@@ -64,7 +64,7 @@ export function rejectConnectAuth(conn, id, reason, { sendJson, auth = {}, hasDe
   conn.ws.close(1008, failure.message.slice(0, 120));
 }
 
-export function pairingRequiredError({ requestId, deviceId, reason, requestedScopes }, approvedScopes) {
+export function pairingRequiredError({ requestId, deviceId, reason, requestedScopes, requestedRole = 'operator' }, approvedScopes) {
   return {
     code: 'NOT_PAIRED',
     message: `pairing required (requestId: ${requestId})`,
@@ -72,9 +72,9 @@ export function pairingRequiredError({ requestId, deviceId, reason, requestedSco
       code: 'PAIRING_REQUIRED',
       reason,
       requestId,
-      remediationHint: reason === 'scope-upgrade' ? SCOPE_UPGRADE_HINT : NOT_PAIRED_HINT,
+      remediationHint: reason === 'scope-upgrade' || reason === 'role-upgrade' ? SCOPE_UPGRADE_HINT : NOT_PAIRED_HINT,
       deviceId,
-      requestedRole: 'operator',
+      requestedRole,
       requestedScopes,
       ...(approvedScopes ? { approvedScopes } : {}),
     },

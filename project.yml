@@ -62,7 +62,10 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate messages to your agents."
-        INFOPLIST_KEY_NSLocationUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing."
+        INFOPLIST_KEY_NSLocationUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing. If you turn on device mode, also answer location requests from this Gateway's agents while Pincer is open."
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Let this Gateway read your upcoming events, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSContactsUsageDescription: "Let this Gateway search your contacts by name, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Let this Gateway read your reminders, only when you turn on device mode for it."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
   Pincer-iOS:
     templates: [validateDevelopmentSuffix]
@@ -95,7 +98,11 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
         INFOPLIST_KEY_NSCameraUsageDescription: "Take a photo to attach to a message you send to your agents."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate messages to your agents."
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Share your device location as context for your agent, separate from message text, only when you enable location sharing. If you turn on device mode, also answer location requests from this Gateway's agents while Pincer is open."
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Let this Gateway read your upcoming events, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSContactsUsageDescription: "Let this Gateway search your contacts by name, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Let this Gateway read your reminders, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSMotionUsageDescription: "Let this Gateway read your activity and step counts, only when you turn on device mode for it."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
         TARGETED_DEVICE_FAMILY: "1,2"
   # Share extensions: send text, links and files into a chat. They connect as the app's paired
