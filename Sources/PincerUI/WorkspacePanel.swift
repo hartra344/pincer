@@ -96,9 +96,9 @@ struct WorkspacePanel: View {
 }
 
 /// The panel's current title (the selected tab's name). The panel reports it as a preference instead of
-/// setting `navigationTitle` itself: it is also hosted in the inspector, which has no navigation bar of its
-/// own, so a title set from inside it would land on the chat's bar and stay there after closing (#1026).
-/// Only the compact sheet, which owns a NavigationStack, turns it into a title.
+/// setting `navigationTitle` itself: on iOS a `navigationTitle` set from deep inside the compact sheet's
+/// NavigationStack was left drawn in the presenting chat's bar after the sheet closed, even though the chat's
+/// `UINavigationItem.title` was still empty (#1026). Only the sheet's stack root applies it as a title.
 struct WorkspaceTitlePreference: PreferenceKey {
     static let defaultValue: String? = nil
     static func reduce(value: inout String?, nextValue: () -> String?) { value = nextValue() ?? value }
