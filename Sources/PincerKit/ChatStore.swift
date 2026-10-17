@@ -538,7 +538,10 @@ public final class ChatStore: Identifiable {
         }
         var opened = self.committedOpenedPortals
         if let live { for tool in live.tools { opened.insert(tool.openedPortal) } }
-        if opened != self.openedPortals { self.openedPortals = opened }
+        if opened != self.openedPortals {
+            self.openedPortals = opened
+            self.gateway?.portals.recordOpened(opened, agentId: self.agentId, sessionKey: self.sessionKey)
+        }
         if itemsChanged {
             var byId: [String: ChatItem] = [:]
             for item in self.items where item.isReplyable {
