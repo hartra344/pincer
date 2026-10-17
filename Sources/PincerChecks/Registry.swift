@@ -58,6 +58,7 @@ enum Suites {
         Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks(); await runDemoEffectiveAgentCompatibilityChecks() },
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Payload & identity") { runIdentityChecks() },
+            Section("Shared utilities") { runSharedUtilityChecks() },
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Gateways settings") { runGatewaysSettingsOfflineChecks() },
