@@ -66,14 +66,27 @@ including remote push delivery, require the user's own live gateway and optional
 relay and are not represented as live services in the demo.
 
 For regular live operation, users configure an OpenClaw Gateway that they own or
-have access to. Pincer connects as an operator client. It never runs a gateway or
-registers as a node and does not expose local camera, screen or shell execution.
+have access to. Pincer connects as an operator client. It never runs a gateway and does not
+expose local camera, screen or shell execution. An optional, per-gateway
+"device mode" (Gateway Settings > This Device) is off by default. If the user
+turns it on, Pincer also connects to that same gateway as a node and declares only
+the read-only data the user checks: location, device info and status (battery,
+thermal, network), calendar events, contacts search, reminders and motion
+(iPhone only). It never declares camera, screen, shell, files, photos or any
+command that writes data. The data goes only to the user's own gateway, and only
+while Pincer is open and connected.
 Remote management controls operate on that user-selected gateway. No additional
 executable app code is downloaded to enable them.
 
 Microphone and speech permissions support optional dictation. Photo/file access
 supports chosen attachments. Camera access (iOS) only takes a photo the user chooses
-to attach to a message. Location sharing is optional. Background audio is
+to attach to a message. Location sharing is optional.
+
+App Review note (device mode): it is off by default and nothing is requested
+at launch. Each OS permission prompt (Location When In Use, Calendars, Contacts,
+Reminders, Motion & Fitness) appears only when the user checks the matching
+capability. Declining leaves that capability off. Reviewers can try it with the
+built-in demo (Gateway Settings > This Device) without a gateway. Background audio is
 for Read Aloud; background refresh and remote notifications refresh gateway state.
 The Mac app is sandboxed with outgoing network and user-selected file access.
 

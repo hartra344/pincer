@@ -1423,6 +1423,16 @@
         }
       }
     },
+    "A remote Gateway may ask you to approve twice: once to pair this device, and again when the data list changes. Granting an OS permission later also triggers a new approval.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A remote Gateway may ask you to approve twice: once to pair this device, and again when the data list changes. Granting an OS permission later also triggers a new approval."
+          }
+        }
+      }
+    },
     "A server named “%@” already exists.": {
       "localizations": {
         "en": {
@@ -1593,12 +1603,32 @@
         }
       }
     },
+    "Active — answering requests while Pincer is open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Active — answering requests while Pincer is open"
+          }
+        }
+      }
+    },
     "Activity": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Activity"
+          }
+        }
+      }
+    },
+    "Activity and step counts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity and step counts"
           }
         }
       }
@@ -2003,6 +2033,16 @@
         }
       }
     },
+    "Allow access in System Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow access in System Settings"
+          }
+        }
+      }
+    },
     "Allow location access to share context": {
       "localizations": {
         "en": {
@@ -2369,6 +2409,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Approve new nodes on the Devices page."
+          }
+        }
+      }
+    },
+    "Approve the new data list on the Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve the new data list on the Gateway"
+          }
+        }
+      }
+    },
+    "Approve the new data list on the Gateway (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve the new data list on the Gateway (%@)"
+          }
+        }
+      }
+    },
+    "Approve this device on the Gateway (pairing)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve this device on the Gateway (pairing)"
+          }
+        }
+      }
+    },
+    "Approve this device on the Gateway (pairing) (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve this device on the Gateway (pairing) (%@)"
           }
         }
       }
@@ -3039,6 +3119,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calculating…"
+          }
+        }
+      }
+    },
+    "Calendar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calendar"
           }
         }
       }
@@ -4503,6 +4593,16 @@
         }
       }
     },
+    "Contacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacts"
+          }
+        }
+      }
+    },
     "Context": {
       "localizations": {
         "en": {
@@ -5373,6 +5473,16 @@
         }
       }
     },
+    "Current location, only while Pincer is open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current location, only while Pincer is open"
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "en": {
@@ -5439,6 +5549,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Daily"
+          }
+        }
+      }
+    },
+    "Data this device shares with agents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data this device shares with agents"
+          }
+        }
+      }
+    },
+    "Data to share": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Data to share"
           }
         }
       }
@@ -5809,6 +5939,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Device Voice"
+          }
+        }
+      }
+    },
+    "Device info": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device info"
           }
         }
       }
@@ -8853,6 +8993,16 @@
         }
       }
     },
+    "Last request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last request"
+          }
+        }
+      }
+    },
     "Last run": {
       "localizations": {
         "en": {
@@ -9793,6 +9943,16 @@
         }
       }
     },
+    "Model, OS version, battery, thermal and network state": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model, OS version, battery, thermal and network state"
+          }
+        }
+      }
+    },
     "Models": {
       "localizations": {
         "en": {
@@ -9819,6 +9979,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "More page actions"
+          }
+        }
+      }
+    },
+    "Motion & fitness": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motion & fitness"
           }
         }
       }
@@ -12113,6 +12283,16 @@
         }
       }
     },
+    "Paused while Pincer is in the background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused while Pincer is in the background"
+          }
+        }
+      }
+    },
     "Pending Requests": {
       "localizations": {
         "en": {
@@ -12359,6 +12539,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pincer doesn’t have camera access. Allow it in Settings → Privacy & Security → Camera."
+          }
+        }
+      }
+    },
+    "Pincer is a client by default. Turn on device mode to let this Gateway's agents ask this device for the data you choose. It can never run commands, take photos, record the screen, or read files.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer is a client by default. Turn on device mode to let this Gateway's agents ask this device for the data you choose. It can never run commands, take photos, record the screen, or read files."
           }
         }
       }
@@ -13123,6 +13313,26 @@
         }
       }
     },
+    "Read upcoming events": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read upcoming events"
+          }
+        }
+      }
+    },
+    "Read your reminders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read your reminders"
+          }
+        }
+      }
+    },
     "Ready": {
       "localizations": {
         "en": {
@@ -13453,6 +13663,16 @@
         }
       }
     },
+    "Reminders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "en": {
@@ -13629,6 +13849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove the Demo?"
+          }
+        }
+      }
+    },
+    "Remove this device’s node role in Devices on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this device’s node role in Devices on the Gateway host."
           }
         }
       }
@@ -13939,6 +14169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Requested by"
+          }
+        }
+      }
+    },
+    "Requests are answered only while Pincer is connected. Pincer never declares camera, screen, shell, files or notification commands.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests are answered only while Pincer is connected. Pincer never declares camera, screen, shell, files or notification commands."
           }
         }
       }
@@ -15083,6 +15323,16 @@
         }
       }
     },
+    "Search contacts by name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search contacts by name"
+          }
+        }
+      }
+    },
     "Search files": {
       "localizations": {
         "en": {
@@ -15609,6 +15859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Severity"
+          }
+        }
+      }
+    },
+    "Share data from this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share data from this device"
           }
         }
       }
@@ -18109,6 +18369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Thinking…"
+          }
+        }
+      }
+    },
+    "This Device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Device"
           }
         }
       }
@@ -20819,6 +21089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "almost full"
+          }
+        }
+      }
+    },
+    "answered": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "answered"
           }
         }
       }

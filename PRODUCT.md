@@ -24,7 +24,7 @@ Success on the website: an OpenClaw operator understands in one screen that Pinc
 
 ## Positioning
 
-A pure **operator client**, native on both Mac and iPhone. It never bundles, launches or embeds a Gateway and never registers as a node, so it exposes no camera, screen, shell or `system.run` capability. That makes it usable on machines where the official OpenClaw app isn't allowed. Native table-view transcripts with a background cache, not a web view.
+A native **client** (operator role) on both Mac and iPhone. It never bundles, launches or embeds a Gateway. An opt-in, per-gateway device mode adds a node connection that declares only the read-only data the user checks, and Pincer never exposes camera, screen, shell or `system.run` capability. That makes it usable on machines where the official OpenClaw app isn't allowed. Native table-view transcripts with a background cache, not a web view.
 
 ## Operating Context
 

@@ -190,6 +190,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var networkWatch: Task<Void, Never>?
 
     @ObservationIgnored let connection: GatewayConnection
+    /// Opt-in device mode: a second, node-role connection, off by default.
+    public let deviceNode: DeviceNodeController
     @ObservationIgnored internal(set) var chats: [String: ChatStore] = [:]
     @ObservationIgnored private var runSessions: [String: String] = [:]
     @ObservationIgnored private(set) var bootstrapped = false
@@ -215,6 +217,11 @@ public final class GatewayStore: Identifiable {
             if self.appIsActive, !oldValue, self.state.isConnected { self.startPrefetch() }
             if !self.appIsActive, oldValue { self.prefetchTask?.cancel() }
         }
+    }
+    /// Whether iOS has put the app in the background (not merely `.inactive`, which every permission
+    /// prompt or Control Center pull causes). Device mode pauses its node connection only then.
+    public var appIsInBackground = false {
+        didSet { self.deviceNode.setForeground(!self.appIsInBackground) }
     }
     /// Most chats one prefetch run fetches, so a big account isn't paged through all at once.
     static let prefetchBudget = 40
@@ -384,7 +391,10 @@ public final class GatewayStore: Identifiable {
         if profile.isDemo { MessageIndex.allowInMemory(gatewayId: profile.id) }
         self.messageIndexProgress = MessageIndex.status(gatewayId: profile.id)
         self.identity = identity
-        self.connection = GatewayConnection(profile: profile, identity: identity)
+        let operatorConnection = GatewayConnection(profile: profile, identity: identity)
+        self.connection = operatorConnection
+        self.deviceNode = DeviceNodeController(
+            profile: profile, identity: identity, operatorConnection: operatorConnection, defaults: defaults)
         self.gatewayHost = profile.isDemo ? nil : defaults.string(forKey: Self.gatewayHostKey(profile.id))
         self.organization = SidebarOrganization(
             rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
@@ -475,9 +485,12 @@ public final class GatewayStore: Identifiable {
                 onState: { stream.yield(.state($0, $1)) })
             await connection.start()
         }
+        self.deviceNode.setForeground(self.appIsActive)
+        self.deviceNode.start()
     }
 
     public func stop() {
+        self.deviceNode.stop()
         self.replySendLifecycle &+= 1
         for task in self.replyReservationPreparations.values { task.cancel() }
         self.wakeReplyAcceptanceWaiters()
@@ -523,9 +536,16 @@ public final class GatewayStore: Identifiable {
         Task { await connection.retryWithheldScopes() }
     }
 
+    /// Demo only: asks the demo's attached device node for `command`, like an operator's `node.invoke`.
+    /// Returns `{ok, nodeId, command, payload?, payloadJSON?, error?}`, nil off the demo.
+    public func demoInvokeNode(command: String, paramsJSON: String? = nil) async -> JSONValue? {
+        await self.connection.demoInvokeNode(command: command, paramsJSON: paramsJSON)
+    }
+
     public func reconnectIfNeeded() {
         let connection = self.connection
         Task { await connection.reconnectNow() }
+        self.deviceNode.reconnectNow()
     }
 
     // MARK: State
@@ -539,7 +559,10 @@ public final class GatewayStore: Identifiable {
     }
 
     private func update(state: ConnectionState, hello: GatewayHello?) {
-        if state == .connected { self.setSessionListReady(false) }
+        if state == .connected {
+            self.setSessionListReady(false)
+            self.deviceNode.operatorConnected(scopes: hello?.scopes ?? [])
+        }
         self.state = state
         self.routeCandidatesDidChange?()
         if case let .failed(message) = state { self.lastError = message }
@@ -1060,6 +1083,7 @@ public final class GatewayStore: Identifiable {
 
     private func handle(_ event: GatewayEvent) {
         for tap in self.eventTaps.values { tap(event) }
+        self.deviceNode.handleOperatorEvent(event)
         let payload = event.payload
         switch event.name {
         case PortalStore.changedEvent:

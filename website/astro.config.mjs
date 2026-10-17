@@ -93,6 +93,7 @@ export default defineConfig({
 						{ slug: 'guides/skills-and-tools' },
 						{ slug: 'guides/mcp-servers' },
 						{ slug: 'guides/devices' },
+						{ slug: 'guides/device-mode' },
 						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/gateway-health' },
 						{ slug: 'guides/channel-status' },

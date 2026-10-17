@@ -109,6 +109,8 @@ actor DemoGateway {
     var devicePending: [JSONValue] = []
     var devicePaired: [JSONValue] = []
     var demoNodes: [JSONValue] = []
+    /// This device's opt-in node attachment (DemoGateway+DeviceNode.swift).
+    var demoNode = DemoNodeState()
     var prefs: [String: JSONValue] = [:]
     var voice = DemoVoiceState()
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
@@ -295,6 +297,7 @@ actor DemoGateway {
     func handle(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         if let result = try self.handleAgents(method, params) { return result }
         if let result = try await self.handleChannelLifecycle(method, params) { return result }
+        if let result = try self.handleDeviceNode(method, params) { return result }
         if let result = try self.handleDevices(method, params) { return result }
         if let result = try await self.handleMCP(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }

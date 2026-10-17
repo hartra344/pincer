@@ -283,6 +283,7 @@ private struct GatewaySettingsRoot: View {
         case .channelStatus: ChannelStatusPage()
         case .devices: DevicesPage()
         case .nodes: NodesPage()
+        case .deviceMode: DeviceModePage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -452,6 +453,7 @@ private struct SettingsSidebar: View {
         case .execPolicy: unsaved = self.gateway.execPolicy.hasChanges
         case .pairing: badge = connected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0
         case .devices: badge = connected ? self.gateway.devices.pendingCount : 0
+        case .deviceMode: attention = self.gateway.deviceNode.removalHint != nil
         case let .page(id): badge = SettingsCatalog.page(id)?.roots.reduce(0) { $0 + settings.changeCount(under: [$1]) } ?? 0
         case .plugins:
             badge = settings.changeCount(under: ["plugins"])

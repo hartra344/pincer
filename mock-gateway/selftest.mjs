@@ -36,6 +36,7 @@ const SECTIONS = [
   'agents',
   'subagents',
   'devices',
+  'nodes',
   'skills',
   'mcp',
   'first-run',

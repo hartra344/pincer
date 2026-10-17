@@ -9,7 +9,7 @@ A native macOS and iOS client for [OpenClaw](https://github.com/openclaw/opencla
 
 ## What it is (and isn't)
 
-Pincer is a **pure client**. It connects to a Gateway you already run and speaks the Gateway WebSocket protocol in the `operator` role. It never bundles, launches or embeds a Gateway, and it never registers as a node, so it exposes no camera, screen, shell or `system.run` capabilities. That makes it suitable for machines where the official OpenClaw app isn't allowed. Identity, secrets, transport, local storage and the sandbox are described in [Security and privacy](website/src/content/docs/reference/security.md).
+Pincer is a **pure client**. It connects to a Gateway you already run and speaks the Gateway WebSocket protocol in the `operator` role. It never bundles, launches or embeds a Gateway. Only if you turn on the opt-in [device mode](website/src/content/docs/guides/device-mode.mdx) for a Gateway does it also connect as a node, and then it declares only the read-only data you check. It never exposes camera, screen, shell or `system.run` capabilities. That makes it suitable for machines where the official OpenClaw app isn't allowed. Identity, secrets, transport, local storage and the sandbox are described in [Security and privacy](website/src/content/docs/reference/security.md).
 
 ## Quick start
 
