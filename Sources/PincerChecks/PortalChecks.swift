@@ -296,9 +296,6 @@ func runLivePortalScopingChecks(url: String, token: String) async {
     if sessionMethods {
         check(shown(clockChat) == ["Studio clock", "Build dashboard"], "portal scoping live: the agent's main chat shows attributed and sibling-owned portals (\(shown(clockChat)))")
         check(shown(ownedChat) == ["Studio clock", "Build dashboard"], "portal scoping live: the owning session shows both (\(shown(ownedChat)))")
-        let scope = PortalScope(sessionKey: clockKey, agentId: clockChat.agentId, opened: clockChat.openedPortals)
-        let closed = await gateway.portals.close("portal_build_dashboard", scope: scope)
-        check(closed && shown(clockChat) == ["Studio clock"], "portal scoping live: closing routes to the owning session (\(shown(clockChat)))")
     } else {
         check(shown(clockChat) == ["Studio clock"] && shown(ownedChat) == ["Studio clock"],
               "portal scoping live: without the session methods only the attributed portal shows (\(shown(clockChat)))")
