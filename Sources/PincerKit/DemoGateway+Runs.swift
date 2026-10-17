@@ -9,6 +9,8 @@ extension DemoGateway {
         case "chat.abort":
             self.abort(sessionKey: params["sessionKey"]?.string, runId: params["runId"]?.string)
             return ["aborted": true]
+        case "sessions.abort":
+            return try self.abortSession(params)
         case "progressCard.get":
             return ["card": self.progressCards[try self.knownSession(params["sessionKey"])] ?? .null]
         case "progressCard.put":
@@ -16,6 +18,44 @@ extension DemoGateway {
         default:
             return nil
         }
+    }
+
+    /// `sessions.abort`: like upstream, validates key/runId, then stops the session's runs (and, key-only,
+    /// its running subagent children). Answers `{ok, abortedRunId, status}`.
+    func abortSession(_ params: JSONValue) throws -> JSONValue {
+        func invalid(_ message: String) -> GatewayError { .rpc(code: "INVALID_REQUEST", message: message, details: nil) }
+        let runId = params["runId"]?.text
+        var key = params["key"]?.text
+        if key == nil, let runId {
+            key = self.runs[runId]?.sessionKey ?? self.seededRunningRuns[runId] ?? self.sessions.first {
+                $0.value["activeRunIds"]?.array?.contains(.string(runId)) == true
+            }?.key
+        }
+        guard let key, self.sessions[key] != nil else { throw invalid("session target is unavailable") }
+        if let agentId = params["agentId"]?.text, let keyAgent = SessionKey.agentId(from: key), keyAgent != agentId.lowercased() {
+            throw invalid("session key agent does not match agentId")
+        }
+        func activeIds(_ key: String) -> [String] {
+            var ids = self.runs.filter { $0.value.sessionKey == key }.map(\.key)
+            ids += self.seededRunningRuns.filter { $0.value == key }.map(\.key)
+            for id in self.sessions[key]?["activeRunIds"]?.array?.compactMap(\.text) ?? [] where !ids.contains(id) { ids.append(id) }
+            return ids
+        }
+        let own = activeIds(key)
+        if let runId, !own.contains(runId) { throw invalid("runId does not match session") }
+        var aborted: String?
+        if let runId {
+            aborted = runId
+            self.abort(sessionKey: key, runId: runId)
+            self.stopStubRun(key)
+        } else {
+            aborted = own.first
+            let children = self.sessions.filter { $0.value["spawnedBy"]?.string == key && $0.value["status"]?.string == "running" }
+            for child in children.keys { self.stopRuns(child) }
+            self.stopRuns(key)
+        }
+        return ["ok": true, "abortedRunId": aborted.map { .string($0) } ?? .null,
+                "status": .string(aborted == nil ? "no-active-run" : "aborted")]
     }
 
     // MARK: Runs

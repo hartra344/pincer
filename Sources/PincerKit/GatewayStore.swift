@@ -1034,6 +1034,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var agentMainKey = "main"
     /// `agents.list` `scope`; `global` shares one session instead of per-agent home chats.
     @ObservationIgnored private var agentScope: String?
+    public var agentScopeIsGlobal: Bool { self.agentScope == "global" }
 
     /// The Gateway only lists sessions it has stored, and an agent's home chat isn't stored until
     /// its first message, so a new agent would have no chats and no sidebar section. Like the

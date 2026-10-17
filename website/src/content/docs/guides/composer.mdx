@@ -25,6 +25,19 @@ The message box keeps the selected chat's name if its session row is briefly mis
 
 If you're offline, or a message can't be sent, it stays in the chat marked **Queued** or **Failed — Retry**. See [Offline sending & retry](../offline-outbox/).
 
+## Stopping a run
+
+While the agent is working, a red **Stop** button appears next to **Send**. Click or tap it, or press <kbd>⌘</kbd> <kbd>.</kbd>, to stop.
+
+- **A reply you're watching stream:** Stop ends exactly that run and the helpers it started. Queued follow-ups stay queued.
+- **Work Pincer didn't start or can't see**, such as a run started from another device, a channel message or a background follow-up: Stop ends whatever the session is doing, including its running helpers, and discards its queued follow-ups so the agent doesn't pick straight back up.
+
+Typing `/stop` and sending it always stops the whole session that way, even while a reply is streaming, like the Control UI. It's handled right away and is never queued as a message; like other commands, it can't be sent while you're offline. If the gateway can't stop the session, the chat says **Couldn’t stop** with the reason and `/stop` stays in the box. If some helpers might still be running, the chat says **Couldn’t stop everything** with the gateway's reason; check them in the [session manager](../sessions/). If nothing was running, nothing happens.
+
+The shared `global` session keeps its queued follow-ups; only its active run is stopped. Gateways older than `sessions.abort` stop the session's active runs without touching helpers or queued follow-ups.
+
+You can try it in the built-in demo: open **Refactor auth module** or **Fix retry backoff**, which are still working, and press Stop.
+
 ## Location context
 
 In **Settings → Privacy → Location**, turn on **Share location context with the agent**. It starts off. With permission, Pincer requests a one-time location while the app is active and sends a recent fix as agent context. The context is separate from your message text. Pincer keeps the coordinates supplied by the device and reports the provider's horizontal accuracy; system privacy settings may reduce precision.
@@ -161,6 +174,7 @@ With VoiceOver, moving through suggestions speaks the selected command or argume
 | `/think` | Set the session's thinking level. |
 | `/compact` | Summarize older messages to free up context. Add instructions after it to say what to keep. |
 | `/reset` or `/clear` | Start the session fresh. |
+| `/stop` | Stop everything the session is doing, including helpers and queued follow-ups. See [Stopping a run](#stopping-a-run). |
 
 The exact list depends on your gateway, its skills and its plugins.
 
