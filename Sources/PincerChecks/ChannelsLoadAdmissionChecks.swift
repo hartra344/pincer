@@ -1,24 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class ChannelsStatusReadGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                if released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        released = true
-        continuation?.resume(); continuation = nil
-    }
-}
+private typealias ChannelsStatusReadGate = CheckGate
 
 /// A real status result is computed before the local delivery hold. No Gateway writes or overlays.
 @MainActor private func checkChannelsReadAdmission(request: @escaping ChannelsModel.Request) async {

@@ -1,21 +1,9 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class RewindHistoryCheckGate {
-    var entered = false
+private final class RewindHistoryCheckGate: CheckGate {
     var historyCalls = 0
     var oldPoints: [SessionRewindPoint] = []
-    var released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func release() { released = true; let old = waiter; waiter = nil; old?.resume() }
-    func hold() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released || Task.isCancelled { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
 }
 
 @MainActor
@@ -31,7 +19,7 @@ private func checkRewindHistoryOwnership(key: String, methods: @escaping @MainAc
                 if gate.historyCalls == 1 {
                     gate.oldPoints = SessionRewindPoint.points(history: result)
                     gate.entered = true
-                    try await gate.hold()
+                    try await gate.holdThrowing()
                 }
             }
             return result

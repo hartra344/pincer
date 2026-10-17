@@ -1,19 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class HealthAdmissionGate {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released || Task.isCancelled { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
+private typealias HealthAdmissionGate = CheckGate
 
 @MainActor private func checkHealthCanceledAdmission(request: @escaping GatewayHealthModel.Request) async {
     let gate = HealthAdmissionGate()

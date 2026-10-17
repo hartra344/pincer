@@ -1,31 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor
-private final class HealthResponseGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    func hold() async {
-        self.entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if self.released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in self?.release() }
-        }
-    }
-
-    func release() {
-        self.released = true
-        let continuation = self.continuation
-        self.continuation = nil
-        continuation?.resume()
-    }
-}
+private typealias HealthResponseGate = CheckGate
 
 @MainActor
 func runHealthEventOrderingChecks() async {

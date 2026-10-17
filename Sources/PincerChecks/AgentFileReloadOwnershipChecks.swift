@@ -1,20 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class AgentFileReloadCheckGate {
-    var arrived = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        arrived = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { held in
-                if released || Task.isCancelled { held.resume() } else { continuation = held }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { released = true; let held = continuation; continuation = nil; held?.resume() }
-}
+private typealias AgentFileReloadCheckGate = CheckGate
 
 @MainActor func runAgentFileReloadOwnershipChecks() async {
     let gate = AgentFileReloadCheckGate(); defer { gate.release() }
@@ -32,7 +19,7 @@ import Foundation
     editor.text = "discarded draft"
     let reload = Task { await editor.resolveConflictKeepTheirs() }
     defer { reload.cancel(); gate.release() }
-    let ready = await waitFor("actual file reload request", timeout: 20) { gate.arrived }
+    let ready = await waitFor("actual file reload request", timeout: 20) { gate.entered }
     check(ready, "actual reload reaches held request")
     guard ready else { return }
     editor.text = "later draft"; editor.text = "discarded draft"
@@ -66,7 +53,7 @@ import Foundation
     editor.text = "pre-reload local draft"
     let reload = Task { await editor.resolveConflictKeepTheirs() }
     defer { reload.cancel(); gate.release() }
-    let ready = await waitFor("genuine Demo file response", timeout: 20) { gate.arrived }
+    let ready = await waitFor("genuine Demo file response", timeout: 20) { gate.entered }
     check(ready, "actual Demo file response reaches completion gate")
     guard ready else { return }
     editor.text = "newer local document"

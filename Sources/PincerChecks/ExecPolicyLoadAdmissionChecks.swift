@@ -1,24 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class PolicyAdmissionGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                if released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        released = true
-        continuation?.resume(); continuation = nil
-    }
-}
+private typealias PolicyAdmissionGate = CheckGate
 
 /// The held request has already obtained its response. Only local delivery is deferred.
 @MainActor private func checkPolicyLoadAdmission(response: JSONValue,

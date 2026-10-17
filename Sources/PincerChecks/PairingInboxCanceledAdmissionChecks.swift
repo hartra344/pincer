@@ -1,17 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class PairingAdmissionGate {
-    var entered = false, open = false
-    var held: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in if open || Task.isCancelled { continuation.resume() } else { held = continuation } }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { open = true; held?.resume(); held = nil }
-}
+private typealias PairingAdmissionGate = CheckGate
 private func hasRequiredPairingFields(_ response: JSONValue) -> Bool {
     guard let requests = response["requests"]?.array, let accounts = response["accounts"]?.array,
           !requests.isEmpty, !accounts.isEmpty else { return false }

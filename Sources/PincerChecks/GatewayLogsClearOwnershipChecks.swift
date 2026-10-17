@@ -1,20 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class LogClearDeliveryGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { held in
-                if released || Task.isCancelled { held.resume() } else { continuation = held }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { released = true; let held = continuation; continuation = nil; held?.resume() }
-}
+private typealias LogClearDeliveryGate = CheckGate
 
 @MainActor func runGatewayLogsClearOwnershipChecks() async {
     let gate = LogClearDeliveryGate(); defer { gate.release() }

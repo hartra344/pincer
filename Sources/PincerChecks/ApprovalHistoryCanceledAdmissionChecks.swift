@@ -1,17 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class ApprovalAdmissionGate {
-    var entered = false, open = false
-    var held: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in if open || Task.isCancelled { continuation.resume() } else { held = continuation } }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { open = true; held?.resume(); held = nil }
-}
+private typealias ApprovalAdmissionGate = CheckGate
 @MainActor private func checkApprovalCanceledAdmission(_ request: @escaping ApprovalHistoryModel.Request) async {
     let gate = ApprovalAdmissionGate()
     var attempts = 0, page: JSONValue = .null

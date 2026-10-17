@@ -1,17 +1,7 @@
 import Foundation
 import PincerKit
 
-@MainActor private final class ExecRevisionCheckGate {
-    var entered = false, open = false
-    private var held: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { if open || Task.isCancelled { $0.resume() } else { held = $0 } }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() { open = true; held?.resume(); held = nil }
-}
+private typealias ExecRevisionCheckGate = CheckGate
 @MainActor func runExecPolicyReloadRevisionChecks() async {
     for mode in ["no-op", "revert", "discard"] {
         let old: JSONValue = ["path": "policy.json", "exists": true, "hash": "old", "file": ["version": 1, "defaults": ["ask": "on-miss"]]]

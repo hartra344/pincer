@@ -1,24 +1,7 @@
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class UsageStatusAdmissionGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                if released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        released = true
-        continuation?.resume(); continuation = nil
-    }
-}
+private typealias UsageStatusAdmissionGate = CheckGate
 
 /// Only delivery of an already-computed actual response is held; no backend mutation.
 @MainActor private func checkUsageStatusAdmission(request: @escaping UsageModel.Request) async {

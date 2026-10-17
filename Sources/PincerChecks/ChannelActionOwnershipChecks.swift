@@ -1,25 +1,7 @@
 import Foundation
 import PincerKit
 
-@MainActor private final class ChannelActionCheckGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                if released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func release() {
-        released = true
-        continuation?.resume()
-        continuation = nil
-    }
-}
+private typealias ChannelActionCheckGate = CheckGate
 
 @MainActor func runChannelActionOwnershipChecks() async {
     let gate = ChannelActionCheckGate()
