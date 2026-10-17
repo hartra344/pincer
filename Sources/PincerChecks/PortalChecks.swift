@@ -46,6 +46,84 @@ func runPortalOfflineChecks() {
           "portal: an access link on another origin is ignored")
 }
 
+/// #1029: a chat shows only the portals its agent opened (its own `portal` tool calls) and those its session owns.
+@MainActor
+func runPortalScopingOfflineChecks() async {
+    func open(_ id: String, _ url: String, args: String = #"{"action":"open","port":4173}"#, error: Bool = false, running: Bool = false) -> ToolActivity {
+        let json = #"{"id":"\#(id)","title":"T","port":4173,"listenPort":4173,"publicUrl":"\#(url)","createdAtMs":1}"#
+        return ToolActivity(id: "c-\(id)", name: "portal", arguments: args, result: "Portal route allocated at \(url)\n\(json)", isError: error, isRunning: running)
+    }
+    let tool = open("clock", "https://portal.test:4173/")
+    check(tool.openedPortal?.id == "clock" && tool.openedPortal?.publicURL == "https://portal.test:4173/",
+          "portal scoping: a portal open call yields the id and public URL from the JSON after the text prefix")
+    check(open("a", "https://a.test/", error: true).openedPortal == nil && open("a", "https://a.test/", running: true).openedPortal == nil
+          && open("a", "https://a.test/", args: #"{"action":"list"}"#).openedPortal == nil
+          && open("a", "https://a.test/", args: #"{"action":"close","id":"a"}"#).openedPortal == nil,
+          "portal scoping: failed, running, list and close calls are ignored")
+    let filler = String(repeating: "x", count: 100_000)
+    let late = ToolActivity(id: "late", name: "portal", arguments: #"{"action":"open"}"#, result: filler + #"{"id":"late","publicUrl":"https://l.test/"}"#,
+                            isError: false, isRunning: false)
+    check(late.openedPortal == nil, "portal scoping: a huge result is only scanned up to a cap")
+
+    func entry(_ id: String, port: Int, at: Int) -> JSONValue {
+        .object(["id": .string(id), "title": .string(id), "port": .number(Double(port)), "listenPort": .number(Double(port)),
+                 "publicUrl": .string("https://portal.test:\(port)/"), "createdAtMs": .number(Double(at))])
+    }
+    let global: [JSONValue] = [entry("clock", port: 4173, at: 1), entry("board", port: 4174, at: 2)]
+    let ownedBoard: [JSONValue] = [entry("board", port: 4174, at: 2)]
+    let calls = Counter()
+    func store(methods: Set<String>) -> PortalStore {
+        PortalStore(request: { method, params in
+            await calls.bump(method)
+            switch method {
+            case "portal.list": return ["portals": .array(global)]
+            case "environments.session.status":
+                return params["sessionKey"]?.string == "A" ? ["attachment": ["environmentId": "env-1", "closedAtMs": .null], "closed": false] : ["attachment": .null]
+            case "portal.session.list": return ["portals": .array(params["sessionKey"]?.string == "A" ? ownedBoard : [])]
+            default: return ["closed": true]
+            }
+        }, methods: { methods }, debounce: .milliseconds(20))
+    }
+    let all: Set<String> = ["portal.list", "portal.close", "environments.session.status", "portal.session.list", "portal.session.close"]
+    let scoped = store(methods: all)
+    await scoped.refresh()
+    await scoped.refreshOwned(sessionKey: "A", agentId: "main")
+    await scoped.refreshOwned(sessionKey: "B", agentId: "other")
+    func scope(_ key: String, _ tools: [ToolActivity] = []) -> PortalScope {
+        PortalScope(sessionKey: key, agentId: key == "B" ? "other" : "main", opened: PortalRefs(tools: tools))
+    }
+    check(scoped.portals(for: scope("A", [tool])).map(\.id) == ["clock", "board"], "portal scoping: a chat shows its attributed and owned portals")
+    check(scoped.portals(for: scope("B")).isEmpty, "portal scoping: another chat shows neither")
+    check(scoped.portals(for: scope("C", [tool])).map(\.id) == ["clock", "board"], "portal scoping: another chat of the same agent shows its attributed and owned portals")
+    // Per agent: once a chat of agent "main" opened it, any other chat of that agent shows it, even with an empty transcript.
+    scoped.recordOpened(PortalRefs(tools: [tool]), agentId: "main", sessionKey: "A")
+    check(scoped.portals(for: scope("C")).map(\.id) == ["clock", "board"],
+          "portal scoping: another chat of the same agent shows the portal the agent opened")
+    check(scoped.portals(for: scope("B")).isEmpty && scoped.attributedAgent(for: PortalSummary.parse(global[0])!) == "main",
+          "portal scoping: a chat of another agent still shows none, and the portal is attributed to its agent")
+    let legacy = store(methods: ["portal.list", "portal.close"])
+    await legacy.refresh()
+    await legacy.refreshOwned(sessionKey: "A", agentId: "main")
+    check(legacy.portals(for: scope("A")).isEmpty && legacy.portals(for: scope("A", [tool])).map(\.id) == ["clock"],
+          "portal scoping: without the session methods only attributed portals show")
+    let statusCalls = await calls.count("environments.session.status")
+    check(statusCalls == 2 && legacy.ownedPortals(sessionKey: "A").isEmpty,
+          "portal scoping: refreshOwned is a no-op unless both session methods are advertised")
+    _ = await scoped.close("board", scope: scope("A"))
+    _ = await scoped.close("clock", scope: scope("A", [tool]))
+    let sessionCloses = await calls.count("portal.session.close"), globalCloses = await calls.count("portal.close")
+    check(sessionCloses == 1 && globalCloses == 1,
+          "portal scoping: owned portals close via portal.session.close, attributed ones via portal.close")
+    scoped.handleReconnect()
+    check(scoped.ownedPortals(sessionKey: "A").isEmpty, "portal scoping: a reconnect clears the owned cache")
+}
+
+private actor Counter {
+    private var counts: [String: Int] = [:]
+    func bump(_ key: String) { counts[key, default: 0] += 1 }
+    func count(_ key: String) -> Int { counts[key, default: 0] }
+}
+
 @MainActor
 func runDemoPortalChecks() async {
     let (defaults, suite) = scratchDefaults()
@@ -62,18 +140,34 @@ func runDemoPortalChecks() async {
         return
     }
     let store = gateway.portals
-    let ok1 = await waitFor("demo portal", timeout: 10, { store.portals.count == 1 })
-    check(ok1, "demo: the Studio clock portal is listed")
-    let portal = store.portals.first
+    let ok1 = await waitFor("demo portals", timeout: 10, { store.portals.count == 2 })
+    check(ok1, "demo: the Studio clock and Build dashboard portals are listed")
+    let portal = store.portals.first { $0.title == "Studio clock" }
     check(portal?.title == "Studio clock" && portal?.loadURL != nil && portal?.isRedacted == false && !store.unavailable,
           "demo: the portal has a title and an access link")
     check(portal?.displayURL.absoluteString.contains("openclaw_portal") == false, "demo: the display URL has no token")
     check(portal.map { PortalOriginPolicy.allows($0.loadURL!, portal: $0) } == true, "demo: its load URL stays inside its origin")
 
+    // #1029: the portal belongs to the coder agent (Forge); other agents' chats show none.
+    let coderChat = gateway.chat(for: DemoGateway.studioClockSessionKey)
+    await coderChat.load()
+    let otherChat = gateway.chat(for: "agent:main:main")
+    await otherChat.load()
+    store.trackOwned(sessionKey: coderChat.sessionKey, agentId: coderChat.agentId)
+    func shown(_ chat: ChatStore) -> [String] {
+        store.portals(for: PortalScope(sessionKey: chat.sessionKey, agentId: chat.agentId, opened: chat.openedPortals)).map(\.title)
+    }
+    check(coderChat.openedPortals.ids.contains(DemoGateway.demoPortalId), "demo: the coder chat's transcript holds the portal open call")
+    let ok6 = await waitFor("demo owned portal", timeout: 10, { shown(coderChat).count == 2 })
+    check(ok6 && Set(shown(coderChat)) == ["Studio clock", "Build dashboard"], "demo: the coder agent's chat shows Studio clock and its owned Build dashboard (\(shown(coderChat)))")
+    check(shown(otherChat).isEmpty, "demo: another agent's chat shows no portals (\(shown(otherChat)))")
+    let research = gateway.chat(for: "agent:research:main")
+    check(shown(research).isEmpty, "demo: the research agent's chat shows no portals")
+
     // Closed behind the store's back: only the redacted portal.changed event can empty the list.
     let reply = try? await gateway.connection.request("portal.close", ["id": .string(portal?.id ?? "")])
     check(reply?["closed"]?.bool == true, "demo: portal.close closes it")
-    let ok2 = await waitFor("demo portal.changed", timeout: 10, { store.portals.isEmpty })
+    let ok2 = await waitFor("demo portal.changed", timeout: 10, { store.portals.map(\.title) == ["Build dashboard"] })
     check(ok2, "demo: portal.changed refreshes the list")
 }
 
@@ -166,4 +260,44 @@ func runLivePortalChecks(url: String, token: String) async {
     check(ok5, "mock: portal.changed refreshes another connection")
     let gone = await portalFetch(load)
     check(gone == nil || gone?.status != 200, "mock: a closed portal's server stops answering")
+}
+
+/// #1029 against the mock: "Studio clock" is attributed to the coder's main chat (its `portal` tool call), "Build
+/// dashboard" is owned by another session through the session methods. No other session sees either one.
+@MainActor
+func runLivePortalScopingChecks(url: String, token: String) async {
+    let profile = GatewayProfile(name: "Mock portal scoping", url: url, authMode: .token, access: .admin)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile)
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    defer { gateway.stop() }
+    guard await waitFor("scoping connected", timeout: 25, { gateway.state.isConnected && !gateway.sessions.isEmpty }),
+          await waitFor("scoping portals", timeout: 10, { gateway.portals.portals.count == 2 }) else {
+        check(false, "portal scoping live: connected with both portals listed")
+        return
+    }
+    let clockKey = "agent:coder:main", ownedKey = "agent:coder:dashboard:retry-fix", otherKey = "agent:main:main"
+    let sessionMethods = gateway.hello?.methods.contains("portal.session.list") == true
+    let clockChat = gateway.chat(for: clockKey)
+    await clockChat.load()
+    check(clockChat.openedPortals.ids.contains("portal_studio_clock"), "portal scoping live: the coder's chat history holds the portal open call")
+    let ownedChat = gateway.chat(for: ownedKey)
+    await ownedChat.load()
+    let otherChat = gateway.chat(for: otherKey)
+    await otherChat.load()
+    for chat in [clockChat, ownedChat, otherChat] { await gateway.portals.refreshOwned(sessionKey: chat.sessionKey, agentId: chat.agentId) }
+    func shown(_ chat: ChatStore) -> [String] {
+        gateway.portals.portals(for: PortalScope(sessionKey: chat.sessionKey, agentId: chat.agentId, opened: chat.openedPortals)).map(\.title)
+    }
+    // Per agent: the attributed portal shows in every chat of the coder agent, even one that never ran `portal`.
+    check(shown(ownedChat).contains("Studio clock"), "portal scoping live: another chat of the same agent shows Studio clock (\(shown(ownedChat)))")
+    check(shown(otherChat).isEmpty, "portal scoping live: another agent's chat shows no portals (\(shown(otherChat)))")
+    if sessionMethods {
+        check(shown(clockChat) == ["Studio clock", "Build dashboard"], "portal scoping live: the agent's main chat shows attributed and sibling-owned portals (\(shown(clockChat)))")
+        check(shown(ownedChat) == ["Studio clock", "Build dashboard"], "portal scoping live: the owning session shows both (\(shown(ownedChat)))")
+    } else {
+        check(shown(clockChat) == ["Studio clock"] && shown(ownedChat) == ["Studio clock"],
+              "portal scoping live: without the session methods only the attributed portal shows (\(shown(clockChat)))")
+    }
 }

@@ -6,13 +6,13 @@ import UniformTypeIdentifiers
 /// A tool invocation paired with its result, rendered as one card.
 public struct ToolActivity: Identifiable, Hashable, Sendable {
     public let id: String
-    public var name: String { didSet { self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
+    public var name: String { didSet { self.deriveBrowserPage(); self.derive(); self.presentationCacheRevision = UUID() } }
     public var arguments: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     public var result: String? { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     /// `details` of the result, trimmed to what a file-edit diff reads. See `ToolFileEdit.parse`.
     public var details: JSONValue? { didSet { self.durationMs = Self.duration(details); self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
-    public var isError: Bool { didSet { self.deriveBrowserPage(); self.presentationCacheRevision = UUID() } }
-    public var isRunning: Bool { didSet { self.presentationCacheRevision = UUID() } }
+    public var isError: Bool { didSet { self.deriveBrowserPage(); self.derive(); self.presentationCacheRevision = UUID() } }
+    public var isRunning: Bool { didSet { self.derive(); self.presentationCacheRevision = UUID() } }
     /// Opaque presentation-cache identity. Copies retain it; mutations rotate it.
     /// It is intentionally excluded from semantic equality and hashing.
     public private(set) var presentationCacheRevision: UUID
@@ -26,6 +26,8 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     public private(set) var spawnedSessionKey: String?
     /// `label` argument of a spawn call, for matching the run when no key is echoed back.
     public private(set) var spawnLabel: String?
+    /// The portal a successful `portal` tool call (`action: open`) allocated, so the chat can claim it.
+    public private(set) var openedPortal: PortalToolOpen?
 
     public init(id: String, name: String, arguments: String?, result: String?, details: JSONValue? = nil,
                 isError: Bool, isRunning: Bool)
@@ -59,6 +61,7 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
             && lhs.durationMs == rhs.durationMs
             && lhs.spawnedSessionKey == rhs.spawnedSessionKey
             && lhs.spawnLabel == rhs.spawnLabel
+            && lhs.openedPortal == rhs.openedPortal
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -73,6 +76,7 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         hasher.combine(self.durationMs)
         hasher.combine(self.spawnedSessionKey)
         hasher.combine(self.spawnLabel)
+        hasher.combine(self.openedPortal)
     }
 
     /// Scalar `details` keys other cards read: exec's exit status and web_fetch's response.
@@ -112,6 +116,69 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         self.spawnedSessionKey = text.contains(":subagent:")
             ? text.firstMatch(of: /agent:[A-Za-z0-9_.-]+:subagent:[A-Za-z0-9-]+/).map { String($0.output) }
             : nil
+        self.openedPortal = PortalToolOpen.parse(name: self.name, arguments: object, result: self.result,
+                                                 isError: self.isError, isRunning: self.isRunning)
+    }
+}
+
+/// The portal a successful `portal` tool call (`action: open`) opened: its id and public URL, as the
+/// result echoes them (openclaw's `jsonResult(PortalSummary)`: a text line, then the summary as JSON).
+public struct PortalToolOpen: Hashable, Sendable {
+    public var id: String?
+    public var publicURL: String?
+
+    public init(id: String?, publicURL: String?) {
+        self.id = id
+        self.publicURL = publicURL
+    }
+
+    /// Only the first part of a result is read: the summary is small and the text is untrusted.
+    static let scanLimit = 16 * 1024
+
+    static func parse(name: String, arguments: [String: Any]?, result: String?, isError: Bool, isRunning: Bool) -> PortalToolOpen? {
+        guard name == "portal", !isError, !isRunning, arguments?["action"] as? String == "open",
+              let result, !result.isEmpty else { return nil }
+        let text = String(result.prefix(Self.scanLimit))
+        var found = Self.fromJSON(text)
+        if found == nil, let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end {
+            found = Self.fromJSON(String(text[start...end]))
+        }
+        if found == nil { found = Self.fromRegex(text) }
+        guard let found, found.id != nil || found.publicURL != nil else { return nil }
+        return found
+    }
+
+    private static func clean(_ value: Any?, limit: Int) -> String? {
+        guard let string = value as? String, !string.isEmpty, string.count <= limit else { return nil }
+        return string
+    }
+
+    private static func summary(_ object: [String: Any]) -> PortalToolOpen? {
+        let id = Self.clean(object["id"], limit: 256)
+        let url = Self.clean(object["publicUrl"], limit: 4096)
+        return id == nil && url == nil ? nil : PortalToolOpen(id: id, publicURL: url)
+    }
+
+    /// Reads a PortalSummary object, a `{content, details}` tool result (the streaming form, whose text
+    /// blocks hold the summary as an escaped JSON string), or a summary inside a text block.
+    private static func fromJSON(_ text: String, depth: Int = 0) -> PortalToolOpen? {
+        guard depth < 3, let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let found = Self.summary(object) { return found }
+        if let details = object["details"] as? [String: Any], let found = Self.summary(details) { return found }
+        for block in (object["content"] as? [[String: Any]]) ?? [] {
+            guard let inner = block["text"] as? String else { continue }
+            if let found = Self.fromJSON(inner, depth: depth + 1) { return found }
+            if let start = inner.firstIndex(of: "{"), let end = inner.lastIndex(of: "}"), start < end,
+               let found = Self.fromJSON(String(inner[start...end]), depth: depth + 1) { return found }
+        }
+        return nil
+    }
+
+    private static func fromRegex(_ text: String) -> PortalToolOpen? {
+        let id = text.firstMatch(of: /\\?"id\\?"\s*:\s*\\?"([^"\\]{1,256})\\?"/).map { String($0.output.1) }
+        let url = text.firstMatch(of: /\\?"publicUrl\\?"\s*:\s*\\?"([^"\\]{1,4096})\\?"/).map { String($0.output.1) }
+        return id == nil && url == nil ? nil : PortalToolOpen(id: id, publicURL: url)
     }
 }
 

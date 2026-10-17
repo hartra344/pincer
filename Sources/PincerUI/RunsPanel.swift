@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What the chat's single inspector slot shows. Opening one panel closes the other.
 enum ChatInspectorPanel: Hashable {
-    case runs, workspace
+    case runs, workspace, portals
 }
 
 extension Binding where Value == ChatInspectorPanel? {
@@ -50,6 +50,8 @@ struct ChatInspectorChrome: ViewModifier {
     private var current: ChatInspectorPanel { self.panel ?? self.shown }
     /// False while the split view's headers show their own Runs and Browser buttons (#427).
     var showsToolbarButton = true
+    /// False in a split view, whose headers follow each side's chat themselves.
+    var tracksPortals = true
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { self.sizeClass == .compact }
@@ -65,6 +67,7 @@ struct ChatInspectorChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .modifier(PortalsTracking(key: self.tracksPortals ? self.gateway.portalChatKey(window: self.windowKey) : nil))
             .toolbar {
                 #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {
@@ -72,6 +75,9 @@ struct ChatInspectorChrome: ViewModifier {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     if self.showsToolbarButton { BrowserToolbarButton(isPresented: self.guarded.isShowing(.workspace), isCompact: self.isCompact) }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if self.showsToolbarButton { PortalsToolbarButton(isPresented: self.guarded.isShowing(.portals), isCompact: self.isCompact) }
                 }
                 #else
                 if self.showsToolbarButton {
@@ -81,6 +87,9 @@ struct ChatInspectorChrome: ViewModifier {
                     ToolbarItem(placement: .primaryAction) {
                         BrowserToolbarButton(isPresented: self.guarded.isShowing(.workspace), isCompact: self.isCompact)
                     }
+                    ToolbarItem(placement: .primaryAction) {
+                        PortalsToolbarButton(isPresented: self.guarded.isShowing(.portals), isCompact: self.isCompact)
+                    }
                 }
                 #endif
             }
@@ -89,7 +98,10 @@ struct ChatInspectorChrome: ViewModifier {
                 Group {
                     switch self.current {
                     case .workspace:
-                        WorkspacePanel(cache: self.portalCache, drafts: self.drafts)
+                        WorkspacePanel(drafts: self.drafts)
+                            .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
+                    case .portals:
+                        PortalsPanel(cache: self.portalCache)
                             .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
                     default:
                         RunsPanel()
@@ -100,9 +112,13 @@ struct ChatInspectorChrome: ViewModifier {
             .sheet(isPresented: self.presented(true)) {
                 NavigationStack {
                     Group {
-                        if self.current == .workspace { WorkspacePanel(cache: self.portalCache, drafts: self.drafts) } else { RunsPanel() }
+                        switch self.current {
+                        case .workspace: WorkspacePanel(drafts: self.drafts)
+                        case .portals: PortalsPanel(cache: self.portalCache)
+                        case .runs: RunsPanel()
+                        }
                     }
-                    .navigationTitle(self.current == .workspace ? L("Browser") : L("Runs"))
+                    .navigationTitle(self.current == .workspace ? L("Browser") : self.current == .portals ? L("Portals") : L("Runs"))
                     #if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
                     #endif
@@ -114,9 +130,9 @@ struct ChatInspectorChrome: ViewModifier {
                         }
                     }
                 }
-                .presentationDetents(self.current == .workspace ? [.large] : [.medium, .large])
+                .presentationDetents(self.current == .runs ? [.medium, .large] : [.large])
                 // Pulling down inside a portal page scrolls it; Done closes the sheet.
-                .presentationContentInteraction(self.current == .workspace ? .scrolls : .automatic)
+                .presentationContentInteraction(self.current == .runs ? .automatic : .scrolls)
                 .interactiveDismissDisabled(self.drafts.isDirty(for: self.filesKey))
             }
             .modifier(DiscardPrompt(isPresented: self.confirmBinding(compact: false), discard: self.discardClose))
