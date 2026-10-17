@@ -83,7 +83,7 @@ struct WorkspacePanel: View {
             Text("Your edits to this file haven't been saved.", bundle: .module)
         }
         .modifier(NewTabPrompt(isPresented: self.$newTab, model: model))
-        .modifier(SheetTitle(title: tab == .files ? L("Files") : (selected?.title ?? L("Browser"))))
+        .preference(key: WorkspaceTitlePreference.self, value: tab == .files ? L("Files") : (selected?.title ?? L("Browser")))
         .onChange(of: self.closing) { _, new in if let new { self.lastClosingTitle = new.title } }
         .onChange(of: portals.map(\.id)) { _, ids in self.cache.prune(keeping: Set(ids)) }
         .onChange(of: self.scenePhase) { _, phase in if phase != .active { self.cache.pauseAllMedia() } }
@@ -95,16 +95,17 @@ struct WorkspacePanel: View {
     }
 }
 
-/// The iPhone sheet's navigation title follows the selected tab; the macOS inspector has no title bar of its own.
-private struct SheetTitle: ViewModifier {
-    let title: String
+/// The panel's current title (the selected tab's name). The panel reports it as a preference instead of
+/// setting `navigationTitle` itself: it is also hosted in the inspector, which has no navigation bar of its
+/// own, so a title set from inside it would land on the chat's bar and stay there after closing (#1026).
+/// Only the compact sheet, which owns a NavigationStack, turns it into a title.
+struct WorkspaceTitlePreference: PreferenceKey {
+    static let defaultValue: String? = nil
+    static func reduce(value: inout String?, nextValue: () -> String?) { value = nextValue() ?? value }
 
-    func body(content: Content) -> some View {
-        #if os(iOS)
-        content.navigationTitle(self.title)
-        #else
-        content
-        #endif
+    /// What the compact sheet's bar shows for `panel`.
+    static func sheetTitle(isWorkspace: Bool, workspaceTitle: String?) -> String {
+        isWorkspace ? (workspaceTitle ?? L("Browser")) : L("Runs")
     }
 }
 

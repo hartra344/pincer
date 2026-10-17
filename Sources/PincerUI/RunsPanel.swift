@@ -28,6 +28,7 @@ struct ChatInspectorChrome: ViewModifier {
     /// Open Files-tab documents and unsaved drafts; closing the panel asks before dropping them from view.
     @State private var drafts = FilesDraftKeeper()
     @State private var confirmClose: ChatInspectorPanel??
+    @State private var workspaceTitle: String?
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.chatWindowKey) private var windowKey
     private var filesKey: String? { self.windowKey ?? self.gateway.focusedKey ?? self.gateway.selectedKey }
@@ -102,7 +103,8 @@ struct ChatInspectorChrome: ViewModifier {
                     Group {
                         if self.current == .workspace { WorkspacePanel(cache: self.portalCache, drafts: self.drafts) } else { RunsPanel() }
                     }
-                    .navigationTitle(self.current == .workspace ? L("Browser") : L("Runs"))
+                    .onPreferenceChange(WorkspaceTitlePreference.self) { self.workspaceTitle = $0 }
+                    .navigationTitle(WorkspaceTitlePreference.sheetTitle(isWorkspace: self.current == .workspace, workspaceTitle: self.workspaceTitle))
                     #if os(iOS)
                     .navigationBarTitleDisplayMode(.inline)
                     #endif
