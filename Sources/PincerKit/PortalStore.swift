@@ -72,6 +72,8 @@ public final class PortalStore {
     @ObservationIgnored private var closing: Set<String> = []
     private var owned: [String: OwnedPortals] = [:]
     @ObservationIgnored private var ownedOrder: [String] = []
+    /// Views tracking each session; it is followed until the last one lets go.
+    @ObservationIgnored private var trackCounts: [String: Int] = [:]
     @ObservationIgnored private var tracked: [String: String?] = [:]
     @ObservationIgnored private var ownedRefreshedAt: [String: Date] = [:]
     @ObservationIgnored private var ownedInFlight: [String: Task<Void, Never>] = [:]
@@ -266,14 +268,15 @@ public final class PortalStore {
     }
 
     /// After a successful `portal.list`: forget portals that are gone. Never called for a failed list.
-    private func prune(keeping list: [PortalSummary]) {
+    private func prune(keeping list: [PortalSummary], requestedAtMs: Double) {
         guard !self.attribution.isEmpty else { return }
         var live = Set<String>()
         for portal in list {
             live.insert("id:" + portal.id)
             live.insert("url:" + PortalRefs.normalized(portal.publicURL.absoluteString))
         }
-        let stale = self.attribution.keys.filter { !live.contains($0) }
+        // Entries recorded after the request started may name a portal the list couldn't know about.
+        let stale = self.attribution.filter { !live.contains($0.key) && $0.value.seenAtMs < requestedAtMs }.map(\.key)
         guard !stale.isEmpty else { return }
         for key in stale { self.attribution[key] = nil }
         self.saveAttribution()
@@ -296,13 +299,17 @@ public final class PortalStore {
     private func saveAttribution() {
         guard let url = self.attributionFile else { return }
         let previous = self.attributionWrite
-        let snapshot = self.attribution
-        self.attributionWrite = Task.detached(priority: .utility) { [load = self.attributionLoad] in
+        let load = self.attributionLoad
+        self.attributionWrite = Task { [weak self] in
+            // Snapshot only once the persisted entries are merged in, so a first save can't drop them.
             await load?.value
             await previous?.value
-            guard let data = try? JSONEncoder().encode(AttributionFile(entries: snapshot)) else { return }
-            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? data.write(to: url, options: .atomic)
+            guard let snapshot = self?.attribution else { return }
+            await Task.detached(priority: .utility) {
+                guard let data = try? JSONEncoder().encode(AttributionFile(entries: snapshot)) else { return }
+                try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? data.write(to: url, options: .atomic)
+            }.value
         }
     }
 
@@ -318,6 +325,7 @@ public final class PortalStore {
     /// The chat's portal panel is showing: fetch its owned portals now and follow `portal.changed`.
     public func trackOwned(sessionKey: String, agentId: String? = nil) {
         self.tracked[sessionKey] = .some(agentId)
+        self.trackCounts[sessionKey, default: 0] += 1
         let agent = agentId ?? SessionKey.agentId(from: sessionKey)
         Task {
             await self.refreshOwned(sessionKey: sessionKey, agentId: agentId)
@@ -331,7 +339,13 @@ public final class PortalStore {
     }
 
     public func untrackOwned(sessionKey: String) {
-        self.tracked[sessionKey] = nil
+        let count = (self.trackCounts[sessionKey] ?? 0) - 1
+        if count > 0 {
+            self.trackCounts[sessionKey] = count
+        } else {
+            self.trackCounts[sessionKey] = nil
+            self.tracked[sessionKey] = nil
+        }
     }
 
     /// `environments.session.status`, then `portal.session.list` when the session has a live attached
@@ -403,6 +417,7 @@ public final class PortalStore {
     private func fetch(_ generation: Int) async {
         let request = self.request
         let demo = self.allowsDemoScheme
+        let requestedAtMs = Date().timeIntervalSince1970 * 1000
         let parsed: [PortalSummary]?
         do {
             let reply = try await request(Self.listMethod, [:])
@@ -416,7 +431,7 @@ public final class PortalStore {
         self.setUnavailable(false)
         let visible = list.filter { !self.closing.contains($0.id) }
         if visible != self.portals { self.portals = visible }
-        self.prune(keeping: list)
+        self.prune(keeping: list, requestedAtMs: requestedAtMs)
         let isRedacted = visible.contains { $0.isRedacted }
         if self.redacted != isRedacted { self.redacted = isRedacted }
         if !self.loaded { self.loaded = true }

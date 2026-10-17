@@ -276,6 +276,58 @@ struct PortalAgentScopingTests {
         }
         #expect(kept.count == 256)
     }
+
+    @Test func theFirstSaveKeepsEntriesAlreadyOnDisk() async throws {
+        let dir = URL(filePath: FileManager.default.currentDirectoryPath).appending(path: ".build/portal-attr-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appending(path: "gw.json")
+        let seeded = #"{"version":1,"entries":{"id:old":{"agentId":"coder","sessionKey":"agent:coder:main","seenAtMs":1}}}"#
+        try Data(seeded.utf8).write(to: file)
+        let store = makeStore(FakeScopedGateway(global: []), file: file)
+        store.recordOpened(PortalRefs(ids: ["new"]), agentId: "coder", sessionKey: "agent:coder:main") // before the load finishes
+        #expect(await portalWait {
+            guard let data = try? Data(contentsOf: file), let text = String(data: data, encoding: .utf8) else { return false }
+            return text.contains("id:new") && text.contains("id:old")
+        })
+    }
+
+    @Test func pruneSkipsEntriesRecordedAfterTheListRequestStarted() async {
+        let holder = StoreBox()
+        let store = PortalStore(request: { method, _ in
+            guard method == "portal.list" else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown", details: nil) }
+            try? await Task.sleep(for: .milliseconds(20))
+            await MainActor.run { holder.store?.recordOpened(PortalRefs(ids: ["fresh"]), agentId: "coder", sessionKey: "agent:coder:main") }
+            return ["portals": .array([])]
+        }, methods: { Self.all }, debounce: .milliseconds(30))
+        holder.store = store
+        store.recordOpened(PortalRefs(ids: ["gone"]), agentId: "coder", sessionKey: "agent:coder:main")
+        try? await Task.sleep(for: .milliseconds(5))
+        await store.refresh()
+        let fresh = PortalSummary.parse(portalEntry(id: "fresh", port: 4200))!
+        let gone = PortalSummary.parse(portalEntry(id: "gone", port: 4201))!
+        #expect(store.attributedAgent(for: fresh) == "coder")
+        #expect(store.attributedAgent(for: gone) == nil)
+    }
+
+    @Test func trackingIsReferenceCountedPerSession() async {
+        let fake = FakeScopedGateway(global: [])
+        await fake.setOwned("agent:coder:main", env: "env-1", [])
+        let store = makeStore(fake)
+        store.trackOwned(sessionKey: "agent:coder:main", agentId: "coder")
+        store.trackOwned(sessionKey: "agent:coder:main", agentId: "coder")
+        store.untrackOwned(sessionKey: "agent:coder:main")
+        _ = await portalWait { await fake.count("portal.session.list") >= 1 }
+        let before = await fake.count("environments.session.status")
+        store.handleReconnect()
+        #expect(await portalWait { await fake.count("environments.session.status") > before })
+        store.untrackOwned(sessionKey: "agent:coder:main")
+        _ = await portalWait(0.3) { false }
+        let after = await fake.count("environments.session.status")
+        store.handleReconnect()
+        _ = await portalWait(0.3) { false }
+        #expect(await fake.count("environments.session.status") == after)
+    }
 }
 
 @MainActor
@@ -494,3 +546,6 @@ private func portalWait(_ timeout: Double = 3, _ condition: @MainActor () async 
     }
     return await condition()
 }
+
+@MainActor
+private final class StoreBox { var store: PortalStore? }
