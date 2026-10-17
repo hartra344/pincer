@@ -1,9 +1,10 @@
 // Mock of the Gateway's browser tool surface for the live browser panel (#974): `browser.request`
 // (operator.admin) with `GET /tabs`, `POST /screencast`, `/navigate`, `/tabs/open`, `DELETE /tabs/<id>`, `/start`,
-// `/act` (history.go(±1) only) and `/download`, the `/browser/screencast` WebSocket upgrade, and the assistant-media
+// `/act` (history.go(±1) and `resize`) and `/download`, the `/browser/screencast` WebSocket upgrade, and the assistant-media
 // route that serves downloads.
 // Shapes follow upstream extensions/browser/src/browser/{routes/agent.screencast.ts,screencast/{wire,upgrade}.ts}.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { WebSocketServer } from 'ws';
 
 export const BROWSER_METHODS = ['browser.request'];
@@ -22,7 +23,16 @@ export const BROWSER_TABS = [
   { targetId: 'tab-release-0002', tabId: 't2', title: 'Release v2026.5 · openclaw/openclaw', url: 'https://github.com/openclaw/openclaw/releases/tag/v2026.5' },
 ];
 const FRAME_INTERVAL_MS = 200;
-const CSS_SIZE = { width: 1280, height: 800 };
+// The agent browser window's size before anyone resizes it: landscape, like the real managed browser.
+const DEFAULT_VIEWPORT = { width: 1230, height: 670 };
+const VIEWPORT_LIMIT = 8192; // upstream ACT_MAX_VIEWPORT_DIMENSION
+
+// Page behaviours chosen by the tab's host, so one mock covers every stream case:
+//   static.example      ready, then frames only when the page repaints (navigation, resize), like upstream
+//   unsupported.example the socket is closed with 4005 (SCREENCAST_UNSUPPORTED) right after ready
+export const STATIC_HOST = 'static.example';
+export const UNSUPPORTED_HOST = 'unsupported.example';
+const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
 
 // Valid baseline JPEGs (192x120), generated once offline with `sips`: one per color.
 const FRAMES_B64 = [
@@ -32,6 +42,9 @@ const FRAMES_B64 = [
   '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+Z6KKK+RPUCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//0eoooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9LqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//T6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//1Ooooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9XqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//W6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//2Q==',
 ];
 export const FRAMES = FRAMES_B64.map((b64) => Buffer.from(b64, 'base64'));
+// 192x256 variants, used when the page viewport is taller than wide.
+export const PORTRAIT_FRAMES = [0, 1, 2, 3].map((i) => fs.readFileSync(new URL(`./assets/browser-portrait-${i}.jpg`, import.meta.url)));
+const framesFor = (viewport) => (viewport.height > viewport.width ? PORTRAIT_FRAMES : FRAMES);
 
 export function browserDisabled() {
   return process.env.MOCK_NO_BROWSER === '1';
@@ -54,7 +67,7 @@ function browserState(state) {
     tokens: new Map(),
     running: process.env.MOCK_BROWSER_STOPPED !== '1',
     // Per-tab history so Back and Forward move through pages.
-    tabs: BROWSER_TABS.map((tab) => ({ targetId: tab.targetId, tabId: tab.tabId, history: [{ url: tab.url, title: tab.title }], index: 0 })),
+    tabs: BROWSER_TABS.map((tab) => ({ targetId: tab.targetId, tabId: tab.tabId, history: [{ url: tab.url, title: tab.title }], index: 0, viewport: { ...DEFAULT_VIEWPORT } })),
     sockets: new Map(),
     downloads: new Map(),
     nextTab: 3,
@@ -92,11 +105,17 @@ function parseNavigationURL(value) {
   }
 }
 
+/** Sends one fresh frame to every viewer of the tab: what CDP does when the page repaints. */
+function repaint(bs, tab) {
+  for (const ws of bs.sockets.get(tab.targetId) ?? []) ws.sendFrame?.();
+}
+
 function pushMeta(bs, tab) {
   const page = currentPage(tab);
   for (const ws of bs.sockets.get(tab.targetId) ?? []) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: 'meta', url: page.url, title: page.title }));
   }
+  repaint(bs, tab);
 }
 
 /** Moves a tab to a new page; with MOCK_BROWSER_RETARGET=1 its targetId changes and old viewers close with 4004. */
@@ -157,9 +176,9 @@ function scopeApproved(scopes, scope) {
 }
 
 /** Upstream wire.ts: UInt32 BE header length, UTF-8 JSON header, JPEG bytes. */
-export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0) {
+export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0, css = DEFAULT_VIEWPORT) {
   const header = Buffer.from(
-    JSON.stringify({ url, cssWidth: CSS_SIZE.width, cssHeight: CSS_SIZE.height, scrollX: 0, scrollY, ts }),
+    JSON.stringify({ url, cssWidth: css.width, cssHeight: css.height, scrollX: 0, scrollY, ts }),
     'utf8',
   );
   const wire = Buffer.allocUnsafe(4 + header.length + jpeg.length);
@@ -219,7 +238,7 @@ export function handleBrowserRequest(state, conn, msg, { sendRes, sendErr }) {
 
   if (route === 'GET /tabs') {
     sendRes(conn, id, bs.running
-      ? { running: true, tabs: bs.tabs.map(tabInfo), canAutoResizeViewport: true }
+      ? { running: true, tabs: bs.tabs.map(tabInfo), canAutoResizeViewport: process.env.MOCK_BROWSER_NO_RESIZE !== '1' }
       : { running: false, tabs: [], canAutoResizeViewport: false });
     return true;
   }
@@ -263,6 +282,19 @@ export function handleBrowserRequest(state, conn, msg, { sendRes, sendErr }) {
     for (const ws of bs.sockets.get(tab.targetId) ?? []) ws.close(4004, 'target closed');
     bs.sockets.delete(tab.targetId);
     sendRes(conn, id, { ok: true });
+    return true;
+  }
+  if (route === 'POST /act' && body.kind === 'resize') {
+    // Upstream: positive integer width and height, each up to ACT_MAX_VIEWPORT_DIMENSION; it resizes the page's viewport.
+    const dims = [body.width, body.height];
+    if (!dims.every((n) => Number.isInteger(n) && n > 0 && n <= VIEWPORT_LIMIT)) return invalid('resize requires positive width and height');
+    if (process.env.MOCK_BROWSER_NO_RESIZE === '1') return fail('INVALID_REQUEST', 'viewport resize is not supported for this profile');
+    const tab = tabFor();
+    if (!tab) return true;
+    tab.viewport = { width: body.width, height: body.height };
+    bs.resizes = (bs.resizes ?? 0) + 1;
+    repaint(bs, tab);
+    sendRes(conn, id, { ok: true, targetId: tab.targetId, url: currentPage(tab).url });
     return true;
   }
   if (route === 'POST /act') {
@@ -358,22 +390,29 @@ export function attachScreencastUpgrade(httpServer, state, fallback) {
       });
       const first = currentPage(liveTab());
       ws.send(JSON.stringify({ type: 'ready', targetId: grant.targetId, url: first.url, title: first.title }));
+      const host = hostOf(first.url);
+      if (host === UNSUPPORTED_HOST) {
+        ws.close(4005, 'unsupported');
+        ws.on('close', () => bs.sockets.get(grant.targetId)?.delete(ws));
+        return;
+      }
       let n = 0;
       const send = () => {
         const tab = liveTab();
         if (ws.readyState !== ws.OPEN || !tab) return;
         const { url: pageUrl } = currentPage(tab);
-        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, FRAMES[(n + pageUrl.length) % FRAMES.length], Date.now(), (n % 4) * 40);
+        const frames = framesFor(tab.viewport);
+        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, frames[(n + pageUrl.length) % frames.length], Date.now(), (n % 4) * 40, tab.viewport);
         n += 1;
         ws.send(frame, { binary: true });
       };
-      send();
-      const timer = setInterval(send, FRAME_INTERVAL_MS);
-      timers.add(timer);
+      ws.sendFrame = send;
+      // A static page paints nothing after `ready` until something changes it.
+      const timer = hostOf(currentPage(liveTab()).url) === STATIC_HOST ? undefined : setInterval(send, FRAME_INTERVAL_MS);
+      if (timer) { send(); timers.add(timer); }
       ws.on('close', () => {
         bs.sockets.get(grant.targetId)?.delete(ws);
-        clearInterval(timer);
-        timers.delete(timer);
+        if (timer) { clearInterval(timer); timers.delete(timer); }
       });
     });
   });

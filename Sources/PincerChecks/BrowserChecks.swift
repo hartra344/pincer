@@ -192,6 +192,27 @@ func runLiveBrowserChecks(url: String, token: String) async {
     check(live, "mock: the panel goes live end to end (\(model.status))")
     model.stop()
 
+    // #1027: the panel asks the Gateway to resize the page to itself, so the frame comes back panel-shaped.
+    model.setVisible(true, pixelSize: CGSize(width: 800, height: 600), viewport: CGSize(width: 600, height: 900))
+    let resized = await waitFor("viewport matched", timeout: 20) { model.frame?.cssSize == CGSize(width: 600, height: 900) }
+    check(resized, "mock: /act resize makes the page viewport match the panel (\(model.frame?.cssSize ?? .zero))")
+
+    // A static page sends `ready` and then no frames: the panel is live, not Reconnecting….
+    await model.openTab(url: "https://static.example/")
+    let staticLive = await waitFor("static page live", timeout: 20) { model.status == .live && model.selectedTab?.url?.host == "static.example" }
+    check(staticLive, "mock: a static page (ready, no frames) is live, not Reconnecting… (\(model.status))")
+
+    // An unsupported browser closes 4005: a terminal error that stays put instead of retrying.
+    await model.openTab(url: "https://unsupported.example/")
+    let terminal = await waitFor("4005 terminal", timeout: 20) { if case .failed = model.status { true } else { false } }
+    var flipped = false
+    for _ in 0..<15 {
+        try? await Task.sleep(for: .milliseconds(100))
+        if case .failed = model.status {} else { flipped = true }
+    }
+    check(terminal && !flipped, "mock: close 4005 is a terminal error and the panel stops retrying (\(model.status))")
+    model.stop()
+
     let standard = GatewayProfile(name: "Mock standard", url: url, authMode: .token)
     standard.secret = token
     let limited = GatewayStore(profile: standard)
