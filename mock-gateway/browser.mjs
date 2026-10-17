@@ -6,6 +6,7 @@
 import crypto from 'node:crypto';
 import jpegJs from 'jpeg-js';
 import { WebSocketServer } from 'ws';
+import { scopeApproved } from './scopes.mjs';
 
 export const BROWSER_METHODS = ['browser.request'];
 
@@ -190,10 +191,6 @@ export function handleBrowserHttp(state, req, res, authorized) {
   });
   res.end(file.body);
   return true;
-}
-
-function scopeApproved(scopes, scope) {
-  return scopes.includes(scope) || scopes.includes(ADMIN_SCOPE);
 }
 
 /** Upstream wire.ts: UInt32 BE header length, UTF-8 JSON header, JPEG bytes. */

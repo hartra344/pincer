@@ -217,6 +217,18 @@ function sessionTarget(state, params) {
   return { sessionKey, environmentId: state.portals?.environments?.get(sessionKey) };
 }
 
+function closePortal(state, conn, id, portal, { sendRes, broadcast }) {
+  if (!portal) {
+    sendRes(conn, id, { closed: false });
+    return true;
+  }
+  state.portals.entries.delete(portal.id);
+  stopPortalHttp(portal);
+  sendRes(conn, id, { closed: true });
+  broadcast(state, 'portal.changed', { portals: listFor(state).map(redact) });
+  return true;
+}
+
 /** Handles portal.* requests; returns false when the method isn't ours. */
 export function handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broadcast }) {
   const { id, method } = msg;
@@ -269,15 +281,7 @@ export function handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broad
       return true;
     }
     const portal = owned.find((p) => p.id === params.id);
-    if (!portal) {
-      sendRes(conn, id, { closed: false });
-      return true;
-    }
-    state.portals.entries.delete(portal.id);
-    stopPortalHttp(portal);
-    sendRes(conn, id, { closed: true });
-    broadcast(state, 'portal.changed', { portals: listFor(state).map(redact) });
-    return true;
+    return closePortal(state, conn, id, portal, { sendRes, broadcast });
   }
   if (method === 'portal.list') {
     const portals = listFor(state);
@@ -289,13 +293,5 @@ export function handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broad
     return true;
   }
   const portal = state.portals.entries.get(params.id);
-  if (!portal) {
-    sendRes(conn, id, { closed: false });
-    return true;
-  }
-  state.portals.entries.delete(portal.id);
-  stopPortalHttp(portal);
-  sendRes(conn, id, { closed: true });
-  broadcast(state, 'portal.changed', { portals: listFor(state).map(redact) });
-  return true;
+  return closePortal(state, conn, id, portal, { sendRes, broadcast });
 }

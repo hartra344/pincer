@@ -1,5 +1,5 @@
-import zlib from 'node:zlib';
-import { makePng, pngChunk } from './seed.mjs';
+import { encodePng, pngChunk } from './png.mjs';
+import { makePng } from './seed.mjs';
 
 // Big images for memory and size-cap testing (`image huge` and `image many` in chat.mjs).
 // Built on first use so a plain mock start doesn't hold tens of megabytes.
@@ -44,17 +44,7 @@ export function makeLargePng(width = MANY_WIDTH, height = MANY_HEIGHT) {
         raw[i + 3] = 255;
       }
     }
-    const ihdr = Buffer.alloc(13);
-    ihdr.writeUInt32BE(width, 0);
-    ihdr.writeUInt32BE(height, 4);
-    ihdr[8] = 8;
-    ihdr[9] = 6;
-    manyPng = Buffer.concat([
-      Buffer.from('89504e470d0a1a0a', 'hex'),
-      pngChunk('IHDR', ihdr),
-      pngChunk('IDAT', zlib.deflateSync(raw, { level: 1 })),
-      pngChunk('IEND', Buffer.alloc(0)),
-    ]);
+    manyPng = encodePng(width, height, 6, raw, { level: 1 });
   }
   return manyPng;
 }

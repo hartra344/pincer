@@ -3,6 +3,7 @@
 // tiny HTTP OAuth consent flow (/mcp-oauth/authorize and /mcp-oauth/callback).
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { scopeApproved } from './scopes.mjs';
 
 export const MCP_METHODS = [
   'mcp.status',
@@ -412,10 +413,6 @@ export function handleMcpHttp(state, req, res, broadcast) {
   }
   page(res, 200, denied ? 'Sign-in denied' : 'Signed in', '<p>You can close this window.</p>');
   return true;
-}
-
-function scopeApproved(scopes, scope) {
-  return scopes.includes(scope) || scopes.includes(ADMIN_SCOPE) || (scope === READ_SCOPE && scopes.includes('operator.write'));
 }
 
 /** Handles an mcp.* request; returns false when the method isn't one of ours. */

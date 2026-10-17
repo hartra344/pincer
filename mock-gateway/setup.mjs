@@ -7,8 +7,9 @@
 // MOCK_WEB_LOGIN=timeout never links (every wait says it's still waiting).
 // MOCK_WEB_LOGIN_WAIT_MS sets how long a wait takes (default 600).
 import crypto from 'node:crypto';
-import zlib from 'node:zlib';
 import { ADMIN_SCOPE } from './config.mjs';
+import { encodePng } from './png.mjs';
+import { isObject } from './util.mjs';
 
 export const SETUP_METHODS = ['channels.status'];
 /** Real Gateway methods that it doesn't list in `hello.features.methods`. */
@@ -29,10 +30,6 @@ export function createSetupState() {
   return { whatsapp: { linked: false, linkedAt: null }, login: null };
 }
 
-function isObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 function checkParams(params, allowed, method) {
   if (!isObject(params)) return `invalid ${method} params: must be object`;
   const extra = Object.keys(params).find((key) => !allowed.includes(key));
@@ -40,27 +37,6 @@ function checkParams(params, allowed, method) {
 }
 
 // --- QR codes ------------------------------------------------------------------------------
-
-let crcTable;
-function crc32(buf) {
-  crcTable ??= Array.from({ length: 256 }, (_, n) => {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    return c >>> 0;
-  });
-  let c = 0xffffffff;
-  for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function chunk(type, data) {
-  const typeBuf = Buffer.from(type, 'ascii');
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])));
-  return Buffer.concat([len, typeBuf, data, crc]);
-}
 
 /** A QR-looking grayscale PNG (finder squares plus noise from `seed`) as a `data:` URL. */
 export function makeQrDataUrl(seed) {
@@ -95,17 +71,7 @@ export function makeQrDataUrl(seed) {
       if (mx >= 0 && my >= 0 && mx < modules && my < modules && dark(mx, my)) raw[py * (size + 1) + 1 + px] = 0;
     }
   }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 0;
-  const png = Buffer.concat([
-    Buffer.from('89504e470d0a1a0a', 'hex'),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', zlib.deflateSync(raw)),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
+  const png = encodePng(size, size, 0, raw);
   return `data:image/png;base64,${png.toString('base64')}`;
 }
 
