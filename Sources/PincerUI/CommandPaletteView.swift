@@ -341,12 +341,7 @@ struct CommandPaletteView: View {
                             .multilineTextAlignment(.leading)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
-                        Text(item.title).lineLimit(1)
-                        if let subtitle = item.subtitle {
-                            Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                    }
+                    PaletteItemLabel(title: item.title, subtitle: item.subtitle)
                     Spacer(minLength: 8)
                     if let shortcut = item.shortcut {
                         Text(shortcut).font(.caption.monospaced()).foregroundStyle(.secondary)
