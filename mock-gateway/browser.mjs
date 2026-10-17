@@ -30,8 +30,10 @@ const VIEWPORT_LIMIT = 8192; // upstream ACT_MAX_VIEWPORT_DIMENSION
 // Page behaviours chosen by the tab's host, so one mock covers every stream case:
 //   static.example      ready, then frames only when the page repaints (navigation, resize), like upstream
 //   unsupported.example the socket is closed with 4005 (SCREENCAST_UNSUPPORTED) right after ready
+//   dead.example        the socket drops before `ready`, every time (a stream that never connects)
 export const STATIC_HOST = 'static.example';
 export const UNSUPPORTED_HOST = 'unsupported.example';
+export const DEAD_HOST = 'dead.example';
 const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
 
 // Frames are painted at the page's viewport aspect (scaled so the long edge is 320 px), like upstream repaints
@@ -408,6 +410,10 @@ export function attachScreencastUpgrade(httpServer, state, fallback) {
         if (binary) ws.close(1003, 'view_only');
       });
       const first = currentPage(liveTab());
+      if (hostOf(first.url) === DEAD_HOST) {
+        ws.terminate();
+        return;
+      }
       ws.send(JSON.stringify({ type: 'ready', targetId: grant.targetId, url: first.url, title: first.title }));
       const host = hostOf(first.url);
       if (host === UNSUPPORTED_HOST) {
