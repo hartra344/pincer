@@ -5173,6 +5173,16 @@
         }
       }
     },
+    "Couldn't connect to the browser stream. Check the Gateway, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't connect to the browser stream. Check the Gateway, then try again."
+          }
+        }
+      }
+    },
     "Couldn't download this page.": {
       "localizations": {
         "en": {
