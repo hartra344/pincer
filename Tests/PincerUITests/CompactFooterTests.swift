@@ -264,6 +264,12 @@ struct CompactFooterTests {
         let footer = footerPart(placed.part)
         #expect(footer.branch?.count == 2)
         #expect(footer.isBookmarked)
+        // At a typical phone width the switcher shares its line with the message's actions.
+        let phone = TranscriptLayoutBuilder(context: context, settings: settings).layout(.entry(.user(item)), width: 393)
+        let phoneFooter = try footerPart(#require(phone.parts.first { if case .footer = $0.part { true } else { false } }).part)
+        let group = try #require(phoneFooter.actionFrames[.branch])
+        #expect(phoneFooter.compact && phoneFooter.actionFrames.contains { $0.key != .branch && abs($0.value.midY - group.midY) < 1 },
+                "the switcher shares a line with the message's actions")
         #expect(footer.actionFrames[.branch] != nil, "#1038: the switcher packs into the action rows, not a row of its own")
 
         let view = TranscriptFooterView(frame: placed.frame)
@@ -281,8 +287,6 @@ struct CompactFooterTests {
         let branchButtons = visible.filter { branchLabels.contains($0.accessibilityText) }
         let actionButtons = visible.filter { !branchLabels.contains($0.accessibilityText) }
         let actionOrigin: CGFloat = 0
-        #expect(branchButtons.contains { branch in actionButtons.contains { abs($0.frame.midY - branch.frame.midY) < 1 } },
-                "the switcher shares a line with the message's actions")
         let actionRows = Set(actionButtons.map { Int(($0.frame.midY - actionOrigin) / footer.actionRowHeight) })
         #expect(actionRows.count > 1, "the branch and bookmark controls force a real wrapped action row")
         let effectiveHits = (branchButtons + actionButtons).map {
