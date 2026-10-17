@@ -200,7 +200,7 @@ report 0
 lane perf-smoke "$CHECKS" --perf-smoke
 report $((${#pids[@]} - 1))
 lane perf-tests complete_swift_test env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
-    --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe'
+    --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe|TranscriptPrefetchProbe/probe'
 report $((${#pids[@]} - 1))
 
 echo

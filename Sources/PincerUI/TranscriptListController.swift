@@ -106,6 +106,12 @@ final class TranscriptListController {
     private var scrollMeasureScheduled = false
     private var pendingFixes = Set<String>()
     private var fixesScheduled = false
+    /// Whether measuring work is still queued: a prefetch step, a scroll measure or height fix on the
+    /// main queue, or rows on (or waiting for) the worker. Lets tests wait for the list to finish
+    /// rather than for a quiet period, which a starved runner can't promise.
+    var hasPendingMeasureWork: Bool {
+        self.prefetchScheduled || self.scrollMeasureScheduled || self.fixesScheduled || self.premeasure.hasPendingWork
+    }
     private var pendingReveal: String?
     private var lastJump: UUID?
     private var olderRowWasVisible = false

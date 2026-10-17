@@ -142,24 +142,33 @@ struct PanelSlideProbe {
         return (stale, visible.length)
     }
 
-    /// Waits until layout builds stop for 3 polls in a row (and at least `minimum` seconds), capped at 2 s.
+    /// Waits until the list has no measuring work queued (`hasPendingMeasureWork`), no thaw pending, and
+    /// layout builds have stopped for 3 polls in a row (and at least `minimum` seconds). On a loaded runner
+    /// the prefetch can legitimately take many seconds (#1022), so the wait follows the work itself; the
+    /// cap only catches work that never finishes.
     @discardableResult
     static func waitQuiet(_ host: Host, minimum: Double = 0.3) async -> Double {
         let start = ProbeMeter.wall()
+        func busy() -> Bool { host.coordinator.controller.hasPendingMeasureWork || host.coordinator.isWidthFrozen }
         var last = builds(host), quiet = 0, settled = false
-        while ProbeMeter.wall() - start < 2 {
+        while ProbeMeter.wall() - start < Self.hangGuard {
             try? await Task.sleep(for: .milliseconds(60))
             let now = builds(host)
-            quiet = now == last ? quiet + 1 : 0
+            quiet = now == last && !busy() ? quiet + 1 : 0
             last = now
             if quiet >= 3, ProbeMeter.wall() - start >= minimum { settled = true; break }
         }
-        if !settled { Issue.record("waitQuiet: layout builds never went quiet within 2 s") }
+        if !settled {
+            Issue.record("waitQuiet: the list still had measuring work after \(Int(Self.hangGuard)) s (pending \(busy()))")
+        }
         return ProbeMeter.wall() - start
     }
 
+    /// Bounds a wait for work that must finish; only a hang should reach it.
+    static let hangGuard = 60.0
+
     /// Waits until the anchor row sits at the same spot for 5 polls (20 ms apart) while no layout build
-    /// lands in between, capped at 5 s. The builds counter alone can look quiet for 180 ms on a starved
+    /// lands in between, capped at `hangGuard`. The builds counter alone can look quiet for 180 ms on a starved
     /// runner while a height fix or prefetch turn is still queued on the main loop; each of those ends
     /// with the coordinator putting the anchor back, so the position is what says it has finished.
     static func waitAnchorStable(_ host: Host, row: Int?) async {
@@ -169,21 +178,21 @@ struct PanelSlideProbe {
         }
         let start = ProbeMeter.wall()
         var last = position(), lastBuilds = builds(host), stable = 0
-        while stable < 5, ProbeMeter.wall() - start < 5 {
+        while stable < 5, ProbeMeter.wall() - start < Self.hangGuard {
             try? await Task.sleep(for: .milliseconds(20))
             let now = position(), nowBuilds = builds(host)
             stable = now == last && nowBuilds == lastBuilds ? stable + 1 : 0
             last = now
             lastBuilds = nowBuilds
         }
-        if stable < 5 { Issue.record("waitAnchorStable: the anchor never held still within 5 s") }
+        if stable < 5 { Issue.record("waitAnchorStable: the anchor never held still within \(Int(Self.hangGuard)) s") }
     }
 
-    /// Polls (every 5 ms, up to 10 s) until a thaw after `thaws` has run and the width is no longer frozen.
+    /// Polls (every 5 ms, up to `hangGuard`) until a thaw after `thaws` has run and the width is no longer frozen.
     static func waitUntilThawed(_ host: Host, after thaws: Int) async -> Bool {
         func thawed() -> Bool { !host.coordinator.isWidthFrozen && host.coordinator.thawStats.count > thaws }
         let start = ProbeMeter.wall()
-        while !thawed(), ProbeMeter.wall() - start < 10 {
+        while !thawed(), ProbeMeter.wall() - start < Self.hangGuard {
             try? await Task.sleep(for: .milliseconds(5))
         }
         return thawed()
@@ -399,30 +408,26 @@ struct PanelSlideProbe {
     /// #974 PR 2: opening the panel on a portal tab must not create its WKWebView (a WebContent process
     /// spin-up on main) until the slide has settled, so the slide stays inside its budget.
     @Test func portalWebViewIsCreatedOnlyAfterTheSlideSettles() async throws {
+        // The test owns the "slide settled" signal instead of racing a wall-clock delay: on a loaded
+        // runner a 600 ms sleep can elapse before the first check runs (#1022).
         struct Harness: View {
             let portal: PortalSummary
             let cache: PortalWebCache
-            @State private var settled = false
+            let gate: PortalSlideGate
             var body: some View {
-                PortalView(portal: self.portal, cache: self.cache, canLoad: self.settled) {}
-                    .task {
-                        try? await Task.sleep(for: WorkspacePanel.slideSettleDelay)
-                        self.settled = true
-                    }
+                PortalView(portal: self.portal, cache: self.cache, canLoad: self.gate.settled) {}
             }
         }
         let scratch = ScratchDefaults()
         let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
         let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
-        let saved = WorkspacePanel.slideSettleDelay
-        WorkspacePanel.slideSettleDelay = .milliseconds(600)
-        defer { WorkspacePanel.slideSettleDelay = saved }
         let portal = PortalSummary(id: "probe-portal", title: "Probe", publicURL: URL(string: "http://127.0.0.1:9/")!,
                                    loadURL: URL(string: "http://127.0.0.1:9/?openclaw_portal=probe")!)
         let cache = PortalWebCache()
+        let gate = PortalSlideGate()
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 560, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: Harness(portal: portal, cache: cache).environment(gateway))
+        window.contentView = NSHostingView(rootView: Harness(portal: portal, cache: cache, gate: gate).environment(gateway))
         window.orderBack(nil)
         defer { window.contentView = nil; window.close() }
 
@@ -430,7 +435,8 @@ struct PanelSlideProbe {
             try await Task.sleep(for: .milliseconds(30))
             #expect(cache.liveWebViewCount == 0, "no web view while the panel is still sliding")
         }
-        let deadline = Date().addingTimeInterval(5)
+        gate.settled = true
+        let deadline = Date().addingTimeInterval(Self.hangGuard)
         while cache.liveWebViewCount == 0, Date() < deadline { try await Task.sleep(for: .milliseconds(20)) }
         #expect(cache.liveWebViewCount == 1, "the web view appears once the slide has settled")
     }
@@ -450,4 +456,7 @@ struct PanelSlideProbe {
         return result
     }
 }
+
+/// Test-owned stand-in for the portal panel's "slide settled" signal.
+@MainActor @Observable private final class PortalSlideGate { var settled = false }
 #endif

@@ -39,11 +39,18 @@ struct BranchSwitcherFooterTests {
 
         chat.branches = [SessionBranch(leafEntryId: "a", headline: "one", messageCount: 2, active: false),
                          SessionBranch(leafEntryId: "b", headline: "two", messageCount: 2, active: true)]
-        #expect(chat.branchAnchorId == "msg-2")
-        let anchor = try #require(footer(last))
+        // #1038: tips this chat didn't fork (or forked before a relaunch) put no switcher under a message:
+        // the latest send used to carry `‹ 2 / 2 ›`, so it showed under every message the user sent.
+        #expect(chat.branchAnchorId == nil)
+        #expect(try #require(footer(last)).0.branch == nil, "a plain send never carries the switcher")
+        #expect(try #require(footer(first)).0.branch == nil)
+
+        chat.branchForkEntryId = "msg-1"
+        #expect(chat.branchAnchorId == "msg-1")
+        let anchor = try #require(footer(first))
         #expect(anchor.0.branch?.number == 2 && anchor.0.branch?.count == 2)
         #expect(anchor.1 == plain.1, "the switcher lives in the footer row, which keeps its height")
-        #expect(try #require(footer(first)).0.branch == nil, "only the last user message carries it")
-        #expect(builder.decoration(for: .entry(.user(last))) != builder.decoration(for: .entry(.user(first))))
+        #expect(try #require(footer(last)).0.branch == nil, "a later send doesn't carry it")
+        #expect(builder.decoration(for: .entry(.user(first))) != builder.decoration(for: .entry(.user(last))))
     }
 }

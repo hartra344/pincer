@@ -102,6 +102,15 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     await chat.load(force: true)
     let regeneratedImages = chat.items.last { $0.role == .user }.map(imageCount) ?? 0
     check(regeneratedImages == 1, "regenerate resends the image (#397) (\(regeneratedImages))")
+    let regeneratedId = chat.items.last { $0.role == .user }?.transcriptId
+    await chat.refreshBranches()
+    check(chat.hasBranches && regeneratedId != nil && chat.branchAnchorId == regeneratedId,
+          "after regenerate the switcher sits on the resent message (#1038)")
+    _ = await chat.sendMessage("Which trellis wood lasts longest?")
+    let followed = await waitFor("follow-up reply", timeout: 20) {
+        !chat.isRunning && chat.items.last?.role == .assistant && chat.items.last { $0.role == .user }?.transcriptId != regeneratedId
+    }
+    check(followed && chat.branchAnchorId == regeneratedId, "a plain send doesn't carry the switcher (#1038)")
     gateway.selectedKey = garden
     let forks = [userFork, assistantFork, whole].compactMap { $0 }
     await gateway.sessionManager.load(filter: .all)
@@ -120,6 +129,8 @@ private func runBranchNavigationChecks(_ chat: ChatStore, edited: String) async 
     check(chat.canListBranches && chat.canSwitchBranches, "branches can be listed and switched")
     check(chat.branches.count == 2 && chat.activeBranchNumber == 2 && chat.hasBranches,
           "the edit left two branches, the newest last and active (\(chat.branches.map(\.headline)))")
+    let editedId = chat.items.last { $0.role == .user && $0.plainText == edited }?.transcriptId
+    check(editedId != nil && chat.branchAnchorId == editedId, "the footer switcher sits on the edited message (#1038)")
     guard let old = chat.branches.first(where: { !$0.active }) else { return }
     let switched = await chat.switchBranch(to: old.leafEntryId)
     check(switched, "switch to the earlier branch (\(chat.errorMessage ?? ""))")
@@ -127,6 +138,8 @@ private func runBranchNavigationChecks(_ chat: ChatStore, edited: String) async 
         chat.hasLoaded && chat.items.filter { $0.role == .user }.map(\.plainText).last?.hasPrefix("Make it shade tolerant; it only") == true
     }
     check(onOld && !chat.items.contains { $0.plainText == edited }, "the earlier branch's messages are shown")
+    let original = chat.items.last { $0.role == .user }?.transcriptId
+    check(original != nil && chat.branchAnchorId == original, "on the earlier branch the switcher sits on the replaced message (#1038)")
     check(chat.branches.first { $0.active }?.leafEntryId == old.leafEntryId, "the switched-to branch is now active")
     let again = await chat.switchBranch(to: old.leafEntryId)
     check(!again, "the active branch is not a switch target")

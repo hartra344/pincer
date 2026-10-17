@@ -157,16 +157,15 @@ enum TranscriptPart {
 
     /// The line under a message: a Copy button and details such as when it was sent.
     struct Footer {
-        enum Action: Hashable { case bookmark, copy, reply, listen, react }
+        enum Action: Hashable { case branch, bookmark, copy, reply, listen, react }
 
         /// Tells a recycled footer it now shows a different message, so "Copied" resets.
         let key: String
         let copyText: String
         let details: String
-        /// Compact rows reserve two action lines (plus the branch hit-target row when present)
-        /// before drawing metadata across the content width.
+        /// Compact rows pack the branch switcher and actions into wrapped action lines before drawing
+        /// metadata across the content width.
         let compact: Bool
-        let branchRowHeight: CGFloat
         let actionRowHeight: CGFloat
         let controlHeight: CGFloat
         let detailsFrame: CGRect
@@ -390,6 +389,8 @@ struct BranchPosition: Equatable {
     let number: Int
     let count: Int
     let canSwitch: Bool
+
+    var label: String { "\(self.number) / \(self.count)" }
 }
 
 /// What a row shows besides its own content: its quote card, reaction chips, the 👀 while the
@@ -1240,13 +1241,10 @@ extension TranscriptLayoutBuilder {
         let captionHeight = max(lineHeight, 16)
         let compact = stack.width < 430
         let branch = layout.decoration.branch
-        let branchRowHeight: CGFloat
         let actionRowHeight: CGFloat
         #if os(iOS)
-        branchRowHeight = branch == nil ? 0 : 44
         actionRowHeight = 44
         #else
-        branchRowHeight = branch == nil ? 0 : 28
         // Bookmark's existing 8pt vertical hit outset adds 16pt to its 16pt caption-height frame.
         actionRowHeight = max(captionHeight, 32)
         #endif
@@ -1257,15 +1255,18 @@ extension TranscriptLayoutBuilder {
         let footerActionRowHeight: CGFloat
         if compact {
             var actions: [TranscriptPart.Footer.Action] = []
+            if branch != nil { actions.append(.branch) }
             if bookmarked { actions.append(.bookmark) }
             if !text.isEmpty { actions.append(.copy) }
             if messageId != nil { actions.append(.reply) }
             if canListen { actions.append(.listen) }
             if messageId != nil, self.settings.reactionsEnabled { actions.append(.react) }
-            let packed = CompactFooterPacking.pack(width: stack.width, actions: actions, rowHeight: actionRowHeight)
+            let branchWidth = branch.map { TranscriptFooterView.branchSlotWidths(label: $0.label).reduce(0, +) } ?? 0
+            let packed = CompactFooterPacking.pack(width: stack.width, actions: actions, rowHeight: actionRowHeight,
+                                                   branchWidth: branchWidth)
             actionFrames = packed.frames
             footerActionRowHeight = packed.rowHeight
-            controlHeight = branchRowHeight + (branch == nil ? 0 : 4) + CGFloat(packed.rowCount) * footerActionRowHeight
+            controlHeight = CGFloat(packed.rowCount) * footerActionRowHeight
             let detailsY = controlHeight + (detailLines.isEmpty ? 0 : 4)
             let detailsHeight = CGFloat(detailLines.count) * captionHeight
             detailsFrame = CGRect(x: 0, y: detailsY, width: stack.width, height: detailsHeight)
@@ -1278,7 +1279,7 @@ extension TranscriptLayoutBuilder {
             height = captionHeight
         }
         stack.add(.footer(.init(key: key, copyText: text, details: details, compact: compact,
-                                branchRowHeight: branchRowHeight, actionRowHeight: footerActionRowHeight,
+                                actionRowHeight: footerActionRowHeight,
                                 controlHeight: controlHeight, detailsFrame: detailsFrame, detailLines: detailLines,
                                 actionFrames: actionFrames,
                                 messageId: messageId, isBookmarked: bookmarked, branch: branch)),

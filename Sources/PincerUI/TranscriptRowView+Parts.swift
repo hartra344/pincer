@@ -702,8 +702,13 @@ enum CompactFooterPacking {
         return values
     }
 
-    static func pack(width: CGFloat, actions: [TranscriptPart.Footer.Action], rowHeight: CGFloat) -> Result {
-        let metrics = self.metrics()
+    /// `branchWidth` is the switcher group's full width, its hit slots included (`TranscriptFooterView.branchSlotWidths`).
+    static func pack(width: CGFloat, actions: [TranscriptPart.Footer.Action], rowHeight: CGFloat,
+                     branchWidth: CGFloat = 0) -> Result {
+        var metrics = self.metrics()
+        if actions.contains(.branch) {
+            metrics[.branch] = Metric(width: branchWidth, outset: 0, height: TranscriptLabelButton.size(title: "").height)
+        }
         let rowHeight = max(rowHeight, actions.compactMap { metrics[$0]?.height }.max() ?? 0)
         var frames: [TranscriptPart.Footer.Action: CGRect] = [:]
         var cursor: CGFloat = 0
@@ -754,22 +759,36 @@ final class TranscriptFooterView: TranscriptBaseView {
         #endif
     }
 
+    private static var branchDigitsFont: PFont {
+        let caption = TranscriptStyle.shared.caption
+        #if os(macOS)
+        return NSFont.monospacedDigitSystemFont(ofSize: caption.pointSize, weight: .regular)
+        #else
+        return UIFont.monospacedDigitSystemFont(ofSize: caption.pointSize, weight: .regular)
+        #endif
+    }
+
+    private static let chevronPadding: CGFloat = 3
+    private static let labelPadding: CGFloat = 4
+
+    /// Widths of the compact switcher's three slots (‹, "2 / 2", ›), each at least the minimum target
+    /// wide, so the group packs into the action row with its touch targets intact. Layout and view share it.
+    static func branchSlotWidths(label: String) -> [CGFloat] {
+        let chevron = 14 + 2 * self.chevronPadding
+        let text = singleLine(label, self.branchDigitsFont, TranscriptColors.tint).lineWidth + 2 * self.labelPadding
+        return [chevron, text, chevron].map { max($0, self.minimumTarget.width) }
+    }
+
     private func setUpBranchControls() {
         self.previousBranchButton.set(title: "", symbol: "chevron.left")
         self.nextBranchButton.set(title: "", symbol: "chevron.right")
         self.previousBranchButton.accessibilityText = L("Previous branch")
         self.nextBranchButton.accessibilityText = L("Next branch")
-        var digits = TranscriptStyle.shared.caption
-        #if os(macOS)
-        digits = NSFont.monospacedDigitSystemFont(ofSize: digits.pointSize, weight: .regular)
-        #else
-        digits = UIFont.monospacedDigitSystemFont(ofSize: digits.pointSize, weight: .regular)
-        #endif
-        self.branchLabel.titleFont = digits
+        self.branchLabel.titleFont = Self.branchDigitsFont
         for button in self.branchControls {
             button.isSubdued = true
             button.isCompact = true
-            button.padding = button === self.branchLabel ? 4 : 3
+            button.padding = button === self.branchLabel ? Self.labelPadding : Self.chevronPadding
             button.isHidden = true
             #if os(macOS)
             button.showsHover = true
@@ -843,8 +862,7 @@ final class TranscriptFooterView: TranscriptBaseView {
                 ? controls[index + 1].frame
                 : [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton].first { !$0.isHidden }?.frame
             guard let next else { continue }
-            // In compact rows the branch group owns its own 44pt row. Do not split a touch target
-            // at the midpoint of a control on the following action row.
+            // Do not split a touch target at the midpoint of a control on another (wrapped) action row.
             guard abs(controls[index].frame.midY - next.midY) < max(controls[index].frame.height, next.height) / 2 else { continue }
             let mid = (controls[index].frame.maxX + next.minX) / 2
             frames[index].size.width = max(min(frames[index].maxX, mid) - frames[index].minX, 0)
@@ -931,7 +949,7 @@ final class TranscriptFooterView: TranscriptBaseView {
             let branch = footer.branch
             for button in self.branchControls { button.isHidden = branch == nil }
             if let branch {
-                self.branchLabel.set(title: "\(branch.number) / \(branch.count)", symbol: "")
+                self.branchLabel.set(title: branch.label, symbol: "")
                 self.branchLabel.accessibilityText = L("Branch \(branch.number) of \(branch.count)")
                 self.previousBranchButton.isDisabled = !branch.canSwitch || branch.number <= 1
                 self.nextBranchButton.isDisabled = !branch.canSwitch || branch.number >= branch.count
@@ -1049,18 +1067,20 @@ final class TranscriptFooterView: TranscriptBaseView {
 
     private func layoutCompact(_ footer: TranscriptPart.Footer) {
         var moved = false
-        var branchX: CGFloat = self.previousBranchButton.isHidden ? 0 : -4
-        for button in self.branchControls where !button.isHidden {
-            let size = button.buttonSize
-            let frame = CGRect(x: branchX, y: (footer.branchRowHeight - size.height) / 2,
-                               width: size.width, height: size.height)
-            button.hitOutset = CGSize(width: max((Self.minimumTarget.width - size.width) / 2, 0),
-                                      height: max((Self.minimumTarget.height - size.height) / 2, 0))
-            if button.frame != frame { button.frame = frame; moved = true }
-            branchX = frame.maxX + (button === self.previousBranchButton || button === self.branchLabel ? 0 : 3)
+        if let group = footer.actionFrames[.branch], let branch = footer.branch {
+            // Each control is centred in its slot; the slots are its touch targets.
+            var slotX = group.minX
+            for (button, slot) in zip(self.branchControls, Self.branchSlotWidths(label: branch.label)) where !button.isHidden {
+                let size = button.buttonSize
+                let frame = CGRect(x: slotX + (slot - size.width) / 2, y: group.minY + (group.height - size.height) / 2,
+                                   width: size.width, height: size.height)
+                button.hitOutset = CGSize(width: max((slot - size.width) / 2, 0),
+                                          height: max((Self.minimumTarget.height - size.height) / 2, 0))
+                if button.frame != frame { button.frame = frame; moved = true }
+                slotX += slot
+            }
         }
 
-        let actionY = footer.branch == nil ? 0 : footer.branchRowHeight + 4
         let buttons: [(TranscriptPart.Footer.Action, TranscriptLabelButton)] = [
             (.bookmark, self.bookmarkButton), (.copy, self.copyButton), (.reply, self.replyButton),
             (.listen, self.listenButton), (.react, self.reactButton),
@@ -1068,7 +1088,7 @@ final class TranscriptFooterView: TranscriptBaseView {
         for (action, button) in buttons where !button.isHidden {
             guard let planned = footer.actionFrames[action] else { continue }
             button.hitOutset = CGSize(width: CompactFooterPacking.hitOutset(for: action), height: 0)
-            let frame = planned.offsetBy(dx: 0, dy: actionY)
+            let frame = planned
             if button.frame != frame { button.frame = frame; moved = true }
         }
         if moved { self.redraw() }

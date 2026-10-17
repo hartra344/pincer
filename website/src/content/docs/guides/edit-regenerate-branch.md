@@ -30,7 +30,7 @@ On the last assistant reply, **Regenerate** rewinds to the message before it and
 
 ## Switching between branches
 
-When a chat has more than one path, an inline **‹ 2 / 3 ›** switcher sits in the footer of the message where the branches fork. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+When a chat has more than one path, an inline **‹ 2 / 3 ›** switcher sits next to Copy and Reply under the message where the branches fork. Messages you simply sent never show it. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
 
 ## The header branch menu
 
@@ -39,7 +39,7 @@ Whenever a chat has more than one branch, a branch icon appears in the chat head
 On compact iPhone layouts, the branch menu appears in chat options only when the chat has multiple branches. On regular-width iPad, chats without multiple branches leave no empty space for the toolbar icon.
 
 :::note
-The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent (remembered until the app quits), otherwise on the last message you sent on the current branch. After relaunching, or on another device, it may sit lower than the real fork point.
+The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent, or, on the earlier branch, on the message it replaced (remembered until the app quits). After relaunching, on another device, or for branches made elsewhere, no message shows it; use the header branch menu instead.
 :::
 
 ## What you need

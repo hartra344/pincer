@@ -458,6 +458,10 @@ final class TranscriptPremeasureDriver {
     }
 
     var inFlightCount: Int { self.inFlight.count }
+    /// Rows on the worker, or a step waiting for worker capacity.
+    var hasPendingWork: Bool {
+        !self.inFlight.isEmpty || self.admissionCompletion != nil || self.admissionCallbackScheduled
+    }
     #if DEBUG
     var memoRowCount: Int { self.rowMemos.count }
     var memoSourceCost: Int { self.rowMemos.totalCost }
