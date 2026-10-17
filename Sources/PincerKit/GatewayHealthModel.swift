@@ -127,6 +127,8 @@ public final class GatewayHealthModel {
     public internal(set) var dismissals: [String: String] = [:]
     /// Dismissals this model changed (nil removes one), for the store to save and sync.
     @ObservationIgnored public var onDismissalsChanged: (@MainActor ([String: String?]) -> Void)?
+    /// `system.info` host vitals, sampled while Gateway Health is on screen.
+    public let host: GatewayHostVitalsModel
 
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
@@ -146,7 +148,12 @@ public final class GatewayHealthModel {
          simulatedRestart: Bool = false, quietsInitialIssues: Bool = false) {
         self.simulatedRestart = simulatedRestart
         self.quietsInitialIssues = quietsInitialIssues
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        let request: Request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = request
+        // The Control UI's 10 s budget, so a hung read can't stall polling.
+        self.host = GatewayHostVitalsModel(methods: { hello()?.methods }) { method, params in
+            try await connection.request(method, params, timeout: GatewayHostVitalsModel.requestTimeout)
+        }
         self.hello = hello
         self.localDeviceId = localDeviceId
         self.localInstanceId = GatewayConnection.instanceId
@@ -162,6 +169,7 @@ public final class GatewayHealthModel {
     {
         self.quietsInitialIssues = quietsInitialIssues
         self.request = request
+        self.host = GatewayHostVitalsModel(methods: methods, request: request)
         self.dismissals = dismissals
         self.hello = { nil }
         self.methodsOverride = methods
@@ -342,6 +350,7 @@ public final class GatewayHealthModel {
             return
         }
         self.healthFailure = nil
+        self.host.reset()
         switch self.restartState {
         case .scheduled, .waiting:
             self.beginRestarting(expectedMs: nil)

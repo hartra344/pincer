@@ -161,6 +161,16 @@
         }
       }
     },
+    "%@ free of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ free of %2$@"
+          }
+        }
+      }
+    },
     "%@ hr": {
       "localizations": {
         "en": {
@@ -347,6 +357,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ needs a key"
+          }
+        }
+      }
+    },
+    "%@ of %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "%@ of %@ (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ of %2$@ (%3$@)"
           }
         }
       }
@@ -761,6 +791,16 @@
         }
       }
     },
+    "%lld CPUs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld CPUs"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -949,6 +989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld more…"
+          }
+        }
+      }
+    },
+    "%lld ms": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ms"
           }
         }
       }
@@ -4003,6 +4053,16 @@
         }
       }
     },
+    "Collecting history…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collecting history…"
+          }
+        }
+      }
+    },
     "Color": {
       "localizations": {
         "en": {
@@ -6193,6 +6253,26 @@
         }
       }
     },
+    "Disk": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disk"
+          }
+        }
+      }
+    },
+    "Disk %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disk %@"
+          }
+        }
+      }
+    },
     "Dismiss": {
       "localizations": {
         "en": {
@@ -7573,6 +7653,26 @@
         }
       }
     },
+    "Gateway %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway %@"
+          }
+        }
+      }
+    },
+    "Gateway %@ cores": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway %@ cores"
+          }
+        }
+      }
+    },
     "Gateway Logs": {
       "localizations": {
         "en": {
@@ -7729,6 +7829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway default"
+          }
+        }
+      }
+    },
+    "Gateway host": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway host"
           }
         }
       }
@@ -8249,6 +8359,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Host"
+          }
+        }
+      }
+    },
+    "Host CPU": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Host CPU"
+          }
+        }
+      }
+    },
+    "Host memory": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Host memory"
           }
         }
       }
@@ -9013,6 +9143,16 @@
         }
       }
     },
+    "Last sampled %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last sampled %@"
+          }
+        }
+      }
+    },
     "Last seen %@": {
       "localizations": {
         "en": {
@@ -9219,6 +9359,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live view"
+          }
+        }
+      }
+    },
+    "Load": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load"
           }
         }
       }
@@ -12593,6 +12743,16 @@
         }
       }
     },
+    "Ping": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ping"
+          }
+        }
+      }
+    },
     "Pink": {
       "localizations": {
         "en": {
@@ -14719,6 +14879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Role"
+          }
+        }
+      }
+    },
+    "Round-trip time for the Gateway diagnostics request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Round-trip time for the Gateway diagnostics request"
           }
         }
       }
@@ -17819,6 +17989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway sent an unreadable browser stream reply."
+          }
+        }
+      }
+    },
+    "The Gateway sent host information Pincer can't read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway sent host information Pincer can't read."
           }
         }
       }
@@ -21644,6 +21824,16 @@
         }
       }
     },
+    "per core %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "per core %@"
+          }
+        }
+      }
+    },
     "percent": {
       "localizations": {
         "en": {
@@ -21850,6 +22040,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "via %@"
+          }
+        }
+      }
+    },
+    "warning": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "warning"
           }
         }
       }

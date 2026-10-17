@@ -13,11 +13,64 @@ extension DemoGateway {
             return self.lastHeartbeat()
         case "system-presence":
             return .array(self.presence())
+        case "system.info":
+            return self.systemInfo()
         case "gateway.restart.request":
             return self.requestRestart(params)
         default:
             return nil
         }
+    }
+
+    // MARK: Host vitals
+
+    /// `system.info` for the demo's Mac mini: values drift smoothly with the wall clock (a sine plus a little
+    /// deterministic jitter) so the sparklines move. The process instance changes with each simulated restart.
+    func systemInfo(now: Date = Date()) -> JSONValue {
+        let t = now.timeIntervalSince1970
+        func drift(_ lo: Double, _ hi: Double, period: Double, phase: Double) -> Double {
+            let wave = (sin(t / period * 2 * .pi + phase) + 1) / 2
+            let bucket = (t / 5).rounded(.down)
+            let noise = sin(bucket * 127.1 + phase * 311.7) * 43758.5453
+            let jitter = (noise - noise.rounded(.down) - 0.5) * 0.06
+            return lo + (hi - lo) * min(1, max(0, wave + jitter))
+        }
+        func rounded(_ value: Double) -> Double { (value * 100).rounded() / 100 }
+        let gib: Int64 = 1 << 30
+        let memoryTotal = 16 * gib
+        let memoryUsed = drift(0.62, 0.74, period: 300, phase: 0.4)
+        let load = drift(0.8, 2.4, period: 180, phase: 2.0)
+        let rss = Int64(drift(380, 460, period: 240, phase: 3.0) * 1024 * 1024)
+        let heapTotal = Int64(Double(rss) * 0.45)
+        let gb: Int64 = 1_000_000_000
+        let primaryTotal = 494 * gb
+        let primaryAvailable = 311 * gb
+        let instance = String(Int64(self.startedAt.timeIntervalSince1970 * 1000), radix: 16)
+        return [
+            "machineName": "Studio Mac mini", "hostname": "studio-mac-mini.local", "platform": "darwin",
+            "release": "24.6.0", "arch": "arm64", "osLabel": "macOS 15.6", "nodeVersion": "v22.18.0",
+            "pid": 1187, "processInstanceId": .string("demo-\(instance)"),
+            "uptimeMs": .number((now.timeIntervalSince(self.startedAt) * 1000).rounded(.down)),
+            "cpuCount": 10, "cpuModel": "Apple M4",
+            "loadAverage": [.number(rounded(load)), .number(rounded(load * 0.85)), .number(rounded(load * 0.7))],
+            "memoryTotalBytes": .number(Double(memoryTotal)),
+            "memoryFreeBytes": .number(Double(Int64(Double(memoryTotal) * (1 - memoryUsed)))),
+            "eventLoop": [
+                "degraded": false, "reasons": [], "intervalMs": 10_000,
+                "delayP99Ms": .number(rounded(drift(1, 5, period: 90, phase: 0.9))),
+                "delayMaxMs": .number(rounded(drift(5, 18, period: 90, phase: 0.9))),
+                "utilization": .number(rounded(drift(0.02, 0.1, period: 60, phase: 0.5))),
+                "cpuCoreRatio": .number(rounded(drift(0.05, 0.25, period: 75, phase: 0.2))),
+                "cpuBreakdown": ["hostUtilization": .number(rounded(drift(0.08, 0.35, period: 100, phase: 1.1))), "hostCpuCount": 10],
+            ],
+            "processMemory": ["rssBytes": .number(Double(rss)), "heapUsedBytes": .number(Double(Int64(Double(heapTotal) * 0.7))),
+                              "heapTotalBytes": .number(Double(heapTotal))],
+            "diskTotalBytes": .number(Double(primaryTotal)), "diskAvailableBytes": .number(Double(primaryAvailable)), "diskPath": "/",
+            "disks": [
+                ["path": "/", "totalBytes": .number(Double(primaryTotal)), "availableBytes": .number(Double(primaryAvailable))],
+                ["path": "/Volumes/Archive", "totalBytes": .number(Double(2000 * gb)), "availableBytes": .number(Double(1240 * gb))],
+            ],
+        ]
     }
 
     // MARK: Health and restart
