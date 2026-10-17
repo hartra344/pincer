@@ -10,6 +10,10 @@ on:
         type: choice
         options: [both, ios, macos]
         default: both
+      skip_ci_gate:
+        description: Skip the green-Tests requirement (use only for known CI flakes)
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -30,7 +34,11 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v5
+      - name: Warn that the CI gate was bypassed
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_ci_gate
+        run: echo "::warning::skip_ci_gate is set; uploading without a successful Tests run for $(git rev-parse HEAD)."
       - name: Require successful Tests for this main commit
+        if: github.event_name != 'workflow_dispatch' || !inputs.skip_ci_gate
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/check_release_ci.py "$(git rev-parse HEAD)"

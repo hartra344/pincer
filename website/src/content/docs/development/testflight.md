@@ -20,6 +20,7 @@ The upload workflow first requires a completed, successful **Tests** push run on
 `main` for the exact commit being uploaded. Pending, failed, cancelled, skipped,
 PR-only or older-commit checks do not authorize an upload. Wait for the main
 checks to finish and rerun TestFlight if this gate fails.
+For a known CI flake only, a manual run can bypass the gate with `-f skip_ci_gate=true` (tag pushes are always gated).
 
 ## Signing
 
