@@ -58,7 +58,9 @@ Evidence: Apple review guideline 5.1.2(i); current gateway onboarding and send e
 
 ### 4. Complete and publish App Privacy answers for both apps
 
-Status: confirmed empty questionnaires; both pages show “Get Started.” Inventory what leaves each app, who can read it, how long it is retained, purpose, linkage to identity and tracking. Resolve how user-managed gateways/providers fit the actual implementation. Do not choose “Data Not Collected” solely because the developer hosts no backend. Keep answers, policy, manifests, permission prompts and behavior consistent. No advertising/tracking SDK was found in the inspected package setup, but final dependencies and archives still need verification.
+Status: confirmed empty questionnaires; both pages show “Get Started.” Inventory what leaves each app, who can read it, how long it is retained, purpose, linkage to identity and tracking. Resolve how user-managed gateways/providers fit the actual implementation. Do not choose “Data Not Collected” solely because the developer hosts no backend.
+
+Opt-in device mode adds to the inventory: location, contacts, calendar events, reminders, motion/activity and device info (model, OS, battery, thermal and network state). These leave the device only to the user's own Gateway, only when device mode is turned on for that gateway and the matching capability is checked; the developer receives none of it. Nutrition-label impact is an open question for the owner: whether sending this data to the user's own server (not the developer's) counts as “collected” is not decided here. Decide it together with the gateway/provider question above, then keep answers, policy and permission strings consistent. Keep answers, policy, manifests, permission prompts and behavior consistent. No advertising/tracking SDK was found in the inspected package setup, but final dependencies and archives still need verification.
 
 ### 5. Align App Store version and binary version
 

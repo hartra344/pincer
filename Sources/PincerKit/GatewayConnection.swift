@@ -102,8 +102,8 @@ public struct GatewayEvent: Sendable {
 /// One operator WebSocket to one Gateway: handshake, device pairing, request/response
 /// correlation, event fan-out, and reconnect with backoff.
 ///
-/// Deliberately operator-only: it never registers as a `node`, never advertises host
-/// commands, and never starts or embeds a Gateway process.
+/// An operator by default; an opt-in node surface declares only `DeviceModePolicy` commands and can
+/// never run commands. It never starts or embeds a Gateway process.
 public actor GatewayConnection {
     public static let protocolVersion = 4
     public static let role = "operator"
@@ -118,7 +118,20 @@ public actor GatewayConnection {
     public static let adminScope = "operator.admin"
     public static let caps = ["tool-events"]
 
+    /// What this socket presents to the Gateway.
+    public enum Surface: Sendable, Equatable {
+        case operatorClient
+        case node(caps: [String], commands: [String], permissions: [String: Bool])
+
+        var isNode: Bool {
+            if case .node = self { return true }
+            return false
+        }
+    }
+
     public nonisolated let profile: GatewayProfile
+    private let surface: Surface
+    private var demoNodeAttachId: Int?
     private let identity: DeviceIdentity
     private let session: URLSession
     private var task: URLSessionWebSocketTask?
@@ -135,7 +148,9 @@ public actor GatewayConnection {
     /// Cleared on `start()`, so a relaunch picks up an approval made in the meantime.
     private var withheldScopes: Set<String> = []
     private var scopeUpgradeRequestId: String?
-    private var requestedScopes: [String] { self.profile.requestedScopes.filter { !self.withheldScopes.contains($0) } }
+    private var requestedScopes: [String] {
+        self.surface.isNode ? [] : self.profile.requestedScopes.filter { !self.withheldScopes.contains($0) }
+    }
     private var isWaitingToRetry = false
     private var lastFrameAt = Date()
     private var hello: GatewayHello?
@@ -144,18 +159,24 @@ public actor GatewayConnection {
     private var loopTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
     /// Stands in for the WebSocket when the profile is the built-in demo.
-    private let demo: DemoGateway?
+    nonisolated let demo: DemoGateway?
 
-    public init(profile: GatewayProfile, identity: DeviceIdentity = .loadOrCreate()) {
+    /// `demo` shares an existing demo instance (a node connection attaches to its operator's).
+    public init(profile: GatewayProfile, identity: DeviceIdentity = .loadOrCreate(), surface: Surface = .operatorClient) {
+        self.init(profile: profile, identity: identity, surface: surface, demo: nil)
+    }
+
+    init(profile: GatewayProfile, identity: DeviceIdentity, surface: Surface, demo: DemoGateway?) {
         self.profile = profile
         self.identity = identity
-        self.demo = profile.isDemo ? DemoGateway(
+        self.surface = surface
+        self.demo = !profile.isDemo ? nil : (demo ?? DemoGateway(
             acceptsReplyTo: !profile.url.contains("replyTo=off"),
             acceptsWorkContext: !profile.url.contains("workContext=off"),
             hasSessionReactions: profile.url != DemoGateway.noSessionReactionsURL,
             failsFirstAvatarPrefsRead: profile.url == DemoGateway.avatarPrefsReadFailureURL,
             seedsForwardedSenderRefreshHistory: profile.url == DemoGateway.forwardedSenderRefreshURL,
-            instantPacing: profile.url == DemoGateway.instantPacingURL) : nil
+            instantPacing: profile.url == DemoGateway.instantPacingURL))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
@@ -189,6 +210,10 @@ public actor GatewayConnection {
         self.loopTask?.cancel()
         self.watchdogTask?.cancel()
         self.teardown(reason: "stopped")
+        if let demo = self.demo, let id = self.demoNodeAttachId {
+            self.demoNodeAttachId = nil
+            Task { await demo.detachNode(id) }
+        }
         self.emit(.idle)
     }
 
@@ -227,6 +252,11 @@ public actor GatewayConnection {
         self.loopTask?.cancel()
         self.teardown(reason: "retrying optional scopes")
         self.loopTask = Task { await self.runLoop() }
+    }
+
+    /// Asks the demo's attached node for `command`, like an operator's `node.invoke` (nil off the demo).
+    func demoInvokeNode(command: String, paramsJSON: String?) async -> JSONValue? {
+        await self.demo?.invokeNode(command: command, paramsJSON: paramsJSON)
     }
 
     /// `message.action` calls the built-in demo received, oldest first (empty for real Gateways).
@@ -332,12 +362,12 @@ public actor GatewayConnection {
                     await self.waitToRetry(seconds: 5)
                 case .staleDeviceToken:
                     // The Gateway rotated or revoked our device token; fall back to the shared secret once.
-                    guard self.profile.deviceToken != nil else {
+                    guard self.hasStoredDeviceToken else {
                         self.shouldRun = false
                         self.emit(.failed(error.localizedDescription))
                         return
                     }
-                    self.profile.deviceToken = nil
+                    self.clearStoredDeviceToken()
                 case let .fatal(message):
                     self.shouldRun = false
                     self.emit(.failed(message))
@@ -357,6 +387,23 @@ public actor GatewayConnection {
                 self.emit(.reconnecting(attempt: self.attempt, delaySeconds: delay, reason: error.localizedDescription))
                 await self.waitToRetry(seconds: delay)
             }
+        }
+    }
+
+    private var hasStoredDeviceToken: Bool {
+        (self.surface.isNode ? self.profile.nodeDeviceToken : self.profile.deviceToken) != nil
+    }
+
+    private func clearStoredDeviceToken() {
+        if self.surface.isNode { self.profile.nodeDeviceToken = nil } else { self.profile.deviceToken = nil }
+    }
+
+    /// A node surface may only declare allowlisted commands; anything else refuses to connect.
+    static func validate(_ surface: Surface) throws {
+        guard case let .node(_, commands, _) = surface else { return }
+        for command in commands where DeviceModePolicy.isForbidden(command) || !DeviceModePolicy.allowedCommands.contains(command) {
+            throw GatewayError.rpc(
+                code: "DEVICE_MODE_FORBIDDEN_COMMAND", message: "Pincer never declares the command “\(command)”.", details: nil)
         }
     }
 
@@ -429,6 +476,17 @@ public actor GatewayConnection {
     }
 
     private func connectOnce() async throws {
+        try Self.validate(self.surface)
+        if let demo = self.demo, case let .node(caps, commands, _) = self.surface {
+            self.teardown(reason: "new attempt")
+            let handler = self.eventHandler
+            let (attachId, response) = await demo.attachNode(
+                deviceId: self.identity.deviceId, caps: caps, commands: commands) { handler?($0) }
+            self.demoNodeAttachId = attachId
+            self.hello = GatewayHello(payload: response)
+            self.lastFrameAt = Date()
+            return
+        }
         if let demo = self.demo {
             self.teardown(reason: "new attempt")
             let handler = self.eventHandler
@@ -456,7 +514,7 @@ public actor GatewayConnection {
 
         let (nonce, signedAt) = try await self.waitForChallenge(timeout: 20)
 
-        let deviceToken = self.profile.deviceToken
+        let deviceToken = self.surface.isNode ? self.profile.nodeDeviceToken : self.profile.deviceToken
         let params = try Self.connectParams(
             identity: self.identity,
             authMode: self.profile.authMode,
@@ -465,7 +523,8 @@ public actor GatewayConnection {
             scopes: self.requestedScopes,
             nonce: nonce,
             signedAt: signedAt,
-            instanceId: Self.instanceId)
+            instanceId: Self.instanceId,
+            surface: self.surface)
 
         let response = try await self.send(method: "connect", params: .object(params), on: task, timeout: 20)
         guard generation == self.generation else { throw GatewayError.closed("superseded") }
@@ -473,7 +532,7 @@ public actor GatewayConnection {
         hello.withheldScopes = self.withheldScopes
         hello.scopeUpgradeRequestId = self.withheldScopes.isEmpty ? nil : self.scopeUpgradeRequestId
         if let issued = response["auth"]?["deviceToken"]?.text, issued != deviceToken {
-            self.profile.deviceToken = issued
+            if self.surface.isNode { self.profile.nodeDeviceToken = issued } else { self.profile.deviceToken = issued }
         }
         self.hello = hello
         self.lastFrameAt = Date()
@@ -490,8 +549,24 @@ public actor GatewayConnection {
         scopes: [String],
         nonce: String,
         signedAt: Int64,
-        instanceId: String) throws -> [String: JSONValue]
+        instanceId: String,
+        surface: Surface = .operatorClient) throws -> [String: JSONValue]
     {
+        try Self.validate(surface)
+        let role: String
+        let signedScopes: [String]
+        let clientMode: String
+        let caps: [String]
+        var commands: [String] = []
+        var permissions: [String: Bool] = [:]
+        switch surface {
+        case .operatorClient:
+            (role, signedScopes, clientMode, caps) = (Self.role, scopes, "ui", Self.caps)
+        case let .node(nodeCaps, nodeCommands, nodePermissions):
+            (role, signedScopes, clientMode, caps) = ("node", [], "node", nodeCaps)
+            commands = nodeCommands
+            permissions = nodePermissions
+        }
         var auth: [String: JSONValue] = [:]
         var signatureToken: String?
         if let deviceToken {
@@ -506,13 +581,12 @@ public actor GatewayConnection {
         }
 
         let clientId = Self.clientId
-        let clientMode = "ui"
         let payload = DeviceAuthPayload.v2(
             deviceId: identity.deviceId,
             clientId: clientId,
             clientMode: clientMode,
-            role: Self.role,
-            scopes: scopes,
+            role: role,
+            scopes: signedScopes,
             signedAtMs: signedAt,
             token: signatureToken,
             nonce: nonce)
@@ -530,11 +604,11 @@ public actor GatewayConnection {
                 "deviceFamily": .string(Self.deviceFamily),
                 "instanceId": .string(instanceId),
             ],
-            "role": .string(Self.role),
-            "scopes": JSONValue(scopes),
-            "caps": JSONValue(Self.caps),
-            "commands": [],
-            "permissions": [:],
+            "role": .string(role),
+            "scopes": JSONValue(signedScopes),
+            "caps": JSONValue(caps),
+            "commands": JSONValue(commands),
+            "permissions": .object(permissions.mapValues { .bool($0) }),
             "locale": .string(Locale.preferredLanguages.first ?? "en-US"),
             "userAgent": .string("pincer/\(Self.appVersion) (\(Self.platform))"),
             "device": [

@@ -84,6 +84,10 @@ public final class AppModel {
     @ObservationIgnored var windowRefCounts: [ChatWindowRef: Int] = [:]
     @ObservationIgnored var legacyWindowRefCounts: [ChatWindowRef: Int] = [:]
     @ObservationIgnored var ownedChatWindows: [UUID: OwnedChatWindow] = [:]
+    /// Set on iOS when the scene goes to `.background`; device mode pauses its node connection then.
+    public var appIsInBackground = false {
+        didSet { self.gateways.forEach { $0.appIsInBackground = self.appIsInBackground } }
+    }
     /// False until a scene reports `.active`, so a background launch doesn't prefetch.
     public var appIsActive = false {
         didSet {
@@ -339,6 +343,7 @@ public final class AppModel {
         store.locationContext = self.locationContext
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
+        store.appIsInBackground = self.appIsInBackground
         store.wireBookmarkSync()
         self.gateways.append(store)
         self.installRouteCandidateObserver(for: store)
@@ -414,6 +419,7 @@ public final class AppModel {
         store.locationContext = self.locationContext
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
+        store.appIsInBackground = self.appIsInBackground
         store.outboxRoot = old.outboxRoot
         self.gateways[index] = store
         self.installRouteCandidateObserver(for: store)

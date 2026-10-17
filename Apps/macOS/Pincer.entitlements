@@ -2,7 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Sandboxed, outbound network. Microphone for Dictation and opt-in foreground location context;
+	<!-- Sandboxed, outbound network. Microphone for Dictation, opt-in foreground location context, and
+	     calendar and contacts reads only when the user turns on device mode;
 	     no server, camera or automation entitlements; files only where the user picks. -->
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
@@ -13,6 +14,10 @@
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
+	<true/>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+	<key>com.apple.security.personal-information.addressbook</key>
 	<true/>
 	<!-- Shared with the Share extension: saved gateways (App Group) and the paired device key, secrets and device tokens (Keychain). -->
 	<key>com.apple.security.application-groups</key>

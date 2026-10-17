@@ -21,6 +21,7 @@ import { SETUP_METHODS, handleSetupRequest } from './setup.mjs';
 import { SESSION_MANAGER_METHODS, handleSessionManagerRequest, hiddenSessionManagerMethods } from './sessions.mjs';
 import { CHANNEL_LIFECYCLE_METHODS, handleChannelsRequest } from './channels.mjs';
 import { handleWebPushRequest } from './webpush.mjs';
+import { NODE_ROLE_METHODS, attachNode, detachNode, handleNodeOperatorRequest, handleNodeRoleRequest, hasNodeRole, isNodeConn, nodeTokenFor } from './nodes.mjs';
 import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
@@ -134,7 +135,7 @@ function verifyConnect(params, challenge, token, protocol = 4) {
       details: { code: 'PROTOCOL_MISMATCH', clientMinProtocol: params.minProtocol, clientMaxProtocol: params.maxProtocol, expectedProtocol: protocol },
     });
   }
-  if (params.role !== 'operator') throw Object.assign(new Error('role must be operator'), { code: 'PROTOCOL' });
+  if (params.role !== 'operator' && params.role !== 'node') throw Object.assign(new Error('role must be operator or node'), { code: 'PROTOCOL' });
   const device = params.device ?? {};
   if (device.signedAt !== challenge.ts || device.nonce !== challenge.nonce) {
     throw Object.assign(new Error('device auth invalid'), { code: 'DEVICE_AUTH_INVALID' });
@@ -215,6 +216,17 @@ function advertisedMethods() {
 }
 
 function makeHelloPayload(state, params, connId, deviceId) {
+  if (params.role === 'node') {
+    return {
+      type: 'hello-ok',
+      protocol: state.protocol ?? 4,
+      server: { version: 'mock-2026.1', connId },
+      features: { methods: NODE_ROLE_METHODS, events: ['node.invoke.request', 'node.pair.resolved', 'tick'] },
+      snapshot: {},
+      auth: { role: 'node', scopes: [], deviceToken: nodeTokenFor(state, deviceId) },
+      policy: { maxPayload: 26214400, maxBufferedBytes: 52428800, tickIntervalMs: 15000 },
+    };
+  }
   return {
     type: 'hello-ok',
     protocol: state.protocol ?? 4,
@@ -250,6 +262,7 @@ const REQUEST_HANDLERS = [
   (state, conn, msg) => handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary }),
   (state, conn, msg) => handleChannelsRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary }),
+  (state, conn, msg) => !nodesDisabled() && handleNodeOperatorRequest(state, conn, msg, { broadcast }),
   (state, conn, msg) => handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort }),
   (state, conn, msg) => handleSessionManagerRequest(state, conn, msg, {
@@ -270,6 +283,10 @@ const REQUEST_HANDLERS = [
 ];
 
 function handleAuthedRequest(state, conn, msg) {
+  if (isNodeConn(conn)) {
+    handleNodeRoleRequest(state, conn, msg);
+    return;
+  }
   if (msg.method === CONTROL_METHOD) {
     handleControlRequest(state, conn, msg);
     return;
@@ -294,7 +311,8 @@ function handleConnect(state, conn, msg, options) {
     return;
   }
 
-  const issued = state.pairedDevices.get(deviceId)?.deviceToken;
+  const isNodeRole = params.role === 'node';
+  const issued = isNodeRole ? state.pairedDevices.get(deviceId)?.nodeToken : state.pairedDevices.get(deviceId)?.deviceToken;
   // MOCK_AUTH_RATE_LIMIT=<n>: n failed attempts lock shared-secret auth for a minute.
   if (state.authLockedUntil && nowMs() >= state.authLockedUntil) Object.assign(state, { authLockedUntil: 0, authFailures: 0 });
   const failure = state.authLockedUntil
@@ -310,12 +328,13 @@ function handleConnect(state, conn, msg, options) {
   state.authFailures = 0;
   const isDeviceTokenAuth = Boolean(issued) && params.auth?.token === issued;
 
-  const requestedScopes = Array.isArray(params.scopes) ? params.scopes : [];
+  // Node connects never carry operator scopes; they need the node role instead.
+  const requestedScopes = isNodeRole ? [] : Array.isArray(params.scopes) ? params.scopes : [];
   const paired = state.pairedDevices.get(deviceId);
   // A paired device asking for scopes it was never approved for needs a scope upgrade.
-  const upgrade = paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
+  const upgrade = isNodeRole ? paired && !hasNodeRole(paired) : paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
   if ((!paired || upgrade) && options.pairing !== 'off') {
-    const reason = paired ? 'scope-upgrade' : 'not-paired';
+    const reason = paired ? (isNodeRole ? 'role-upgrade' : 'scope-upgrade') : 'not-paired';
     // MOCK_LEGACY_PAIRING=1 approves first pairings without operator.questions, like a device
     // paired before Pincer asked for it, so the next connect needs a scope upgrade.
     const grantScopes = !paired && options.legacyPairing ? requestedScopes.filter((scope) => scope !== 'operator.questions') : requestedScopes;
@@ -326,22 +345,30 @@ function handleConnect(state, conn, msg, options) {
     const { requestId } = request;
     const existing = before === requestId;
     console.log(`Pairing request ${requestId} (${reason}${existing ? ', pending' : ''}) from ${displayName} (${deviceId.slice(0, 8)})`);
-    const error = pairingRequiredError({ requestId, deviceId, reason, requestedScopes }, paired ? [...paired.scopes] : undefined);
+    const error = pairingRequiredError({ requestId, deviceId, reason, requestedScopes, requestedRole: isNodeRole ? 'node' : 'operator' }, paired ? [...paired.scopes] : undefined);
     sendErr(conn, id, error.code, error.message, error.details);
     if (!existing) schedulePairingDecision(state, request, options);
     conn.ws.close(1008, 'PAIRING_REQUIRED');
     return;
   }
-  if (options.pairing === 'off') deviceTokenFor(state, deviceId, requestedScopes);
+  if (options.pairing === 'off') {
+    deviceTokenFor(state, deviceId, requestedScopes);
+    if (isNodeRole) state.pairedDevices.get(deviceId).roles = [...new Set([...(state.pairedDevices.get(deviceId).roles ?? []), 'node'])];
+  }
 
   conn.authenticated = true;
   conn.connId = shortId('conn_');
   conn.deviceId = deviceId;
   conn.isDeviceTokenAuth = isDeviceTokenAuth;
   noteDeviceConnected(state, deviceId, params, conn.ws._socket?.remoteAddress);
-  conn.scopes = Array.isArray(params.scopes) ? params.scopes : [];
+  conn.scopes = isNodeRole ? [] : Array.isArray(params.scopes) ? params.scopes : [];
   conn.client = params.client ?? {};
   conn.connectedAt = nowMs();
+  if (isNodeRole) {
+    attachNode(state, conn, params, broadcast);
+    sendRes(conn, id, makeHelloPayload(state, params, conn.connId, deviceId));
+    return;
+  }
   sendRes(conn, id, makeHelloPayload(state, params, conn.connId, deviceId));
   broadcastPresence(state, broadcast);
 }
@@ -493,7 +520,8 @@ export async function startServer(opts = {}) {
     ws.on('close', () => {
       if (conn.tickTimer) clearInterval(conn.tickTimer);
       state.connections.delete(conn);
-      if (conn.authenticated && !isRestarting(state)) broadcastPresence(state, broadcast);
+      detachNode(state, conn);
+      if (conn.authenticated && !isNodeConn(conn) && !isRestarting(state)) broadcastPresence(state, broadcast);
     });
   });
 

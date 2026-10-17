@@ -40,7 +40,7 @@ Everything you'd expect from a chat with your agents is there too: [live thinkin
 Pincer is a **pure client**. It connects to a Gateway you already run and uses the Gateway WebSocket protocol (v4) in the `operator` role.
 
 - It **never** bundles, launches or embeds a Gateway.
-- It **never** registers as a node, so it doesn't expose camera, screen, shell or `system.run` capabilities.
+- It only registers as a node if you turn on the opt-in [device mode](../../guides/device-mode/), and then it declares just the read-only data you check. It **never** exposes camera, screen, shell or `system.run` capabilities.
 
 That's why you can use it on machines where the official OpenClaw app isn't allowed. [The security model](../../reference/security/) covers the details.
 

@@ -11,6 +11,7 @@ public struct PincerScene: Scene {
         // PincerKit's sentences are keys in this catalog.
         PincerStrings.bundle = .module
         SVGRasterizer.install()
+        DeviceNodeController.platformHandler = PlatformDeviceNodeHandler()
         AppModel.shared.locationContext.configure(driver: DeviceLocationContext(model: AppModel.shared.locationContext))
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)

@@ -1,0 +1,64 @@
+---
+title: Device Mode
+description: Optionally let a Gateway's agents ask this device for location, device status, calendar, contacts, reminders and motion data, read-only.
+---
+
+Pincer is a client by default. **Device mode** is an opt-in setting that also lets the agents on a gateway ask *this device* for a few pieces of read-only data you choose. It's **off by default, per gateway**, and it can never run commands on your device.
+
+## Turning it on
+
+In [Gateway Settings](../gateway-settings/), choose **This Device** in the sidebar. Turn on **Share data from this device**, then check the capabilities you want to share. **Location** is the only one checked by default. When you check a capability, Pincer asks for the matching OS permission first. If you decline, the capability stays off and the page tells you to allow access in System Settings.
+
+Pincer then opens a second connection to the gateway in the `node` role. It declares only the commands for the capabilities you checked.
+
+## What it can share
+
+| Capability | Commands | OS permission |
+| --- | --- | --- |
+| Location | `location.get` | Location, **When In Use** only |
+| Device info | `device.info`, `device.status` | None |
+| Calendar | `calendar.events` | Calendars |
+| Contacts | `contacts.search` | Contacts |
+| Reminders | `reminders.list` | Reminders |
+| Motion & fitness | `motion.activity`, `motion.pedometer` | Motion & Fitness |
+
+All of them only read. `device.info` reports the model, OS and app version and locale. `device.status` reports battery, thermal and network state, and deliberately not storage or uptime, for privacy.
+
+## What Pincer never declares
+
+Pincer never declares camera, screen recording, shell or `system.run`, notifications (`system.notify`), files, a browser, computer use, installed apps, photos, SMS or health data, and no command that adds or writes anything. The code refuses to connect if a command outside the table above would be declared.
+
+## Pairing and approval
+
+The first time you turn it on, the gateway treats the node role like any other device pairing and asks you to approve it. On a remote gateway this can take two approvals: first this device's node role, then the list of data it may answer. Pincer shows **Approve this device on the Gateway (pairing)** until you approve the request on the gateway or from **Operator Devices** on another paired device. See [Operator Devices & Nodes](../devices/).
+
+Pincer reads its approval state from the gateway's node list, so the status updates without needing the pairing scope.
+
+If you change the checked capabilities, or turn on an OS permission later, Pincer reconnects with the new command surface and the gateway asks again. Until you approve it, the page shows **Approve the new data list on the Gateway** and agents keep only the previously approved commands. Once approved, the status becomes **Active**.
+
+## Only while Pincer is open
+
+Pincer answers requests only while it's connected to the gateway, which on iPhone and iPad means while the app is open: the node connection pauses while Pincer is in the background, so agents get "node not connected" right away. On a Mac it answers while Pincer is running, even with no window open. There's no background wake yet. This is planned in [#1031](https://github.com/hartra344/pincer/issues/1031).
+
+## Turning it off
+
+Turning device mode off disconnects the node connection and asks the gateway to remove the node role. Pincer deletes the node token on this device once the gateway confirms the removal; until then it keeps the token, so turning device mode back on needs no new pairing. Pincer can remove the node role itself only with Full Management access; otherwise the page says so, and you remove this device's node role in **Devices** on the gateway host.
+
+## Platform notes
+
+- **Motion** is iPhone-only and isn't offered on a Mac at all.
+- Location is a one-shot reading while the app is open, never continuous tracking.
+
+## How agents use it
+
+Agents reach the device through OpenClaw's `nodes` tool, and you can try the same from the gateway host with the CLI:
+
+```bash
+openclaw nodes location get --node <name>
+```
+
+See OpenClaw's [location command](https://docs.openclaw.ai/nodes/location-command) docs for parameters.
+
+## In the demo
+
+In the [demo](../../getting-started/try-the-demo/), turning on **This Device** connects to the built-in simulated gateway and shows as **Active** straight away. Nothing leaves your device.

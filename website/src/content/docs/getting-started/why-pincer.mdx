@@ -48,7 +48,7 @@ The Control UI isn't a bare chat window either. It's an installable web app with
 
 ### It's only a client
 
-Pincer connects in the gateway's `operator` role and nothing else. It never registers as a node, never runs a gateway, and has no terminal, camera, screen or `system.run` capability. Its device key and credentials live in the Keychain, not in a browser profile, and the macOS app is sandboxed. See [Security](../../reference/security/).
+Pincer connects in the gateway's `operator` role. Only if you turn on [device mode](../../guides/device-mode/) for a gateway does it also register as a node, and then it declares only the read-only data you check. It never runs a gateway, and has no terminal, camera, screen or `system.run` capability. Its device key and credentials live in the Keychain, not in a browser profile, and the macOS app is sandboxed. See [Security](../../reference/security/).
 
 ## At a glance
 

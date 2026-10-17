@@ -6,9 +6,10 @@
 // own device, like the Gateway. device.pair.requested/resolved/changed only reach operator.pairing
 // clients. MOCK_DEVICE_PAIRING=off (or MOCK_NODES=off) makes the mock look like a Gateway without them.
 import crypto from 'node:crypto';
+import { NODE_INVOKE_METHODS, dropNode, pendingNodeRequestId } from './nodes.mjs';
 
 export const DEVICE_PAIRING_METHODS = ['device.pair.list', 'device.pair.approve', 'device.pair.reject', 'device.pair.remove', 'device.pair.rename'];
-export const NODE_METHODS = ['node.list', 'node.describe', 'node.rename', 'node.pair.remove'];
+export const NODE_METHODS = ['node.list', 'node.describe', 'node.rename', 'node.pair.remove', ...NODE_INVOKE_METHODS];
 export const DEVICE_PAIRING_EVENTS = ['device.pair.requested', 'device.pair.resolved', 'device.pair.changed', 'node.pair.requested', 'node.pair.resolved'];
 export const PAIRING_SCOPE = 'operator.pairing';
 const ADMIN_SCOPE = 'operator.admin';
@@ -236,7 +237,10 @@ export function approvePendingDevice(state, requestId, broadcast) {
     state.pairedDevices.set(pending.deviceId, device);
   }
   for (const scope of pending.scopes ?? []) device.scopes.add(scope);
+  // A role upgrade (operator device gaining the node role) keeps the device's primary role.
+  const isNew = !device.role;
   for (const key of ['publicKey', 'displayName', 'platform', 'deviceFamily', 'clientId', 'clientMode', 'role', 'remoteIp']) {
+    if (key === 'role' && !isNew) continue;
     if (pending[key] !== undefined) device[key] = pending[key];
   }
   device.roles = [...new Set([...(device.roles ?? []), ...(pending.roles ?? [])])];
@@ -279,7 +283,7 @@ function nodeRecords(state) {
   return [...state.pairedDevices.values()].filter((d) => roleList(d).includes('node'));
 }
 
-function nodeView(device) {
+function nodeView(state, device) {
   const node = device.node ?? {};
   const connected = node.connected === true;
   return JSON.parse(JSON.stringify({
@@ -294,10 +298,12 @@ function nodeView(device) {
     modelIdentifier: node.modelIdentifier,
     caps: node.caps ?? [],
     commands: node.commands ?? [],
-    approvalState: 'approved',
+    ...(node.permissions ? { permissions: node.permissions } : {}),
+    approvalState: pendingNodeRequestId(state, device.deviceId) ? 'pending' : 'approved',
+    ...(pendingNodeRequestId(state, device.deviceId) ? { pendingRequestId: pendingNodeRequestId(state, device.deviceId) } : {}),
     paired: true,
     connected,
-    ...(connected && node.connectedAgoMs ? { connectedAtMs: Date.now() - node.connectedAgoMs } : {}),
+    ...(connected && (node.connectedAgoMs || node.connectedAtMs) ? { connectedAtMs: node.connectedAtMs ?? Date.now() - node.connectedAgoMs } : {}),
     lastSeenAtMs: device.lastSeenAtMs,
   }));
 }
@@ -376,6 +382,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
       }
       if (!device) return invalid('unknown deviceId'), true;
       state.pairedDevices.delete(deviceId);
+      dropNode(state, deviceId);
       for (const [requestId, pending] of state.pendingPairing) {
         if (pending.deviceId === deviceId) state.pendingPairing.delete(requestId);
       }
@@ -391,7 +398,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
     case 'node.list': {
       const error = paramsError(method, params, []);
       if (error) return invalid(error), true;
-      const nodes = nodeRecords(state).map(nodeView);
+      const nodes = nodeRecords(state).map((d) => nodeView(state, d));
       sendRes(conn, id, { ts: Date.now(), nodes });
       return true;
     }
@@ -400,7 +407,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
       if (error) return invalid(error), true;
       const device = nodeRecords(state).find((d) => d.deviceId === params.nodeId.trim());
       if (!device) return invalid('unknown nodeId'), true;
-      sendRes(conn, id, { ts: Date.now(), ...nodeView(device) });
+      sendRes(conn, id, { ts: Date.now(), ...nodeView(state, device) });
       return true;
     }
     case 'node.rename': {
@@ -428,6 +435,7 @@ export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broad
       device.role = device.roles[0];
       delete device.node;
       if (device.roles.length === 0) state.pairedDevices.delete(nodeId);
+      dropNode(state, nodeId);
       broadcast(state, 'node.pair.resolved', { requestId: '', nodeId, decision: 'removed', ts: Date.now() }, hasPairingScope);
       sendRes(conn, id, { nodeId });
       return true;
