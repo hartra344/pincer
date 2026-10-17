@@ -85,7 +85,9 @@ struct ChatInspectorChrome: ViewModifier {
                 }
                 #endif
             }
-            .onChange(of: self.panel) { _, new in if let new { self.shown = new } }
+            .onChange(of: self.panel) { _, new in
+                if let new { self.shown = new } else { self.workspaceTitle = nil }
+            }
             .inspector(isPresented: self.presented(false)) {
                 Group {
                     switch self.current {
