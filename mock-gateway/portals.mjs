@@ -5,7 +5,7 @@
 // a query token sets the HttpOnly `openclaw_portal_<port>` cookie; neither token nor cookie is a 401.
 // `portal.open` is not mocked: the agent opens portals, Pincer doesn't.
 // Scoping (#1029): portals carry no owner field. "Studio clock" is a host portal the coder's main chat opened
-// with a `portal` tool call (its chat.history holds the call and the result with the portal id). "Build
+// with a `portal` call (via Tool Search's `dispatch_action`, as upstream's default runtime does; its chat.history holds the call and the result with the portal id). "Build
 // dashboard" is owned by a session with an attached environment, reported by the 2026.9 session methods
 // (`environments.session.status`, `portal.session.list`, `portal.session.close`); MOCK_NO_SESSION_PORTALS=1
 // drops those methods.
@@ -150,13 +150,22 @@ function seedClockToolCall(state, portal) {
   if (!transcript) return;
   const args = { action: 'open', port: portal.port, title: portal.title, description: portal.description };
   const summary = summarize(portal);
-  // Like the agent's `portal` tool: the opener's link, then the PortalSummary as JSON.
-  const text = `Portal route allocated at ${summary.publicUrl}`;
+  // Upstream's DEFAULT runtime (Tool Search on) hides `portal` behind the `dispatch_action` control tool. The
+  // transcript holds the dispatch call, a nested-activity row for the real call, and the dispatch result: a
+  // JSON envelope around the tool's content (chat.history strips `details`) whose texts are the prose, then
+  // the PortalSummary as JSON.
+  const prose = `Portal route allocated at ${summary.url}. Pass PUBLIC_URL=${summary.publicUrl} and PORT=${portal.port} when starting the dev server on the selected environment. Browser access and application rendering remain unverified from the requesting viewer; allocation or a worker/Gateway browser test is not delivery proof. Use the returned URLs unchanged.`;
+  const toolContent = [textBlock(prose), textBlock(JSON.stringify(summary, null, 2))];
+  const envelope = { tool: { id: 'openclaw:core:portal', name: 'portal', source: 'openclaw' }, result: { content: toolContent } };
   transcript.push(
     makeMessage('user', [textBlock('Put a live clock on the studio wall display.')]),
-    makeMessage('assistant', [toolCallBlock('call_portal_open', 'portal', args)]),
-    makeMessage('toolResult', [textBlock(text), textBlock(JSON.stringify(summary, null, 2))], {
-      extra: { toolCallId: 'call_portal_open', toolName: 'portal', details: summary, isError: false },
+    makeMessage('assistant', [toolCallBlock('call_portal_open', 'dispatch_action', { id: 'openclaw:core:portal', args })]),
+    makeMessage('custom', [
+      toolCallBlock('call_portal_open', 'portal', args),
+      { type: 'toolResult', toolCallId: 'call_portal_open', toolName: 'portal', content: toolContent, isError: false },
+    ], { extra: { customType: 'openclaw.nested-tool.v1', display: true } }),
+    makeMessage('toolResult', [textBlock(JSON.stringify(envelope, null, 2))], {
+      extra: { toolCallId: 'call_portal_open', toolName: 'dispatch_action', isError: false },
     }),
     makeMessage('assistant', [textBlock('The studio clock is live. Open it from the Portals button.')]),
   );

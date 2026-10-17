@@ -549,3 +549,157 @@ private func portalWait(_ timeout: Double = 3, _ condition: @MainActor () async 
 
 @MainActor
 private final class StoreBox { var store: PortalStore? }
+
+// #1042: upstream Tool Search hides `portal` behind the `dispatch_action` control tool, and CLI harnesses
+// prefix it (`mcp__openclaw__portal`). The history rows below follow the upstream chat.history shape.
+private enum UpstreamPortalHistory {
+    static var summary: [String: Any] { ["id": "portal_studio_clock", "title": "Studio clock", "port": 4173, "listenPort": 4173,
+                                         "publicUrl": "https://portal.test:4173/", "createdAtMs": 1000] }
+
+    static func text(_ object: Any) -> String {
+        let data = try! JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func envelope(toolId: String = "openclaw:core:portal", toolName: String = "portal", summary: [String: Any]? = summary) -> String {
+        var content: [[String: Any]] = [["type": "text", "text": "Portal route allocated at https://portal.test:4173/. Pass PUBLIC_URL=https://portal.test:4173/ and PORT=4173 when starting the dev server on the selected environment. Use the returned URLs unchanged."]]
+        if let summary { content.append(["type": "text", "text": text(summary)]) }
+        return text(["tool": ["id": toolId, "name": toolName, "source": "openclaw"], "result": ["content": content]])
+    }
+
+    /// (A) the assistant toolCall, (B) the toolResult, (C) the custom nested-activity row.
+    static func rows(callName: String = "dispatch_action", arguments: [String: Any], resultText: String, isError: Bool = false,
+                     argumentsKey: String = "arguments") -> [ChatItem] {
+        let call: [String: Any] = ["type": "toolCall", "id": "call_x", "name": callName, argumentsKey: arguments]
+        let rows: [[String: Any]] = [
+            ["role": "assistant", "content": [call], "timestamp": 1, "__openclaw": ["id": "a1"]],
+            ["role": "toolResult", "toolName": callName, "toolCallId": "call_x", "isError": isError,
+             "content": [["type": "text", "text": resultText]], "timestamp": 2, "__openclaw": ["id": "r1"]],
+            ["role": "custom", "customType": "openclaw.nested-activity", "content": [["type": "text", "text": "nested"]], "timestamp": 3,
+             "__openclaw": ["id": "c1"]],
+        ]
+        return rows.enumerated().compactMap { ChatItem(Fixtures.json(text($1)), fallbackIndex: $0) }
+    }
+
+    static func dispatch(id: String = "openclaw:core:portal", args: [String: Any] = ["action": "open", "port": 4173, "title": "Studio clock"],
+                         key: String = "args", flatten: Bool = false) -> [String: Any] {
+        flatten ? ["id": id].merging(args) { $1 } : ["id": id, key: args]
+    }
+
+    static func tools(_ items: [ChatItem]) -> [ToolActivity] {
+        TranscriptBuilder.build(items).flatMap { entry -> [ToolActivity] in
+            if case let .assistant(turn) = entry { return turn.tools }
+            return []
+        }
+    }
+
+    static func opened(_ items: [ChatItem]) -> [PortalToolOpen] { self.tools(items).compactMap(\.openedPortal) }
+}
+
+struct DispatchedPortalOpenTests {
+    fileprivate typealias H = UpstreamPortalHistory
+    private let open = ["action": "open", "port": 4173, "title": "Studio clock"] as [String: Any]
+
+    private func expectClock(_ items: [ChatItem], sourceLocation: SourceLocation = #_sourceLocation) {
+        let found = H.opened(items)
+        #expect(found.count == 1, sourceLocation: sourceLocation)
+        #expect(found.first?.id == "portal_studio_clock", sourceLocation: sourceLocation)
+        #expect(found.first?.publicURL == "https://portal.test:4173/", sourceLocation: sourceLocation)
+    }
+
+    @Test func dispatchActionOpensThePortalWithTheCoreId() {
+        expectClock(H.rows(arguments: H.dispatch(), resultText: H.envelope()))
+    }
+
+    @Test func dispatchActionWithTheBareIdOpensThePortal() {
+        expectClock(H.rows(arguments: H.dispatch(id: "portal"), resultText: H.envelope()))
+    }
+
+    @Test func dispatchActionWithInputInsteadOfArgsOpensThePortal() {
+        expectClock(H.rows(arguments: H.dispatch(key: "input"), resultText: H.envelope()))
+    }
+
+    @Test func dispatchActionWithFlattenedArgumentsOpensThePortal() {
+        expectClock(H.rows(arguments: H.dispatch(flatten: true), resultText: H.envelope()))
+    }
+
+    @Test func dispatchActionArgumentsKeyVariantsOnTheBlock() {
+        expectClock(H.rows(arguments: H.dispatch(), resultText: H.envelope(), argumentsKey: "input"))
+    }
+
+    @Test func mcpPrefixedPortalCallsOpenThePortal() {
+        for name in ["mcp__openclaw__portal", "mcp_openclaw_portal"] {
+            // The CLI harness result is the bare tool text, not a dispatch_action envelope.
+            expectClock(H.rows(callName: name, arguments: open, resultText: "Portal route allocated at https://portal.test:4173/\n" + H.text(H.summary)))
+        }
+    }
+
+    @Test func theEnvelopeToolIdIsNeverThePortalId() {
+        let items = H.rows(arguments: H.dispatch(), resultText: H.envelope(summary: nil))
+        #expect(H.opened(items).allSatisfy { $0.id != "openclaw:core:portal" && $0.id != "portal" })
+        #expect(H.opened(items).isEmpty)
+    }
+
+    @Test func dispatchActionWrappingAnotherToolIsIgnored() {
+        let web = H.text(["tool": ["id": "openclaw:core:web_fetch", "name": "web_fetch", "source": "openclaw"],
+                          "result": ["content": [["type": "text", "text": H.text(["id": "page-1", "publicUrl": "https://example.com/"])]]]])
+        let items = H.rows(arguments: H.dispatch(id: "openclaw:core:web_fetch", args: ["action": "open", "url": "https://example.com/"]), resultText: web)
+        #expect(H.opened(items).isEmpty)
+    }
+
+    @Test func dispatchActionListCloseAndErrorsAreIgnored() {
+        let list = H.rows(arguments: H.dispatch(args: ["action": "list"]), resultText: H.envelope())
+        #expect(H.opened(list).isEmpty)
+        let close = H.rows(arguments: H.dispatch(args: ["action": "close", "id": "portal_studio_clock"]), resultText: H.envelope())
+        #expect(H.opened(close).isEmpty)
+        let failed = H.rows(arguments: H.dispatch(), resultText: H.envelope(), isError: true)
+        #expect(H.opened(failed).isEmpty)
+    }
+
+    @Test func theNestedActivityRowIsIgnored() {
+        #expect(H.rows(arguments: H.dispatch(), resultText: H.envelope()).count == 3)
+        #expect(H.tools(H.rows(arguments: H.dispatch(), resultText: H.envelope())).count == 1)
+    }
+}
+
+@MainActor
+struct DispatchedPortalVisibilityTests {
+    fileprivate typealias H = UpstreamPortalHistory
+    private let global: [JSONValue] = [portalEntry(id: "portal_studio_clock", title: "Studio clock")]
+
+    private func makeStore() async -> PortalStore {
+        let fake = FakeScopedGateway(global: global)
+        let store = PortalStore(request: { try await fake.request($0, $1) }, methods: { ["portal.list", "portal.close"] }, debounce: .milliseconds(30))
+        await store.refresh()
+        return store
+    }
+
+    /// The toolbar button and the ⋯ "Show Portals" item both show exactly when `chatPortals(for:)` (this) is non-empty.
+    private func chatPortals(_ store: PortalStore, _ chat: ChatStore) -> [String] {
+        store.portals(for: PortalScope(sessionKey: chat.sessionKey, agentId: chat.agentId, opened: chat.openedPortals)).map(\.id)
+    }
+
+    @Test func aDispatchedPortalOpenMakesTheChatsPortalsNonEmpty() async {
+        let scratch = ScratchDefaults()
+        let gateway = GatewayStore(profile: GatewayProfile(id: UUID(), name: "P", url: "ws://127.0.0.1:1", authMode: .none),
+                                   defaults: scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = nil
+        gateway.outboxRoot = nil
+        defer { gateway.stop(); scratch.remove() }
+        let chat = ChatStore(sessionKey: "agent:coder:main", agentId: "coder", gateway: gateway, headless: false)
+        let other = ChatStore(sessionKey: "agent:research:main", agentId: "research", gateway: gateway, headless: false)
+        let store = await makeStore()
+        #expect(chatPortals(store, chat).isEmpty)
+        chat.items = H.rows(arguments: H.dispatch(), resultText: H.envelope())
+        #expect(chat.openedPortals.ids == ["portal_studio_clock"])
+        #expect(chatPortals(store, chat) == ["portal_studio_clock"])
+        #expect(chatPortals(store, other).isEmpty)
+    }
+
+    @Test func mcpPrefixedOpenMakesTheChatsPortalsNonEmpty() async {
+        let store = await makeStore()
+        let items = H.rows(callName: "mcp__openclaw__portal", arguments: ["action": "open", "port": 4173], resultText: H.envelope())
+        let refs = PortalRefs(tools: H.tools(items))
+        #expect(store.portals(for: PortalScope(sessionKey: "agent:coder:main", agentId: "coder", opened: refs)).map(\.id) == ["portal_studio_clock"])
+    }
+}

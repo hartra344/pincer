@@ -135,17 +135,57 @@ public struct PortalToolOpen: Hashable, Sendable {
     /// Only the first part of a result is read: the summary is small and the text is untrusted.
     static let scanLimit = 16 * 1024
 
+    /// Direct `portal` calls (also the CLI harnesses' MCP-prefixed names), and upstream Tool Search's control
+    /// tool: with Tool Search on (the default) `portal` is hidden from the catalog and the model calls
+    /// `dispatch_action` (legacy `tool_call`) with `{id: "openclaw:core:portal", args: {action: "open", …}}`,
+    /// whose result wraps the tool's result as `{tool: {name}, result: {content: [...]}}`.
     static func parse(name: String, arguments: [String: Any]?, result: String?, isError: Bool, isRunning: Bool) -> PortalToolOpen? {
-        guard name == "portal", !isError, !isRunning, arguments?["action"] as? String == "open",
-              let result, !result.isEmpty else { return nil }
-        let text = String(result.prefix(Self.scanLimit))
-        var found = Self.fromJSON(text)
-        if found == nil, let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end {
-            found = Self.fromJSON(String(text[start...end]))
+        guard !isError, !isRunning, let result, !result.isEmpty else { return nil }
+        let tool = name.trimmingCharacters(in: .whitespaces).lowercased()
+        let dispatched = tool == "dispatch_action" || tool == "tool_call"
+        if dispatched {
+            guard let arguments, Self.dispatchedPortalArguments(arguments)?["action"] as? String == "open" else { return nil }
+        } else {
+            guard ["portal", "mcp__openclaw__portal", "mcp_openclaw_portal"].contains(tool),
+                  arguments?["action"] as? String == "open" else { return nil }
         }
-        if found == nil { found = Self.fromRegex(text) }
+        let text = String(result.prefix(Self.scanLimit))
+        let inner = dispatched ? Self.dispatchedResult(text) : text
+        guard let inner else { return nil }
+        var found = Self.fromJSON(inner)
+        if found == nil, let start = inner.firstIndex(of: "{"), let end = inner.lastIndex(of: "}"), start < end {
+            found = Self.fromJSON(String(inner[start...end]))
+        }
+        if found == nil { found = Self.fromRegex(inner) }
         guard let found, found.id != nil || found.publicURL != nil else { return nil }
         return found
+    }
+
+    /// The `portal` call's own arguments inside a Tool Search call, or nil when it targets another tool.
+    private static func dispatchedPortalArguments(_ arguments: [String: Any]) -> [String: Any]? {
+        guard let id = (arguments["id"] as? String)?.trimmingCharacters(in: .whitespaces) else { return nil }
+        let inner = id.firstMatch(of: /^(?:openclaw|mcp|client):[^:]+:(.+)$/).map { String($0.output.1) } ?? id
+        guard inner == "portal" else { return nil }
+        for key in ["args", "input"] {
+            if let object = arguments[key] as? [String: Any], !object.isEmpty { return object }
+        }
+        var flat = arguments
+        flat.removeValue(forKey: "id")
+        for (key, value) in arguments where key.hasPrefix("args.") { flat[String(key.dropFirst(5))] = value }
+        return flat
+    }
+
+    /// The tool result inside a Tool Search envelope, as text; nil when the envelope names another tool.
+    /// Never falls back to the envelope itself: its `tool.id` ("openclaw:core:portal") isn't a portal id.
+    private static func dispatchedResult(_ text: String) -> String? {
+        if let data = text.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if let tool = object["tool"] as? [String: Any], let toolName = tool["name"] as? String, toolName != "portal" { return nil }
+            guard let result = object["result"], let encoded = try? JSONSerialization.data(withJSONObject: result, options: [.fragmentsAllowed]) else { return nil }
+            return String(data: encoded, encoding: .utf8)
+        }
+        // Truncated or unparsable envelope: look only past its "result" key.
+        guard let range = text.range(of: "\"result\"") else { return nil }
+        return String(text[range.upperBound...])
     }
 
     private static func clean(_ value: Any?, limit: Int) -> String? {

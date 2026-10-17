@@ -72,11 +72,16 @@ export async function run() {
     // Scoping (#1029): the clock is attributed by a `portal` tool call in one chat; the dashboard is owned by a session.
     for (const method of SESSION_PORTAL_METHODS) assert.ok(writer.hello.features.methods.includes(method), method);
     const history = (await writer.send('chat.history', { sessionKey: CLOCK_SESSION_KEY })).messages;
-    const call = history.flatMap((m) => (Array.isArray(m.content) ? m.content : [])).find((b) => b.type === 'toolCall' && b.name === 'portal');
-    assert.equal(call.arguments.action, 'open');
-    const opened = history.find((m) => m.role === 'toolResult' && m.toolName === 'portal');
-    assert.match(opened.content[0].text, /^Portal route allocated at /);
-    assert.equal(JSON.parse(opened.content[1].text).id, portal.id);
+    const call = history.flatMap((m) => (Array.isArray(m.content) ? m.content : [])).find((b) => b.type === 'toolCall' && b.name === 'dispatch_action');
+    assert.equal(call.arguments.id, 'openclaw:core:portal');
+    assert.equal(call.arguments.args.action, 'open');
+    const opened = history.find((m) => m.role === 'toolResult' && m.toolName === 'dispatch_action');
+    const envelope = JSON.parse(opened.content[0].text);
+    assert.equal(envelope.tool.name, 'portal');
+    assert.match(envelope.result.content[0].text, /^Portal route allocated at /);
+    assert.equal(JSON.parse(envelope.result.content[1].text).id, portal.id);
+    assert.equal(opened.details, undefined);
+    assert.ok(history.some((m) => m.role === 'custom' && m.customType === 'openclaw.nested-tool.v1'));
     const other = (await writer.send('chat.history', { sessionKey: 'agent:main:main' })).messages;
     assert.ok(!JSON.stringify(other).includes('"portal"'), 'another agent never opened a portal');
     assert.deepEqual(await writer.send('environments.session.status', { sessionKey: 'agent:main:main' }), { attachment: null });
