@@ -65,6 +65,35 @@ func runPortalScopingOfflineChecks() async {
                             isError: false, isRunning: false)
     check(late.openedPortal == nil, "portal scoping: a huge result is only scanned up to a cap")
 
+    // #1042: Tool Search hides `portal` behind `dispatch_action`; CLI harnesses prefix the name.
+    let clockSummary = #"{"id":"portal_studio_clock","title":"Studio clock","port":4173,"publicUrl":"https://portal.test:4173/","createdAtMs":1}"#
+    func envelope(_ summary: String?, tool: String = "portal") -> String {
+        var content: [JSONValue] = [["type": "text", "text": "Portal route allocated at https://portal.test:4173/. Use the returned URLs unchanged."]]
+        if let summary { content.append(["type": "text", "text": .string(summary)]) }
+        let object: JSONValue = ["tool": ["id": .string("openclaw:core:\(tool)"), "name": .string(tool), "source": "openclaw"], "result": ["content": .array(content)]]
+        return ContentBlock.prettyJSON(object) ?? ""
+    }
+    func dispatched(_ arguments: String, _ result: String, name: String = "dispatch_action", error: Bool = false) -> ToolActivity {
+        ToolActivity(id: "d1", name: name, arguments: arguments, result: result, isError: error, isRunning: false)
+    }
+    let viaEnvelope = dispatched(#"{"id":"openclaw:core:portal","args":{"action":"open","port":4173}}"#, envelope(clockSummary))
+    check(viaEnvelope.openedPortal?.id == "portal_studio_clock" && viaEnvelope.openedPortal?.publicURL == "https://portal.test:4173/",
+          "portal scoping: a dispatch_action portal open yields the summary id and public URL, not the envelope's tool id")
+    check(dispatched(#"{"id":"portal","input":{"action":"open","port":4173}}"#, envelope(clockSummary)).openedPortal?.id == "portal_studio_clock"
+          && dispatched(#"{"id":"openclaw:core:portal","action":"open","port":4173}"#, envelope(clockSummary)).openedPortal?.id == "portal_studio_clock"
+          && dispatched(#"{"id":"openclaw:core:portal","args":{"action":"open"}}"#, envelope(clockSummary), name: "tool_call").openedPortal?.id == "portal_studio_clock",
+          "portal scoping: dispatch_action with the bare id, input, flattened arguments, or the legacy tool_call name still counts")
+    check(dispatched(#"{"id":"openclaw:core:portal","args":{"action":"open"}}"#, envelope(nil)).openedPortal == nil,
+          "portal scoping: a dispatch_action envelope without a summary never yields the envelope's tool id")
+    check(dispatched(#"{"id":"openclaw:core:web_fetch","args":{"action":"open"}}"#, envelope(#"{"id":"page","publicUrl":"https://e.test/"}"#, tool: "web_fetch")).openedPortal == nil
+          && dispatched(#"{"id":"openclaw:core:portal","args":{"action":"list"}}"#, envelope(clockSummary)).openedPortal == nil
+          && dispatched(#"{"id":"openclaw:core:portal","args":{"action":"open"}}"#, envelope(clockSummary), error: true).openedPortal == nil,
+          "portal scoping: dispatch_action wrapping another tool, a list call, or a failed call is ignored")
+    let mcpText = "Portal route allocated at https://portal.test:4173/\n" + clockSummary
+    check(["mcp__openclaw__portal", "mcp_openclaw_portal"].allSatisfy {
+        ToolActivity(id: "m", name: $0, arguments: #"{"action":"open","port":4173}"#, result: mcpText, isError: false, isRunning: false).openedPortal?.id == "portal_studio_clock"
+    }, "portal scoping: the MCP-prefixed portal names (mcp__openclaw__portal, mcp_openclaw_portal) count")
+
     func entry(_ id: String, port: Int, at: Int) -> JSONValue {
         .object(["id": .string(id), "title": .string(id), "port": .number(Double(port)), "listenPort": .number(Double(port)),
                  "publicUrl": .string("https://portal.test:\(port)/"), "createdAtMs": .number(Double(at))])
@@ -160,6 +189,14 @@ func runDemoPortalChecks() async {
     check(coderChat.openedPortals.ids.contains(DemoGateway.demoPortalId), "demo: the coder chat's transcript holds the portal open call")
     let ok6 = await waitFor("demo owned portal", timeout: 10, { shown(coderChat).count == 2 })
     check(ok6 && Set(shown(coderChat)) == ["Studio clock", "Build dashboard"], "demo: the coder agent's chat shows Studio clock and its owned Build dashboard (\(shown(coderChat)))")
+    let usesDispatch = TranscriptBuilder.build(coderChat.items).contains { entry in
+        if case let .assistant(turn) = entry { return turn.tools.contains { $0.name == "dispatch_action" && $0.openedPortal?.id == DemoGateway.demoPortalId } }
+        return false
+    }
+    check(usesDispatch, "demo: the Studio clock is opened through dispatch_action, as upstream Tool Search records it")
+    // chatPortals(for:) is exactly this scoped list: non-empty shows the Portals toolbar button and the ⋯ menu's Show Portals item.
+    check(!shown(coderChat).isEmpty && shown(otherChat).isEmpty,
+          "demo: Portals toolbar button and ⋯ Show Portals item are visible in the coder's chat and hidden in another agent's")
     check(shown(otherChat).isEmpty, "demo: another agent's chat shows no portals (\(shown(otherChat)))")
     let research = gateway.chat(for: "agent:research:main")
     check(shown(research).isEmpty, "demo: the research agent's chat shows no portals")
@@ -290,6 +327,8 @@ func runLivePortalScopingChecks(url: String, token: String) async {
     func shown(_ chat: ChatStore) -> [String] {
         gateway.portals.portals(for: PortalScope(sessionKey: chat.sessionKey, agentId: chat.agentId, opened: chat.openedPortals)).map(\.title)
     }
+    check(!shown(clockChat).isEmpty && shown(otherChat).isEmpty,
+          "portal scoping live: Portals toolbar button and ⋯ Show Portals item are visible in the coder's chat (dispatch_action history) and hidden in another agent's")
     // Per agent: the attributed portal shows in every chat of the coder agent, even one that never ran `portal`.
     check(shown(ownedChat).contains("Studio clock"), "portal scoping live: another chat of the same agent shows Studio clock (\(shown(ownedChat)))")
     check(shown(otherChat).isEmpty, "portal scoping live: another agent's chat shows no portals (\(shown(otherChat)))")
