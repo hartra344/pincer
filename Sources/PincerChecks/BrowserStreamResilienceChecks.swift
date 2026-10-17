@@ -51,7 +51,7 @@ func runBrowserStreamResilienceChecks() async {
     let unsupported = StreamCounter()
     let noStream = model(counter: unsupported) { ScriptedBrowserSource(events: [.closed(code: 4005)]) }
     noStream.setVisible(true, pixelSize: pixels)
-    let terminal = await waitFor("4005 is terminal", timeout: 5) { if case .failed = noStream.status { true } else { false } }
+    let terminal = await waitFor("4005 is terminal", timeout: 5) { noStream.status == .unstreamable }
     try? await Task.sleep(for: .milliseconds(200))
     check(terminal && unsupported.value == 1, "stream resilience: close 4005 shows an error and doesn't retry (\(unsupported.value) tickets)")
     noStream.stop()
@@ -65,4 +65,25 @@ func runBrowserStreamResilienceChecks() async {
     try? await Task.sleep(for: .milliseconds(300))
     check(gaveUp && never.value == seen && seen <= 8, "stream resilience: a socket that never connects stops after \(seen) tries")
     dead.stop()
+
+    // Only a regular-width host resizes the agent's page; a compact (phone) panel just views it.
+    for compact in [true, false] {
+        let acts = StreamCounter()
+        let panel = BrowserPanelModel(
+            request: { _, params in
+                switch params["path"]?.string {
+                case "/tabs": return tabs
+                case "/act": _ = acts.bump(); return .null
+                default: return json(#"{"token":"t","wsPath":"/browser/screencast?token=t","targetId":"T1","url":"https://one.test/"}"#)
+                }
+            },
+            makeSource: { _ in ScriptedBrowserSource(events: [.meta(url: URL(string: "https://one.test/"), title: "One")]) },
+            debounce: .milliseconds(5), retryDelay: .milliseconds(5))
+        panel.setVisible(true, pixelSize: pixels, viewport: CGSize(width: 390, height: 750), compact: compact)
+        _ = await waitFor("viewport sync (compact \(compact))", timeout: 3) { acts.value > 0 }
+        try? await Task.sleep(for: .milliseconds(500))
+        check(compact ? acts.value == 0 : acts.value == 1,
+              "stream resilience: a \(compact ? "compact" : "regular-width") panel sent \(acts.value) resize request(s)")
+        panel.stop()
+    }
 }

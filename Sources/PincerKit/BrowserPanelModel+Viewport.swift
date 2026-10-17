@@ -16,7 +16,7 @@ extension BrowserPanelModel {
     }
 
     func scheduleViewportSync() {
-        guard self.canAutoResizeViewport, !self.resizeUnavailable, self.viewport != nil else { return }
+        guard self.canAutoResizeViewport, self.viewport != nil else { return }
         self.resizeTask?.cancel()
         self.resizeTask = Task { [weak self] in
             try? await Task.sleep(for: Self.viewportSyncDelay)
@@ -26,13 +26,14 @@ extension BrowserPanelModel {
     }
 
     private func syncViewport() async {
-        guard self.canAutoResizeViewport, !self.resizeUnavailable, self.hasAdmin, self.visible,
+        guard self.canAutoResizeViewport, self.hasAdmin, self.visible,
               let viewport = self.viewport, let tab = self.selectedTab ?? self.tabs.first, !self.selectedPageMissing
         else { return }
         let (width, height) = Self.resizeTarget(for: viewport)
         let wanted = CGSize(width: width, height: height)
-        // Never repeat a request for the same size, whether it worked or was refused.
-        guard self.resizeRequested[tab.targetId] != wanted else { return }
+        // Never repeat a request for the same size, whether it worked or was refused: a size another client
+        // changed since is theirs, and re-asserting it would make two clients fight.
+        guard self.resizeRequested[tab.targetId] != wanted, self.resizeRefused[tab.targetId] != wanted else { return }
         if let css = self.frame?.cssSize, abs(css.width - wanted.width) <= 1, abs(css.height - wanted.height) <= 1 {
             self.resizeRequested[tab.targetId] = wanted
             return
@@ -43,10 +44,13 @@ extension BrowserPanelModel {
                 "POST", "/act", route: tab.route,
                 body: ["kind": "resize", "targetId": .string(tab.targetId),
                        "width": .number(Double(width)), "height": .number(Double(height))]))
+        } catch let error as GatewayError {
+            // Only the Gateway saying no (policy, a profile that can't resize) is a refusal, and only that size is
+            // not asked again. A timeout or dropped connection says nothing about the Gateway's answer: ask again
+            // the next time the panel's size or the page changes.
+            if case .rpc = error { self.resizeRefused[tab.targetId] = wanted } else { self.resizeRequested[tab.targetId] = nil }
         } catch {
-            if error is CancellationError { return }
-            // Refused (policy, a profile that can't resize): show the frame as it is and stop asking.
-            self.resizeUnavailable = true
+            self.resizeRequested[tab.targetId] = nil
         }
     }
 }

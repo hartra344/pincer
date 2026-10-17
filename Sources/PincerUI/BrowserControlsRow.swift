@@ -24,7 +24,7 @@ struct BrowserControlsRow: View {
         guard self.model.selectedTargetId != nil, !self.model.selectedPageMissing else { return false }
         switch self.model.status {
         case .live, .idle, .loading, .reconnecting: return true
-        case .needsFullManagement, .notRunning, .navigationBlocked, .failed: return false
+        case .needsFullManagement, .notRunning, .navigationBlocked, .unstreamable, .failed: return false
         }
     }
 
@@ -37,7 +37,7 @@ struct BrowserControlsRow: View {
     /// An empty or error message already says what's wrong, so the pill would only repeat it.
     private var showsStatusPill: Bool {
         switch self.model.status {
-        case .needsFullManagement, .notRunning, .failed, .navigationBlocked: return false
+        case .needsFullManagement, .notRunning, .failed, .navigationBlocked, .unstreamable: return false
         case .live, .idle, .loading, .reconnecting:
             return !(self.model.selectedPageMissing
                 || (self.model.tabs.isEmpty && self.model.selectedTargetId == nil))
@@ -224,7 +224,7 @@ struct BrowserControlsRow: View {
     }
 
     private var statusPill: some View {
-        BrowserStatusPill(status: self.model.status)
+        BrowserStatusPill(status: self.model.status, attempt: self.model.retryAttempt)
     }
 
     private func submit() {

@@ -10,6 +10,7 @@ struct BrowserPanelView: View {
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var size = CGSize.zero
     @State private var appeared = false
     @State private var viewerID = UUID()
@@ -32,13 +33,15 @@ struct BrowserPanelView: View {
             self.model.setVisible(false, pixelSize: .zero, viewer: self.viewerID)
         }
         .onChange(of: self.scenePhase) { self.updateVisibility() }
+        .onChange(of: self.horizontalSizeClass) { self.updateVisibility() }
     }
 
     /// The stream runs only while the panel is on screen and the app is active.
     private func updateVisibility() {
         let visible = self.appeared && self.scenePhase == .active && self.size.width > 0
         let pixels = CGSize(width: self.size.width * self.displayScale, height: self.size.height * self.displayScale)
-        self.model.setVisible(visible, pixelSize: visible ? pixels : .zero, viewer: self.viewerID, viewport: visible ? self.size : nil)
+        self.model.setVisible(visible, pixelSize: visible ? pixels : .zero, viewer: self.viewerID, viewport: visible ? self.size : nil,
+                             compact: self.horizontalSizeClass == .compact)
     }
 
     /// Reads `status` and `tabs` only; the per-frame `model.frame` is read by `BrowserFrameView` alone.
@@ -78,6 +81,12 @@ struct BrowserPanelView: View {
                 Text(message)
             } actions: {
                 Button(L("Try Again")) { Task { await self.model.refreshTabs() } }
+            }
+        case .unstreamable:
+            ContentUnavailableView {
+                Label(L("Can't show the browser"), systemImage: "exclamationmark.triangle")
+            } description: {
+                Text("This browser can't be streamed. Extension-relay and existing-session browsers aren't supported; use a managed browser profile.", bundle: .module)
             }
         case .navigationBlocked:
             ContentUnavailableView {
@@ -139,7 +148,8 @@ private struct BrowserFrameView: View {
     }
 }
 
-/// No frame yet: a spinner, then "Waiting for page…" if the first frame takes more than about 10 s.
+/// No frame yet: a spinner. Once the stream is live a static page can stay quiet, so say so; otherwise
+/// "Waiting for page…" if the first frame takes more than about 10 s.
 private struct BrowserWaiting: View {
     let status: BrowserPanelModel.Status
     @State private var slow = false
@@ -147,7 +157,9 @@ private struct BrowserWaiting: View {
     var body: some View {
         VStack(spacing: Theme.Spacing.sm) {
             ProgressView().controlSize(.small)
-            if self.slow {
+            if self.status == .live {
+                Text("Waiting for the page to draw…", bundle: .module).font(.caption).foregroundStyle(.secondary)
+            } else if self.slow {
                 Text("Waiting for page…", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -160,6 +172,7 @@ private struct BrowserWaiting: View {
 /// empty state already says what's wrong.
 struct BrowserStatusPill: View {
     let status: BrowserPanelModel.Status
+    var attempt = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pulsing = false
 
@@ -175,10 +188,11 @@ struct BrowserStatusPill: View {
         case .loading:
             self.pill(L("Connecting…"), spoken: L("Connecting")) { ProgressView().controlSize(.mini) }
         case .reconnecting:
-            self.pill(L("Reconnecting…"), spoken: L("Reconnecting")) { ProgressView().controlSize(.mini) }
+            let text = self.attempt > 0 ? L("Reconnecting (\(self.attempt)/\(BrowserPanelModel.maxStreamFailures))…") : L("Reconnecting…")
+            self.pill(text, spoken: L("Reconnecting")) { ProgressView().controlSize(.mini) }
         case .idle:
             self.pill(L("Paused"), spoken: L("Paused")) { Circle().fill(.gray).frame(width: 6, height: 6) }
-        case .needsFullManagement, .notRunning, .navigationBlocked, .failed:
+        case .needsFullManagement, .notRunning, .navigationBlocked, .unstreamable, .failed:
             EmptyView()
         }
     }

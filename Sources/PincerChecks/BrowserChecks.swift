@@ -204,11 +204,11 @@ func runLiveBrowserChecks(url: String, token: String) async {
 
     // An unsupported browser closes 4005: a terminal error that stays put instead of retrying.
     await model.openTab(url: "https://unsupported.example/")
-    let terminal = await waitFor("4005 terminal", timeout: 20) { if case .failed = model.status { true } else { false } }
+    let terminal = await waitFor("4005 terminal", timeout: 20) { model.status == .unstreamable }
     var flipped = false
     for _ in 0..<15 {
         try? await Task.sleep(for: .milliseconds(100))
-        if case .failed = model.status {} else { flipped = true }
+        if model.status != .unstreamable { flipped = true }
     }
     check(terminal && !flipped, "mock: close 4005 is a terminal error and the panel stops retrying (\(model.status))")
     model.stop()
