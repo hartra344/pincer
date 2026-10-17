@@ -182,9 +182,11 @@ struct TranscriptPrefetchProbe {
         if let stats = PrefetchProbeShim.premeasure { lines.append("| premeasureStats / measureStats | \(stats(coordinator)) |") }
         print("\nTranscriptPrefetchProbe (\(Self.rowCount) rows, 700x900 window)\n" + lines.joined(separator: "\n"))
 
-        // Sanity only: the numbers above are the point, not a budget.
-        #expect(open.wall < Self.idleCap + 5)
-        #expect(top.wall < 5)
+        // Sanity only: the numbers above are the point, not a budget. They're wall-clock, so the solo
+        // perf lane (PINCER_STRICT_PERF=1) holds them as written and the parallel lane to `PerfBudget`'s
+        // ceiling: a loaded runner stretched `open` past 25 s there (#1022).
+        #expect(.seconds(open.wall) < PerfBudget.limit(.seconds(Self.idleCap + 5)))
+        #expect(.seconds(top.wall) < PerfBudget.limit(.seconds(5)))
         Self.keepAlive.append((window, coordinator))
     }
 }

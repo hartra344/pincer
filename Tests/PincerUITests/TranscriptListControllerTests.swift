@@ -326,6 +326,23 @@ struct TranscriptListControllerTests {
         #expect(controller.anchor == .row("u-u5", 100))
     }
 
+    @Test func pendingMeasureWorkClearsOnceThePrefetchDrains() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, _) = self.make(scratch, admission: TranscriptPremeasureAdmission())
+        let rows = Self.rows(0..<60)
+        _ = controller.accept(rows, contextChanged: false)
+        #expect(!controller.hasPendingMeasureWork)
+        controller.schedulePrefetch()
+        #expect(controller.hasPendingMeasureWork, "a scheduled prefetch step counts as pending work")
+        let drained = await eventually(timeout: .seconds(60)) { !controller.hasPendingMeasureWork }
+        #expect(drained, "the prefetch finishes and reports no pending work")
+        #expect(!controller.premeasure.hasPendingWork)
+        let window = host.rowWindow(screens: CGFloat(TranscriptMeasureQueue.screensAhead), minimum: 200)
+        let unmeasured = window.map { rows[$0.range].filter { controller.heights[$0.id]?.measured != true }.map(\.id) }
+        #expect(unmeasured == [], "every row in the prefetch window is measured once the work drains")
+    }
+
     @Test func pendingRevealWaitsForItsRow() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
