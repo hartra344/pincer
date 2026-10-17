@@ -28,15 +28,20 @@ extension ChatStore {
     }
 
     /// The message whose footer carries the branch switcher. `sessions.branches.list` reports only
-    /// branch tips, not where they fork, so this is the message the latest Edit & Resend or Regenerate
-    /// sent while it's on the active path, else the last committed user message. Nil without branches.
+    /// branch tips, not where they fork, so this is only a message this chat knows forked: the one the
+    /// latest Edit & Resend or Regenerate sent, or on the earlier branch the one it replaced. Nil when
+    /// neither is on the shown path (or the fork is unknown, e.g. after a relaunch); the header chip
+    /// still switches. Never the latest message by default, which put `‹ 2 / 2 ›` under every send (#1038).
     public var branchAnchorId: String? {
-        guard self.hasBranches else { return nil }
+        guard self.hasBranches, self.branchAnchorKey != nil || self.branchForkEntryId != nil else { return nil }
         let users = self.items.filter { $0.role == .user && $0.isReplyable && $0.transcriptId != nil }
         if let key = self.branchAnchorKey, let anchor = users.last(where: { $0.idempotencyKey == key }) {
             return anchor.transcriptId
         }
-        return users.last?.transcriptId
+        if let entryId = self.branchForkEntryId, users.contains(where: { $0.transcriptId == entryId }) {
+            return entryId
+        }
+        return nil
     }
 
     /// Constant-cost admission for the header's branch toolbar item.

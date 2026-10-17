@@ -415,7 +415,7 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
-    @Test func branchAnchorIsTheLastUserMessageOnceThereAreBranches() async {
+    @Test func branchAnchorIsTheForkedMessageOnEitherBranch() async {
         let gateway = await self.connected()
         let source = await self.loaded(gateway, Self.garden)
         let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
@@ -432,6 +432,17 @@ struct MessageEditTests {
         await self.settle { !chat.isRunning && self.messages(chat, .user).count == 3 && chat.items.last?.role == .assistant }
         await chat.load(force: true)
         #expect(self.messages(chat, .user).count == 3 && chat.branchAnchorId == edited)
+        // #1038: on the earlier branch the switcher sits on the message the edit replaced, not the latest one.
+        let original = chat.branchForkEntryId
+        if let old = chat.branches.first(where: { !$0.active }) {
+            #expect(await chat.switchBranch(to: old.leafEntryId))
+            await self.settle { chat.hasLoaded && !self.messages(chat, .user).contains { $0.transcriptId == edited } }
+            #expect(original != nil && chat.branchAnchorId == original)
+        }
+        // Branches this chat didn't fork never put the switcher under the latest send.
+        chat.branchAnchorKey = nil
+        chat.branchForkEntryId = nil
+        #expect(chat.hasBranches && chat.branchAnchorId == nil)
         await self.finish(gateway)
     }
 

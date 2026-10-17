@@ -235,7 +235,7 @@ struct CompactFooterTests {
                 "the row height includes only its one metadata line")
     }
 
-    @Test func compactBranchAndBookmarkKeepTheirOwnControlRow() throws {
+    @Test func compactBranchSwitcherSharesTheActionRow() throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let profile = GatewayProfile(name: "Footer", url: "ws://127.0.0.1:1", authMode: .none)
@@ -251,6 +251,7 @@ struct CompactFooterTests {
                          SessionBranch(leafEntryId: "second", headline: "second", messageCount: 1, active: true)]
         let bookmarks = BookmarkStore.shared(gatewayId: gateway.id)
         defer { bookmarks.removeAll() }
+        chat.branchForkEntryId = messageID
         bookmarks.add(Bookmark(sessionKey: key, messageId: messageID, preview: item.plainText))
         let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
                                         agent: AgentSummary(id: "footer", name: "Footer"), sessionKey: key,
@@ -263,12 +264,7 @@ struct CompactFooterTests {
         let footer = footerPart(placed.part)
         #expect(footer.branch?.count == 2)
         #expect(footer.isBookmarked)
-        #if os(iOS)
-        let branchTargetHeight: CGFloat = 44
-        #else
-        let branchTargetHeight: CGFloat = 28
-        #endif
-        #expect(footer.controlHeight >= branchTargetHeight + 4 + 2 * footer.actionRowHeight)
+        #expect(footer.actionFrames[.branch] != nil, "#1038: the switcher packs into the action rows, not a row of its own")
 
         let view = TranscriptFooterView(frame: placed.frame)
         let userActions = Actions()
@@ -282,11 +278,14 @@ struct CompactFooterTests {
         #expect(view.detailsDrawFrame.minY >= (visible.map(\.frame.maxY).max() ?? 0))
 
         let branchLabels: Set<String> = ["Previous branch", "Branch 2 of 2", "Next branch"]
+        let branchButtons = visible.filter { branchLabels.contains($0.accessibilityText) }
         let actionButtons = visible.filter { !branchLabels.contains($0.accessibilityText) }
-        let actionOrigin = footer.branchRowHeight + 4
+        let actionOrigin: CGFloat = 0
+        #expect(branchButtons.contains { branch in actionButtons.contains { abs($0.frame.midY - branch.frame.midY) < 1 } },
+                "the switcher shares a line with the message's actions")
         let actionRows = Set(actionButtons.map { Int(($0.frame.midY - actionOrigin) / footer.actionRowHeight) })
         #expect(actionRows.count > 1, "the branch and bookmark controls force a real wrapped action row")
-        let effectiveHits = actionButtons.map {
+        let effectiveHits = (branchButtons + actionButtons).map {
             $0.frame.insetBy(dx: -$0.hitOutset.width, dy: -$0.hitOutset.height)
         }
         for hit in effectiveHits {
@@ -358,7 +357,7 @@ extension TranscriptUIKitLayoutTests {
     }
 
     @Test func compactFooterKeepsBranchAndBookmarkTargetsSeparate() throws {
-        try CompactFooterTests().compactBranchAndBookmarkKeepTheirOwnControlRow()
+        try CompactFooterTests().compactBranchSwitcherSharesTheActionRow()
     }
 
     @Test func compactFooterReservesOnlyItsActualMetadataLines() throws {
