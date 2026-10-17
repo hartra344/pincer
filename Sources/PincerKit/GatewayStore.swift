@@ -293,7 +293,10 @@ public final class GatewayStore: Identifiable {
     }()
     /// The agent's portals (`portal.list`, `portal.close`); refreshed by `portal.changed`. Hidden when unavailable.
     @ObservationIgnored public private(set) lazy var portals = PortalStore(
-        connection: self.connection, hello: { [weak self] in self?.hello }, isDemo: self.profile.isDemo)
+        connection: self.connection, hello: { [weak self] in self?.hello }, isDemo: self.profile.isDemo, gatewayId: self.id,
+        agentSessions: { [weak self] agent in
+            (self?.sessions.values.filter { $0.agentId == agent } ?? []).sorted { $0.activityMs > $1.activityMs }.map(\.key)
+        })
     @ObservationIgnored var filesModelCache: [String: SessionFilesModel] = [:]
     @ObservationIgnored var filesModelOrder: [String] = []
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may

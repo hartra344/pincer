@@ -7,9 +7,10 @@ import Foundation
 @MainActor
 func runWorkspaceTitleChecks() {
     typealias P = WorkspaceTitlePreference
-    check(P.sheetTitle(isWorkspace: true, workspaceTitle: nil) == "Browser", "sheet title falls back to Browser before the panel reports one")
-    check(P.sheetTitle(isWorkspace: true, workspaceTitle: "Files") == "Files", "sheet title follows the selected tab")
-    check(P.sheetTitle(isWorkspace: false, workspaceTitle: "Files") == "Runs", "the Runs panel ignores the workspace title")
+    check(P.sheetTitle(panel: .workspace, workspaceTitle: nil) == "Browser", "sheet title falls back to Browser before the panel reports one")
+    check(P.sheetTitle(panel: .workspace, workspaceTitle: "Files") == "Files", "sheet title follows the selected tab")
+    check(P.sheetTitle(panel: .runs, workspaceTitle: "Files") == "Runs", "the Runs panel ignores the workspace title")
+    check(P.sheetTitle(panel: .portals, workspaceTitle: "Files") == "Portals", "the Portals panel's title comes from the sheet, not the panel")
     check(P.defaultValue == nil, "no title is reported until the panel is present")
     var value: String? = "Browser"
     P.reduce(value: &value, nextValue: { nil })

@@ -1,6 +1,6 @@
 ---
 title: Browser panel
-description: Watch the agent's live browser and open its portals and browse the chat's files in a panel next to the chat.
+description: Watch the agent's live browser and browse the chat's files in a panel next to the chat.
 ---
 
 The **Browser** panel shows what the agent's browser is looking at right now, so you can follow along while it works. You can move around the agent's browser, open and close its tabs and save a page. Clicking and typing into the page isn't available: the picture is view-only.
@@ -48,39 +48,16 @@ Without Full Management, the panel asks for it instead of showing the page.
 - Choose **Show Browser** from the chat's ⋯ menu. When the panel is open it reads **Hide Browser**.
 - Click or tap a [browser page card](../tool-calls/#browser-page-previews) in the chat. The panel opens on that card's page.
 
-The Browser panel shares its slot with [Runs](../subagents-and-runs/#opening-the-runs-panel). Opening one closes the other.
+The Browser panel shares its slot with [Runs](../subagents-and-runs/#opening-the-runs-panel) and [Portals](../portals/). Opening one closes the others.
+
+Portals the agent opens have their own panel: see [Portals](../portals/).
 
 - **Mac and iPad:** an inspector on the right side of the window. You can resize it.
 - **iPhone:** a sheet. Tap **Done** to close it.
 
-## Portals
-
-A portal is a small web app the agent started on the gateway's machine and shared through the gateway, such as a dashboard or a preview. When the agent has portals open, the panel shows a tab strip: **Browser**, then one tab per portal. With no portals, there's no strip.
-
-- **The badge:** the panel's toolbar button and its ⋯ menu item show how many portals are open. Pincer never opens the panel by itself, so the badge is how you know something is waiting.
-- **Viewing:** pick a portal's tab to load it inside the panel. It loads only while its tab is showing, and Pincer keeps at most three portals loaded at a time. A portal you haven't looked at in a while reloads when you select it again.
-- **Address and reload:** the address row shows the portal's address without its access token, and you can select and copy it. **Reload** loads it again.
-- **Open in Browser:** opens the portal in your default browser using its access link. Pincer asks first ("Open in your browser?"), because anyone with that link can use the portal until it closes.
-- **Copy Link:** in the address row's ⋯ menu. It copies the address without access, so it never includes the access token.
-- **Close:** the tab's ✕, its context menu, or **Close Portal** in the address row's ⋯ menu. Pincer asks `Close "Studio clock"?` and explains that the link stops working for everyone. The agent can open a new portal if needed. The Close controls are hidden when the connection can't open portals.
-
-**On iPhone,** open the panel from the chat's ⋯ menu: **Show Browser** shows the portal count. It opens as a sheet, and the tab strip scrolls sideways. The address row is compact: the portal's host, **Reload**, and a ⋯ menu with **Open in Browser**, **Copy Link** and **Close Portal**. Pulling down inside a page scrolls the page and doesn't close the sheet. Tap **Done** to close it.
-
-### Only the portal's own site
-
-The panel only shows the portal's own site. If a page in the portal links somewhere else, Pincer opens that link in your browser instead, with the access token removed. A page that redirects you away, or navigates away on its own, is blocked: a **Blocked a page outside the portal** banner shows the site's name, with an **Open in Browser** button if you want to go there yourself. Nothing opens until you choose it. Pages can't open pop-up windows, download files, or use your camera, microphone or location. Each portal keeps its cookies and storage in memory only, and they're discarded when the portal closes or you quit Pincer.
-
-### If a portal doesn't load
-
-- **"This portal only listens on the gateway's machine, so it may not load here":** the portal is reachable only from the gateway's own computer, and you're connected from another device. Pincer still tries to load it.
-- **"This connection can't open portals":** "Pincer was connected without permission to open links. Reconnect this Gateway to fix it." The gateway didn't give this device the portal's access link, so Pincer can't show it or close it. Make sure this device's **Access** includes write access, which **Full Management** does. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
-- **A load error:** choose **Try Again**.
-
-Portals don't need the browser plugin. If your gateway doesn't support portals, the tab strip and badge never appear.
-
 ## Files
 
-The **Files** tab, after **Browser** and any portal tabs, shows the workspace of the chat you have open: what the agent changed, what it read and what it produced. With no chat selected it says "Select a chat to see its files". It also appears on iPhone, in the same sheet.
+The **Files** tab, after **Browser**, shows the workspace of the chat you have open: what the agent changed, what it read and what it produced. With no chat selected it says "Select a chat to see its files". It also appears on iPhone, in the same sheet.
 
 Turn it off with **Show Files in the workspace panel** under **Settings ▸ Appearance ▸ Workspace panel**. It's on by default. If your gateway doesn't offer file listing, the tab never appears.
 
@@ -126,4 +103,4 @@ The picture streams only while the panel is visible. While it shows a page that 
 
 ## Try it in the demo
 
-In [Try the Demo](../../getting-started/try-the-demo/), open any chat and press **⌥⌘B**. It shows two pages, OpenClaw Docs and a GitHub release, with a moving demo picture. The demo also has one portal, **Studio clock**: its tab appears next to **Browser**, and closing it removes it.
+In [Try the Demo](../../getting-started/try-the-demo/), open any chat and press **⌥⌘B**. It shows two pages, OpenClaw Docs and a GitHub release, with a moving demo picture.

@@ -547,6 +547,7 @@ extension DemoGateway {
                 Whole-module optimization was off in the Release configuration, so every file compiled on its \
                 own. Turning it on cut the build from 6 min 40 s to 2 min 55 s.
                 """, ago: 2 * day - 2 * minute),
+            ] + Self.studioClockExchange(ago: 20 * minute) + [
                 said("user", "Fix the login timeout and push it.", ago: 3 * minute),
                 said("assistant", """
                 Raised the login timeout to 30 s and the tests pass. I've asked to run \

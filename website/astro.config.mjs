@@ -79,6 +79,7 @@ export default defineConfig({
 						{ slug: 'guides/gateway-voice' },
 						{ slug: 'guides/subagents-and-runs' },
 						{ slug: 'guides/browser-panel' },
+						{ slug: 'guides/portals' },
 						{ slug: 'guides/appearance' },
 						{ slug: 'guides/agent-avatars' },
 						{ slug: 'guides/accessibility' },

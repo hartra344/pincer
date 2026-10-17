@@ -260,7 +260,7 @@ struct PortalWebViewHost: PortalViewRepresentable {
     #endif
 }
 
-/// Serves the demo gateway's portal from memory (no network): `demo-portal://studio-clock/`.
+/// Serves the demo gateway's portals from memory (no network): `demo-portal://studio-clock/` and `demo-portal://build-dashboard/`.
 final class DemoPortalSchemeHandler: NSObject, WKURLSchemeHandler {
     private static let html = """
     <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
@@ -281,9 +281,32 @@ final class DemoPortalSchemeHandler: NSObject, WKURLSchemeHandler {
     </script>
     """
 
+    private static let dashboardHTML = """
+    <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+    <title>Build dashboard</title>
+    <style>
+    :root{color-scheme:light dark}
+    body{margin:0;padding:24px;font:15px -apple-system,system-ui,sans-serif;background:#0f172a;color:#e2e8f0}
+    h1{font-size:20px;font-weight:600;margin:0 0 4px}
+    .sub{opacity:.6;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse}
+    td{padding:10px 8px;border-top:1px solid #1e293b}
+    td:last-child{text-align:right;opacity:.6;font-variant-numeric:tabular-nums}
+    .s{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
+    .ok{background:#14532d;color:#86efac}.run{background:#1e3a8a;color:#93c5fd}.wait{background:#334155;color:#cbd5e1}
+    </style>
+    <h1>retry-fix</h1><div class=sub>Build #482 · 3 of 4 jobs passing</div>
+    <table>
+    <tr><td>Lint</td><td><span class="s ok">Passed</span></td><td>0:42</td></tr>
+    <tr><td>Unit tests</td><td><span class="s ok">Passed</span></td><td>3:18</td></tr>
+    <tr><td>Integration tests</td><td><span class="s run">Running</span></td><td>4:05</td></tr>
+    <tr><td>Package</td><td><span class="s wait">Waiting</span></td><td>—</td></tr>
+    </table>
+    """
+
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
         guard let url = task.request.url else { return task.didFailWithError(URLError(.badURL)) }
-        let data = Data(Self.html.utf8)
+        let data = Data((url.host == "build-dashboard" ? Self.dashboardHTML : Self.html).utf8)
         let response = URLResponse(url: url, mimeType: "text/html", expectedContentLength: data.count, textEncodingName: "utf-8")
         task.didReceive(response)
         task.didReceive(data)

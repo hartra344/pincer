@@ -3,9 +3,10 @@ import Testing
 
 struct WorkspaceTitlePreferenceTests {
     @Test func sheetTitleRouting() {
-        #expect(WorkspaceTitlePreference.sheetTitle(isWorkspace: true, workspaceTitle: nil) == "Browser")
-        #expect(WorkspaceTitlePreference.sheetTitle(isWorkspace: true, workspaceTitle: "Files") == "Files")
-        #expect(WorkspaceTitlePreference.sheetTitle(isWorkspace: false, workspaceTitle: "Files") == "Runs")
+        #expect(WorkspaceTitlePreference.sheetTitle(panel: .workspace, workspaceTitle: nil) == "Browser")
+        #expect(WorkspaceTitlePreference.sheetTitle(panel: .workspace, workspaceTitle: "Files") == "Files")
+        #expect(WorkspaceTitlePreference.sheetTitle(panel: .runs, workspaceTitle: "Files") == "Runs")
+        #expect(WorkspaceTitlePreference.sheetTitle(panel: .portals, workspaceTitle: "Files") == "Portals")
     }
 
     @Test func reduceKeepsLatestNonNil() {

@@ -1023,16 +1023,6 @@
         }
       }
     },
-    "%lld portals open": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld portals open"
-          }
-        }
-      }
-    },
     "%lld problems": {
       "localizations": {
         "en": {
@@ -1279,16 +1269,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 portal"
-          }
-        }
-      }
-    },
-    "1 portal open": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 portal open"
           }
         }
       }
@@ -8153,26 +8133,6 @@
         }
       }
     },
-    "Hide Browser · %lld portals": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide Browser · %lld portals"
-          }
-        }
-      }
-    },
-    "Hide Browser · 1 portal": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hide Browser · 1 portal"
-          }
-        }
-      }
-    },
     "Hide Others": {
       "localizations": {
         "en": {
@@ -8189,6 +8149,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide Pincer"
+          }
+        }
+      }
+    },
+    "Hide Portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Portals"
+          }
+        }
+      }
+    },
+    "Hide Portals (⌥⌘P)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Portals (⌥⌘P)"
           }
         }
       }
@@ -10823,6 +10803,16 @@
         }
       }
     },
+    "No portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No portals"
+          }
+        }
+      }
+    },
     "No results": {
       "localizations": {
         "en": {
@@ -12739,6 +12729,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Portal: %@"
+          }
+        }
+      }
+    },
+    "Portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portals"
+          }
+        }
+      }
+    },
+    "Portals this agent opens show here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portals this agent opens show here."
           }
         }
       }
@@ -16033,26 +16043,6 @@
         }
       }
     },
-    "Show Browser · %lld portals": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Browser · %lld portals"
-          }
-        }
-      }
-    },
-    "Show Browser · 1 portal": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Browser · 1 portal"
-          }
-        }
-      }
-    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
@@ -16139,6 +16129,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Pincer in the menu bar"
+          }
+        }
+      }
+    },
+    "Show Portals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Portals"
+          }
+        }
+      }
+    },
+    "Show Portals (⌥⌘P)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Portals (⌥⌘P)"
           }
         }
       }

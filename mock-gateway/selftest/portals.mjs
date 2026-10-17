@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { startServer } from '../server.mjs';
-import { PORTAL_EVENTS, PORTAL_METHODS, SECOND_PORTAL_TITLE, SEED_PORTAL_TITLE } from '../portals.mjs';
+import { CLOCK_SESSION_KEY, OWNED_ENVIRONMENT_ID, OWNED_SESSION_KEY, PORTAL_EVENTS, PORTAL_METHODS, SECOND_PORTAL_TITLE, SEED_PORTAL_TITLE, SESSION_PORTAL_METHODS } from '../portals.mjs';
 import { makeDevice, connectClient } from './helpers.mjs';
 
 // Portals on a fresh server so the seeded portal and its HTTP listener don't leak.
@@ -69,6 +69,27 @@ export async function run() {
     assert.equal((await fetch(`${portal.url.replace('/?', '/redirect-out?')}`, { redirect: 'manual' })).status, 302);
     assert.equal((await fetch(`${portal.publicUrl}redirect-out`, { redirect: 'manual' })).status, 401);
 
+    // Scoping (#1029): the clock is attributed by a `portal` tool call in one chat; the dashboard is owned by a session.
+    for (const method of SESSION_PORTAL_METHODS) assert.ok(writer.hello.features.methods.includes(method), method);
+    const history = (await writer.send('chat.history', { sessionKey: CLOCK_SESSION_KEY })).messages;
+    const call = history.flatMap((m) => (Array.isArray(m.content) ? m.content : [])).find((b) => b.type === 'toolCall' && b.name === 'portal');
+    assert.equal(call.arguments.action, 'open');
+    const opened = history.find((m) => m.role === 'toolResult' && m.toolName === 'portal');
+    assert.match(opened.content[0].text, /^Portal route allocated at /);
+    assert.equal(JSON.parse(opened.content[1].text).id, portal.id);
+    const other = (await writer.send('chat.history', { sessionKey: 'agent:main:main' })).messages;
+    assert.ok(!JSON.stringify(other).includes('"portal"'), 'another agent never opened a portal');
+    assert.deepEqual(await writer.send('environments.session.status', { sessionKey: 'agent:main:main' }), { attachment: null });
+    const status = await writer.send('environments.session.status', { sessionKey: OWNED_SESSION_KEY });
+    assert.equal(status.attachment.environmentId, OWNED_ENVIRONMENT_ID);
+    assert.equal(status.closed, false);
+    const ownedList = (await writer.send('portal.session.list', { sessionKey: OWNED_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID })).portals;
+    assert.deepEqual(ownedList.map((p) => p.id), [second.id]);
+    assert.ok(ownedList[0].url, 'the owner list is unredacted for a writer');
+    await assert.rejects(writer.send('portal.session.list', { sessionKey: 'agent:main:main', environmentId: OWNED_ENVIRONMENT_ID }));
+    assert.deepEqual(await writer.send('portal.session.close', { id: second.id, sessionKey: CLOCK_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID }).catch(() => 'rejected'), 'rejected');
+    assert.equal((await reader.call('portal.session.close', { id: second.id, sessionKey: OWNED_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID })).ok, false);
+
     // Close: gone, and a redacted portal.changed reaches every connection.
     const changed = reader.waitEvent('portal.changed');
     assert.deepEqual(await writer.send('portal.close', { id: portal.id }), { closed: true });
@@ -78,6 +99,10 @@ export async function run() {
     assert.deepEqual((await writer.send('portal.list', {})).portals.map((p) => p.id), [second.id]);
     assert.deepEqual(await writer.send('portal.close', { id: portal.id }), { closed: false });
     await assert.rejects(fetch(portal.url), 'the portal listener stops with the portal');
+    const ownedChanged = reader.waitEvent('portal.changed');
+    assert.deepEqual(await writer.send('portal.session.close', { id: second.id, sessionKey: OWNED_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID }), { closed: true });
+    assert.deepEqual((await ownedChanged).portals, []);
+    assert.deepEqual((await writer.send('portal.session.list', { sessionKey: OWNED_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID })).portals, []);
 
     writer.ws.close();
     reader.ws.close();
@@ -108,5 +133,18 @@ export async function run() {
   } finally {
     delete process.env.MOCK_NO_PORTALS;
     await off.close();
+  }
+
+  // MOCK_NO_SESSION_PORTALS=1 drops the 2026.9 session methods but keeps portal.list/portal.close.
+  process.env.MOCK_NO_SESSION_PORTALS = '1';
+  const legacy = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token' });
+  try {
+    const client = await connectClient(`ws://127.0.0.1:${legacy.address().port}`, makeDevice(), 'dev-token');
+    for (const method of SESSION_PORTAL_METHODS) assert.ok(!client.hello.features.methods.includes(method), method);
+    for (const method of PORTAL_METHODS) assert.ok(client.hello.features.methods.includes(method), method);
+    client.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_SESSION_PORTALS;
+    await legacy.close();
   }
 }
