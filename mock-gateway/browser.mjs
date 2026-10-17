@@ -4,7 +4,7 @@
 // route that serves downloads.
 // Shapes follow upstream extensions/browser/src/browser/{routes/agent.screencast.ts,screencast/{wire,upgrade}.ts}.
 import crypto from 'node:crypto';
-import fs from 'node:fs';
+import jpegJs from 'jpeg-js';
 import { WebSocketServer } from 'ws';
 
 export const BROWSER_METHODS = ['browser.request'];
@@ -34,17 +34,36 @@ export const STATIC_HOST = 'static.example';
 export const UNSUPPORTED_HOST = 'unsupported.example';
 const hostOf = (url) => { try { return new URL(url).hostname; } catch { return ''; } };
 
-// Valid baseline JPEGs (192x120), generated once offline with `sips`: one per color.
-const FRAMES_B64 = [
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+OaKKK+uPFCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/R8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/S8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/T8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/U8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/V8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/W8Hooor9oPgQroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnOdooorxT0Aroq52uirtw3U563QKKKK7TnP/Z',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+S6KKK8s+uCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//0eXooor4k/oQK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI//9Ll6KKK+JP6ECuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiP//T5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//1OXooor4k/oQK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI6yiiiuU9oK5Ousrk61p9TixPQKKKK1OI//9Xl6KKK+JP6ECuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiOsooorlPaCuTrrK5OtafU4sT0CiiitTiP//W5eiiiviT+hArk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4jrKKKK5T2grk66yuTrWn1OLE9AooorU4j//2Q==',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+TaKKK5z5sKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Q8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//R8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//S8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//T8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//U8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//V8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//W8vooorzT8vCusrk66ypZy1+gUUUVJynJ0UUVoeoFdZXJ11lSzlr9AoooqTlOTooorQ9QK6yuTrrKlnLX6BRRRUnKcnRRRWh6gV1lcnXWVLOWv0CiiipOU//Z',
-  '/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAwKADAAQAAAABAAAAeAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAeADAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMABAQEBAQEBgQEBgkGBgYJDAkJCQkMDwwMDAwMDxIPDw8PDw8SEhISEhISEhUVFRUVFRkZGRkZHBwcHBwcHBwcHP/bAEMBBAUFBwcHDAcHDB0UEBQdHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHf/dAAQADP/aAAwDAQACEQMRAD8A+Z6KKK+RPUCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA//Q6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//0eoooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9LqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//T6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//1Ooooor+eT7wK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE7qiiivDOwK4Wu6rha7sL1ManQKKKK7jE//9XqKKKK/nk+8CuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xO6ooorwzsCuFruq4Wu7C9TGp0Ciiiu4xP//W6iiiiv55PvArha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMTuqKKK8M7Arha7quFruwvUxqdAoooruMT//2Q==',
-];
-export const FRAMES = FRAMES_B64.map((b64) => Buffer.from(b64, 'base64'));
-// 192x256 variants, used when the page viewport is taller than wide.
-export const PORTRAIT_FRAMES = [0, 1, 2, 3].map((i) => fs.readFileSync(new URL(`./assets/browser-portrait-${i}.jpg`, import.meta.url)));
-const framesFor = (viewport) => (viewport.height > viewport.width ? PORTRAIT_FRAMES : FRAMES);
+// Frames are painted at the page's viewport aspect (scaled so the long edge is 320 px), like upstream repaints
+// at the CSS size. Vertical stripes in one of four hues, no chrome, so aspect-fit is visible at a glance.
+const FRAME_HUES = [[36, 99, 235], [22, 163, 74], [217, 119, 6], [147, 51, 234]];
+const frameCache = new Map();
+export function frameFor(viewport, index) {
+  const scale = 320 / Math.max(viewport.width, viewport.height);
+  const width = Math.max(8, Math.round(viewport.width * scale));
+  const height = Math.max(8, Math.round(viewport.height * scale));
+  const hue = index % FRAME_HUES.length;
+  const key = `${width}x${height}:${hue}`;
+  let jpeg = frameCache.get(key);
+  if (!jpeg) {
+    const data = Buffer.alloc(width * height * 4);
+    const stripe = Math.max(4, Math.round(width / 8));
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const shade = Math.floor(x / stripe) % 2 === 0 ? 1 : 0.72;
+        const o = (y * width + x) * 4;
+        data[o] = FRAME_HUES[hue][0] * shade;
+        data[o + 1] = FRAME_HUES[hue][1] * shade;
+        data[o + 2] = FRAME_HUES[hue][2] * shade;
+        data[o + 3] = 255;
+      }
+    }
+    jpeg = jpegJs.encode({ data, width, height }, 85).data;
+    frameCache.set(key, jpeg);
+  }
+  return jpeg;
+}
+const DEFAULT_FRAME = () => frameFor(DEFAULT_VIEWPORT, 0);
 
 export function browserDisabled() {
   return process.env.MOCK_NO_BROWSER === '1';
@@ -190,7 +209,7 @@ export function encodeFrame(url, jpeg, ts = Date.now(), scrollY = 0, css = DEFAU
 
 function malformedFrame(kind, url) {
   if (kind === CASE_BAD_LENGTH) {
-    const wire = encodeFrame(url, FRAMES[0]);
+    const wire = encodeFrame(url, DEFAULT_FRAME());
     wire.writeUInt32BE(wire.length + 1000, 0);
     return wire;
   }
@@ -198,10 +217,10 @@ function malformedFrame(kind, url) {
   const prefix = Buffer.from(`{"url":${JSON.stringify(url)},"pad":"`, 'utf8');
   const suffix = Buffer.from('"}', 'utf8');
   const header = Buffer.concat([prefix, filler.subarray(0, 70_000 - prefix.length - suffix.length), suffix]);
-  const wire = Buffer.allocUnsafe(4 + header.length + FRAMES[0].length);
+  const wire = Buffer.allocUnsafe(4 + header.length + DEFAULT_FRAME().length);
   wire.writeUInt32BE(header.length, 0);
   header.copy(wire, 4);
-  FRAMES[0].copy(wire, 4 + header.length);
+  DEFAULT_FRAME().copy(wire, 4 + header.length);
   return wire;
 }
 
@@ -401,8 +420,7 @@ export function attachScreencastUpgrade(httpServer, state, fallback) {
         const tab = liveTab();
         if (ws.readyState !== ws.OPEN || !tab) return;
         const { url: pageUrl } = currentPage(tab);
-        const frames = framesFor(tab.viewport);
-        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, frames[(n + pageUrl.length) % frames.length], Date.now(), (n % 4) * 40, tab.viewport);
+        const frame = hook ? malformedFrame(hook, pageUrl) : encodeFrame(pageUrl, frameFor(tab.viewport, n + pageUrl.length), Date.now(), (n % 4) * 40, tab.viewport);
         n += 1;
         ws.send(frame, { binary: true });
       };

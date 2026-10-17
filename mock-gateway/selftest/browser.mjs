@@ -22,6 +22,15 @@ function collect(url, count, { timeoutMs = 3000, onOpen } = {}) {
   });
 }
 
+function jpegSize(jpeg) {
+  for (let i = 2; i < jpeg.length - 9; ) {
+    if (jpeg[i] !== 0xff) { i += 1; continue; }
+    if (jpeg[i + 1] >= 0xc0 && jpeg[i + 1] <= 0xc3) return { height: jpeg.readUInt16BE(i + 5), width: jpeg.readUInt16BE(i + 7) };
+    i += 2 + jpeg.readUInt16BE(i + 2);
+  }
+  return null;
+}
+
 function decodeFrame(buf) {
   const headerLength = buf.readUInt32BE(0);
   const header = JSON.parse(buf.subarray(4, 4 + headerLength).toString('utf8'));
@@ -223,6 +232,9 @@ async function runStreamShapes() {
     assert.equal(JSON.parse(got.messages[0].data.toString('utf8')).type, 'ready');
     const resized = decodeFrame(got.messages[1].data).header;
     assert.deepEqual([resized.cssWidth, resized.cssHeight], [500, 900]);
+    // The repainted image has the requested viewport's aspect, as upstream repaints at the CSS size.
+    const size = jpegSize(decodeFrame(got.messages[1].data).jpeg);
+    assert.ok(Math.abs(size.width / size.height - 500 / 900) < 0.01, `repaint aspect ${size.width}x${size.height}`);
 
     // The default viewport is landscape; resize is validated like upstream.
     const first = decodeFrame((await collect(await wsFor(t1), 2)).messages[1].data).header;

@@ -8,6 +8,7 @@
     "selftest": "node selftest.mjs"
   },
   "dependencies": {
+    "jpeg-js": "^0.4.4",
     "ws": "^8.18.0"
   }
 }
