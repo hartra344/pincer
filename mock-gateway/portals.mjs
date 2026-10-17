@@ -4,10 +4,20 @@
 // Each portal is backed by a real tiny HTTP server (a ticking clock) behind the `openclaw_portal` token check:
 // a query token sets the HttpOnly `openclaw_portal_<port>` cookie; neither token nor cookie is a 401.
 // `portal.open` is not mocked: the agent opens portals, Pincer doesn't.
+// Scoping (#1029): portals carry no owner field. "Studio clock" is a host portal the coder's main chat opened
+// with a `portal` tool call (its chat.history holds the call and the result with the portal id). "Build
+// dashboard" is owned by a session with an attached environment, reported by the 2026.9 session methods
+// (`environments.session.status`, `portal.session.list`, `portal.session.close`); MOCK_NO_SESSION_PORTALS=1
+// drops those methods.
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { makeMessage, textBlock, toolCallBlock } from './util.mjs';
 
 export const PORTAL_METHODS = ['portal.list', 'portal.close'];
+export const SESSION_PORTAL_METHODS = ['environments.session.status', 'portal.session.list', 'portal.session.close'];
+export const CLOCK_SESSION_KEY = 'agent:coder:main';
+export const OWNED_SESSION_KEY = 'agent:coder:dashboard:retry-fix';
+export const OWNED_ENVIRONMENT_ID = 'env_worker_retry_fix';
 export const PORTAL_EVENTS = ['portal.changed'];
 export const SEED_PORTAL_TITLE = 'Studio clock';
 export const SECOND_PORTAL_TITLE = 'Build dashboard';
@@ -23,6 +33,10 @@ export function portalLoopbackOnly() {
 
 export function portalsDisabled() {
   return process.env.MOCK_NO_PORTALS === '1';
+}
+
+export function sessionPortalsDisabled() {
+  return process.env.MOCK_NO_SESSION_PORTALS === '1';
 }
 
 const PAGE = `<!doctype html>
@@ -105,11 +119,12 @@ function stopPortalHttp(portal) {
 
 /** Seeds the portals and starts their HTTP servers. Call once while starting the mock. */
 export async function initPortals(state) {
-  state.portals = { entries: new Map() };
+  // Sessions with an attached dedicated environment (it outlives its portals).
+  state.portals = { entries: new Map(), environments: new Map([[OWNED_SESSION_KEY, OWNED_ENVIRONMENT_ID]]) };
   if (portalsDisabled()) return;
   const seeds = [
     { id: 'portal_studio_clock', title: SEED_PORTAL_TITLE, description: 'A live clock for the studio wall display.', port: APP_PORT, ageMs: 5 * 60_000 },
-    { id: 'portal_build_dashboard', title: SECOND_PORTAL_TITLE, description: 'CI status for the main branch.', port: APP_PORT + 1, ageMs: 2 * 60_000 },
+    { id: 'portal_build_dashboard', title: SECOND_PORTAL_TITLE, description: 'CI status for the main branch.', port: APP_PORT + 1, ageMs: 2 * 60_000, ownerSessionKey: OWNED_SESSION_KEY, environmentId: OWNED_ENVIRONMENT_ID },
   ];
   for (const seed of seeds) {
     // Each portal has its own listener port and token, so one portal's cookie never opens another.
@@ -121,10 +136,30 @@ export async function initPortals(state) {
       path: '/',
       token: crypto.randomBytes(18).toString('base64url'),
       createdAtMs: Date.now() - seed.ageMs,
+      ...(seed.ownerSessionKey && !sessionPortalsDisabled() ? { ownerSessionKey: seed.ownerSessionKey, environmentId: seed.environmentId } : {}),
     };
     await startPortalHttp(portal);
     state.portals.entries.set(portal.id, portal);
   }
+  seedClockToolCall(state, state.portals.entries.get('portal_studio_clock'));
+}
+
+/** The coder's main chat opened the Studio clock: a `portal` tool call whose result echoes the summary. */
+function seedClockToolCall(state, portal) {
+  const transcript = state.transcripts?.get(CLOCK_SESSION_KEY);
+  if (!transcript) return;
+  const args = { action: 'open', port: portal.port, title: portal.title, description: portal.description };
+  const summary = summarize(portal);
+  // Like the agent's `portal` tool: the opener's link, then the PortalSummary as JSON.
+  const text = `Portal route allocated at ${summary.publicUrl}`;
+  transcript.push(
+    makeMessage('user', [textBlock('Put a live clock on the studio wall display.')]),
+    makeMessage('assistant', [toolCallBlock('call_portal_open', 'portal', args)]),
+    makeMessage('toolResult', [textBlock(text), textBlock(JSON.stringify(summary, null, 2))], {
+      extra: { toolCallId: 'call_portal_open', toolName: 'portal', details: summary, isError: false },
+    }),
+    makeMessage('assistant', [textBlock('The studio clock is live. Open it from the Portals button.')]),
+  );
 }
 
 export async function stopPortals(state) {
@@ -168,12 +203,19 @@ function listFor(state) {
   return [...(state.portals?.entries.values() ?? [])].map(summarize);
 }
 
+function sessionTarget(state, params) {
+  const sessionKey = params.sessionKey;
+  return { sessionKey, environmentId: state.portals?.environments?.get(sessionKey) };
+}
+
 /** Handles portal.* requests; returns false when the method isn't ours. */
 export function handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broadcast }) {
   const { id, method } = msg;
-  if (!PORTAL_METHODS.includes(method) || portalsDisabled()) return false;
+  const isSession = SESSION_PORTAL_METHODS.includes(method);
+  if (isSession ? sessionPortalsDisabled() : !PORTAL_METHODS.includes(method)) return false;
+  if (portalsDisabled()) return false;
   const scopes = conn.scopes ?? [];
-  const required = method === 'portal.close' ? WRITE_SCOPE : READ_SCOPE;
+  const required = method === 'portal.close' || method === 'portal.session.close' ? WRITE_SCOPE : READ_SCOPE;
   const allowed = scopes.includes(required) || scopes.includes(ADMIN_SCOPE) || (required === READ_SCOPE && scopes.includes(WRITE_SCOPE));
   if (!allowed) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${required}`, { code: 'MISSING_SCOPE', scope: required });
@@ -182,6 +224,50 @@ export function handlePortalsRequest(state, conn, msg, { sendRes, sendErr, broad
   const params = msg.params ?? {};
   if (params.environmentId !== undefined && typeof params.environmentId !== 'string') {
     sendErr(conn, id, 'INVALID_REQUEST', 'invalid portal params: environmentId must be a string');
+    return true;
+  }
+  if (isSession) {
+    if (method === 'environments.session.status') {
+      const key = params.sessionKey ?? (params.agentId ? `agent:${params.agentId}:main` : undefined);
+      const { environmentId } = sessionTarget(state, { sessionKey: key });
+      if (!environmentId || (params.environmentId && params.environmentId !== environmentId)) {
+        sendRes(conn, id, { attachment: null });
+        return true;
+      }
+      sendRes(conn, id, {
+        attachment: { environmentId, closedAtMs: null },
+        closed: false,
+        environment: { id: environmentId, type: 'worker', status: 'available' },
+      });
+      return true;
+    }
+    if (typeof params.sessionKey !== 'string' || !params.sessionKey || typeof params.environmentId !== 'string' || !params.environmentId) {
+      sendErr(conn, id, 'INVALID_REQUEST', `invalid ${method} params: sessionKey and environmentId are required`);
+      return true;
+    }
+    const target = sessionTarget(state, params);
+    if (target.environmentId !== params.environmentId) {
+      sendErr(conn, id, 'INVALID_REQUEST', 'Conversation environment target changed');
+      return true;
+    }
+    const owned = [...state.portals.entries.values()].filter((p) => p.ownerSessionKey === params.sessionKey && p.environmentId === params.environmentId);
+    if (method === 'portal.session.list') {
+      sendRes(conn, id, { portals: owned.map(summarize) });
+      return true;
+    }
+    if (typeof params.id !== 'string' || !params.id) {
+      sendErr(conn, id, 'INVALID_REQUEST', 'invalid portal.session.close params: id is required');
+      return true;
+    }
+    const portal = owned.find((p) => p.id === params.id);
+    if (!portal) {
+      sendRes(conn, id, { closed: false });
+      return true;
+    }
+    state.portals.entries.delete(portal.id);
+    stopPortalHttp(portal);
+    sendRes(conn, id, { closed: true });
+    broadcast(state, 'portal.changed', { portals: listFor(state).map(redact) });
     return true;
   }
   if (method === 'portal.list') {

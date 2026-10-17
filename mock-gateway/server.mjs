@@ -26,7 +26,7 @@ import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
 import { handleLinkPreviewRequest, LINK_PREVIEW_METHOD } from './link-preview.mjs';
 import { BROWSER_METHODS, attachScreencastUpgrade, browserDisabled, handleBrowserHttp, handleBrowserRequest } from './browser.mjs';
-import { PORTAL_EVENTS, PORTAL_METHODS, handlePortalsRequest, initPortals, portalsDisabled, stopPortals } from './portals.mjs';
+import { PORTAL_EVENTS, PORTAL_METHODS, SESSION_PORTAL_METHODS, handlePortalsRequest, initPortals, portalsDisabled, sessionPortalsDisabled, stopPortals } from './portals.mjs';
 import { SESSION_FILES_METHODS, handleSessionFilesRequest, sessionFilesDisabled } from './sessions-files.mjs';
 import { handleMiscRequest } from './misc.mjs';
 import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
@@ -83,6 +83,7 @@ const METHODS = [
   ...MCP_METHODS,
   ...BROWSER_METHODS,
   ...PORTAL_METHODS,
+  ...SESSION_PORTAL_METHODS,
   ...SESSION_FILES_METHODS,
   ...CRON_METHODS,
   ...LOGS_METHODS,
@@ -206,7 +207,8 @@ function advertisedMethods() {
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
     ...(browserDisabled() ? BROWSER_METHODS : []),
-    ...(portalsDisabled() ? PORTAL_METHODS : []),
+    ...(portalsDisabled() ? [...PORTAL_METHODS, ...SESSION_PORTAL_METHODS] : []),
+    ...(sessionPortalsDisabled() ? SESSION_PORTAL_METHODS : []),
     ...(sessionFilesDisabled() ? SESSION_FILES_METHODS : []),
     ...(reactionsDisabled() ? REACTION_METHODS : []),
     ...hiddenSessionManagerMethods(),

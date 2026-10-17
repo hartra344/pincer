@@ -144,7 +144,8 @@ Portals (`portals.mjs`, #974):
 - Two seeded portals, `portal_studio_clock` and `portal_build_dashboard` "Build dashboard" (own port and token, so one portal's cookie is a 401 on the other). The first is `portal_studio_clock` "Studio clock" (description, `path: "/"`, `exposure {kind: "non-loopback", browserReachability: "unverified"}`), backed by a real HTTP server on a random 127.0.0.1 port (`listenPort`; `publicUrl` is `http://127.0.0.1:<listenPort>/`, `url` adds `?openclaw_portal=<token>`). The page is a ticking clock. A request with the `openclaw_portal` query token gets 200 and `Set-Cookie: openclaw_portal_<listenPort>=<token>; HttpOnly; SameSite=Lax; Path=/`; the cookie alone also works; neither is 401.
 - `GET /redirect-out` on a portal (token or cookie required, else 401) answers 302 to `http://example.com/`. `MOCK_PORTAL_LOOPBACK=1` makes Studio clock report `exposure.kind: "loopback-only"`.
 - `portal.close` stops that portal's HTTP server and broadcasts `portal.changed {portals}` (always redacted) to every connection. The servers also stop with the mock.
-- `MOCK_NO_PORTALS=1` drops both methods from `hello-ok` (and starts no HTTP server), like an older Gateway.
+- `MOCK_NO_SESSION_PORTALS=1` drops the 2026.9 session methods (`environments.session.status`, `portal.session.list`, `portal.session.close`) but keeps `portal.list`/`portal.close`. "Studio clock" is attributed by a `portal` tool call in `agent:coder:main`'s history; "Build dashboard" is owned by `agent:coder:dashboard:retry-fix` (environment `env_worker_retry_fix`).
+- `MOCK_NO_PORTALS=1` drops all portal methods from `hello-ok` (and starts no HTTP server), like an older Gateway.
 
 Text-to-speech (`tts.mjs`):
 

@@ -141,3 +141,49 @@ public enum PortalOriginPolicy {
         }
     }
 }
+
+/// The portals a chat's agent opened itself (successful `portal` tool calls with `action: open`).
+public struct PortalRefs: Hashable, Sendable {
+    public var ids: Set<String>
+    public var publicURLs: Set<String>
+
+    public static let empty = PortalRefs()
+    public var isEmpty: Bool { self.ids.isEmpty && self.publicURLs.isEmpty }
+
+    public init(ids: Set<String> = [], publicURLs: Set<String> = []) {
+        self.ids = ids
+        self.publicURLs = publicURLs
+    }
+
+    public init<S: Sequence>(tools: S) where S.Element == ToolActivity {
+        self.init()
+        for tool in tools { self.insert(tool.openedPortal) }
+    }
+
+    mutating func insert(_ open: PortalToolOpen?) {
+        guard let open else { return }
+        if let id = open.id { self.ids.insert(id) }
+        if let url = open.publicURL { self.publicURLs.insert(Self.normalized(url)) }
+    }
+
+    func contains(_ portal: PortalSummary) -> Bool {
+        self.ids.contains(portal.id) || self.publicURLs.contains(Self.normalized(portal.publicURL.absoluteString))
+    }
+
+    static func normalized(_ url: String) -> String {
+        url.hasSuffix("/") ? String(url.dropLast()) : url
+    }
+}
+
+/// Which portals one chat shows: those its session owns plus those its agent opened in the transcript.
+public struct PortalScope: Hashable, Sendable {
+    public var sessionKey: String
+    public var agentId: String?
+    public var opened: PortalRefs
+
+    public init(sessionKey: String, agentId: String? = nil, opened: PortalRefs = .empty) {
+        self.sessionKey = sessionKey
+        self.agentId = agentId
+        self.opened = opened
+    }
+}

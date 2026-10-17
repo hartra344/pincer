@@ -325,6 +325,10 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var outcomeRunId: String?
     /// Reactions the agent added with its `message` tool, by transcript id.
     public internal(set) var agentReactions: [String: [String]] = [:]
+    /// Portals this chat's agent opened (successful `portal` tool calls), from the transcript and the live run.
+    /// Written only when it changes, so views don't re-render per streamed token.
+    public internal(set) var openedPortals = PortalRefs.empty
+    @ObservationIgnored var committedOpenedPortals = PortalRefs.empty
     /// Reactions on this chat's messages as the Gateway stores them (`session.reactions.*`), by transcript id.
     public internal(set) var sharedReactions: [String: [ReactionSummary]] = [:]
     /// Your Gateway reaction identity once this chat has synced its reactions on the connection; nil while
@@ -526,7 +530,15 @@ public final class ChatStore: Identifiable {
         var committed: [TranscriptEntry]?
         if itemsChanged || self.committedEntryCount == nil {
             committed = TranscriptBuilder.build(self.items)
+            if let committed {
+                var refs = PortalRefs()
+                for case let .assistant(turn) in committed { for tool in turn.tools { refs.insert(tool.openedPortal) } }
+                self.committedOpenedPortals = refs
+            }
         }
+        var opened = self.committedOpenedPortals
+        if let live { for tool in live.tools { opened.insert(tool.openedPortal) } }
+        if opened != self.openedPortals { self.openedPortals = opened }
         if itemsChanged {
             var byId: [String: ChatItem] = [:]
             for item in self.items where item.isReplyable {

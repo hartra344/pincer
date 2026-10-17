@@ -119,6 +119,8 @@ actor DemoGateway {
     var sessionsSubscribed = false
     /// The demo's one portal ("Studio clock") until the user closes it.
     var demoPortalOpen = true
+    /// The Build dashboard, owned by the retry-fix chat's attached environment, until it's closed.
+    var demoDashboardOpen = true
     /// The demo browser's tabs with their history, created on first use (DemoGateway+Browser.swift).
     var demoBrowserTabs: [DemoBrowserTab] = BrowserDemoPages.all.map(DemoBrowserTab.init)
     var demoBrowserTabCounter = 0
