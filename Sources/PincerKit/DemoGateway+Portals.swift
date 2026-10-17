@@ -105,19 +105,24 @@ extension DemoGateway {
         ]
     }
 
-    /// Forge's `portal` call that opened the Studio clock: the opener's link, then the summary as JSON,
-    /// the way the agent's tool returns it.
+    /// Forge's `portal` call that opened the Studio clock, the way the default runtime records it: Tool Search
+    /// hides `portal`, so the model calls `dispatch_action`, whose result is an envelope around the tool's
+    /// content (the opener's link, then the summary as JSON).
     static func studioClockExchange(ago: Double) -> [JSONValue] {
         let callId = "call_demo_portal_open"
         let summary = studioClock()
         let args: JSONValue = ["action": "open", "port": 4173, "title": "Studio clock"]
+        let prose = "Portal route allocated at \(demoPortalLoadURL). Pass PUBLIC_URL=\(demoPortalPublicURL) and PORT=4173 when starting the dev server on the selected environment. Browser access and application rendering remain unverified from the requesting viewer; allocation or a worker/Gateway browser test is not delivery proof. Use the returned URLs unchanged."
+        let content: [JSONValue] = [text(prose), text(ContentBlock.prettyJSON(summary) ?? "")]
+        let envelope: JSONValue = [
+            "tool": ["id": "openclaw:core:portal", "name": "portal", "source": "openclaw"],
+            "result": ["content": .array(content)],
+        ]
         return [
             message("user", [text("Put a live clock on the studio wall display.")], ago: ago),
-            message("assistant", [toolCall(callId, "portal", args)], ago: ago - 20),
-            message("toolResult", [
-                text("Portal route allocated at \(demoPortalPublicURL)"),
-                text(ContentBlock.prettyJSON(summary) ?? ""),
-            ], ago: ago - 25, extra: ["toolCallId": .string(callId), "toolName": "portal", "isError": false, "details": summary]),
+            message("assistant", [toolCall(callId, "dispatch_action", ["id": "openclaw:core:portal", "args": args])], ago: ago - 20),
+            message("toolResult", [text(ContentBlock.prettyJSON(envelope) ?? "")], ago: ago - 25,
+                    extra: ["toolCallId": .string(callId), "toolName": "dispatch_action", "isError": false]),
             message("assistant", [text("The studio clock is live. Open it from the Portals button.")], ago: ago - 30),
         ]
     }
