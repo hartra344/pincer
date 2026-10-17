@@ -37,7 +37,8 @@ struct DeviceModePage: View {
                     }
                     if let last = controller.lastInvoke {
                         LabeledContent(L("Last request")) {
-                            Text("\(last.command) · \(last.ok ? L("answered") : L("failed")) · \(last.at.formatted(.relative(presentation: .named)))")
+                            Text(verbatim: [last.command, last.ok ? L("answered") : L("failed"),
+                                           last.at.formatted(.relative(presentation: .named))].joined(separator: " · "))
                                 .foregroundStyle(.secondary)
                         }
                     }
