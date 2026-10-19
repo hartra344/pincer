@@ -5,13 +5,7 @@ import SwiftUI
 
 /// Sidebar backed by a source-list `NSOutlineView`: native rows, selection, keyboard navigation,
 /// collapsible sections, context menus, and drag and drop between groups.
-struct SidebarList: NSViewRepresentable {
-    let model: SidebarModel
-    let selectedKey: String?
-    let gateway: GatewayStore
-    let actions: SidebarActions
-    var theme = AppTheme()
-
+extension SidebarList: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(gateway: self.gateway, actions: self.actions) }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -597,12 +591,6 @@ private final class SidebarOutlineView: NSOutlineView {
 
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
         self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)
-    }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }
 
