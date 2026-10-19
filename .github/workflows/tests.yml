@@ -19,7 +19,7 @@ env:
   SWIFT_FLAGS: -Xswiftc -enable-incremental-file-hashing --disable-index-store
   # Only main saves build caches. Pull requests restore main's, so they can't evict them from the
   # repository's 10 GB cache.
-  SAVE_CACHES: ${{ github.event_name == 'push' || github.head_ref == 'hartra344-cut-ci-time-to-10-minutes' }}
+  SAVE_CACHES: ${{ github.event_name == 'push' }}
 
 jobs:
   # Docs- and website-only changes skip the jobs below (docs.yml builds the website instead).
@@ -142,20 +142,15 @@ jobs:
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
           exit "${PIPESTATUS[0]}"
 
-  # The Swift jobs run the tests on macOS, where the UIKit list never loads. These run the transcript
-  # suites (hosted UIKit list, Dynamic Type parity, controller) and SVG rendering against an iPhone
-  # simulator, split across parallel runners by scripts/ci-ios-shard.sh. The simulator boots while
-  # the shard builds. One process hosting every suite starved the timeout-bounded tests (#643).
-  ios-tests:
-    name: iOS simulator tests (${{ matrix.shard }})
+  # The Swift jobs run the tests on macOS, where the UIKit list never loads. Build once, then run
+  # each shard with test-without-building on its own runner. This keeps PR wall-clock low while
+  # preserving main coverage before TestFlight.
+  ios-tests-build:
+    name: iOS simulator tests (build)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.changes.outputs.ios_shards || '["hosted","lists","svg"]') }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -165,13 +160,8 @@ jobs:
           XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
-          echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
 
-      - name: Pick and boot an iPhone simulator
-        id: sim
-        run: scripts/ci-boot-simulator.sh ${{ matrix.shard == 'svg' && '--warm-webkit' || '' }} >> "$GITHUB_OUTPUT"
-
-      # Every shard builds the same products. Checkout gives every file a new mtime, so file hashing
+      # Every shard uses the same products. Checkout gives every file a new mtime, so file hashing
       # keeps a restored build incremental.
       - name: Restore the build cache
         id: cache
@@ -183,41 +173,69 @@ jobs:
 
       # Pincer-Package would also build the macOS-only PincerChecks and PincerMacDev for iOS.
       - name: Build for testing
-        id: build
         run: |
           set -o pipefail
           scripts/ios-test-scheme.sh
-          xcodebuild build-for-testing \
-            -scheme PincerUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-ios \
-            COMPILER_INDEX_STORE_ENABLE=NO OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing' \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodebuild build-for-testing             -scheme PincerUITests-iOS             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath .build/xcode-ios             COMPILER_INDEX_STORE_ENABLE=NO OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing'             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
       - name: Save the build cache
-        if: ${{ env.SAVE_CACHES == 'true' && matrix.shard == 'hosted' && steps.cache.outputs.cache-hit != 'true' }}
+        if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: .build/xcode-ios
           key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Upload iOS test products
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-ios-products
+          path: .build/xcode-ios
+          if-no-files-found: error
+
+  # The transcript suites run in shards from scripts/ci-ios-shard.sh.
+  ios-tests:
+    name: iOS simulator tests (${{ matrix.shard }})
+    needs: [changes, ios-tests-build]
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.ios_shards || '["hosted","lists","svg"]') }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Pick and boot an iPhone simulator
+        id: sim
+        run: scripts/ci-boot-simulator.sh ${{ matrix.shard == 'svg' && '--warm-webkit' || '' }} >> "$GITHUB_OUTPUT"
+
+      - name: Download iOS test products
+        uses: actions/download-artifact@v5
+        with:
+          name: xcode-ios-products
+          path: .build/xcode-ios
 
       - name: Test on iOS
         run: |
           set -o pipefail
           xcrun simctl bootstatus '${{ steps.sim.outputs.udid }}' -b > /dev/null
           cat "$RUNNER_TEMP/simulator-boot.log" || true
-          xcodebuild test-without-building \
-            -scheme PincerUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-ios \
-            $(scripts/ci-ios-shard.sh '${{ matrix.shard }}') \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodebuild test-without-building             -scheme PincerUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-ios             $(scripts/ci-ios-shard.sh '${{ matrix.shard }}')             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
   # Drives the real app on the simulator: the Browser sheet must leave the compact chat header untouched (#1026).
+  # It runs on main and manual runs; pull requests rely on the faster transcript shards and still
+  # get this XCUITest before TestFlight because main must be green.
   ios-app-tests:
     name: iOS app UI tests
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -254,14 +272,7 @@ jobs:
         run: |
           set -o pipefail
           xcodegen generate --quiet
-          xcodebuild build-for-testing \
-            -project Pincer.xcodeproj \
-            -scheme PincerAppUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-app-uitests \
-            CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO \
-            OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing' \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodebuild build-for-testing             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO             OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing'             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
       - name: Save the build cache
         if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
@@ -274,12 +285,7 @@ jobs:
         run: |
           set -o pipefail
           xcrun simctl bootstatus '${{ steps.sim.outputs.udid }}' -b > /dev/null
-          xcodebuild test-without-building \
-            -project Pincer.xcodeproj \
-            -scheme PincerAppUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-app-uitests \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodebuild test-without-building             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
   # The unit tests and the PincerChecks modes run on separate runners, each building only what it runs.
   swift-shards:
