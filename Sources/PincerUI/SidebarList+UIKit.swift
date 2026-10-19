@@ -5,13 +5,7 @@ import UIKit
 
 /// Sidebar backed by a `UICollectionView` list: native rows, selection, collapsible sections,
 /// swipe actions, context menus, pull to refresh, and drag and drop between groups.
-struct SidebarList: UIViewRepresentable {
-    let model: SidebarModel
-    let selectedKey: String?
-    let gateway: GatewayStore
-    let actions: SidebarActions
-    var theme = AppTheme()
-
+extension SidebarList: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(gateway: self.gateway, actions: self.actions) }
 
     func makeUIView(context: Context) -> UICollectionView {
@@ -414,12 +408,6 @@ private extension UIColor {
               other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else { return self }
         return UIColor(red: r1 + (r2 - r1) * amount, green: g1 + (g2 - g1) * amount,
                        blue: b1 + (b2 - b1) * amount, alpha: a1 + (a2 - a1) * amount)
-    }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
     }
 }
 

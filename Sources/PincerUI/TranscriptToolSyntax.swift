@@ -93,13 +93,8 @@ enum TranscriptSyntaxColors {
             let dark = Self.isDark(appearance)
             let highContrast = increasedContrast || Self.isHighContrast(appearance)
             let background = Self.background(surface, theme: theme, appearance: appearance)
-            if let cached = resolved.value(background: background, dark: dark, increasedContrast: highContrast) {
-                return Self.nativeColor(cached)
-            }
-            let foreground = UInt32(dark ? shades.dark : shades.light)
-            let adjusted = ToolSyntaxContrast.foreground(foreground, on: background, increased: highContrast)
-            resolved.insert(adjusted, background: background, dark: dark, increasedContrast: highContrast)
-            return Self.nativeColor(adjusted)
+            return Self.nativeColor(Self.foreground(shades, on: background, dark: dark,
+                                                    increasedContrast: highContrast, cache: resolved))
         }
         #else
         let resolved = ResolutionCache()
@@ -107,20 +102,47 @@ enum TranscriptSyntaxColors {
             let dark = traits.userInterfaceStyle == .dark
             let highContrast = increasedContrast || traits.accessibilityContrast == .high
             let background = Self.background(surface, theme: theme, traits: traits)
-            if let cached = resolved.value(background: background, dark: dark, increasedContrast: highContrast) {
-                return Self.nativeColor(cached)
-            }
-            let foreground = UInt32(dark ? shades.dark : shades.light)
-            let adjusted = ToolSyntaxContrast.foreground(foreground, on: background, increased: highContrast)
-            resolved.insert(adjusted, background: background, dark: dark, increasedContrast: highContrast)
-            return Self.nativeColor(adjusted)
+            return Self.nativeColor(Self.foreground(shades, on: background, dark: dark,
+                                                    increasedContrast: highContrast, cache: resolved))
         }
         #endif
     }
 
-    #if os(macOS)
-    private struct RGBA { var red: Double; var green: Double; var blue: Double; var alpha: Double }
+    /// The token's shade for this appearance, adjusted to contrast with `background`, memoized.
+    private static func foreground(_ shades: (light: Int, dark: Int), on background: UInt32, dark: Bool,
+                                   increasedContrast: Bool, cache: ResolutionCache) -> UInt32 {
+        if let cached = cache.value(background: background, dark: dark, increasedContrast: increasedContrast) {
+            return cached
+        }
+        let foreground = UInt32(dark ? shades.dark : shades.light)
+        let adjusted = ToolSyntaxContrast.foreground(foreground, on: background, increased: increasedContrast)
+        cache.insert(adjusted, background: background, dark: dark, increasedContrast: increasedContrast)
+        return adjusted
+    }
 
+    struct RGBA { var red: Double; var green: Double; var blue: Double; var alpha: Double }
+
+    /// `foreground` blended over the opaque `background`, as an opaque packed RGB.
+    static func composite(_ foreground: RGBA, over background: UInt32) -> UInt32 {
+        let a = foreground.alpha
+        let base = Self.rgba(background)
+        return Self.packed(RGBA(red: foreground.red * a + base.red * (1 - a),
+                                green: foreground.green * a + base.green * (1 - a),
+                                blue: foreground.blue * a + base.blue * (1 - a), alpha: 1))
+    }
+
+    static func rgba(_ color: UInt32) -> RGBA {
+        RGBA(red: Double((color >> 16) & 0xFF) / 255, green: Double((color >> 8) & 0xFF) / 255,
+             blue: Double(color & 0xFF) / 255, alpha: 1)
+    }
+
+    static func packed(_ color: RGBA) -> UInt32 {
+        func byte(_ component: Double) -> UInt32 { UInt32((min(max(component, 0), 1) * 255).rounded()) }
+        let r = byte(color.red), g = byte(color.green), b = byte(color.blue)
+        return (r << 16) | (g << 8) | b
+    }
+
+    #if os(macOS)
     private static func isDark(_ appearance: NSAppearance) -> Bool {
         [.darkAqua, .vibrantDark, .accessibilityHighContrastDarkAqua,
          .accessibilityHighContrastVibrantDark].contains(appearance.name)
@@ -165,31 +187,11 @@ enum TranscriptSyntaxColors {
         return result ?? RGBA(red: 1, green: 1, blue: 1, alpha: 1)
     }
 
-    private static func composite(_ foreground: RGBA, over background: UInt32) -> UInt32 {
-        let a = foreground.alpha
-        let base = Self.rgba(background)
-        return Self.packed(RGBA(red: foreground.red * a + base.red * (1 - a),
-                                green: foreground.green * a + base.green * (1 - a),
-                                blue: foreground.blue * a + base.blue * (1 - a), alpha: 1))
-    }
-
-    private static func rgba(_ color: UInt32) -> RGBA {
-        RGBA(red: Double((color >> 16) & 0xFF) / 255, green: Double((color >> 8) & 0xFF) / 255,
-             blue: Double(color & 0xFF) / 255, alpha: 1)
-    }
-
-    private static func packed(_ color: RGBA) -> UInt32 {
-        func byte(_ component: Double) -> UInt32 { UInt32((min(max(component, 0), 1) * 255).rounded()) }
-        let r = byte(color.red), g = byte(color.green), b = byte(color.blue)
-        return (r << 16) | (g << 8) | b
-    }
-
     private static func nativeColor(_ rgb: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((rgb >> 16) & 0xFF) / 255, green: CGFloat((rgb >> 8) & 0xFF) / 255,
                 blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
     }
     #else
-    private struct RGBA { var red: Double; var green: Double; var blue: Double; var alpha: Double }
 
     private static func background(_ surface: Surface, theme: AppTheme, traits: UITraitCollection) -> UInt32 {
         let chat = theme.value(.chatBackground).map { Self.packed(Self.rgba($0.platformColor.resolvedColor(with: traits))) }
@@ -214,22 +216,6 @@ enum TranscriptSyntaxColors {
         }
         return RGBA(red: Double(components[0]), green: Double(components[1]), blue: Double(components[2]),
                     alpha: min(max(Double(components.count > 3 ? components[3] : 1), 0), 1))
-    }
-
-    private static func composite(_ foreground: RGBA, over background: UInt32) -> UInt32 {
-        let alpha = foreground.alpha
-        let red = Double((background >> 16) & 0xFF) / 255
-        let green = Double((background >> 8) & 0xFF) / 255
-        let blue = Double(background & 0xFF) / 255
-        return Self.packed(RGBA(red: foreground.red * alpha + red * (1 - alpha),
-                                green: foreground.green * alpha + green * (1 - alpha),
-                                blue: foreground.blue * alpha + blue * (1 - alpha), alpha: 1))
-    }
-
-    private static func packed(_ color: RGBA) -> UInt32 {
-        func byte(_ component: Double) -> UInt32 { UInt32((min(max(component, 0), 1) * 255).rounded()) }
-        let r = byte(color.red), g = byte(color.green), b = byte(color.blue)
-        return (r << 16) | (g << 8) | b
     }
 
     private static func nativeColor(_ rgb: UInt32) -> UIColor {
