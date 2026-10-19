@@ -111,8 +111,7 @@ public final class PortalStore {
 
     /// Whether the connection advertises `portal.list` (unknown before hello counts as maybe).
     private var advertised: Bool {
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(Self.listMethod)
+        GatewayMethodSupport.supports(Self.listMethod, advertised: self.methods())
     }
 
     /// Fetches the list now. Safe to call often; a call while one is running waits for it.

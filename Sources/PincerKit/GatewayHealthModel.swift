@@ -277,8 +277,7 @@ public final class GatewayHealthModel {
 
     public func isAvailable(_ section: Section) -> Bool {
         if self.unavailable.contains(section) { return false }
-        if let methods = self.methods, !methods.isEmpty, !methods.contains(section.method) { return false }
-        return true
+        return GatewayMethodSupport.supports(section.method, advertised: self.methods)
     }
 
     /// Restart can be pressed: admin, the method exists, connected, and nothing already in flight.

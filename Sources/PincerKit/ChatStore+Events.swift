@@ -750,7 +750,7 @@ extension ChatStore {
     /// Reads the durable card. Only the latest read may publish, so a slow reply can't overwrite a newer one.
     func refreshProgressCard() {
         guard let gateway, gateway.state.isConnected, !self.headless else { return }
-        if let methods = gateway.hello?.methods, !methods.isEmpty, !methods.contains("progressCard.get") {
+        if !GatewayMethodSupport.supports("progressCard.get", advertised: gateway.hello?.methods) {
             self.progressCardStoreAvailable = false
             return
         }

@@ -150,7 +150,6 @@ public extension GatewayStore {
     /// Whether reaction levels can be written: `operator.admin`, and `config.patch` unless the Gateway lists no methods.
     var canEditReactionLevels: Bool {
         guard self.settings.canEdit else { return false }
-        guard let methods = self.hello?.methods, !methods.isEmpty else { return true }
-        return methods.contains("config.patch")
+        return GatewayMethodSupport.supports("config.patch", advertised: self.hello?.methods)
     }
 }

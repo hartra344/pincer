@@ -491,24 +491,22 @@ public final class DeviceManagementModel {
                 self.loadState = .idle
             }
         }
-        do {
-            let result = try await self.request(Self.listMethod, [:])
-            guard !Task.isCancelled, generation == self.generation else { return }
+        let outcome = await GatewayCallOutcome.run { try await self.request(Self.listMethod, [:]) }
+        guard !Task.isCancelled, generation == self.generation else { return }
+        switch outcome {
+        case let .success(result):
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
-        } catch let error where GatewayError.isUnknownMethod(error) {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case .unknownMethod:
             self.rejectedMethods.insert(Self.listMethod)
             self.pending = []
             self.paired = []
             self.loadState = .idle
-        } catch let error where GatewayError.isMissingScope(error) {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case .missingScope:
             self.scopeDenied = true
             self.loadState = .failed(Self.needsAccessMessage)
-        } catch {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case let .failure(error):
             self.loadState = .failed(Self.message(for: error))
         }
         self.hasLoaded = true
@@ -531,9 +529,10 @@ public final class DeviceManagementModel {
         self.nodesGeneration += 1
         let generation = self.nodesGeneration
         self.nodesLoadState = .running
-        do {
-            let result = try await self.request(Self.nodeListMethod, [:])
-            guard generation == self.nodesGeneration else { return }
+        let outcome = await GatewayCallOutcome.run { try await self.request(Self.nodeListMethod, [:]) }
+        guard generation == self.nodesGeneration else { return }
+        switch outcome {
+        case let .success(result):
             let activeId = result["activeNodeId"]?.text
             var seen: Set<String> = []
             let nodes = (result["nodes"]?.array ?? []).compactMap(GatewayNode.init).filter { seen.insert($0.nodeId).inserted }
@@ -541,13 +540,11 @@ public final class DeviceManagementModel {
             let ids = Set(self.nodes.map { Self.key($0) })
             self.operations = self.operations.filter { !$0.key.hasPrefix("node:") || ids.contains($0.key) }
             self.nodesLoadState = .idle
-        } catch let error where GatewayError.isUnknownMethod(error) {
-            guard generation == self.nodesGeneration else { return }
+        case .unknownMethod:
             self.rejectedMethods.insert(Self.nodeListMethod)
             self.nodes = []
             self.nodesLoadState = .idle
-        } catch {
-            guard generation == self.nodesGeneration else { return }
+        case let .missingScope(error), let .failure(error):
             self.nodesLoadState = .failed(Self.message(for: error))
         }
         self.nodesLoaded = true

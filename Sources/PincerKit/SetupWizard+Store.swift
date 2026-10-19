@@ -31,7 +31,7 @@ extension GatewayStore {
     /// Why the wizard can't save a default agent or model here, or nil when it can.
     public var setupDefaultsBlocker: String? {
         guard self.settings.canEdit else { return SetupWizardModel.fullManagementMessage }
-        if let methods = self.hello?.methods, !methods.isEmpty, !methods.contains("config.patch") {
+        if !GatewayMethodSupport.supports("config.patch", advertised: self.hello?.methods) {
             return "This Gateway doesn't accept config changes."
         }
         if self.settings.hasChanges { return "Gateway Settings has unsaved changes. Save or discard them first." }
