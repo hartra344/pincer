@@ -8,6 +8,18 @@ import UIKit
 
 // MARK: - Platform base views
 
+extension PView {
+    /// The transcript row this view sits in, if any (not counting the view itself).
+    var enclosingRow: TranscriptRowView? {
+        var view = self.superview
+        while let current = view {
+            if let row = current as? TranscriptRowView { return row }
+            view = current.superview
+        }
+        return nil
+    }
+}
+
 #if os(macOS)
 /// Top-left-origin view that lays out and draws the same way on both platforms.
 class TranscriptBaseView: NSView {
@@ -57,14 +69,7 @@ class TranscriptBaseView: NSView {
         return result
     }
 
-    var rowView: TranscriptRowView? {
-        var view = self.superview
-        while let current = view {
-            if let row = current as? TranscriptRowView { return row }
-            view = current.superview
-        }
-        return nil
-    }
+    var rowView: TranscriptRowView? { self.enclosingRow }
 }
 #else
 /// Top-left-origin view that lays out and draws the same way on both platforms. A control, so
@@ -108,14 +113,7 @@ class TranscriptBaseView: UIControl {
         color.resolvedColor(with: self.traitCollection).cgColor
     }
 
-    var rowView: TranscriptRowView? {
-        var view = self.superview
-        while let current = view {
-            if let row = current as? TranscriptRowView { return row }
-            view = current.superview
-        }
-        return nil
-    }
+    var rowView: TranscriptRowView? { self.enclosingRow }
 }
 #endif
 
@@ -311,17 +309,6 @@ final class TranscriptTextView: NSTextView {
     }
 }
 
-extension NSView {
-    var enclosingRow: TranscriptRowView? {
-        var view = self.superview
-        while let current = view {
-            if let row = current as? TranscriptRowView { return row }
-            view = current.superview
-        }
-        return nil
-    }
-}
-
 @MainActor
 final class TranscriptMenuItem: NSMenuItem {
     private let handler: () -> Void
@@ -496,9 +483,8 @@ final class TranscriptTextView: UITextView, UITextViewDelegate {
 
     func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
         let items = self.extraItems + self.copyItems
-        var row: UIView? = self.superview
-        while let current = row, !(current is TranscriptRowView) { row = current.superview }
-        let messageItems = (row as? TranscriptRowView)?.messageMenuElements(at: self.convert(CGPoint(x: 0, y: 1), to: row), anchor: self) ?? []
+        let row = self.enclosingRow
+        let messageItems = row?.messageMenuElements(at: self.convert(CGPoint(x: 0, y: 1), to: row), anchor: self) ?? []
         guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         let extras = items.map { item in UIAction(title: item.title) { _ in Clipboard.copy(item.text) } }
         return UIMenu(children: suggestedActions + messageItems + [UIMenu(options: .displayInline, children: extras)])

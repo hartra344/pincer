@@ -8,24 +8,7 @@ import SwiftUI
 /// `TranscriptRenderer`, so a row's height is known exactly before it's on screen. Only rows near
 /// the viewport are laid out eagerly, the rest in idle slices, and the row the reader is looking
 /// at stays put while history loads above it or a reply streams in below.
-struct TranscriptList: NSViewRepresentable {
-    let rows: [TranscriptRow]
-    let context: TranscriptContext
-    let isConnected: Bool
-    /// Extra space below the last row for content floating over the transcript (the composer).
-    var bottomInset: CGFloat = 0
-    /// Extra space above the first row, for a toolbar the transcript scrolls under.
-    var topInset: CGFloat = 0
-    /// Find in chat's matches to highlight, and the selected one to scroll to.
-    var highlight = TranscriptHighlight()
-    /// A message to scroll to and flash, e.g. from a `pincer://` link.
-    var jump: TranscriptJump?
-    /// Told how far the reader is from the latest message and whether the list follows the bottom;
-    /// runs the scroll-to-bottom button's scroll (#439).
-    var bottomState: TranscriptBottomState?
-    /// Go ▸ Previous/Next Message for this list (#195).
-    var navigator: TranscriptNavigator?
-
+extension TranscriptList: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -33,12 +16,7 @@ struct TranscriptList: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSScrollView, context: Context) {
-        context.coordinator.attach(self.bottomState)
-        context.coordinator.update(rows: self.rows, context: self.context,
-                                   insets: (self.topInset, self.bottomInset), isConnected: self.isConnected)
-        context.coordinator.apply(self.highlight)
-        context.coordinator.apply(self.jump)
-        context.coordinator.install(self.navigator)
+        self.push(to: context.coordinator)
     }
 
     @MainActor
@@ -151,11 +129,10 @@ struct TranscriptList: NSViewRepresentable {
                 self.reportPosition()
             }
             guard let table, let scroll = self.scrollView else { return }
-            let top = TranscriptLayout.verticalInset + max(0, insets.top)
-            let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
-            if abs(scroll.contentInsets.top - top) > 0.5 || abs(scroll.contentInsets.bottom - bottom) > 0.5 {
-                scroll.contentInsets.top = top
-                scroll.contentInsets.bottom = bottom
+            let target = TranscriptListController.contentInsets(top: insets.top, bottom: insets.bottom)
+            if TranscriptListController.insetsChanged(from: (scroll.contentInsets.top, scroll.contentInsets.bottom), to: target) {
+                scroll.contentInsets.top = target.top
+                scroll.contentInsets.bottom = target.bottom
                 if !self.rows.isEmpty, !contextChanged { self.settle(changed: IndexSet()) }
             }
             let update = self.controller.accept(newRows, contextChanged: contextChanged)
@@ -224,8 +201,7 @@ struct TranscriptList: NSViewRepresentable {
             let width = self.layoutWidth
             guard width > TranscriptListController.minimumWidth else { return }
             for row in visible {
-                let layout = self.renderer.layout(for: self.rows[row], width: width)
-                self.controller.correctHeight(self.rows[row].id, width: width, height: layout.height)
+                let layout = self.controller.layoutCorrectingHeight(self.rows[row], width: width)
                 guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell else { continue }
                 cell.apply(layout, actions: self.renderer)
             }
@@ -410,8 +386,7 @@ struct TranscriptList: NSViewRepresentable {
             let item = self.rows[row]
             let cell = tableView.makeView(withIdentifier: TranscriptCell.reuseIdentifier, owner: nil) as? TranscriptCell
                 ?? TranscriptCell()
-            let layout = self.renderer.layout(for: item, width: self.layoutWidth)
-            self.controller.correctHeight(item.id, width: self.layoutWidth, height: layout.height)
+            let layout = self.controller.layoutCorrectingHeight(item, width: self.layoutWidth)
             cell.apply(layout, actions: self.renderer)
             let focused = self.showsFocusRing(at: row)
             if focused {
@@ -584,12 +559,10 @@ struct TranscriptList: NSViewRepresentable {
         // MARK: Rotors
 
         private func makeRotors() -> [NSAccessibilityCustomRotor] {
-            let kinds: [(String, TranscriptNavKind)] = [
-                (L("Messages"), .message), (L("Replies"), .reply), (L("Your Messages"), .user), (L("Tool Calls"), .tool),
-            ]
-            self.rotorDelegates = kinds.map { TranscriptRotorDelegate(kind: $0.1, coordinator: self) }
+            let kinds = TranscriptNavKind.rotors
+            self.rotorDelegates = kinds.map { TranscriptRotorDelegate(kind: $0.kind, coordinator: self) }
             return zip(kinds, self.rotorDelegates).map { kind, delegate in
-                let rotor = NSAccessibilityCustomRotor(label: kind.0, itemSearchDelegate: delegate)
+                let rotor = NSAccessibilityCustomRotor(label: kind.name, itemSearchDelegate: delegate)
                 rotor.itemLoadingDelegate = delegate
                 return rotor
             }
@@ -770,8 +743,7 @@ private final class TranscriptCell: NSView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("TranscriptCell")
 
     private let content = TranscriptRowView()
-    private var serial: Int?
-    private weak var actions: TranscriptRowActions?
+    private var state = TranscriptCellState()
 
     private let ring = TranscriptFocusRingView()
 
@@ -837,14 +809,7 @@ private final class TranscriptCell: NSView {
     override var isFlipped: Bool { true }
 
     func apply(_ layout: TranscriptRowLayout, actions: TranscriptRowActions) {
-        // Top-aligned at the layout's own size, so a row briefly taller than its table row
-        // (between a change and the table catching up) grows downward.
-        let frame = CGRect(x: 0, y: 0, width: layout.width, height: layout.height)
-        if self.content.frame != frame { self.content.frame = frame }
-        guard layout.serial != self.serial else { return }
-        self.serial = layout.serial
-        self.actions = actions
-        self.content.apply(layout, actions: actions)
+        guard self.state.apply(layout, actions: actions, to: self.content) else { return }
         self.updateFocusRingFrame()
     }
 
@@ -855,7 +820,7 @@ private final class TranscriptCell: NSView {
 
     override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
         guard let layout = self.content.layout else { return nil }
-        let actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.actions, anchor: self.content)
+        let actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.state.actions, anchor: self.content)
         return actions.map { action in
             NSAccessibilityCustomAction(name: action.name) {
                 action.perform()

@@ -254,27 +254,9 @@ final class ComposerTextMeasurer {
     }
 }
 
-private struct PlatformComposerTextView: NSViewRepresentable {
-    @Binding var text: String
-    let maxLines: Int
-    let isEditable: Bool
-    let menuActive: Bool
-    let escapeActive: Bool
-    let canSubmit: Bool
-    let focusRequest: Int
-    let onSubmit: () -> Void
-    let onCommandSubmit: (() -> Void)?
-    let onMedia: ([PastedMedia]) -> Void
-    let onKey: (ComposerKey) -> Bool
-    let onCaretAtEnd: (Bool) -> Void
-    let onMarkedTextChange: (Bool) -> Void
-    let onSelectionChange: (NSRange) -> Void
-    let onFocusChange: (Bool) -> Void
-    let caretRequest: CaretRequest?
-    let autoFocus: @MainActor () -> Bool
-
-    static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-    static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
+extension PlatformComposerTextView: NSViewRepresentable {
+    @MainActor static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+    @MainActor static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -315,17 +297,12 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         textView.onMedia = self.onMedia
         textView.autoFocus = self.autoFocus
         if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
-        if context.coordinator.focusRequest != self.focusRequest {
-            context.coordinator.focusRequest = self.focusRequest
+        if context.coordinator.takeFocusRequest() {
             DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
         }
-        let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
-        if textView.string != self.text {
-            textView.string = self.text
-            textView.setSelectedRange(NSRange(location: caret ?? (self.text as NSString).length, length: 0))
-        } else if let caret {
-            textView.setSelectedRange(NSRange(location: caret, length: 0))
-        }
+        let edit = context.coordinator.pendingEdit(viewText: textView.string)
+        if let text = edit.text { textView.string = text }
+        if let selection = edit.selection { textView.setSelectedRange(selection) }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
@@ -341,31 +318,12 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTextViewDelegate {
-        var parent: PlatformComposerTextView
-        var focusRequest: Int
-        var caretSerial: Int?
-        let heights = ComposerHeightCache()
+    final class Coordinator: ComposerCoordinatorBase, NSTextViewDelegate {
         let measurer = ComposerTextMeasurer()
-
-        init(_ parent: PlatformComposerTextView) {
-            self.parent = parent
-            self.focusRequest = parent.focusRequest
-            self.caretSerial = parent.caretRequest?.serial
-        }
-
-        /// The clamped offset of a caret request not yet applied, once.
-        func takeCaret(_ request: CaretRequest?, length: Int) -> Int? {
-            guard let request, request.serial != self.caretSerial else { return nil }
-            self.caretSerial = request.serial
-            return min(max(request.offset, 0), length)
-        }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
-            self.parent.onMarkedTextChange(textView.hasMarkedText())
-            let selection = textView.selectedRange()
-            self.parent.onCaretAtEnd(selection.length == 0 && selection.location == textView.textStorage?.length)
+            self.reportCaret(textView.selectedRange(), length: textView.textStorage?.length, hasMarkedText: textView.hasMarkedText())
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
@@ -377,8 +335,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
-            self.parent.onMarkedTextChange(textView.hasMarkedText())
-            self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.string as NSString).length)
+            self.reportCaret(range, length: (textView.string as NSString).length, hasMarkedText: textView.hasMarkedText())
             self.parent.onSelectionChange(range)
         }
 
@@ -535,25 +492,7 @@ final class ComposerUITextView: UITextView {
     }
 }
 
-private struct PlatformComposerTextView: UIViewRepresentable {
-    @Binding var text: String
-    let maxLines: Int
-    let isEditable: Bool
-    let menuActive: Bool
-    let escapeActive: Bool
-    let canSubmit: Bool
-    let focusRequest: Int
-    let onSubmit: () -> Void
-    let onCommandSubmit: (() -> Void)?
-    let onMedia: ([PastedMedia]) -> Void
-    let onKey: (ComposerKey) -> Bool
-    let onCaretAtEnd: (Bool) -> Void
-    let onMarkedTextChange: (Bool) -> Void
-    let onSelectionChange: (NSRange) -> Void
-    let onFocusChange: (Bool) -> Void
-    let caretRequest: CaretRequest?
-    let autoFocus: @MainActor () -> Bool
-
+extension PlatformComposerTextView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> ComposerUITextView {
@@ -587,17 +526,12 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onKey = self.onKey
         textView.autoFocus = self.autoFocus
         if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
-        if context.coordinator.focusRequest != self.focusRequest {
-            context.coordinator.focusRequest = self.focusRequest
+        if context.coordinator.takeFocusRequest() {
             DispatchQueue.main.async { textView.becomeFirstResponder() }
         }
-        let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
-        if textView.text != self.text {
-            textView.text = self.text
-            textView.selectedRange = NSRange(location: caret ?? (self.text as NSString).length, length: 0)
-        } else if let caret {
-            textView.selectedRange = NSRange(location: caret, length: 0)
-        }
+        let edit = context.coordinator.pendingEdit(viewText: textView.text)
+        if let text = edit.text { textView.text = text }
+        if let selection = edit.selection { textView.selectedRange = selection }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerUITextView, context: Context) -> CGSize? {
@@ -612,26 +546,9 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var parent: PlatformComposerTextView
-        var focusRequest: Int
-        var caretSerial: Int?
-        let heights = ComposerHeightCache()
+    final class Coordinator: ComposerCoordinatorBase, UITextViewDelegate {
         private var lineHeightFont: UIFont?
         private var cachedLineHeight: CGFloat = 0
-
-        init(_ parent: PlatformComposerTextView) {
-            self.parent = parent
-            self.focusRequest = parent.focusRequest
-            self.caretSerial = parent.caretRequest?.serial
-        }
-
-        /// The clamped offset of a caret request not yet applied, once.
-        func takeCaret(_ request: CaretRequest?, length: Int) -> Int? {
-            guard let request, request.serial != self.caretSerial else { return nil }
-            self.caretSerial = request.serial
-            return min(max(request.offset, 0), length)
-        }
 
         /// One laid-out line, which UITextView makes taller than `UIFont.lineHeight`; the empty
         /// field and the line cap use it so they match the measured text heights.
@@ -646,9 +563,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            self.parent.onMarkedTextChange(textView.markedTextRange != nil)
-            let selection = textView.selectedRange
-            self.parent.onCaretAtEnd(selection.length == 0 && selection.location == textView.textStorage.length)
+            self.reportCaret(textView.selectedRange, length: textView.textStorage.length, hasMarkedText: textView.markedTextRange != nil)
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }
@@ -659,8 +574,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
-            self.parent.onMarkedTextChange(textView.markedTextRange != nil)
-            self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.text as NSString).length)
+            self.reportCaret(range, length: (textView.text as NSString).length, hasMarkedText: textView.markedTextRange != nil)
             self.parent.onSelectionChange(range)
         }
 
@@ -673,3 +587,69 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     }
 }
 #endif
+
+/// The native text field behind `ComposerTextView`: an `NSTextView` on macOS, a `UITextView` on iOS.
+struct PlatformComposerTextView {
+    @Binding var text: String
+    let maxLines: Int
+    let isEditable: Bool
+    let menuActive: Bool
+    let escapeActive: Bool
+    let canSubmit: Bool
+    let focusRequest: Int
+    let onSubmit: () -> Void
+    let onCommandSubmit: (() -> Void)?
+    let onMedia: ([PastedMedia]) -> Void
+    let onKey: (ComposerKey) -> Bool
+    let onCaretAtEnd: (Bool) -> Void
+    let onMarkedTextChange: (Bool) -> Void
+    let onSelectionChange: (NSRange) -> Void
+    let onFocusChange: (Bool) -> Void
+    let caretRequest: CaretRequest?
+    let autoFocus: @MainActor () -> Bool
+}
+
+/// State and reporting both platforms' composer coordinators share.
+@MainActor
+class ComposerCoordinatorBase: NSObject {
+    var parent: PlatformComposerTextView
+    var focusRequest: Int
+    var caretSerial: Int?
+    let heights = ComposerHeightCache()
+
+    init(_ parent: PlatformComposerTextView) {
+        self.parent = parent
+        self.focusRequest = parent.focusRequest
+        self.caretSerial = parent.caretRequest?.serial
+    }
+
+    /// The clamped offset of a caret request not yet applied, once.
+    final func takeCaret(_ request: CaretRequest?, length: Int) -> Int? {
+        guard let request, request.serial != self.caretSerial else { return nil }
+        self.caretSerial = request.serial
+        return min(max(request.offset, 0), length)
+    }
+
+    /// Whether the parent asked for focus since last time, once.
+    final func takeFocusRequest() -> Bool {
+        guard self.focusRequest != self.parent.focusRequest else { return false }
+        self.focusRequest = self.parent.focusRequest
+        return true
+    }
+
+    /// What the field needs to match the parent: its text when it differs (with the caret at the
+    /// requested offset or the end), or just a pending caret request.
+    final func pendingEdit(viewText: String?) -> (text: String?, selection: NSRange?) {
+        let text = self.parent.text
+        let length = (text as NSString).length
+        let caret = self.takeCaret(self.parent.caretRequest, length: length)
+        if viewText != text { return (text, NSRange(location: caret ?? length, length: 0)) }
+        return (nil, caret.map { NSRange(location: $0, length: 0) })
+    }
+
+    /// Reports the composition state, then whether the caret is an insertion point at the end.
+    final func reportCaret(_ selection: NSRange, length: Int?, hasMarkedText: Bool) {
+        self.parent.onMarkedTextChange(hasMarkedText)
+        self.parent.onCaretAtEnd(selection.length == 0 && selection.location == length)
+    }
+}
