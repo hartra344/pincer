@@ -5,6 +5,9 @@
 #   scripts/run-checks.sh [extra swift flags…]
 #
 # Env: CHECKS_LOG_DIR (default: a temp folder), CHECKS_PORT_BASE (default 18801; uses 6 ports).
+# CHECKS_SHARD picks a subset for CI's parallel jobs: `unit` (the unit tests, then the solo perf tests;
+# needs `swift build --build-tests`), `checks` (every PincerChecks mode, then the solo perf smoke; needs
+# only the PincerChecks product) or `all` (the default: both).
 # CHECKS_PROGRESS_INTERVAL defaults to 30s; fractional intervals are for the owned harness only.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -12,13 +15,18 @@ cd "$(dirname "$0")/.."
 SWIFT_FLAGS=("$@")
 LOGS="${CHECKS_LOG_DIR:-$(mktemp -d)}"
 PORT_BASE="${CHECKS_PORT_BASE:-18801}"
+SHARD="${CHECKS_SHARD:-all}"
+case "$SHARD" in all|unit|checks) ;; *) echo "CHECKS_SHARD must be all, unit or checks, not $SHARD"; exit 1 ;; esac
+runs() { [ "$SHARD" = all ] || [ "$SHARD" = "$1" ]; }
 mkdir -p "$LOGS"
 export PINCER_KEYCHAIN=memory
 
 BIN="$(swift build --show-bin-path ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"})" || exit 1
 CHECKS="$BIN/PincerChecks"
-[ -x "$CHECKS" ] || { echo "No $CHECKS: build first (swift build --build-tests)"; exit 1; }
-[ -d mock-gateway/node_modules ] || { echo "Run npm ci in mock-gateway first"; exit 1; }
+if runs checks; then
+    [ -x "$CHECKS" ] || { echo "No $CHECKS: build first (swift build --build-tests)"; exit 1; }
+    [ -d mock-gateway/node_modules ] || { echo "Run npm ci in mock-gateway first"; exit 1; }
+fi
 
 mocks=()
 mock_names=()
@@ -74,13 +82,15 @@ wait_for_mocks() {
 }
 
 # Mocks start just before the checks: some of their seeded data expires minutes after launch.
-start_mock core $((PORT_BASE))
-start_mock extras $((PORT_BASE + 1)) MOCK_LONG_CHAT=400
-start_mock no-usage $((PORT_BASE + 2)) MOCK_NO_USAGE=1
-start_mock no-reply-to $((PORT_BASE + 3)) MOCK_NO_REPLY_TO=1
-start_mock reconnect $((PORT_BASE + 4))
-start_mock no-session-reactions $((PORT_BASE + 5)) MOCK_NO_REACTIONS=1
-wait_for_mocks
+if runs checks; then
+    start_mock core $((PORT_BASE))
+    start_mock extras $((PORT_BASE + 1)) MOCK_LONG_CHAT=400
+    start_mock no-usage $((PORT_BASE + 2)) MOCK_NO_USAGE=1
+    start_mock no-reply-to $((PORT_BASE + 3)) MOCK_NO_REPLY_TO=1
+    start_mock reconnect $((PORT_BASE + 4))
+    start_mock no-session-reactions $((PORT_BASE + 5)) MOCK_NO_REACTIONS=1
+    wait_for_mocks
+fi
 
 names=()
 pids=()
@@ -154,17 +164,21 @@ fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # reported); a separate run enforces them afterwards, alone.
 # Swift Testing otherwise starts every test at once; on a few-core runner the timeout-bounded
 # tests then starve each other (#920). Override with PINCER_TEST_WIDTH.
-lane unit-tests complete_swift_test swift test --skip-build --parallel \
-    --experimental-maximum-parallelization-width "${PINCER_TEST_WIDTH:-4}" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
-lane self-checks "$CHECKS" --skip-perf-budgets
-lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
-lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras
-lane live-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-core "$(url 0)" dev-token
-lane live-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-extras "$(url 1)" dev-token
-lane live-no-usage "$CHECKS" --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
-lane live-no-reply-to "$CHECKS" --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
-lane live-reconnect "$CHECKS" --skip-perf-budgets --live-reconnect "$(url 4)" dev-token
-lane live-no-session-reactions "$CHECKS" --skip-perf-budgets --live-no-session-reactions "$(url 5)" dev-token
+if runs unit; then
+    lane unit-tests complete_swift_test swift test --skip-build --parallel \
+        --experimental-maximum-parallelization-width "${PINCER_TEST_WIDTH:-4}" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
+fi
+if runs checks; then
+    lane self-checks "$CHECKS" --skip-perf-budgets
+    lane demo-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-core
+    lane demo-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --demo-extras
+    lane live-core "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-core "$(url 0)" dev-token
+    lane live-extras "${fast[@]}" "$CHECKS" --skip-perf-budgets --live-extras "$(url 1)" dev-token
+    lane live-no-usage "$CHECKS" --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
+    lane live-no-reply-to "$CHECKS" --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
+    lane live-reconnect "$CHECKS" --skip-perf-budgets --live-reconnect "$(url 4)" dev-token
+    lane live-no-session-reactions "$CHECKS" --skip-perf-budgets --live-no-session-reactions "$(url 5)" dev-token
+fi
 
 status=0
 summary=()
@@ -197,11 +211,15 @@ report 0
 # ceiling (`PerfBudget` in Tests/PincerKitTests/Support.swift); this solo run enforces them.
 # On CI (CI=true) the wall-clock *ratios* are only reported, even here, since shared runners are too
 # noisy for them; the counter checks and absolute ceilings still apply. PINCER_WALL_CLOCK_CHECKS=1 opts in.
-lane perf-smoke "$CHECKS" --perf-smoke
-report $((${#pids[@]} - 1))
-lane perf-tests complete_swift_test env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
-    --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe|TranscriptPrefetchProbe/probe'
-report $((${#pids[@]} - 1))
+if runs checks; then
+    lane perf-smoke "$CHECKS" --perf-smoke
+    report $((${#pids[@]} - 1))
+fi
+if runs unit; then
+    lane perf-tests complete_swift_test env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
+        --filter 'manyRunsAndEventsStayFast|largeFlatInputBuildsQuickly|StreamingProbe|TranscriptPrefetchProbe/probe'
+    report $((${#pids[@]} - 1))
+fi
 
 echo
 grep -H "✗\|timed out" "$LOGS"/*.log || true
