@@ -201,8 +201,7 @@ struct MCPServersPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !connected, !model.hasConfig {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see MCP servers.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see MCP servers.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }

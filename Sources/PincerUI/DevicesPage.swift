@@ -21,8 +21,7 @@ struct DevicesPage: View {
         let gatewayName = self.gateway.profile.name
         Group {
             if !connected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text(DeviceManagementModel.disconnectedMessage))
+                NotConnectedView(description: Text(DeviceManagementModel.disconnectedMessage))
             } else if !model.supported {
                 ContentUnavailableView(L("Devices Aren't Available"), systemImage: "laptopcomputer.and.iphone",
                                        description: Text(DeviceManagementModel.unsupportedMessage))
@@ -82,10 +81,7 @@ struct DevicesPage: View {
                 }
             }
             if let error = model.loadState.error, model.hasLoaded {
-                Section {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button(L("Try Again")) { Task { await model.refresh() } }
-                }
+                LoadErrorSection(error: error) { Task { await model.refresh() } }
             }
             if model.hasLoaded || !model.pending.isEmpty || !model.paired.isEmpty {
                 Section {
@@ -518,8 +514,7 @@ struct NodesPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !connected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to a Gateway to see its nodes.", bundle: .module))
+                NotConnectedView(description: Text("Connect to a Gateway to see its nodes.", bundle: .module))
             } else if !model.nodesSupported {
                 ContentUnavailableView(L("Nodes Aren't Available"), systemImage: "cpu",
                                        description: Text("This Gateway can't list nodes.", bundle: .module))
@@ -557,10 +552,7 @@ struct NodesPage: View {
     private func list(_ model: DeviceManagementModel) -> some View {
         List {
             if let error = model.nodesLoadState.error, model.nodesLoaded {
-                Section {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button(L("Try Again")) { Task { await model.loadNodes() } }
-                }
+                LoadErrorSection(error: error) { Task { await model.loadNodes() } }
             }
             if !model.nodes.isEmpty {
                 Section {

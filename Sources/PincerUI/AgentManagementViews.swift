@@ -199,8 +199,7 @@ struct AgentPage: View {
             if let agent = self.agent {
                 self.form(agent)
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see this agent.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see this agent.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Agent Not Found"), systemImage: "person.crop.circle.badge.questionmark",
                                        description: Text("“\(self.agentId)” isn't an agent on this Gateway anymore.", bundle: .module))
@@ -829,8 +828,7 @@ struct AgentFileEditorPage: View {
                         .disabled(!self.gateway.state.isConnected)
                 }
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
             } else {
                 ProgressView()
             }

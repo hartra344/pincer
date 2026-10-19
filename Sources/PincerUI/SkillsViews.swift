@@ -78,10 +78,7 @@ struct SkillsPage: View {
             Section { Text("Connect to the Gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
         } else if model.report == nil, let error = model.loadError {
             Section {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                    Button(L("Retry")) { Task { await model.load(agentId: self.requestAgent) } }
-                }
+                LoadErrorRetryBlock(error: error) { Task { await model.load(agentId: self.requestAgent) } }
             }
         } else if model.report == nil {
             Section { ProgressView().frame(maxWidth: .infinity) }
@@ -229,8 +226,7 @@ struct SkillDetailPage: View {
             if let skill = self.model.skill(key: self.skillKey) {
                 self.form(skill)
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see skills.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see skills.", bundle: .module))
             } else if self.model.isLoading {
                 ProgressView()
             } else {
@@ -473,10 +469,7 @@ struct ClawHubSearchPage: View {
             Section { ProgressView().frame(maxWidth: .infinity) }
         } else if let error = model.searchError {
             Section {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                    Button(L("Retry")) { Task { await model.search(self.query) } }
-                }
+                LoadErrorRetryBlock(error: error) { Task { await model.search(self.query) } }
             }
         } else if let searched = model.searchedQuery {
             if model.searchResults.isEmpty {

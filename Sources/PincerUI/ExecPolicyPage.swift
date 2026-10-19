@@ -441,8 +441,7 @@ private struct ExecPolicyStates<Content: View>: View {
         } else if self.model.snapshot != nil {
             self.content
         } else if !self.connected, !self.model.loadState.isRunning {
-            ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the Gateway to see its command policy.", bundle: .module))
+            NotConnectedView(description: Text("Connect to the Gateway to see its command policy.", bundle: .module))
         } else if let error = self.model.loadState.error {
             ContentUnavailableView {
                 Label(L("Couldn't Load Command Policy"), systemImage: "exclamationmark.triangle")

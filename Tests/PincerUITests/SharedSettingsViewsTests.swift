@@ -43,6 +43,22 @@ struct SharedSettingsViewsTests {
         #expect(plain.height > 0 && extra.height > 0)
     }
 
+    @Test func notConnectedViewHosts() {
+        #expect(layout(NotConnectedView(description: Text("Connect to the Gateway."))).height > 0)
+    }
+
+    @Test func loadErrorSectionHostsAndRetryStaysEnabledByDefault() {
+        let enabled = layout(Form { LoadErrorSection(error: "Couldn't load.") {} })
+        let disabled = layout(Form { LoadErrorSection(error: "Couldn't load.", canRetry: false) {} })
+        #expect(enabled.height > 0 && disabled.height == enabled.height)
+    }
+
+    @Test func loadErrorRetryBlockHostsAndGrowsWithLongErrors() {
+        let short = layout(LoadErrorRetryBlock(error: "Failed.") {})
+        let long = layout(LoadErrorRetryBlock(error: String(repeating: "Something went wrong. ", count: 20)) {})
+        #expect(short.height > 0 && long.height > short.height)
+    }
+
     @Test func mainWindowHelperIsCallable() {
         let raise: (OpenWindowAction) -> Void = { MainWindow.bringToFront(openWindow: $0) }
         _ = raise

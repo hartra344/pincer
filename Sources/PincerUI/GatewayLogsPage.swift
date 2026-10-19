@@ -334,8 +334,7 @@ struct GatewayLogsPage: View {
 
     @ViewBuilder private func emptyState(_ model: GatewayLogsModel, connected: Bool) -> some View {
         if !connected {
-            ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the Gateway to see its logs.", bundle: .module))
+            NotConnectedView(description: Text("Connect to the Gateway to see its logs.", bundle: .module))
         } else if let failure = model.failure, !failure.isUnavailable {
             ContentUnavailableView {
                 Label(L("Couldn't Load Logs"), systemImage: "exclamationmark.triangle")

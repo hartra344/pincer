@@ -29,8 +29,7 @@ struct ChannelStatusPage: View {
             if connected, model.hasLoaded, !model.supported {
                 self.unsupported
             } else if !connected, model.snapshot == nil {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Not connected to the Gateway.", bundle: .module))
+                NotConnectedView(description: Text("Not connected to the Gateway.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }

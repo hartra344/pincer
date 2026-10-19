@@ -16,8 +16,7 @@ struct PairingRequestsPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !connected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to review pairing requests.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to review pairing requests.", bundle: .module))
             } else if !model.supported {
                 ContentUnavailableView(L("Message Requests Aren't Available"), systemImage: "person.badge.key",
                                        description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.", bundle: .module))
@@ -85,10 +84,7 @@ struct PairingRequestsPage: View {
         let groups = Self.groups(visible)
         return List {
             if let error = model.loadState.error, model.hasLoaded, !model.accounts.isEmpty || !model.requests.isEmpty {
-                Section {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button(L("Try Again")) { Task { await model.refresh() } }
-                }
+                LoadErrorSection(error: error) { Task { await model.refresh() } }
             }
             if groups.count > 1 {
                 ForEach(groups, id: \.channel) { group in
