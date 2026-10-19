@@ -9,7 +9,7 @@
 // `channelAccountSnapshots` (setup.mjs); every change broadcasts a `health` event.
 import { ADMIN_SCOPE } from './config.mjs';
 import { CHANNEL_META } from './setup.mjs';
-import { isObject } from './util.mjs';
+import { additionalPropertiesProblem } from './params.mjs';
 
 export const CHANNEL_LIFECYCLE_METHODS = ['channels.start', 'channels.stop', 'channels.logout'];
 /** Channels whose plugin implements `logoutAccount` (upstream: WhatsApp and Telegram, not Discord or Slack). */
@@ -36,9 +36,8 @@ export function resetChannelsForRestart(state) {
 }
 
 function checkParams(params, method) {
-  if (!isObject(params)) return `invalid ${method} params: must be object`;
-  const extra = Object.keys(params).find((key) => key !== 'channel' && key !== 'accountId');
-  if (extra) return `invalid ${method} params: must NOT have additional properties (${extra})`;
+  const closed = additionalPropertiesProblem(method, params, ['channel', 'accountId']);
+  if (closed) return closed;
   if (typeof params.channel !== 'string' || params.channel.length === 0) {
     return `invalid ${method} params: must have required property 'channel'`;
   }

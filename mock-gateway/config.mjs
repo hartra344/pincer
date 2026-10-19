@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import { pluginMcpInspect, seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
 import { isTtsApiKeyPath, seedTtsConfig, ttsSchemaProperties } from './tts.mjs';
+import { isObject } from './util.mjs';
 
 export const REDACTED = '__OPENCLAW_REDACTED__';
 export const ADMIN_SCOPE = 'operator.admin';
@@ -22,7 +23,6 @@ const ADMIN_METHODS = new Set(['config.patch', 'config.apply', 'config.set', 'pl
 const CONFIG_PATH = '/home/mock/.openclaw/openclaw.json';
 
 const clone = (value) => structuredClone(value);
-const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export function createConfigState() {
   return {

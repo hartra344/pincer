@@ -62,6 +62,11 @@ export function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** JSON round trip: drops `undefined` fields and flattens Dates, unlike `clone` (structuredClone). */
+export function jsonClone(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
 export function sendJson(ws, obj) {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
 }

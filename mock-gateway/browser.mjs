@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import jpegJs from 'jpeg-js';
 import { WebSocketServer } from 'ws';
-import { scopeApproved } from './scopes.mjs';
+import { hasScope } from './scopes.mjs';
 
 export const BROWSER_METHODS = ['browser.request'];
 
@@ -227,7 +227,7 @@ function malformedFrame(kind, url) {
 export function handleBrowserRequest(state, conn, msg, { sendRes, sendErr }) {
   if (msg.method !== 'browser.request' || browserDisabled()) return false;
   const { id } = msg;
-  if (!scopeApproved(conn.scopes ?? [], ADMIN_SCOPE)) {
+  if (!hasScope(conn, ADMIN_SCOPE)) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${ADMIN_SCOPE}`, { code: 'MISSING_SCOPE', scope: ADMIN_SCOPE });
     return true;
   }

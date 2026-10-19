@@ -12,7 +12,7 @@
 // node connect after approval records the declared surface as approved; later connects that add
 // commands keep the approved set and park a node pairing request (`node.pair.requested`) until
 // `node.pair.approve`. Node sockets only receive node events, never operator broadcasts.
-import { randHex, sendErr, sendEvent, sendRes } from './util.mjs';
+import { jsonClone, randHex, sendErr, sendEvent, sendRes } from './util.mjs';
 import { hasPairingScope, hasScope } from './scopes.mjs';
 
 export const NODE_INVOKE_METHODS = ['node.invoke', 'node.pair.list', 'node.pair.approve', 'node.pair.reject'];
@@ -73,7 +73,7 @@ function sameSet(a, b) {
 }
 
 function pendingView(request) {
-  return JSON.parse(JSON.stringify(request));
+  return jsonClone(request);
 }
 
 /// Registers an authenticated node connection (the caller already verified signature, auth and

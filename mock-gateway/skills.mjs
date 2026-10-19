@@ -15,7 +15,9 @@
 import { ADMIN_SCOPE, REDACTED } from './config.mjs';
 import { MOCK_STATE_DIR, defaultWorkspaceDir } from './agents.mjs';
 import { mcpEffectiveTools, mcpNotices } from './mcp.mjs';
-import { scopeApproved } from './scopes.mjs';
+import { hasScope } from './scopes.mjs';
+import { closedObjectProblem, commonFieldTypes } from './params.mjs';
+import { isObject } from './util.mjs';
 
 export const SKILLS_METHODS = ['skills.status', 'skills.search', 'skills.detail', 'skills.install', 'skills.update'];
 export const TOOLS_METHODS = ['tools.catalog', 'tools.effective'];
@@ -257,15 +259,11 @@ function skillsState(state) {
 
 // --- Params schema (closed objects, like the gateway-protocol typebox schemas) ---
 
-const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fieldType = {
-  nonEmpty: (v) => (typeof v !== 'string' ? 'must be string' : v.length ? undefined : 'must NOT have fewer than 1 characters'),
-  string: (v) => (typeof v === 'string' ? undefined : 'must be string'),
+  ...commonFieldTypes,
   minString: (v) => fieldType.nonEmpty(v),
-  boolean: (v) => (typeof v === 'boolean' ? undefined : 'must be boolean'),
   limit: (v) => (!Number.isInteger(v) ? 'must be integer' : v < 1 ? 'must be >= 1' : v > 100 ? 'must be <= 100' : undefined),
   timeoutMs: (v) => (!Number.isInteger(v) ? 'must be integer' : v < 1000 ? 'must be >= 1000' : undefined),
-  sha256: (v) => (typeof v === 'string' && /^[a-fA-F0-9]{64}$/.test(v) ? undefined : 'must match pattern "^[a-fA-F0-9]{64}$"'),
   clawhub: (v) => (v === 'clawhub' ? undefined : 'must be equal to constant'),
   upload: (v) => (v === 'upload' ? undefined : 'must be equal to constant'),
   envRecord: (v) => {
@@ -295,21 +293,10 @@ const SCHEMAS = {
   'tools.effective': [{ required: ['sessionKey'], fields: { agentId: 'nonEmpty', sessionKey: 'nonEmpty' } }],
 };
 
-function closedObjectProblem(schema, params) {
-  for (const key of schema.required ?? []) if (!(key in params)) return `at root: must have required property '${key}'`;
-  for (const [key, value] of Object.entries(params)) {
-    const type = schema.fields[key];
-    if (!type) return `at root: unexpected property '${key}'`;
-    const problem = fieldType[type](value);
-    if (problem) return `at /${key}: ${problem}`;
-  }
-  return undefined;
-}
-
 export function skillsParamsProblem(method, params) {
   const variants = SCHEMAS[method];
   if (!isObject(params)) return 'at root: must be object';
-  const problems = variants.map((schema) => closedObjectProblem(schema, params));
+  const problems = variants.map((schema) => closedObjectProblem(schema, params, fieldType));
   if (problems.some((p) => p === undefined)) return undefined;
   // A union reports the variant whose discriminator matched, else the first variant's problem.
   if (variants.length > 1) {
@@ -763,7 +750,7 @@ export function handleSkillsRequest(state, conn, msg, { sendRes, sendErr }) {
   if ((isSkills && skillsDisabled()) || (isTools && toolsDisabled())) return false;
   const params = msg.params ?? {};
   const required = ADMIN_METHODS.has(method) ? ADMIN_SCOPE : READ_SCOPE;
-  if (!scopeApproved(conn.scopes ?? [], required)) {
+  if (!hasScope(conn, required)) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${required}`, { code: 'MISSING_SCOPE', scope: required });
     return true;
   }

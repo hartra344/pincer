@@ -9,7 +9,7 @@
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
 import { encodePng } from './png.mjs';
-import { isObject } from './util.mjs';
+import { additionalPropertiesProblem } from './params.mjs';
 
 export const SETUP_METHODS = ['channels.status'];
 /** Real Gateway methods that it doesn't list in `hello.features.methods`. */
@@ -31,9 +31,7 @@ export function createSetupState() {
 }
 
 function checkParams(params, allowed, method) {
-  if (!isObject(params)) return `invalid ${method} params: must be object`;
-  const extra = Object.keys(params).find((key) => !allowed.includes(key));
-  return extra ? `invalid ${method} params: must NOT have additional properties (${extra})` : null;
+  return additionalPropertiesProblem(method, params, allowed);
 }
 
 // --- QR codes ------------------------------------------------------------------------------
