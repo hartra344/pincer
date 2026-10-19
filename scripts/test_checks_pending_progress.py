@@ -91,6 +91,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
         env = dict(os.environ, PATH=str(root / "fake") + os.pathsep + os.environ["PATH"],
                    CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "", CHECKS_LOG_DIR=str(root / "logs"),
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
+        env.pop("CHECKS_SHARD", None)  # a CI shard's own setting must not narrow the runner under test
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
         # The runner's own pipe, so the fixture knows which stdout the progress helper must not share:
         # Node makes a pipe non-blocking for every writer, and the runner's output then fails with EAGAIN.

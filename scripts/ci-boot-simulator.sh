@@ -13,6 +13,8 @@ warm=""
 [ "${1:-}" = --warm-webkit ] && warm=1
 (
     xcrun simctl bootstatus "$UDID" -b
-    [ -z "$warm" ] || xcrun simctl openurl "$UDID" "data:text/html,<p>warm</p>"
+    # simctl openurl rejects data: URLs; any page starts Safari's WebContent process.
+    [ -z "$warm" ] || xcrun simctl openurl "$UDID" https://example.com || true
+    date
 ) > "${RUNNER_TEMP:-/tmp}/simulator-boot.log" 2>&1 < /dev/null &
 echo "udid=$UDID"
