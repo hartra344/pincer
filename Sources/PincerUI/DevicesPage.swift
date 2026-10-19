@@ -466,10 +466,11 @@ private struct DeviceAccessNeeded: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Label(DeviceManagementModel.needsAccessTitle, systemImage: "lock.shield")
-                    .font(.callout.weight(.medium))
-                Text(self.message).font(.caption).foregroundStyle(.secondary)
+            FullManagementNotice(
+                title: DeviceManagementModel.needsAccessTitle,
+                message: Text(self.message),
+                action: { self.navigator.destination = .connection }
+            ) {
                 if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
                     Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                         .font(.caption)
@@ -477,7 +478,6 @@ private struct DeviceAccessNeeded: View {
                     ApprovalInstructions(requestId: nil)
                         .frame(maxWidth: 420, alignment: .leading)
                 }
-                Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
             .padding(.vertical, Theme.Spacing.xs)
         }

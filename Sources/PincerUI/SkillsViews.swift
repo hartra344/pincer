@@ -120,14 +120,10 @@ struct SkillsReadOnlyNotice: View {
 
     var body: some View {
         if !self.model.hasAdmin, self.model.supportsInstall || self.model.supportsUpdate {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Label(L("Managing skills needs Full Management"), systemImage: "lock.shield")
-                    .font(.callout.weight(.medium))
-                Text(Skills.needsAdminMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button(L("Open Connection")) { self.navigator.destination = .connection }
-            }
+            FullManagementNotice(
+                title: L("Managing skills needs Full Management"),
+                message: Text(Skills.needsAdminMessage),
+                action: { self.navigator.destination = .connection })
         }
     }
 }

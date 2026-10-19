@@ -19,9 +19,8 @@ struct GatewayHealthEventOrderingTests {
         let oldHealth: JSONValue
         let beat: JSONValue = ["ts": 1700000000000, "status": "failed", "reason": "held heartbeat"]
         var healthError: GatewayError?
-        var entered: Set<String> = []
-        private var waiters: [String: CheckedContinuation<Void, Never>] = [:]
-        private var released = false
+        private let gate = KeyedTestGate<String>()
+        var entered: Set<String> { gate.entered }
 
         init(connected: Bool) { self.oldHealth = GatewayHealthEventOrderingTests.health(connected: connected, timestamp: 1700000000000) }
 
@@ -30,15 +29,7 @@ struct GatewayHealthEventOrderingTests {
                 Issue.record("Unexpected actual RPC: \(method)")
                 return .null
             }
-            self.entered.insert(method)
-            await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    if self.released || Task.isCancelled { continuation.resume() }
-                    else { self.waiters[method] = continuation }
-                }
-            } onCancel: {
-                Task { @MainActor [weak self] in self?.release() }
-            }
+            await self.gate.hold(method)
             try Task.checkCancellation()
             if method == "health", let error = self.healthError { throw error }
             return method == "health" ? self.oldHealth : self.beat
@@ -57,12 +48,7 @@ struct GatewayHealthEventOrderingTests {
             }
         }
 
-        func release() {
-            self.released = true
-            let waiters = self.waiters.values
-            self.waiters = [:]
-            for waiter in waiters { waiter.resume() }
-        }
+        func release() { self.gate.release() }
     }
 
     @Test(.timeLimit(.minutes(2)), arguments: [false, true])

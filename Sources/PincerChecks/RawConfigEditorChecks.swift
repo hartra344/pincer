@@ -143,32 +143,6 @@ func runRawConfigEditorChecks() async {
 }
 
 @MainActor
-private final class RawApplyResponseGate {
-    var entered = false
-    private var released = false
-    private var continuation: CheckedContinuation<Void, Never>?
-
-    func hold() async {
-        self.entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if self.released || Task.isCancelled { continuation.resume() }
-                else { self.continuation = continuation }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in self?.release() }
-        }
-    }
-
-    func release() {
-        self.released = true
-        let continuation = self.continuation
-        self.continuation = nil
-        continuation?.resume()
-    }
-}
-
-@MainActor
 func runDemoRawConfigEditorChecks() async {
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -220,7 +194,7 @@ func runDemoRawConfigEditorChecks() async {
     // The remaining cases simulate an admin-authorized client through the existing model
     // dependency seam. The Demo hello is unchanged; all requests still reach the real Demo.
     for later in ["unchanged", "typing", "revert", "ABA"] {
-        let gate = RawApplyResponseGate()
+        let gate = CheckGate()
         let settings = GatewaySettingsModel(request: { method, params, timeout in
             let response = try await gateway.connection.request(method, params, timeout: timeout)
             // The real server has already accepted the exact request. Only client publication waits.

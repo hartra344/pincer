@@ -142,14 +142,10 @@ struct AgentReadOnlyNotice: View {
                 Image(systemName: "person.crop.circle.badge.exclamationmark")
             }
         } else if !self.model.hasAdmin {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
-                    .font(.callout.weight(.medium))
-                Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button(L("Open Connection")) { self.navigator.destination = .connection }
-            }
+            FullManagementNotice(
+                title: L("Editing agents needs Full Management"),
+                message: Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module),
+                action: { self.navigator.destination = .connection })
         }
     }
 }
@@ -164,14 +160,10 @@ private struct AgentFilesReadOnlyNotice: View {
             if self.model.hasAdmin {
                 Label(reason, systemImage: "lock").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
-                        .font(.callout.weight(.medium))
-                    Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button(L("Open Connection")) { self.navigator.destination = .connection }
-                }
+                FullManagementNotice(
+                    title: L("Editing agents needs Full Management"),
+                    message: Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module),
+                    action: { self.navigator.destination = .connection })
             }
         }
     }

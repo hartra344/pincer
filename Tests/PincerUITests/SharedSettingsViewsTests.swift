@@ -27,6 +27,22 @@ struct SharedSettingsViewsTests {
         #expect(withSubtitle.height > plain.height)
     }
 
+    @Test func fullManagementNoticeHostsAndGrowsWithExtraContent() {
+        let plain = layout(FullManagementNotice(title: "Needs Full Management", message: Text("Open Connection to turn it on."), action: {}))
+        let extra = layout(FullManagementNotice(title: "Needs Full Management", message: Text("Open Connection to turn it on."), action: {}) {
+            Text("Not granted yet.")
+        })
+        #expect(plain.height > 0 && extra.height > plain.height)
+    }
+
+    @Test func fullManagementUnavailableHosts() {
+        let plain = layout(FullManagementUnavailable(title: "Needs Full Management", message: Text("Open Connection."), action: {}))
+        let extra = layout(FullManagementUnavailable(title: "Needs Full Management", systemImage: "lock", message: Text("Open Connection."), action: {}) {
+            Text("Not granted yet.")
+        })
+        #expect(plain.height > 0 && extra.height > 0)
+    }
+
     @Test func mainWindowHelperIsCallable() {
         let raise: (OpenWindowAction) -> Void = { MainWindow.bringToFront(openWindow: $0) }
         _ = raise

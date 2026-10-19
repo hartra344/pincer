@@ -66,18 +66,17 @@ struct PairingRequestsPage: View {
     // MARK: States
 
     private var accessNeeded: some View {
-        ContentUnavailableView {
-            Label(L("Full Management Needed"), systemImage: "lock")
-        } description: {
-            Text(PairingInboxModel.missingScopeMessage)
-        } actions: {
+        FullManagementUnavailable(
+            title: L("Full Management Needed"), systemImage: "lock",
+            message: Text(PairingInboxModel.missingScopeMessage),
+            action: { self.navigator.destination = .connection }
+        ) {
             if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
                 Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                     .foregroundStyle(.orange)
                 ApprovalInstructions(requestId: nil)
                     .frame(maxWidth: 420)
             }
-            Button(L("Open Connection")) { self.navigator.destination = .connection }
         }
     }
 
