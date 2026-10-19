@@ -185,11 +185,14 @@ jobs:
           path: .build/xcode-ios
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+      # test-without-building only needs Build/Products (xctestrun + bundles). Uploading only that keeps
+      # the artifact transfer below the old per-shard build time.
       - name: Upload iOS test products
         uses: actions/upload-artifact@v4
         with:
           name: xcode-ios-products
-          path: .build/xcode-ios
+          path: .build/xcode-ios/Build/Products
+          compression-level: 0
           if-no-files-found: error
 
   # The transcript suites run in shards from scripts/ci-ios-shard.sh.
@@ -220,7 +223,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: xcode-ios-products
-          path: .build/xcode-ios
+          path: .build/xcode-ios/Build/Products
 
       - name: Make the test scheme
         run: scripts/ios-test-scheme.sh
