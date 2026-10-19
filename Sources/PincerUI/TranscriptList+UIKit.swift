@@ -8,24 +8,7 @@ import UIKit
 /// self-sizes on screen. Only rows near the viewport are laid out eagerly, the rest while the
 /// reader isn't scrolling, and the row the reader is looking at stays put while history loads
 /// above it or a reply streams in below.
-struct TranscriptList: UIViewRepresentable {
-    let rows: [TranscriptRow]
-    let context: TranscriptContext
-    let isConnected: Bool
-    /// Extra space below the last row for content floating over the transcript (the composer).
-    var bottomInset: CGFloat = 0
-    /// Extra space above the first row, for a toolbar the transcript scrolls under.
-    var topInset: CGFloat = 0
-    /// Find in chat's matches to highlight, and the selected one to scroll to.
-    var highlight = TranscriptHighlight()
-    /// A message to scroll to and flash, e.g. from a `pincer://` link.
-    var jump: TranscriptJump?
-    /// Told how far the reader is from the latest message and whether the list follows the bottom;
-    /// runs the scroll-to-bottom button's scroll (#439).
-    var bottomState: TranscriptBottomState?
-    /// Go ▸ Previous/Next Message for this list (#195).
-    var navigator: TranscriptNavigator?
-
+extension TranscriptList: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
     func makeUIView(context: Context) -> UICollectionView {
@@ -33,12 +16,7 @@ struct TranscriptList: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UICollectionView, context: Context) {
-        context.coordinator.attach(self.bottomState)
-        context.coordinator.update(rows: self.rows, context: self.context,
-                                   insets: (self.topInset, self.bottomInset), isConnected: self.isConnected)
-        context.coordinator.apply(self.highlight)
-        context.coordinator.apply(self.jump)
-        context.coordinator.install(self.navigator)
+        self.push(to: context.coordinator)
     }
 
     @MainActor
@@ -107,12 +85,11 @@ struct TranscriptList: UIViewRepresentable {
                 self.reportPosition()
             }
             guard let view = self.collectionView else { return }
-            let top = TranscriptLayout.verticalInset + max(0, insets.top)
-            let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
-            if abs(view.contentInset.top - top) > 0.5 || abs(view.contentInset.bottom - bottom) > 0.5 {
+            let target = TranscriptListController.contentInsets(top: insets.top, bottom: insets.bottom)
+            if TranscriptListController.insetsChanged(from: (view.contentInset.top, view.contentInset.bottom), to: target) {
                 self.isAdjusting = true
-                view.contentInset.top = top
-                view.contentInset.bottom = bottom
+                view.contentInset.top = target.top
+                view.contentInset.bottom = target.bottom
                 view.verticalScrollIndicatorInsets = UIEdgeInsets(top: max(0, insets.top), left: 0,
                                                                   bottom: max(0, insets.bottom), right: 0)
                 self.isAdjusting = false
@@ -182,8 +159,7 @@ struct TranscriptList: UIViewRepresentable {
             let width = self.width
             guard width > 40 else { return }
             for path in view.indexPathsForVisibleItems where path.item < self.rows.count {
-                let layout = self.renderer.layout(for: self.rows[path.item], width: width)
-                self.controller.correctHeight(self.rows[path.item].id, width: width, height: layout.height)
+                let layout = self.controller.layoutCorrectingHeight(self.rows[path.item], width: width)
                 guard let cell = view.cellForItem(at: path) as? TranscriptCell else { continue }
                 cell.apply(layout, actions: self.renderer)
             }
@@ -279,8 +255,7 @@ struct TranscriptList: UIViewRepresentable {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: TranscriptCell.reuseIdentifier, for: indexPath)
             if let cell = cell as? TranscriptCell, indexPath.item < self.rows.count {
                 let item = self.rows[indexPath.item]
-                let layout = self.renderer.layout(for: item, width: self.width)
-                self.controller.correctHeight(item.id, width: self.width, height: layout.height)
+                let layout = self.controller.layoutCorrectingHeight(item, width: self.width)
                 cell.apply(layout, actions: self.renderer)
             }
             return cell
@@ -442,10 +417,7 @@ extension TranscriptList.Coordinator: TranscriptListHost {
     }
 
     private func makeRotors() -> [UIAccessibilityCustomRotor] {
-        let kinds: [(String, TranscriptNavKind)] = [
-            (L("Messages"), .message), (L("Replies"), .reply), (L("Your Messages"), .user), (L("Tool Calls"), .tool),
-        ]
-        return kinds.map { name, kind in
+        TranscriptNavKind.rotors.map { name, kind in
             UIAccessibilityCustomRotor(name: name) { [weak self] predicate in
                 self?.rotorResult(kind: kind, predicate: predicate)
             }
@@ -543,8 +515,7 @@ private final class TranscriptCell: UICollectionViewCell {
     static let reuseIdentifier = "TranscriptCell"
 
     private let content = TranscriptRowView()
-    private var serial: Int?
-    private weak var actions: TranscriptRowActions?
+    private var state = TranscriptCellState()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -563,14 +534,7 @@ private final class TranscriptCell: UICollectionViewCell {
     }
 
     func apply(_ layout: TranscriptRowLayout, actions: TranscriptRowActions) {
-        // Top-aligned at the layout's own size, so a row briefly taller than its slot (between a
-        // change and the layout catching up) grows downward.
-        let frame = CGRect(x: 0, y: 0, width: layout.width, height: layout.height)
-        if self.content.frame != frame { self.content.frame = frame }
-        guard layout.serial != self.serial else { return }
-        self.serial = layout.serial
-        self.actions = actions
-        self.content.apply(layout, actions: actions)
+        _ = self.state.apply(layout, actions: actions, to: self.content)
     }
 
     // Computed when VoiceOver asks, not on every layout, so scrolling pays nothing for them.
@@ -582,7 +546,7 @@ private final class TranscriptCell: UICollectionViewCell {
     override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
         get {
             guard let layout = self.content.layout else { return nil }
-            var actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.actions, anchor: self.content)
+            var actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.state.actions, anchor: self.content)
             var names = Set(actions.map(\.name))
             // The row's other buttons (disclosures, links, images, reaction chips), which a single
             // element would otherwise hide. The footers' own buttons are covered above.
@@ -601,7 +565,7 @@ private final class TranscriptCell: UICollectionViewCell {
                     continue
                 }
                 guard names.insert(name).inserted else { continue }
-                actions.append(.init(name: name) { [weak renderer = self.actions] in renderer?.open(action.url) })
+                actions.append(.init(name: name) { [weak renderer = self.state.actions] in renderer?.open(action.url) })
             }
             return actions.map { action in
                 UIAccessibilityCustomAction(name: action.name) { _ in

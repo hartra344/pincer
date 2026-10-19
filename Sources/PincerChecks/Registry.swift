@@ -60,6 +60,7 @@ enum Suites {
             Section("Check gate") { await checkCheckGate() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Shared utilities") { await runSharedUtilityChecks() },
+            Section("Shared platform helpers") { runSharedPlatformHelperChecks() },
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Gateways settings") { runGatewaysSettingsOfflineChecks() },
