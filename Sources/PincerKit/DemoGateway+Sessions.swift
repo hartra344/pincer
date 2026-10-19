@@ -146,13 +146,13 @@ extension DemoGateway {
         switch method {
         case "sessions.preview":
             guard let keys = params["keys"]?.array, !keys.isEmpty else {
-                throw Self.sessionsInvalid("invalid sessions.preview params: at /keys: must NOT have fewer than 1 items")
+                throw GatewayError.invalidRequest("invalid sessions.preview params: at /keys: must NOT have fewer than 1 items")
             }
             if let limit = params["limit"], (limit.int ?? 0) < 1 {
-                throw Self.sessionsInvalid("invalid sessions.preview params: at /limit: must be >= 1")
+                throw GatewayError.invalidRequest("invalid sessions.preview params: at /limit: must be >= 1")
             }
             if let maxChars = params["maxChars"], (maxChars.int ?? 0) < 20 {
-                throw Self.sessionsInvalid("invalid sessions.preview params: at /maxChars: must be >= 20")
+                throw GatewayError.invalidRequest("invalid sessions.preview params: at /maxChars: must be >= 20")
             }
             let limit = params["limit"]?.int ?? 12
             let maxChars = params["maxChars"]?.int ?? 240
@@ -161,7 +161,7 @@ extension DemoGateway {
             return ["ts": Self.now(), "previews": .array(Array(previews))]
         case "sessions.describe":
             guard let key = params["key"]?.text else {
-                throw Self.sessionsInvalid("invalid sessions.describe params: at root: must have required property 'key'")
+                throw GatewayError.invalidRequest("invalid sessions.describe params: at root: must have required property 'key'")
             }
             try self.checkAgent(params)
             guard var row = self.sessions[key] else { return ["session": .null] }
@@ -177,7 +177,7 @@ extension DemoGateway {
             return try self.recoverSession(params)
         case "sessions.branches.list":
             guard let key = params["sessionKey"]?.text else {
-                throw Self.sessionsInvalid("invalid sessions.branches.list params: at root: must have required property 'sessionKey'")
+                throw GatewayError.invalidRequest("invalid sessions.branches.list params: at root: must have required property 'sessionKey'")
             }
             try self.checkAgent(params)
             return ["branches": .array(self.branchList(key))]
@@ -249,13 +249,13 @@ extension DemoGateway {
 
     private func deleteSession(_ params: JSONValue) throws -> JSONValue {
         guard let key = params["key"]?.text?.trimmingCharacters(in: .whitespaces), !key.isEmpty else {
-            throw Self.sessionsInvalid("invalid sessions.delete params: at root: must have required property 'key'")
+            throw GatewayError.invalidRequest("invalid sessions.delete params: at root: must have required property 'key'")
         }
         try self.checkAgent(params)
-        if Self.isMainKey(key) { throw Self.sessionsInvalid("Cannot delete the main session (\(key)).") }
+        if Self.isMainKey(key) { throw GatewayError.invalidRequest("Cannot delete the main session (\(key)).") }
         guard let row = self.sessions[key] else { return ["ok": true, "key": .string(key), "deleted": false, "archived": []] }
         if params["archivedOnly"]?.bool == true, !Self.isArchived(row) {
-            throw Self.sessionsInvalid("Session \(key) is not archived. Archive it first, then delete it.")
+            throw GatewayError.invalidRequest("Session \(key) is not archived. Archive it first, then delete it.")
         }
         if let expected = params["expectedSessionId"]?.text, expected != row["sessionId"]?.text {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Session \(key) changed before deletion. Retry.",
@@ -281,17 +281,17 @@ extension DemoGateway {
 
     private func patchMany(_ params: JSONValue) throws -> JSONValue {
         guard let targets = params["targets"]?.array, !targets.isEmpty else {
-            throw Self.sessionsInvalid("invalid sessions.patchMany params: at /targets: must NOT have fewer than 1 items")
+            throw GatewayError.invalidRequest("invalid sessions.patchMany params: at /targets: must NOT have fewer than 1 items")
         }
         guard targets.count <= SessionManager.patchManyMaxTargets else {
-            throw Self.sessionsInvalid("invalid sessions.patchMany params: at /targets: must NOT have more than 100 items")
+            throw GatewayError.invalidRequest("invalid sessions.patchMany params: at /targets: must NOT have more than 100 items")
         }
         guard let patch = params["patch"]?.object, !patch.isEmpty else {
-            throw Self.sessionsInvalid("invalid sessions.patchMany params: at /patch: must NOT have fewer than 1 properties")
+            throw GatewayError.invalidRequest("invalid sessions.patchMany params: at /patch: must NOT have fewer than 1 properties")
         }
         let fields = ["unread", "pinned", "label", "category", "color", "archived"]
         if let unsupported = patch.keys.sorted().first(where: { !fields.contains($0) }) {
-            throw Self.sessionsInvalid("invalid sessions.patchMany params: at /patch: unexpected property '\(unsupported)'")
+            throw GatewayError.invalidRequest("invalid sessions.patchMany params: at /patch: unexpected property '\(unsupported)'")
         }
         let outcomes: [JSONValue] = targets.map { target in
             var identity: Row = ["key": target["key"] ?? ""]
@@ -328,10 +328,10 @@ extension DemoGateway {
 
     private func recoverSession(_ params: JSONValue) throws -> JSONValue {
         guard let key = params["key"]?.text else {
-            throw Self.sessionsInvalid("invalid sessions.recover params: at root: must have required property 'key'")
+            throw GatewayError.invalidRequest("invalid sessions.recover params: at root: must have required property 'key'")
         }
         try self.checkAgent(params)
-        guard var source = self.sessions[key] else { throw Self.sessionsInvalid("Session recovery source was not found.") }
+        guard var source = self.sessions[key] else { throw GatewayError.invalidRequest("Session recovery source was not found.") }
         if let successorKey = source["recoveredSessionKey"]?.text, let successor = self.sessions[successorKey] {
             // Already recovered: the same successor comes back.
             self.sessionChanged(successorKey, reason: "recovery")
@@ -339,10 +339,10 @@ extension DemoGateway {
                     "continuation": ["status": "started", "runId": .string(Self.shortId("demo-run-"))]]
         }
         guard source["restartRecoveryStatus"]?.text == "tombstoned" else {
-            throw Self.sessionsInvalid("Session recovery requires a restart-tombstoned session.")
+            throw GatewayError.invalidRequest("Session recovery requires a restart-tombstoned session.")
         }
         guard source["hasActiveRun"]?.bool != true else {
-            throw Self.sessionsInvalid("Session recovery is unavailable while the source still has active work.")
+            throw GatewayError.invalidRequest("Session recovery is unavailable while the source still has active work.")
         }
         let agentId = source["agentId"]?.text ?? "main"
         let successorKey = "agent:\(agentId):dashboard:\(UUID().uuidString.lowercased())"
@@ -377,13 +377,13 @@ extension DemoGateway {
     private func switchBranch(_ params: JSONValue) throws -> JSONValue {
         let key = try self.historyTarget(params, switching: true)
         guard let leaf = params["leafEntryId"]?.text else {
-            throw Self.sessionsInvalid("invalid sessions.branches.switch params: at root: must have required property 'leafEntryId'")
+            throw GatewayError.invalidRequest("invalid sessions.branches.switch params: at root: must have required property 'leafEntryId'")
         }
         let active = self.transcripts[key] ?? []
-        if Self.entryId(active.last) == leaf { throw Self.sessionsInvalid("branch is already active: \(leaf)") }
+        if Self.entryId(active.last) == leaf { throw GatewayError.invalidRequest("branch is already active: \(leaf)") }
         guard let target = self.branchTips[key]?[leaf], !Self.isPrefix(target, of: active) else {
             let known = ([active] + (self.branchTips[key] ?? [:]).values).contains { $0.contains { Self.entryId($0) == leaf } }
-            throw Self.sessionsInvalid(known ? "entry is not a branch tip: \(leaf)" : "branch entry not found: \(leaf)")
+            throw GatewayError.invalidRequest(known ? "entry is not a branch tip: \(leaf)" : "branch entry not found: \(leaf)")
         }
         self.branchTips[key]?[leaf] = nil
         self.retainTip(key, active)
@@ -395,14 +395,14 @@ extension DemoGateway {
     private func rewind(_ params: JSONValue) throws -> JSONValue {
         let key = try self.historyTarget(params, switching: false)
         guard let entryId = params["entryId"]?.text else {
-            throw Self.sessionsInvalid("invalid sessions.rewind params: at root: must have required property 'entryId'")
+            throw GatewayError.invalidRequest("invalid sessions.rewind params: at root: must have required property 'entryId'")
         }
         let active = self.transcripts[key] ?? []
         guard let index = active.firstIndex(where: { Self.entryId($0) == entryId }) else {
             let known = (self.branchTips[key] ?? [:]).values.contains { $0.contains { Self.entryId($0) == entryId } }
-            throw Self.sessionsInvalid(known ? "message entry is not on the active path: \(entryId)" : "message entry not found: \(entryId)")
+            throw GatewayError.invalidRequest(known ? "message entry is not on the active path: \(entryId)" : "message entry not found: \(entryId)")
         }
-        guard active[index]["role"]?.string == "user" else { throw Self.sessionsInvalid("entry is not a user message: \(entryId)") }
+        guard active[index]["role"]?.string == "user" else { throw GatewayError.invalidRequest("entry is not a user message: \(entryId)") }
         self.retainTip(key, active)
         self.transcripts[key] = Array(active[..<index])
         self.historyChanged(key, reason: "rewind")
@@ -417,13 +417,13 @@ extension DemoGateway {
     private func fork(_ params: JSONValue) throws -> JSONValue {
         let key = try self.historyTarget(params, switching: false)
         guard let entryId = params["entryId"]?.text else {
-            throw Self.sessionsInvalid("invalid sessions.fork params: at root: must have required property 'entryId'")
+            throw GatewayError.invalidRequest("invalid sessions.fork params: at root: must have required property 'entryId'")
         }
         let active = self.transcripts[key] ?? []
         guard let index = active.firstIndex(where: { Self.entryId($0) == entryId }) else {
-            throw Self.sessionsInvalid("message entry not found: \(entryId)")
+            throw GatewayError.invalidRequest("message entry not found: \(entryId)")
         }
-        guard active[index]["role"]?.string == "user" else { throw Self.sessionsInvalid("entry is not a user message: \(entryId)") }
+        guard active[index]["role"]?.string == "user" else { throw GatewayError.invalidRequest("entry is not a user message: \(entryId)") }
         let newKey = self.forkSession(from: key, path: Array(active[..<index]))
         let text = Self.plainText(active[index])
         var result: Row = ["sessionKey": .string(newKey)]
@@ -476,7 +476,7 @@ extension DemoGateway {
     private func historyTarget(_ params: JSONValue, switching: Bool) throws -> String {
         let key = params["sessionKey"]?.text ?? ""
         try self.checkAgent(params)
-        guard let row = self.sessions[key] else { throw Self.sessionsInvalid("session not found: \(key)") }
+        guard let row = self.sessions[key] else { throw GatewayError.invalidRequest("session not found: \(key)") }
         if row["hasActiveRun"]?.bool == true {
             throw GatewayError.rpc(code: "UNAVAILABLE", message: switching
                 ? "Branch switch is unavailable while the agent is working."
@@ -569,7 +569,7 @@ extension DemoGateway {
     private func checkAgent(_ params: JSONValue) throws {
         guard let agentId = params["agentId"]?.text else { return }
         guard self.agents.contains(where: { $0["id"]?.string == agentId.lowercased() }) else {
-            throw Self.sessionsInvalid("unknown agent id \"\(agentId)\"")
+            throw GatewayError.invalidRequest("unknown agent id \"\(agentId)\"")
         }
     }
 
@@ -624,9 +624,5 @@ extension DemoGateway {
         return (message["content"]?.array ?? []).compactMap {
             ($0["type"]?.string == "text" || $0["type"]?.string == "input_text") ? $0["text"]?.string : nil
         }.joined(separator: "\n")
-    }
-
-    private static func sessionsInvalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
     }
 }

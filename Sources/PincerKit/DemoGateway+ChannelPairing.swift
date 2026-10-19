@@ -69,7 +69,7 @@ extension DemoGateway {
     func resolvePairing(_ params: JSONValue, approve: Bool) throws -> JSONValue {
         guard let channel = params["channel"]?.string, let accountId = params["accountId"]?.string,
               let requestId = params["requestId"]?.string
-        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "channel, accountId and requestId are required", details: nil) }
+        else { throw GatewayError.invalidRequest("channel, accountId and requestId are required") }
         guard let account = Self.pairingAccounts.first(where: {
             $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
         }) else {
@@ -80,7 +80,7 @@ extension DemoGateway {
         guard let index = self.pairingRequests.firstIndex(where: {
             $0["requestId"]?.string == requestId && $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
         }), PairingRequest(self.pairingRequests[index])?.isExpired(at: now) == false else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "pending DM access request no longer exists", details: nil)
+            throw GatewayError.invalidRequest("pending DM access request no longer exists")
         }
         let senderId = self.pairingRequests[index]["senderId"] ?? .null
         self.pairingRequests.remove(at: index)

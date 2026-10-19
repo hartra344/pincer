@@ -59,7 +59,7 @@ extension DemoGateway {
         case "web.login.wait":
             try Self.closedParams(params, ["channel", "sessionKey", "timeoutMs", "accountId", "currentQrDataUrl"], method)
             if let url = params["currentQrDataUrl"], url.text?.hasPrefix("data:image/png;base64,") != true {
-                throw Self.invalid("invalid web.login.wait params: currentQrDataUrl must match pattern \"^data:image/png;base64,\"")
+                throw GatewayError.invalidRequest("invalid web.login.wait params: currentQrDataUrl must match pattern \"^data:image/png;base64,\"")
             }
             try Self.webLoginChannel(params)
             return try await self.webLoginWait(timeoutMs: params["timeoutMs"]?.int ?? 120_000)
@@ -75,7 +75,7 @@ extension DemoGateway {
         if let raw = params["channel"] {
             let id = raw.text?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
             guard Self.setupChannelMeta.contains(where: { $0.id == id }) else {
-                throw Self.invalid("unknown channel: \(raw.text ?? "")")
+                throw GatewayError.invalidRequest("unknown channel: \(raw.text ?? "")")
             }
             filter = id
         }
@@ -139,9 +139,9 @@ extension DemoGateway {
         let id = raw.text?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
         if id == "whatsapp" || id == "wa" { return }
         if Self.setupChannelMeta.contains(where: { $0.id == id }) {
-            throw Self.invalid("web login is not supported by provider \(id)")
+            throw GatewayError.invalidRequest("web login is not supported by provider \(id)")
         }
-        throw Self.invalid("web login provider is not available")
+        throw GatewayError.invalidRequest("web login provider is not available")
     }
 
     private func webLoginStart(force: Bool) -> JSONValue {
@@ -230,17 +230,13 @@ extension DemoGateway {
 
     // MARK: Helpers
 
-    private static func invalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
-    }
-
     private static func closedParams(_ params: JSONValue, _ allowed: Set<String>, _ method: String) throws {
         guard let object = params.object else {
             if case .null = params { return }
-            throw Self.invalid("invalid \(method) params: must be object")
+            throw GatewayError.invalidRequest("invalid \(method) params: must be object")
         }
         if let extra = object.keys.sorted().first(where: { !allowed.contains($0) }) {
-            throw Self.invalid("invalid \(method) params: must NOT have additional properties (\(extra))")
+            throw GatewayError.invalidRequest("invalid \(method) params: must NOT have additional properties (\(extra))")
         }
     }
 }

@@ -25,7 +25,7 @@ extension DemoGateway {
         self.observeSendRequest(params)
 #endif
         guard let idempotencyKey = params["idempotencyKey"]?.string else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "idempotencyKey is required", details: nil)
+            throw GatewayError.invalidRequest("idempotencyKey is required")
         }
         if params["replyToId"] != nil, !self.acceptsReplyTo {
             throw GatewayError.rpc(
@@ -33,10 +33,10 @@ extension DemoGateway {
         }
         if let context = params["workContext"] {
             guard self.acceptsWorkContext else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid chat.send params: at root: unexpected property 'workContext'", details: nil)
+                throw GatewayError.invalidRequest("invalid chat.send params: at root: unexpected property 'workContext'")
             }
             guard ChatWorkContext.validSnapshot(context) else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid chat.send params: invalid workContext", details: nil)
+                throw GatewayError.invalidRequest("invalid chat.send params: invalid workContext")
             }
         }
         let key = try self.knownSession(params["sessionKey"])

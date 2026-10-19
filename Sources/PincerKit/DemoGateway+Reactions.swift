@@ -64,14 +64,14 @@ extension DemoGateway {
     func setReaction(_ params: JSONValue) throws -> JSONValue {
         let key = try self.knownSession(params["sessionKey"])
         guard let messageId = params["messageId"]?.text, !messageId.isEmpty else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid session.reactions.set params: messageId is required", details: nil)
+            throw GatewayError.invalidRequest("invalid session.reactions.set params: messageId is required")
         }
         guard let emoji = params["emoji"]?.text, Self.isReactionEmoji(emoji) else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "one emoji grapheme is required", details: nil)
+            throw GatewayError.invalidRequest("one emoji grapheme is required")
         }
         let message = self.transcripts[key]?.first { $0["__openclaw"]?["id"]?.text == messageId }
         guard let message, ["user", "assistant"].contains(message["role"]?.text) else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown message", details: nil)
+            throw GatewayError.invalidRequest("unknown message")
         }
         let remove = params["remove"]?.bool == true
         let me = Self.selfProfile

@@ -90,28 +90,28 @@ extension DemoGateway {
 
     func execApprovalsGet(_ params: JSONValue) throws -> JSONValue {
         if let extra = params.object?.keys.sorted().first {
-            throw Self.invalid("invalid exec.approvals.get params: unexpected property '\(extra)'")
+            throw GatewayError.invalidRequest("invalid exec.approvals.get params: unexpected property '\(extra)'")
         }
         return self.execApprovalsSnapshot()
     }
 
     func execApprovalsSet(_ params: JSONValue) throws -> JSONValue {
         if let problem = Self.execSetParamsProblem(params) {
-            throw Self.invalid("invalid exec.approvals.set params: \(problem)")
+            throw GatewayError.invalidRequest("invalid exec.approvals.set params: \(problem)")
         }
         let hash = Self.execApprovalsHash(self.execApprovals)
         let baseHash = params["baseHash"]?.string
         if self.execApprovalsExists {
             guard let baseHash else {
-                throw Self.invalid("exec approvals base hash required; re-run exec.approvals.get and retry")
+                throw GatewayError.invalidRequest("exec approvals base hash required; re-run exec.approvals.get and retry")
             }
             guard baseHash == hash else {
-                throw Self.invalid("exec approvals changed since last load; re-run exec.approvals.get and retry")
+                throw GatewayError.invalidRequest("exec approvals changed since last load; re-run exec.approvals.get and retry")
             }
         } else if let baseHash, baseHash != hash {
-            throw Self.invalid("exec approvals changed since last load; re-run exec.approvals.get and retry")
+            throw GatewayError.invalidRequest("exec approvals changed since last load; re-run exec.approvals.get and retry")
         }
-        guard var file = params["file"]?.object else { throw Self.invalid("exec approvals file is required") }
+        guard var file = params["file"]?.object else { throw GatewayError.invalidRequest("exec approvals file is required") }
         // The socket isn't the client's to change: keep the current one.
         var socket = self.execApprovals["socket"]?.object ?? [:]
         for (key, value) in file["socket"]?.object ?? [:] where socket[key] == nil { socket[key] = value }
@@ -140,10 +140,6 @@ extension DemoGateway {
         file["agents"] = .object(agents)
         self.execApprovals = .object(file)
         self.execApprovalsExists = true
-    }
-
-    private static func invalid(_ message: String) -> GatewayError {
-        .rpc(code: "INVALID_REQUEST", message: message, details: nil)
     }
 
     // MARK: Schema

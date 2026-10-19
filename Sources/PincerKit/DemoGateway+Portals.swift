@@ -32,7 +32,7 @@ extension DemoGateway {
             return ["portals": .array(self.openDemoPortals())]
         case "portal.close":
             guard let id = params["id"]?.string, !id.isEmpty else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid portal.close params", details: nil)
+                throw GatewayError.invalidRequest("invalid portal.close params")
             }
             return ["closed": .bool(self.closeDemoPortal(id))]
         case "environments.session.status":
@@ -48,7 +48,7 @@ extension DemoGateway {
         case "portal.session.close":
             try self.requireDashboardOwner(params, method: method)
             guard let id = params["id"]?.string, !id.isEmpty else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid portal.session.close params", details: nil)
+                throw GatewayError.invalidRequest("invalid portal.session.close params")
             }
             return ["closed": .bool(id == Self.demoDashboardId ? self.closeDemoPortal(id) : false)]
         default:
@@ -72,7 +72,7 @@ extension DemoGateway {
     private func requireDashboardOwner(_ params: JSONValue, method: String) throws {
         guard params["sessionKey"]?.string == Self.dashboardSessionKey,
               params["environmentId"]?.string == Self.dashboardEnvironmentId else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid \(method) params", details: nil)
+            throw GatewayError.invalidRequest("invalid \(method) params")
         }
     }
 

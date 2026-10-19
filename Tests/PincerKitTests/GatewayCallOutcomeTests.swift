@@ -37,3 +37,14 @@ struct GatewayCallOutcomeTests {
         #expect(!GatewayMethodSupport.supports("a", advertised: ["b"]))
     }
 }
+
+@Suite("Invalid request errors")
+struct InvalidRequestErrorTests {
+    @Test func buildsInvalidRequestRpc() {
+        let plain = GatewayError.invalidRequest("bad")
+        #expect(plain == .rpc(code: "INVALID_REQUEST", message: "bad", details: nil))
+        let detailed = GatewayError.invalidRequest("bad", details: ["k": "v"])
+        #expect(detailed == .rpc(code: "INVALID_REQUEST", message: "bad", details: ["k": "v"]))
+        #expect(!GatewayError.isUnknownMethod(plain))
+    }
+}

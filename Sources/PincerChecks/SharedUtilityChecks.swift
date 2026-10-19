@@ -34,4 +34,5 @@ func runSharedUtilityChecks() async {
     check(kind(unknownOutcome) == "unknown", "call outcome unknown method")
     check(kind(scopeOutcome) == "scope", "call outcome missing scope")
     check(kind(failureOutcome) == "failure", "call outcome generic failure")
+    check(GatewayError.invalidRequest("bad") == .rpc(code: "INVALID_REQUEST", message: "bad", details: nil), "invalidRequest builds INVALID_REQUEST")
 }

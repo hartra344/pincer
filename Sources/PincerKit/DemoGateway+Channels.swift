@@ -32,7 +32,7 @@ extension DemoGateway {
         let raw = params["channel"]?.text ?? ""
         let channel = raw.trimmingCharacters(in: .whitespaces).lowercased()
         guard Self.lifecycleChannels.contains(channel) else {
-            throw Self.lifecycleInvalid("invalid \(method) channel")
+            throw GatewayError.invalidRequest("invalid \(method) channel")
         }
         let accountId = params["accountId"]?.text ?? "default"
         let nowMs = Self.now().double ?? 0
@@ -64,7 +64,7 @@ extension DemoGateway {
                     "outcome": ["status": "handed-off"]]
         default:
             guard Self.logoutChannels.contains(channel) else {
-                throw Self.lifecycleInvalid("channel \(channel) does not support logout")
+                throw GatewayError.invalidRequest("channel \(channel) does not support logout")
             }
             let cleared: Bool
             if channel == "whatsapp" {
@@ -104,17 +104,13 @@ extension DemoGateway {
         return .object(object)
     }
 
-    private static func lifecycleInvalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
-    }
-
     private static func lifecycleParams(_ params: JSONValue, _ method: String) throws {
-        guard let object = params.object else { throw Self.lifecycleInvalid("invalid \(method) params: must be object") }
+        guard let object = params.object else { throw GatewayError.invalidRequest("invalid \(method) params: must be object") }
         if let extra = object.keys.sorted().first(where: { $0 != "channel" && $0 != "accountId" }) {
-            throw Self.lifecycleInvalid("invalid \(method) params: must NOT have additional properties (\(extra))")
+            throw GatewayError.invalidRequest("invalid \(method) params: must NOT have additional properties (\(extra))")
         }
         guard object["channel"]?.text?.isEmpty == false else {
-            throw Self.lifecycleInvalid("invalid \(method) params: must have required property 'channel'")
+            throw GatewayError.invalidRequest("invalid \(method) params: must have required property 'channel'")
         }
     }
 }

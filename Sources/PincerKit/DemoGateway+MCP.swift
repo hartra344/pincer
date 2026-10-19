@@ -268,13 +268,13 @@ extension DemoGateway {
     }
 
     private func mcpRequireKnown(_ name: String) throws {
-        guard self.mcp.servers[name] != nil else { throw Self.mcpInvalid("unknown MCP server: \(name)") }
+        guard self.mcp.servers[name] != nil else { throw GatewayError.invalidRequest("unknown MCP server: \(name)") }
     }
 
     private func mcpOAuthServer(_ params: JSONValue) throws -> String {
         let name = params["serverName"]?.string ?? ""
         try self.mcpRequireKnown(name)
-        guard self.mcp.servers[name]?["auth"]?.string == "oauth" else { throw Self.mcpInvalid("MCP server \(name) does not use OAuth") }
+        guard self.mcp.servers[name]?["auth"]?.string == "oauth" else { throw GatewayError.invalidRequest("MCP server \(name) does not use OAuth") }
         return name
     }
 
@@ -293,13 +293,13 @@ extension DemoGateway {
                     "redirectUrl": .string("\(Self.demoOAuthScheme)://callback"), "expiresAt": .number(attempt.expiresAt)]
         case "mcp.oauth.complete":
             guard let attempt = self.mcp.attempts[params["attemptId"]?.string ?? ""] else {
-                throw Self.mcpInvalid("unknown or expired OAuth attempt")
+                throw GatewayError.invalidRequest("unknown or expired OAuth attempt")
             }
             var code = params["code"]?.string
             if code == nil, let callback = params["callbackUrl"]?.string, let components = URLComponents(string: callback) {
                 code = components.queryItems?.first { $0.name == "code" }?.value
             }
-            guard let code, !code.isEmpty else { throw Self.mcpInvalid("missing authorization code") }
+            guard let code, !code.isEmpty else { throw GatewayError.invalidRequest("missing authorization code") }
             self.mcp.attempts[attempt.id] = nil
             let now = Date().timeIntervalSince1970 * 1000
             self.mcp.runtime[attempt.server]?.auth?.state = "authorized"
@@ -346,7 +346,7 @@ extension DemoGateway {
         if let draft = params["server"], draft.object != nil {
             candidate = DemoMCPState.restoring(draft, from: saved)
         }
-        guard let server = candidate else { throw Self.mcpInvalid("unknown MCP server: \(name)") }
+        guard let server = candidate else { throw GatewayError.invalidRequest("unknown MCP server: \(name)") }
         func failure(_ messages: [String], auth: JSONValue? = nil) -> JSONValue {
             var result: [String: JSONValue] = ["ok": false, "tools": [], "resources": 0, "prompts": 0,
                                                "diagnostics": .array(messages.map { ["message": .string($0)] })]
@@ -414,7 +414,7 @@ extension DemoGateway {
 
     private func demoPluginInspect(_ params: JSONValue) throws -> JSONValue {
         guard let plugin = Self.demoPlugins.first(where: { $0.id == params["pluginId"]?.string }) else {
-            throw Self.mcpInvalid("unknown plugin: \(params["pluginId"]?.string ?? "")")
+            throw GatewayError.invalidRequest("unknown plugin: \(params["pluginId"]?.string ?? "")")
         }
         self.mcp.seedIfNeeded()
         var result: JSONValue = ["ok": true, "plugin": Self.demoPluginEntry(plugin), "credentials": [],
@@ -476,11 +476,11 @@ extension DemoGateway {
 
     private func mcpWriteConfig(_ method: String, _ params: JSONValue) throws -> JSONValue {
         guard params["baseHash"]?.string == self.mcp.hash else {
-            throw Self.mcpInvalid(params["baseHash"] == nil ? "config base hash required; re-run config.get and retry"
+            throw GatewayError.invalidRequest(params["baseHash"] == nil ? "config base hash required; re-run config.get and retry"
                 : "config changed since last load; re-run config.get and retry")
         }
         guard let raw = params["raw"]?.string, let value = try? JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8)) else {
-            throw Self.mcpInvalid("invalid config: could not parse JSON")
+            throw GatewayError.invalidRequest("invalid config: could not parse JSON")
         }
         let before = self.mcp.config
         let beforeServers = self.mcp.servers
@@ -489,7 +489,7 @@ extension DemoGateway {
             : DemoMCPState.restoring(value, from: before)
         var candidate = self.mcp
         candidate.config = next ?? .object([:])
-        if let problem = candidate.problem() { throw Self.mcpInvalid(problem) }
+        if let problem = candidate.problem() { throw GatewayError.invalidRequest(problem) }
         if candidate.config == before {
             return ["ok": true, "noop": true, "changedPaths": [], "config": DemoMCPState.redact(before)]
         }
@@ -555,10 +555,6 @@ extension DemoGateway {
         result["toolAccess"] = Self.setting(result["toolAccess"] ?? .object([:]), "tools", .array(access))
         result["notices"] = notices.isEmpty ? nil : .array(notices)
         return .object(result)
-    }
-
-    private static func mcpInvalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
     }
 }
 
