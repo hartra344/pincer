@@ -58,7 +58,7 @@ struct BookmarksView: View {
             .navigationTitle(L("Bookmarks"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
+                SheetDoneToolbarItem { self.dismiss() }
             }
         }
         #if os(macOS)

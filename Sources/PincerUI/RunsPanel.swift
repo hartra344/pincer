@@ -127,9 +127,7 @@ struct ChatInspectorChrome: ViewModifier {
                     // Inside the sheet: a presenter whose sheet is up can't show a second modal.
                     .modifier(DiscardPrompt(isPresented: self.confirmBinding(compact: true), discard: self.discardClose))
                     .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button(L("Done")) { self.guarded.wrappedValue = nil }
-                        }
+                        SheetDoneToolbarItem { self.guarded.wrappedValue = nil }
                     }
                 }
                 .presentationDetents(self.current == .runs ? [.medium, .large] : [.large])

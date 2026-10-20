@@ -602,7 +602,7 @@ private struct ClawHubSkillSheet: View {
             .navigationTitle(self.result.displayName)
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
+                SheetDoneToolbarItem { self.dismiss() }
             }
             .task {
                 guard !self.result.installOnly, self.model.supportsDetail, self.detail == nil else { return }

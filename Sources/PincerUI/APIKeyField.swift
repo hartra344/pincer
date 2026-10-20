@@ -23,6 +23,25 @@ struct APIKeyField: View {
 #if os(iOS)
 import UIKit
 
+private extension UITextField {
+    /// The selection as character offsets, so it survives swapping the secure-entry mode.
+    var selectionOffsets: (start: Int, end: Int)? {
+        self.selectedTextRange.map {
+            (start: self.offset(from: self.beginningOfDocument, to: $0.start),
+             end: self.offset(from: self.beginningOfDocument, to: $0.end))
+        }
+    }
+
+    func restoreSelection(_ selection: (start: Int, end: Int)?) {
+        if let selection,
+           let start = self.position(from: self.beginningOfDocument, offset: selection.start),
+           let end = self.position(from: self.beginningOfDocument, offset: selection.end)
+        {
+            self.selectedTextRange = self.textRange(from: start, to: end)
+        }
+    }
+}
+
 private struct APIKeyIOSField: UIViewRepresentable {
     let title: String
     let prompt: String
@@ -98,19 +117,11 @@ private struct APIKeyIOSField: UIViewRepresentable {
 
             let text = field.text ?? ""
             let wasFirstResponder = field.isFirstResponder
-            let selection = field.selectedTextRange.map {
-                (start: field.offset(from: field.beginningOfDocument, to: $0.start),
-                 end: field.offset(from: field.beginningOfDocument, to: $0.end))
-            }
+            let selection = field.selectionOffsets
             field.isSecureTextEntry = shouldSecure
             if field.text != text { field.text = text }
             if wasFirstResponder { _ = field.becomeFirstResponder() }
-            if let selection,
-               let start = field.position(from: field.beginningOfDocument, offset: selection.start),
-               let end = field.position(from: field.beginningOfDocument, offset: selection.end)
-            {
-                field.selectedTextRange = field.textRange(from: start, to: end)
-            }
+            field.restoreSelection(selection)
         }
 
         @objc func toggleVisibility() {
@@ -121,19 +132,11 @@ private struct APIKeyIOSField: UIViewRepresentable {
         private func preserveSelectionWhileToggling() {
             guard let field = self.field else { return }
             let wasFirstResponder = field.isFirstResponder
-            let selection = field.selectedTextRange.map {
-                (start: field.offset(from: field.beginningOfDocument, to: $0.start),
-                 end: field.offset(from: field.beginningOfDocument, to: $0.end))
-            }
+            let selection = field.selectionOffsets
             DispatchQueue.main.async { [weak field] in
                 guard let field else { return }
                 if wasFirstResponder { _ = field.becomeFirstResponder() }
-                if let selection,
-                   let start = field.position(from: field.beginningOfDocument, offset: selection.start),
-                   let end = field.position(from: field.beginningOfDocument, offset: selection.end)
-                {
-                    field.selectedTextRange = field.textRange(from: start, to: end)
-                }
+                field.restoreSelection(selection)
             }
         }
         @objc func changed(_ field: UITextField) { self.parent.text = field.text ?? "" }

@@ -477,7 +477,7 @@ struct SettingsView: View {
     var close: () -> Void = {}
 
     private var doneButton: some ToolbarContent {
-        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: self.close) }
+        SheetDoneToolbarItem(action: self.close)
     }
     #endif
 
