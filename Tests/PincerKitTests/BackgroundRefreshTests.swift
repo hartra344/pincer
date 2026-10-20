@@ -425,6 +425,23 @@ struct BackgroundRefreshTests {
             defaults.set(notifications, forKey: "pincer.notifications")
         }
 
+        @discardableResult
+        func seedCursor() -> BackgroundRefreshCursor {
+            let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
+            cursors.save(saved, for: profile.id)
+            return saved
+        }
+
+        /// Starts a run with a 25s budget, waits until it has issued a request, then expires the budget.
+        func runUntilBudgetExpires() async -> BackgroundRefresh.Report {
+            let gate = BudgetGate()
+            let refresher = self.refresher(timer: gate.timer)
+            let task = Task { @MainActor in await refresher.run(budget: 25) }
+            #expect(await BackgroundRefreshTests.eventually(timeout: .seconds(30)) { !self.connection.methods.isEmpty })
+            gate.expire()
+            return await task.value
+        }
+
         func refresher(unreachable: Bool = false, timer: (@Sendable (TimeInterval) async -> Void)? = nil) -> BackgroundRefresh {
             var connector = FakeConnector(connections: [profile.id: connection])
             if unreachable { connector.unreachable = [profile.id] }
@@ -485,8 +502,7 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func unreachableGatewayFailsWithoutTouchingTheCursor() async {
         let rig = Rig()
-        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
-        rig.cursors.save(saved, for: rig.profile.id)
+        let saved = rig.seedCursor()
         let report = await rig.refresher(unreachable: true).run()
         #expect(report.failed == [rig.profile.id] && report.posted == 0)
         #expect(rig.posts.batches.isEmpty)
@@ -495,8 +511,7 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func failedSessionsListLeavesCursorUnchanged() async {
         let rig = Rig()
-        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
-        rig.cursors.save(saved, for: rig.profile.id)
+        let saved = rig.seedCursor()
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
         rig.connection.failing = ["sessions.list"]
         let report = await rig.refresher().run()
@@ -507,17 +522,11 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func timeBudgetAbortPostsNothingAndKeepsTheCursor() async {
         let rig = Rig()
-        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
-        rig.cursors.save(saved, for: rig.profile.id)
+        let saved = rig.seedCursor()
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
         rig.connection.approvals = [Self.approvalJSON("a1")]
         rig.connection.delay = .seconds(3600)
-        let gate = BudgetGate()
-        let refresher = rig.refresher(timer: gate.timer)
-        let task = Task { @MainActor in await refresher.run(budget: 25) }
-        #expect(await Self.eventually(timeout: .seconds(30)) { !rig.connection.methods.isEmpty })
-        gate.expire()
-        let report = await task.value
+        let report = await rig.runUntilBudgetExpires()
         #expect(report.aborted.contains(rig.profile.id))
         #expect(report.posted == 0 && rig.posts.batches.isEmpty)
         #expect(rig.cursors.cursor(for: rig.profile.id) == saved)
@@ -528,8 +537,7 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func tinyBudgetAborts() async {
         let rig = Rig()
-        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
-        rig.cursors.save(saved, for: rig.profile.id)
+        let saved = rig.seedCursor()
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
         rig.connection.delay = .seconds(3600)
         let report = await rig.refresher(timer: BudgetGate(expired: true).timer).run(budget: 25)
@@ -549,8 +557,7 @@ struct BackgroundRefreshTests {
 
     @Test @MainActor func cancellationPostsNothingAndKeepsTheCursor() async {
         let rig = Rig()
-        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
-        rig.cursors.save(saved, for: rig.profile.id)
+        let saved = rig.seedCursor()
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
         rig.connection.delay = .seconds(3600)
         let refresher = rig.refresher()
@@ -781,12 +788,7 @@ struct BackgroundRefreshTests {
         let rig = Rig()
         rig.connection.sessions = [Self.row(Self.key(1), activity: 100)]
         rig.connection.delay = .seconds(3600)
-        let gate = BudgetGate()
-        let refresher = rig.refresher(timer: gate.timer)
-        let task = Task { @MainActor in await refresher.run(budget: 25) }
-        #expect(await Self.eventually(timeout: .seconds(30)) { !rig.connection.methods.isEmpty })
-        gate.expire()
-        let report = await task.value
+        let report = await rig.runUntilBudgetExpires()
         #expect(report.aborted == [rig.profile.id])
         #expect(rig.badges.values.isEmpty && report.badge == nil)
     }

@@ -19,6 +19,16 @@ private final class LocationContextTestDriver: LocationContextDriver {
 @MainActor
 @Suite("Location context")
 struct LocationContextTests {
+    /// An opted-in model on an authorized driver with a foreground window active, so a location request is already in flight.
+    private static func activeEnabledModel(_ scratch: ScratchDefaults) -> (LocationContextModel, LocationContextTestDriver) {
+        let model = LocationContextModel(defaults: scratch.defaults)
+        let driver = LocationContextTestDriver(.authorized)
+        model.configure(driver: driver)
+        model.setActive(true)
+        model.setEnabled(true)
+        return (model, driver)
+    }
+
     @Test func preparedSnapshotKeepsProviderCoordinatesAccuracyAndFreshness() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let fix = LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
@@ -100,11 +110,7 @@ struct LocationContextTests {
     @Test func sendingUsesCachedContextBeforeStartingARefresh() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let model = LocationContextModel(defaults: scratch.defaults)
-        let driver = LocationContextTestDriver(.authorized)
-        model.configure(driver: driver)
-        model.setActive(true)
-        model.setEnabled(true)
+        let (model, driver) = Self.activeEnabledModel(scratch)
         let generation = try #require(driver.requestedGenerations.last)
         let now = Date()
         await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
@@ -122,11 +128,7 @@ struct LocationContextTests {
     @Test func disablingIgnoresLateFixAndPersistsOptOut() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let model = LocationContextModel(defaults: scratch.defaults)
-        let driver = LocationContextTestDriver(.authorized)
-        model.configure(driver: driver)
-        model.setActive(true)
-        model.setEnabled(true)
+        let (model, driver) = Self.activeEnabledModel(scratch)
         let generation = try #require(driver.requestedGenerations.last)
 
         model.setEnabled(false)
@@ -177,11 +179,7 @@ struct LocationContextTests {
     @Test func revokedPermissionDropsReadySnapshotAndPreservesMessage() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let model = LocationContextModel(defaults: scratch.defaults)
-        let driver = LocationContextTestDriver(.authorized)
-        model.configure(driver: driver)
-        model.setActive(true)
-        model.setEnabled(true)
+        let (model, driver) = Self.activeEnabledModel(scratch)
         let generation = try #require(driver.requestedGenerations.last)
         let now = Date()
         await model.receiveFix(LocationFix(latitude: 40.7128, longitude: -74.0060, accuracyMeters: 15,
@@ -199,11 +197,7 @@ struct LocationContextTests {
         defer { scratch.remove() }
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
-        let model = LocationContextModel(defaults: scratch.defaults)
-        let driver = LocationContextTestDriver(.authorized)
-        model.configure(driver: driver)
-        model.setActive(true)
-        model.setEnabled(true)
+        let (model, driver) = Self.activeEnabledModel(scratch)
         let firstGeneration = try #require(driver.requestedGenerations.last)
         let firstFixTime = Date()
         await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,
@@ -256,11 +250,7 @@ struct LocationContextTests {
         defer { scratch.remove() }
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
-        let model = LocationContextModel(defaults: scratch.defaults)
-        let driver = LocationContextTestDriver(.authorized)
-        model.configure(driver: driver)
-        model.setActive(true)
-        model.setEnabled(true)
+        let (model, driver) = Self.activeEnabledModel(scratch)
         let generation = try #require(driver.requestedGenerations.last)
         let now = Date()
         await model.receiveFix(LocationFix(latitude: 37.7749, longitude: -122.4194, accuracyMeters: 18,

@@ -6,6 +6,21 @@ import Testing
 /// tool policy explanations, capability and scope gating, and the demo Gateway end to end.
 @Suite("Skills and tools")
 struct SkillsToolsTests {
+    @MainActor private static func expectRPCFailure(_ code: String, _ failure: String, _ call: @MainActor () async throws -> Void) async {
+        do {
+            try await call()
+            Issue.record(Comment(rawValue: failure))
+        } catch let GatewayError.rpc(actual, _, _) {
+            #expect(actual == code)
+        } catch {
+            Issue.record(error)
+        }
+    }
+
+    private static func nasReport(_ demo: DemoGateway) async throws -> JSONValue? {
+        try await demo.handle("skills.status", [:])["skills"]?.array?.first { $0["name"]?.text == "nas-report" }
+    }
+
     // MARK: Fixtures (upstream shapes: SkillStatusEntry, tools.catalog, tools.effective)
 
     static func skill(_ name: String, source: String = "openclaw-bundled", eligible: Bool = true, disabled: Bool = false,
@@ -580,64 +595,32 @@ struct SkillsToolsTests {
         #expect(qualified["skill"]?["slug"]?.text == "nas-report")
         #expect(bare["skill"]?["slug"]?.text == "nas-report")
 
-        do {
-            _ = try await demo.handle("skills.detail", ["slug": .string("@someone-else/nas-report")])
-            Issue.record("a qualified reference from another publisher must not resolve by bare slug")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "UNAVAILABLE")
-        }
+        await Self.expectRPCFailure("UNAVAILABLE", "a qualified reference from another publisher must not resolve by bare slug") { _ = try await demo.handle("skills.detail", ["slug": .string("@someone-else/nas-report")]) }
         let normalized = try await demo.handle("skills.detail", ["slug": .string("@CLAWDIA/ nas-report ")])
         #expect(normalized["skill"]?["slug"]?.text == "nas-report")
     }
 
     @MainActor @Test func demoClawHubWrongPublisherForceInstallDoesNotReplaceKnownSkill() async throws {
         let demo = DemoGateway()
-        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        let before = try await Self.nasReport(demo)
         #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
 
-        do {
-            _ = try await demo.handle("skills.install", [
-                "source": .string("clawhub"), "slug": .string("@someone-else/nas-report"), "force": .bool(true),
-            ])
-            Issue.record("force install from a different publisher must not replace nas-report")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "UNAVAILABLE")
-        }
+        await Self.expectRPCFailure("UNAVAILABLE", "force install from a different publisher must not replace nas-report") { _ = try await demo.handle("skills.install", ["source": .string("clawhub"), "slug": .string("@someone-else/nas-report"), "force": .bool(true)]) }
 
-        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        let after = try await Self.nasReport(demo)
         #expect(after == before)
     }
 
     @MainActor @Test func demoClawHubRejectsEmptyQualifiedPublisherWithoutMutation() async throws {
         let demo = DemoGateway()
         for reference in ["@ /nas-report", "@   /nas-report"] {
-            do {
-                _ = try await demo.handle("skills.detail", ["slug": .string(reference)])
-                Issue.record("qualified ClawHub reference with an empty owner must not resolve")
-            } catch let GatewayError.rpc(code, _, _) {
-                #expect(code == "UNAVAILABLE")
-            }
+            await Self.expectRPCFailure("UNAVAILABLE", "qualified ClawHub reference with an empty owner must not resolve") { _ = try await demo.handle("skills.detail", ["slug": .string(reference)]) }
         }
 
-        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        let before = try await Self.nasReport(demo)
         #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
-        do {
-            _ = try await demo.handle("skills.install", [
-                "source": .string("clawhub"), "slug": .string("@ /nas-report"), "force": .bool(true),
-            ])
-            Issue.record("force install with an empty qualified owner must not replace nas-report")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "UNAVAILABLE")
-        }
-        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        await Self.expectRPCFailure("UNAVAILABLE", "force install with an empty qualified owner must not replace nas-report") { _ = try await demo.handle("skills.install", ["source": .string("clawhub"), "slug": .string("@ /nas-report"), "force": .bool(true)]) }
+        let after = try await Self.nasReport(demo)
         #expect(after == before)
     }
 
@@ -647,29 +630,13 @@ struct SkillsToolsTests {
         #expect(bare["skill"]?["slug"]?.text == "nas-report")
 
         for reference in ["garbage/nas-report", "wrong/path/nas-report", "nas-report/"] {
-            do {
-                _ = try await demo.handle("skills.detail", ["slug": .string(reference)])
-                Issue.record("path-like bare ClawHub reference must not resolve: \(reference)")
-            } catch let GatewayError.rpc(code, _, _) {
-                #expect(code == "UNAVAILABLE")
-            }
+            await Self.expectRPCFailure("UNAVAILABLE", "path-like bare ClawHub reference must not resolve: \(reference)") { _ = try await demo.handle("skills.detail", ["slug": .string(reference)]) }
         }
 
-        let before = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        let before = try await Self.nasReport(demo)
         #expect(before?["clawhub"]?["installedVersion"]?.text == "1.2.0")
-        do {
-            _ = try await demo.handle("skills.install", [
-                "source": .string("clawhub"), "slug": .string("wrong/path/nas-report"), "force": .bool(true),
-            ])
-            Issue.record("force install with a path-like bare ref must not replace nas-report")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "UNAVAILABLE")
-        }
-        let after = try await demo.handle("skills.status", [:])["skills"]?.array?.first {
-            $0["name"]?.text == "nas-report"
-        }
+        await Self.expectRPCFailure("UNAVAILABLE", "force install with a path-like bare ref must not replace nas-report") { _ = try await demo.handle("skills.install", ["source": .string("clawhub"), "slug": .string("wrong/path/nas-report"), "force": .bool(true)]) }
+        let after = try await Self.nasReport(demo)
         #expect(after == before)
     }
 
@@ -708,33 +675,13 @@ struct SkillsToolsTests {
     @MainActor @Test func demoSkillsDetailRejectsInvalidParams() async throws {
         let demo = DemoGateway()
         for invalid in [JSONValue.string(""), .number(1), .null] {
-            do {
-                _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "version": invalid])
-                Issue.record("invalid detail version should be rejected: \(invalid)")
-            } catch let GatewayError.rpc(code, _, _) {
-                #expect(code == "INVALID_REQUEST")
-            }
+            await Self.expectRPCFailure("INVALID_REQUEST", "invalid detail version should be rejected: \(invalid)") { _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "version": invalid]) }
         }
         for invalidSlug in [JSONValue.string(""), .number(1), .null] {
-            do {
-                _ = try await demo.handle("skills.detail", ["slug": invalidSlug])
-                Issue.record("invalid detail slug should be rejected: \(invalidSlug)")
-            } catch let GatewayError.rpc(code, _, _) {
-                #expect(code == "INVALID_REQUEST")
-            }
+            await Self.expectRPCFailure("INVALID_REQUEST", "invalid detail slug should be rejected: \(invalidSlug)") { _ = try await demo.handle("skills.detail", ["slug": invalidSlug]) }
         }
-        do {
-            _ = try await demo.handle("skills.detail", [:])
-            Issue.record("detail requires a slug")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "INVALID_REQUEST")
-        }
-        do {
-            _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "unexpected": true])
-            Issue.record("detail should reject unknown request fields")
-        } catch let GatewayError.rpc(code, _, _) {
-            #expect(code == "INVALID_REQUEST")
-        }
+        await Self.expectRPCFailure("INVALID_REQUEST", "detail requires a slug") { _ = try await demo.handle("skills.detail", [:]) }
+        await Self.expectRPCFailure("INVALID_REQUEST", "detail should reject unknown request fields") { _ = try await demo.handle("skills.detail", ["slug": .string("@clawdia/nas-report"), "unexpected": true]) }
     }
 
     @MainActor @Test func demoInstallOnlyDetailErrorMatchesGatewayGuidance() async throws {
