@@ -29,6 +29,7 @@ A healthy gateway shows nothing there. In the [demo](../../getting-started/try-t
 ## What's on the page
 
 - **Summary:** the level (**Healthy**, **Degraded**, **Down** or **Restarting**), the gateway's version, how long it has been up, and the last heartbeat with its status ("No heartbeat yet" if there hasn't been one).
+- **Host:** the [host vitals](#host-vitals) of the machine the gateway runs on.
 - **Issues:** every reason the gateway counts as degraded, one per row:
   - a channel account that's enabled and set up but isn't running, isn't connected, or reported an error;
   - plugins that failed to load or are unavailable;
@@ -43,6 +44,28 @@ A healthy gateway shows nothing there. In the [demo](../../getting-started/try-t
 The page updates live from the gateway's health and heartbeat events. Newer health and heartbeat events take precedence over older in-flight refreshes and errors for their respective sections. While it's open, it asks the gateway again only if no health event has arrived for 30 seconds. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
 
 If your gateway doesn't offer part of this, that section says **Unavailable on this Gateway** and the rest still works.
+
+## Host vitals
+
+The **Host** section shows how the machine running your gateway is doing, from the gateway's `system.info`. It starts with the host's name and an identity line like "macOS 15.6 · arm64 · 10 CPUs · Apple M4", then five rows, each with its current value and a small chart:
+
+| Row | What it shows |
+| --- | --- |
+| **Host CPU** | How busy the whole host is, with the gateway's own share underneath (for example "Gateway 0.14 cores"). |
+| **Host memory** | Memory in use, like "11.2 GB of 16 GB (70%)", and what the gateway process uses ("Gateway 410 MB"). |
+| **Disk** | How full the gateway's volume is ("37% used"), with the free space and the volume underneath ("290 GB free of 460 GB · /"). Sizes use binary units, like the Control UI. |
+| **Load** | The 1, 5 and 15 minute load averages, and the load per core underneath. |
+| **Ping** | The round trip of the diagnostics request, in whole milliseconds. |
+
+When the gateway reports more volumes, each one gets its own row, like **Disk /Volumes/Archive**, directly under **Disk**. These rows have no chart.
+
+Pincer asks every 10 seconds, only while the Health page is on screen and the app is active, so it costs the gateway nothing when you aren't looking. **Refresh** asks right away. The charts keep the last 15 minutes and start over when you disconnect or the gateway restarts. Until there are two samples, the section shows a single "Collecting history…" caption.
+
+A row turns orange and gets a ⚠︎ symbol when it needs attention: CPU or memory at 90% or more, a disk that's 90% full, a load of 1.0 or more per core, or a ping over 250 ms. These are Pincer's own hints. They don't add an issue and don't change the gateway's level or its degraded flag.
+
+If no fresh sample has arrived for 30 seconds, or the last request failed, the rows dim and show "Last sampled … ago" together with the error.
+
+Host vitals need a gateway that offers `system.info` and a device with the `operator.read` scope. On an older gateway the section says **Unavailable on this Gateway** and the rest of the page still works. Without `operator.read`, it shows the missing-scope message and stops polling until you choose **Refresh**. The [demo](../../getting-started/try-the-demo/) shows a Mac mini with moving values.
 
 ## Dismissing issues
 
@@ -101,6 +124,7 @@ When a setting you saved needs a restart, Gateway Settings says "Saved. Restart 
 
 ## Current limits
 
+- Host vitals have been tested against the [demo](../../getting-started/try-the-demo/) and the [mock gateway](../../development/mock-gateway/) only, not a real gateway.
 - Health and restart have been tested against the [demo](../../getting-started/try-the-demo/) and the [mock gateway](../../development/mock-gateway/) only, not a real gateway restart.
 - **Restart Now Anyway** asks the gateway to skip waiting for active work. How quickly a real gateway restarts after that is up to the gateway.
 - If a dismissed issue clears up and happens again while no device running Pincer is connected, it stays dismissed, unless it also changed (for example, more failed deliveries). Channel accounts that stop or lose their connection again are the exception, since the gateway records when that happened. A channel account dismissed with an older version of Pincer doesn't get this until it clears up once or you dismiss it again.

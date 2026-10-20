@@ -47,7 +47,7 @@ actor DemoGateway {
         "sessions.create", "artifacts.download", "controlUi.linkPreview", "browser.request", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
-        "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
+        "health", "status", "last-heartbeat", "system-presence", "system.info", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
     ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
         + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods + DemoGateway.portalMethods + DemoGateway.sessionFilesMethods

@@ -10,7 +10,7 @@ function lifecycleOf(account) {
   return account.connected ? 'ready' : 'recovering';
 }
 
-export const HEALTH_READ_METHODS = ['health', 'status', 'last-heartbeat', 'system-presence'];
+export const HEALTH_READ_METHODS = ['health', 'status', 'last-heartbeat', 'system-presence', 'system.info'];
 export const RESTART_METHOD = 'gateway.restart.request';
 export const HEALTH_METHODS = [...HEALTH_READ_METHODS, RESTART_METHOD];
 export const HEALTH_EVENTS = ['health', 'heartbeat', 'presence', 'shutdown'];
@@ -19,6 +19,11 @@ export const RESTART_EXPECTED_MS = 1500;
 /** `MOCK_NO_HEALTH=1` drops every health method, like an older Gateway. */
 export function healthDisabled() {
   return process.env.MOCK_NO_HEALTH === '1';
+}
+
+/** `MOCK_NO_SYSTEM_INFO=1` drops only `system.info`, like a Gateway from before host vitals. */
+export function systemInfoDisabled() {
+  return process.env.MOCK_NO_SYSTEM_INFO === '1';
 }
 
 /** The failed delivery queue the mock reports, unless `MOCK_FAILED_DELIVERY=off`. */
@@ -38,6 +43,7 @@ export function createHealthState(base = Date.now()) {
     failedDelivery: failedDeliveryDisabled()
       ? undefined
       : { queueName: FAILED_DELIVERY_QUEUE, count: 1, oldestFailedAt: startedAt + 3 * 3600 * 1000 },
+    processInstanceId: randomUUID(),
     restartingUntil: 0,
     pendingRestart: undefined,
     restartCount: 0,
@@ -98,6 +104,66 @@ export function healthSummary(state) {
     contextEngines: { quarantined: [] },
     modelPricing: { state: 'ok', sources: [] },
     configReload: { hotReloadStatus: 'active' },
+  };
+}
+
+const GIB = 1024 ** 3;
+const hash01 = (n) => {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+/** A smooth value in [lo, hi] that drifts with the wall clock, plus a little deterministic jitter. */
+function drift(now, lo, hi, periodMs, phase) {
+  const wave = (Math.sin((now / periodMs) * 2 * Math.PI + phase) + 1) / 2;
+  const jitter = (hash01(Math.floor(now / 5000) + phase * 100) - 0.5) * 0.06;
+  return lo + (hi - lo) * Math.min(1, Math.max(0, wave + jitter));
+}
+
+/** `system.info` for a Linux box, matching OpenClaw's `SystemInfoResultSchema` (closed objects, integers). */
+export function systemInfo(state, now = Date.now()) {
+  const memoryTotalBytes = 32 * GIB;
+  const memoryUsed = drift(now, 0.38, 0.52, 240_000, 0.4);
+  const hostUtilization = drift(now, 0.05, 0.3, 90_000, 1.1);
+  const load = drift(now, 0.3, 1.6, 120_000, 2.0);
+  const cpuCoreRatio = drift(now, 0.04, 0.22, 70_000, 0.2);
+  const rssBytes = Math.round(drift(now, 360, 440, 150_000, 3.0) * 1024 * 1024);
+  const heapTotalBytes = Math.round(rssBytes * 0.45);
+  const rounded = (n) => Math.round(n * 100) / 100;
+  return {
+    machineName: 'pincer-mock-linux',
+    hostname: 'pincer-mock-linux',
+    platform: 'linux',
+    release: '6.8.0-45-generic',
+    arch: 'x64',
+    osLabel: 'Ubuntu 24.04',
+    nodeVersion: 'v22.18.0',
+    pid: 4242,
+    processInstanceId: state.healthState.processInstanceId,
+    uptimeMs: Math.floor(uptimeMs(state)),
+    cpuCount: 8,
+    cpuModel: 'AMD EPYC 7B13',
+    loadAverage: [rounded(load), rounded(load * 0.9), rounded(load * 0.8)],
+    memoryTotalBytes,
+    memoryFreeBytes: Math.round(memoryTotalBytes * (1 - memoryUsed)),
+    eventLoop: {
+      degraded: false,
+      reasons: [],
+      intervalMs: 10_000,
+      delayP99Ms: rounded(drift(now, 1, 6, 80_000, 0.9)),
+      delayMaxMs: rounded(drift(now, 6, 20, 80_000, 0.9)),
+      utilization: rounded(drift(now, 0.02, 0.12, 60_000, 0.5)),
+      cpuCoreRatio: rounded(cpuCoreRatio),
+      cpuBreakdown: { hostUtilization: rounded(hostUtilization), hostCpuCount: 8 },
+    },
+    processMemory: { rssBytes, heapUsedBytes: Math.round(heapTotalBytes * 0.7), heapTotalBytes },
+    diskTotalBytes: 500 * 1000 ** 3,
+    diskAvailableBytes: 310 * 1000 ** 3,
+    diskPath: '/',
+    disks: [
+      { path: '/', totalBytes: 500 * 1000 ** 3, availableBytes: 310 * 1000 ** 3 },
+      { path: '/mnt/data', totalBytes: 2000 * 1000 ** 3, availableBytes: 1200 * 1000 ** 3 },
+    ],
   };
 }
 
@@ -219,6 +285,7 @@ function performRestart(state, broadcast, reason, abortRun) {
   hs.restartCount += 1;
   hs.restartingUntil = Date.now() + RESTART_EXPECTED_MS;
   hs.startedAt = hs.restartingUntil;
+  hs.processInstanceId = randomUUID();
   resetChannelsForRestart(state);
   broadcast(state, 'shutdown', { reason: reason ?? 'gateway restart', restartExpectedMs: RESTART_EXPECTED_MS });
   // A restart kills whatever was still running.
@@ -258,8 +325,15 @@ export function handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadc
     sendErr(conn, id, 'UNKNOWN_METHOD', `unknown method: ${method}`);
     return true;
   }
+  if (method === 'system.info' && systemInfoDisabled()) {
+    sendErr(conn, id, 'UNKNOWN_METHOD', `unknown method: ${method}`);
+    return true;
+  }
   const hs = state.healthState;
   switch (method) {
+    case 'system.info':
+      sendRes(conn, id, systemInfo(state));
+      return true;
     case 'health':
       sendRes(conn, id, healthSummary(state));
       return true;

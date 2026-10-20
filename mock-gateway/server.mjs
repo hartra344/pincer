@@ -16,7 +16,7 @@ import { TTS_METHODS, handleTtsRequest, ttsDisabled } from './tts.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, handleChannelPairingRequest } from './pairing.mjs';
 import { RATE_LIMIT_RETRY_AFTER_MS, checkConnectAuth, pairingRequiredError, rejectConnectAuth, rejectPendingDevice } from './connect-auth.mjs';
-import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting, healthSummary } from './health.mjs';
+import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, handleHealthRequest, healthDisabled, systemInfoDisabled, helloSnapshot, isRestarting, healthSummary } from './health.mjs';
 import { SETUP_METHODS, handleSetupRequest } from './setup.mjs';
 import { SESSION_MANAGER_METHODS, handleSessionManagerRequest, hiddenSessionManagerMethods } from './sessions.mjs';
 import { CHANNEL_LIFECYCLE_METHODS, handleChannelsRequest } from './channels.mjs';
@@ -196,6 +196,7 @@ function advertisedMethods() {
     ...(toolsDisabled() ? TOOLS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
+    ...(systemInfoDisabled() ? ['system.info'] : []),
     ...(devicePairingDisabled() ? DEVICE_PAIRING_METHODS : []),
     ...(nodesDisabled() ? NODE_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
