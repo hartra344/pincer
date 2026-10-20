@@ -178,7 +178,7 @@ public final class GatewayVoiceModel {
     public func setProvider(_ id: String) async throws {
         let configured = self.providers.first { $0.id == id }?.configured ?? self.status?.providerStates.first { $0.id == id }?.configured
         if configured == false {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: L("That provider isn't configured on the Gateway."), details: nil)
+            throw GatewayError.invalidRequest(L("That provider isn't configured on the Gateway."))
         }
         let result = try await self.call(Self.setProviderMethod, ["provider": .string(id)])
         let provider = result["provider"]?.text ?? id

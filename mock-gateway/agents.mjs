@@ -10,6 +10,8 @@
 // MOCK_NO_AGENT_MANAGEMENT=1 makes the mock look like a Gateway without these methods (only
 // agents.list stays, as it has for a long time).
 import crypto from 'node:crypto';
+import { commonFieldTypes, closedObjectProblem } from './params.mjs';
+import { isObject } from './util.mjs';
 import { ADMIN_SCOPE } from './config.mjs';
 
 export const AGENT_MANAGEMENT_METHODS = [
@@ -134,14 +136,9 @@ export function createAgentWorkspaces(agents, base = Date.now()) {
 
 // --- Params schema (closed objects, like the gateway-protocol typebox schemas) ---
 
-const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const SHA256_RE = /^[a-fA-F0-9]{64}$/;
 const fieldType = {
-  nonEmpty: (v) => (typeof v !== 'string' ? 'must be string' : v.length ? undefined : 'must NOT have fewer than 1 characters'),
-  string: (v) => (typeof v === 'string' ? undefined : 'must be string'),
-  boolean: (v) => (typeof v === 'boolean' ? undefined : 'must be boolean'),
+  ...commonFieldTypes,
   nullableNonEmpty: (v) => (v === null ? undefined : fieldType.nonEmpty(v)),
-  sha256: (v) => (typeof v === 'string' && SHA256_RE.test(v) ? undefined : 'must match pattern "^[a-fA-F0-9]{64}$"'),
   trueLiteral: (v) => (v === true ? undefined : 'must be equal to constant'),
 };
 
@@ -165,13 +162,8 @@ const SCHEMAS = {
 export function agentParamsProblem(method, params) {
   const schema = SCHEMAS[method];
   if (!isObject(params)) return 'at root: must be object';
-  for (const key of schema.required ?? []) if (!(key in params)) return `at root: must have required property '${key}'`;
-  for (const [key, value] of Object.entries(params)) {
-    const type = schema.fields[key];
-    if (!type) return `at root: unexpected property '${key}'`;
-    const problem = fieldType[type](value);
-    if (problem) return `at /${key}: ${problem}`;
-  }
+  const problem = closedObjectProblem(schema, params, fieldType);
+  if (problem) return problem;
   if (method === 'agents.files.set' && 'expectedHash' in params && 'expectedMissing' in params) return 'at root: must NOT be valid';
   return undefined;
 }

@@ -41,6 +41,37 @@ import Foundation
     }
 }
 
+/// A `CheckGate` per key: `hold(key)` parks until `release(key)` or `release()` (all keys).
+/// A cancelled holder releases every key, matching `CheckGate`'s default.
+@MainActor class KeyedCheckGate<Key: Hashable> {
+    private(set) var entered: Set<Key> = []
+    private(set) var isReleased = false
+    private var releasedKeys: Set<Key> = []
+    private var waiters: [Key: [CheckedContinuation<Void, Never>]] = [:]
+
+    func hold(_ key: Key) async {
+        entered.insert(key)
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if isReleased || releasedKeys.contains(key) || Task.isCancelled { continuation.resume() }
+                else { waiters[key, default: []].append(continuation) }
+            }
+        } onCancel: { Task { @MainActor in self.release() } }
+    }
+
+    func release(_ key: Key) {
+        releasedKeys.insert(key)
+        for waiter in waiters.removeValue(forKey: key) ?? [] { waiter.resume() }
+    }
+
+    func release() {
+        isReleased = true
+        let parked = waiters.values.joined()
+        waiters = [:]
+        for waiter in parked { waiter.resume() }
+    }
+}
+
 @MainActor func checkCheckGate() async {
     let early = CheckGate()
     early.release()
@@ -82,4 +113,27 @@ import Foundation
     thrower.cancel()
     let threw = await thrower.value
     check(threw, "CheckGate: holdThrowing throws CancellationError when cancelled")
+
+    let keyed = KeyedCheckGate<String>()
+    var keyedResumed: [String] = []
+    let alpha = Task { @MainActor in await keyed.hold("a"); keyedResumed.append("a") }
+    let beta = Task { @MainActor in await keyed.hold("b"); keyedResumed.append("b") }
+    let keyedParked = await waitFor("KeyedCheckGate holders parked") { keyed.entered == ["a", "b"] }
+    check(keyedParked && keyedResumed.isEmpty && !keyed.isReleased, "KeyedCheckGate: holders park and record their keys")
+    keyed.release("a")
+    await alpha.value
+    check(keyedResumed == ["a"], "KeyedCheckGate: release(key) resumes only that key")
+    await keyed.hold("a")
+    keyed.release()
+    await beta.value
+    check(keyedResumed == ["a", "b"] && keyed.isReleased, "KeyedCheckGate: release() resumes every key and keyed early release returns immediately")
+    await keyed.hold("late")
+    check(keyed.entered.contains("late"), "KeyedCheckGate: hold after release returns immediately")
+
+    let keyedCancelling = KeyedCheckGate<String>()
+    let keyedHolder = Task { @MainActor in await keyedCancelling.hold("x") }
+    _ = await waitFor("KeyedCheckGate cancel holder parked") { keyedCancelling.entered.contains("x") }
+    keyedHolder.cancel()
+    await keyedHolder.value
+    check(keyedCancelling.isReleased, "KeyedCheckGate: cancelling a holder releases every key")
 }

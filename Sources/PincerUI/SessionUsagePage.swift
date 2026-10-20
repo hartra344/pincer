@@ -24,8 +24,7 @@ struct SessionUsagePage: View {
         let loading = detail.map { $0.totals.loadState.isRunning || $0.timeseries.loadState.isRunning || $0.logs.loadState.isRunning } ?? false
         Group {
             if !connected, detail?.totals.value == nil, detail?.timeseries.value == nil, detail?.logs.value == nil {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see this session's usage.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see this session's usage.", bundle: .module))
             } else {
                 Form {
                     Section {

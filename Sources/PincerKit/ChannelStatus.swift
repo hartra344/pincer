@@ -402,8 +402,7 @@ public final class ChannelsModel {
     // MARK: State
 
     private func isAdvertised(_ method: String) -> Bool {
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(method)
+        GatewayMethodSupport.supports(method, advertised: self.methods())
     }
 
     /// False when the Gateway has no `channels.status`.

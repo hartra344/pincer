@@ -22,7 +22,7 @@ extension DemoGateway {
         guard let allowed = Self.deviceParamKeys[method] else { return nil }
         let fields = params.object ?? [:]
         if let extra = fields.keys.sorted().first(where: { !allowed.contains($0) }) {
-            throw Self.deviceInvalid("invalid \(method) params: unexpected property '\(extra)'")
+            throw GatewayError.invalidRequest("invalid \(method) params: unexpected property '\(extra)'")
         }
         let nowMs = JSONValue.number((Date().timeIntervalSince1970 * 1000).rounded())
         switch method {
@@ -31,7 +31,7 @@ extension DemoGateway {
         case "device.pair.approve":
             let requestId = try Self.required(params, "requestId", method)
             guard let index = self.devicePending.firstIndex(where: { $0["requestId"]?.text == requestId }) else {
-                throw Self.deviceInvalid("unknown requestId")
+                throw GatewayError.invalidRequest("unknown requestId")
             }
             let request = self.devicePending.remove(at: index)
             let device = Self.pairedDevice(from: request, nowMs: nowMs)
@@ -44,7 +44,7 @@ extension DemoGateway {
         case "device.pair.reject":
             let requestId = try Self.required(params, "requestId", method)
             guard let index = self.devicePending.firstIndex(where: { $0["requestId"]?.text == requestId }) else {
-                throw Self.deviceInvalid("unknown requestId")
+                throw GatewayError.invalidRequest("unknown requestId")
             }
             let deviceId = self.devicePending.remove(at: index)["deviceId"] ?? .null
             self.emit("device.pair.resolved", ["requestId": .string(requestId), "deviceId": deviceId,
@@ -53,7 +53,7 @@ extension DemoGateway {
         case "device.pair.remove":
             let deviceId = try Self.required(params, "deviceId", method)
             guard let index = self.devicePaired.firstIndex(where: { $0["deviceId"]?.text == deviceId }) else {
-                throw Self.deviceInvalid("unknown deviceId")
+                throw GatewayError.invalidRequest("unknown deviceId")
             }
             self.devicePaired.remove(at: index)
             self.demoNodes.removeAll { $0["nodeId"]?.text == deviceId }
@@ -61,13 +61,13 @@ extension DemoGateway {
         case "device.pair.rename":
             let deviceId = try Self.required(params, "deviceId", method)
             guard let raw = params["label"]?.string, !raw.isEmpty, raw.count <= 64 else {
-                throw Self.deviceInvalid("invalid device.pair.rename params: label must be 1-64 characters")
+                throw GatewayError.invalidRequest("invalid device.pair.rename params: label must be 1-64 characters")
             }
             let label = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !label.isEmpty else { throw Self.deviceInvalid("label required") }
+            guard !label.isEmpty else { throw GatewayError.invalidRequest("label required") }
             guard let index = self.devicePaired.firstIndex(where: { $0["deviceId"]?.text == deviceId }),
                   var device = self.devicePaired[index].object
-            else { throw Self.deviceInvalid("unknown deviceId") }
+            else { throw GatewayError.invalidRequest("unknown deviceId") }
             device["operatorLabel"] = .string(label)
             self.devicePaired[index] = .object(device)
             self.emit("device.pair.changed", [:])
@@ -80,23 +80,23 @@ extension DemoGateway {
         case "node.describe":
             let nodeId = try Self.required(params, "nodeId", method)
             guard var node = self.demoNodes.first(where: { $0["nodeId"]?.text == nodeId })?.object else {
-                throw Self.deviceInvalid("unknown nodeId")
+                throw GatewayError.invalidRequest("unknown nodeId")
             }
             node["ts"] = nowMs
             return .object(node)
         case "node.rename":
             let nodeId = try Self.required(params, "nodeId", method)
-            guard let name = params["displayName"]?.text else { throw Self.deviceInvalid("displayName required") }
+            guard let name = params["displayName"]?.text else { throw GatewayError.invalidRequest("displayName required") }
             guard let index = self.demoNodes.firstIndex(where: { $0["nodeId"]?.text == nodeId }),
                   var node = self.demoNodes[index].object
-            else { throw Self.deviceInvalid("unknown nodeId") }
+            else { throw GatewayError.invalidRequest("unknown nodeId") }
             node["displayName"] = .string(name)
             self.demoNodes[index] = .object(node)
             return ["nodeId": .string(nodeId), "displayName": .string(name)]
         case "node.pair.remove":
             let nodeId = try Self.required(params, "nodeId", method)
             guard let index = self.demoNodes.firstIndex(where: { $0["nodeId"]?.text == nodeId }) else {
-                throw Self.deviceInvalid("unknown nodeId")
+                throw GatewayError.invalidRequest("unknown nodeId")
             }
             self.demoNodes.remove(at: index)
             self.dropNodeRole(nodeId)
@@ -143,12 +143,8 @@ extension DemoGateway {
 
     private static func required(_ params: JSONValue, _ key: String, _ method: String) throws -> String {
         guard let value = params[key]?.text else {
-            throw Self.deviceInvalid("invalid \(method) params: must have required property '\(key)'")
+            throw GatewayError.invalidRequest("invalid \(method) params: must have required property '\(key)'")
         }
         return value
-    }
-
-    private static func deviceInvalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
     }
 }

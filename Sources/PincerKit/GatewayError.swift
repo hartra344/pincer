@@ -26,6 +26,11 @@ extension GatewayError {
         return details?["missingScope"]?.text ?? details?["scope"]?.text
     }
 
+    /// An `INVALID_REQUEST` rejection, as the demo Gateway and mock replies build it.
+    package static func invalidRequest(_ message: String, details: JSONValue? = nil) -> GatewayError {
+        .rpc(code: "INVALID_REQUEST", message: message, details: details)
+    }
+
     /// The Gateway doesn't have the method.
     static func isUnknownMethod(_ error: Error) -> Bool {
         guard case let .rpc(code, message, _) = error as? GatewayError else { return false }

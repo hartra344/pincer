@@ -13,6 +13,14 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # File hashing keeps a restored build cache incremental (checkout gives every file a new mtime);
+  # CI never reads the index store.
+  SWIFT_FLAGS: -Xswiftc -enable-incremental-file-hashing --disable-index-store
+  # Only main saves build caches. Pull requests restore main's, so they can't evict them from the
+  # repository's 10 GB cache.
+  SAVE_CACHES: ${{ github.event_name == 'push' }}
+
 jobs:
   # Docs- and website-only changes skip the jobs below (docs.yml builds the website instead).
   # A job-level `if` rather than `paths-ignore`: the ruleset requires both checks, and a skipped job
@@ -27,6 +35,7 @@ jobs:
       pull-requests: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      ios_shards: ${{ steps.filter.outputs.ios_shards }}
     steps:
       - name: Anything besides docs?
         id: filter
@@ -52,7 +61,9 @@ jobs:
           }
           # Docs only: the website, docs/ and top-level Markdown or LICENSE files.
           docs='^(website/|docs/|[^/]+\.md$|LICENSE$)'
+          listed=false
           if files="$(changed_files)" && [ -n "$files" ]; then
+            listed=true
             printf 'Changed files:\n%s\n' "$files"
             if grep -qvE "$docs" <<<"$files"; then code=true; else code=false; fi
           else
@@ -61,6 +72,18 @@ jobs:
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Full run: $code"
+          # The serialized hosted UIKit suite and SVG shard are the iOS-test long poles. Pull requests
+          # run the broad `lists` shard by default, add `svg` only when SVG paths (or this CI) changed,
+          # and leave `hosted` to pushes on main. Main runs all shards before TestFlight.
+          svg='(^|/)[^/]*SVG[^/]*$|^Package\.(swift|resolved)$|^scripts/ci-|^\.github/workflows/tests\.yml$'
+          if [ "$EVENT" = pull_request ] && $listed; then
+            shards='["lists"]'
+            if grep -qE "$svg" <<<"$files"; then shards='["lists","svg"]'; fi
+          else
+            shards='["hosted","lists","svg"]'
+          fi
+          echo "ios_shards=$shards" >> "$GITHUB_OUTPUT"
+          echo "iOS simulator shards: $shards"
 
   mock-gateway:
     name: Mock gateway selftest
@@ -81,25 +104,33 @@ jobs:
       - run: npm ci
       - run: npm run selftest
 
-  # The Swift job builds for macOS only, so code behind `#if os(iOS)` would otherwise first be
-  # compiled by a TestFlight archive (#421). This mirrors that archive, minus signing.
+  # The Swift jobs build for macOS only, so code behind `#if os(iOS)` would otherwise first be
+  # compiled by a TestFlight archive (#421). This mirrors that archive, minus signing. Pull requests
+  # compile the iOS app in Debug through "iOS app UI tests"; this Release build runs on main, whose
+  # green run gates TestFlight (scripts/check_release_ci.py), and on manual runs.
   ios:
     name: iOS build
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
       - name: Select newest Xcode
+        id: xcode
         run: |
           XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
 
+      # The release zip takes seconds; `brew install` took minutes.
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: |
+          curl -fsSL https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip -o "$RUNNER_TEMP/xcodegen.zip"
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
 
       - name: Build the iOS app
         run: |
@@ -109,19 +140,74 @@ jobs:
             -scheme Pincer-iOS \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO \
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
           exit "${PIPESTATUS[0]}"
 
-  # The Swift job runs the tests on macOS, where the UIKit list never loads. This runs the transcript suites
-  # (hosted UIKit list, Dynamic Type parity, controller) against an iPhone simulator, booted headless by xcodebuild.
-  # Includes streaming/committed row parity, off-main inline math, and WebKit SVG rasterization.
-  ios-tests:
-    name: iOS simulator tests
+  # The Swift jobs run the tests on macOS, where the UIKit list never loads. Build once, then run
+  # each shard with test-without-building on its own runner. This keeps PR wall-clock low while
+  # preserving main coverage before TestFlight.
+  ios-tests-build:
+    name: iOS simulator tests (build)
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        id: xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      # Every shard uses the same products. Checkout gives every file a new mtime, so file hashing
+      # keeps a restored build incremental.
+      - name: Restore the build cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/xcode-ios
+          key: xcode-ios-tests-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          restore-keys: xcode-ios-tests-${{ steps.xcode.outputs.version }}-
+
+      # Pincer-Package would also build the macOS-only PincerChecks and PincerMacDev for iOS.
+      - name: Build for testing
+        run: |
+          set -o pipefail
+          scripts/ios-test-scheme.sh
+          xcodebuild build-for-testing             -scheme PincerUITests-iOS             -destination 'platform=iOS Simulator,name=iPhone 17 Pro'             -derivedDataPath .build/xcode-ios             COMPILER_INDEX_STORE_ENABLE=NO OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing'             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
+      - name: Save the build cache
+        if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .build/xcode-ios
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      # test-without-building only needs Build/Products (xctestrun + bundles). Uploading only that keeps
+      # the artifact transfer below the old per-shard build time.
+      - name: Upload iOS test products
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcode-ios-products
+          path: .build/xcode-ios/Build/Products
+          compression-level: 0
+          if-no-files-found: error
+
+  # The transcript suites run in shards from scripts/ci-ios-shard.sh.
+  ios-tests:
+    name: iOS simulator tests (${{ matrix.shard }})
+    needs: [changes, ios-tests-build]
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.ios_shards || '["hosted","lists","svg"]') }}
     steps:
       - uses: actions/checkout@v5
 
@@ -131,77 +217,95 @@ jobs:
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
-      # Pincer-Package would also build the macOS-only PincerChecks and PincerMacDev for iOS.
+      - name: Pick and boot an iPhone simulator
+        id: sim
+        run: scripts/ci-boot-simulator.sh ${{ matrix.shard == 'svg' && '--warm-webkit' || '' }} >> "$GITHUB_OUTPUT"
+
+      - name: Download iOS test products
+        uses: actions/download-artifact@v5
+        with:
+          name: xcode-ios-products
+          path: .build/xcode-ios/Build/Products
+
       - name: Make the test scheme
         run: scripts/ios-test-scheme.sh
 
-      - name: Pick an iPhone simulator
+      - name: Test on iOS
+        run: |
+          set -o pipefail
+          xcrun simctl bootstatus '${{ steps.sim.outputs.udid }}' -b > /dev/null
+          cat "$RUNNER_TEMP/simulator-boot.log" || true
+          xcodebuild test-without-building             -scheme PincerUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-ios             $(scripts/ci-ios-shard.sh '${{ matrix.shard }}')             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
+  # Drives the real app on the simulator: the Browser sheet must leave the compact chat header untouched (#1026).
+  # It runs on main and manual runs; pull requests rely on the faster transcript shards and still
+  # get this XCUITest before TestFlight because main must be green.
+  ios-app-tests:
+    name: iOS app UI tests
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        id: xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
+
+      - name: Pick and boot an iPhone simulator
         id: sim
-        run: |
-          UDID="$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          phones = [d for runtime, devices in json.load(sys.stdin)["devices"].items() if "iOS" in runtime
-                    for d in devices if d["name"].startswith("iPhone") and d["isAvailable"]]
-          print(phones[0]["udid"] if phones else "")')"
-          test -n "$UDID"
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+        run: scripts/ci-boot-simulator.sh >> "$GITHUB_OUTPUT"
 
-      - name: Test the transcript lists on iOS
+      # The release zip takes seconds; `brew install` took minutes.
+      - name: Install XcodeGen
         run: |
-          set -o pipefail
-          xcodebuild test \
-            -scheme PincerUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-ios \
-            -only-testing:PincerUITests/TranscriptUIKitHostedTests \
-            -only-testing:PincerUITests/TranscriptUIKitLayoutTests \
-            -only-testing:PincerUITests/TranscriptDynamicTypeParityTests \
-            -only-testing:PincerUITests/TranscriptPremeasureTests \
-            -only-testing:PincerUITests/TranscriptListControllerTests \
-            -only-testing:PincerUITests/TranscriptMeasureQueueTests \
-            -only-testing:PincerUITests/TranscriptLayoutCacheTests \
-            -only-testing:PincerUITests/TranscriptWidthFreezeTests \
-            -only-testing:PincerUITests/TranscriptFindTrimTests \
-            -only-testing:PincerUITests/TranscriptNavigationTests \
-            -only-testing:PincerUITests/TranscriptAccessibilityActionTests \
-            -only-testing:PincerUITests/ScrollToBottomTests \
-            -only-testing:PincerUITests/StreamingRenderingTests \
-            -only-testing:PincerUITests/InlineMathOffMainTests \
-            -only-testing:PincerUITests/ComposerSynchronousSizingUIKitTests \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          curl -fsSL https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip -o "$RUNNER_TEMP/xcodegen.zip"
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
 
-      # WebKit SVG rendering waits on the main actor and a cold WebContent process; alongside the hosted
-      # UIKit suites above it starved for minutes (#643). Run it on its own, reusing the same build.
-      - name: Test SVG rasterization on iOS
+      - name: Restore the build cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build/xcode-app-uitests
+          key: xcode-app-uitests-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'Sources/**', 'Apps/**', 'Tests/PincerAppUITests/**') }}
+          restore-keys: xcode-app-uitests-${{ steps.xcode.outputs.version }}-
+
+      - name: Build the app and its UI tests
         run: |
           set -o pipefail
-          xcodebuild test-without-building \
-            -scheme PincerUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-ios \
-            -only-testing:PincerUITests/SVGRasterizerTests \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodegen generate --quiet
+          xcodebuild build-for-testing             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO             OTHER_SWIFT_FLAGS='$(inherited) -enable-incremental-file-hashing'             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
-      # Drives the real app on the simulator: the Browser sheet must leave the compact chat header untouched (#1026).
+      - name: Save the build cache
+        if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .build/xcode-app-uitests
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
       - name: UI-test the Browser sheet header on iOS
         run: |
           set -o pipefail
-          brew install xcodegen
-          xcodegen generate --quiet
-          xcodebuild test \
-            -project Pincer.xcodeproj \
-            -scheme PincerAppUITests-iOS \
-            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
-            -derivedDataPath .build/xcode-app-uitests \
-            CODE_SIGNING_ALLOWED=NO \
-            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcrun simctl bootstatus '${{ steps.sim.outputs.udid }}' -b > /dev/null
+          xcodebuild test-without-building             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
-  swift:
-    name: Swift build and checks
+  # The unit tests and the PincerChecks modes run on separate runners, each building only what it runs.
+  swift-shards:
+    name: Swift ${{ matrix.shard }}
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [unit, checks]
     env:
       PINCER_KEYCHAIN: memory
     steps:
@@ -216,57 +320,79 @@ jobs:
           echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
+        if: matrix.shard == 'checks'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: mock-gateway/package-lock.json
 
       - name: Install mock gateway dependencies
+        if: matrix.shard == 'checks'
         working-directory: mock-gateway
         run: npm ci
 
       # Checkout gives every file a new mtime, so file hashing keeps the restored build incremental.
+      # Each shard builds a different set of products, so each keeps its own cache; the last key is
+      # the cache from before the shards, which built everything.
       - name: Restore the build cache
-        uses: actions/cache@v4
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: .build
-          key: swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
-          restore-keys: swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
+          key: swiftpm-${{ matrix.shard }}-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          restore-keys: |
+            swiftpm-${{ matrix.shard }}-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
+            swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
 
-      - name: Build all targets and tests
-        run: swift build --build-tests -Xswiftc -enable-incremental-file-hashing
+      # The unit shard needs the test bundle; the checks shard only the two executables.
+      - name: Build
+        run: |
+          if [ "${{ matrix.shard }}" = unit ]; then
+            swift build --build-tests $SWIFT_FLAGS
+          else
+            swift build --product PincerChecks $SWIFT_FLAGS
+            swift build --product PincerMacDev $SWIFT_FLAGS
+          fi
 
-      # Unit tests and every check run side by side, each live run against its own mock.
+      - name: Save the build cache
+        if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
       # Below the job's limit, so a hung lane still leaves its logs for the upload step.
-      - name: Unit tests and checks
-        timeout-minutes: 22
+      - name: Run the ${{ matrix.shard }} lanes
+        timeout-minutes: 15
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
-        run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
+          CHECKS_SHARD: ${{ matrix.shard }}
+        run: scripts/run-checks.sh $SWIFT_FLAGS
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
       # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
       - name: Toolbar stability on chat switch
+        if: matrix.shard == 'checks'
         timeout-minutes: 3
         env:
           PINCER_DEV_NAMESPACE: toolbar-check
         run: |
-          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
+          BIN="$(swift build --show-bin-path $SWIFT_FLAGS)"
           "$BIN/PincerMacDev" --toolbar-stability-check
 
       # Switching chats keeps the chat view and only swaps its model (#571). Shared runners and a
       # debug build: the timings are reported, and only a gross regression of the median of all 28
       # switches fails. ChatSwitchReuseHostedTests and SelectionDefaultsWriteTests guard the fix itself.
       - name: Chat switch time
+        if: matrix.shard == 'checks'
         timeout-minutes: 3
         env:
           PINCER_DEV_NAMESPACE: switch-probe
-          PINCER_KEYCHAIN: memory
           PINCER_SWITCH_CHATS: "7"
           PINCER_SWITCH_BUDGET_MS: "1000"
           PINCER_SWITCH_OVERALL_MS: "500"
         run: |
-          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
+          BIN="$(swift build --show-bin-path $SWIFT_FLAGS)"
           "$BIN/PincerMacDev" --chat-switch-probe
 
       # The app must go idle after launch (#119, #135): the debug build above, with the menu bar item
@@ -274,9 +400,10 @@ jobs:
       # (the #119 loop sat near 100%); anything tighter flakes on shared runners. Nightly
       # launch-cpu.yml holds a release build to the script's default 5%.
       - name: Launch CPU
+        if: matrix.shard == 'checks'
         timeout-minutes: 4
         run: |
-          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
+          BIN="$(swift build --show-bin-path $SWIFT_FLAGS)"
           for mode in "--menu-bar off" "--menu-bar on" "--menu-bar on --demo"; do
             echo "Launch CPU check: $mode"
             scripts/check-launch-cpu.sh $mode --threshold 50 --samples 6 "$BIN/PincerMacDev"
@@ -286,8 +413,29 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: check-logs
+          name: check-logs-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/checks
             build/cpu-check-state/app.log
           if-no-files-found: ignore
+
+  # The ruleset requires this name. It passes when every shard passed (or was skipped for a docs-only
+  # change) and fails when any failed or was cancelled.
+  swift:
+    name: Swift build and checks
+    needs: [changes, swift-shards]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every Swift shard passed
+        env:
+          RESULT: ${{ needs.swift-shards.result }}
+          CHANGES: ${{ needs.changes.result }}
+        run: |
+          echo "Detect changes: $CHANGES; Swift shards: $RESULT"
+          case "$RESULT" in
+            success) ;;
+            skipped) [ "$CHANGES" = success ] ;;  # skipped only counts for a docs-only change
+            *) exit 1 ;;
+          esac

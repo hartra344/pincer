@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
 import { crc32, encodePng, pngChunk } from '../png.mjs';
 import { hasPairingScope, hasScope, scopeApproved } from '../scopes.mjs';
-import { isObject } from '../util.mjs';
+import { isObject, jsonClone } from '../util.mjs';
+import { additionalPropertiesProblem, closedObjectProblem, commonFieldTypes } from '../params.mjs';
 
 export async function run() {
   // Scopes: admin covers everything, write covers read, nothing else crosses over.
@@ -42,4 +43,45 @@ export async function run() {
   const idat = png.subarray(idatAt + 4, idatAt + 4 + png.readUInt32BE(idatAt - 4));
   assert.deepEqual(zlib.inflateSync(idat), raw);
   assert.equal(encodePng(2, 1, 0, raw)[25], 0);
+
+  // scopeApproved takes a Set too (paired-device scopes).
+  assert.equal(scopeApproved(new Set(['operator.write']), 'operator.read'), true);
+  assert.equal(scopeApproved(new Set(['operator.admin']), 'operator.pairing'), true);
+  assert.equal(scopeApproved(new Set(['operator.read']), 'operator.write'), false);
+  assert.equal(scopeApproved(new Set(), 'operator.read'), false);
+
+  // jsonClone keeps JSON semantics (unlike structuredClone).
+  assert.equal(jsonClone(undefined), undefined);
+  assert.deepEqual(jsonClone({ a: 1, b: undefined, c: [1, { d: 2 }] }), { a: 1, c: [1, { d: 2 }] });
+  assert.equal('b' in jsonClone({ b: undefined }), false);
+  assert.equal(jsonClone({ at: new Date(0) }).at, '1970-01-01T00:00:00.000Z');
+  const original = { nested: { x: 1 } };
+  const copy = jsonClone(original);
+  copy.nested.x = 2;
+  assert.equal(original.nested.x, 1);
+
+  // additionalPropertiesProblem.
+  const allowed = ['channel', 'accountId'];
+  assert.equal(additionalPropertiesProblem('channels.start', [], allowed), 'invalid channels.start params: must be object');
+  assert.equal(additionalPropertiesProblem('channels.start', null, allowed), 'invalid channels.start params: must be object');
+  assert.equal(
+    additionalPropertiesProblem('channels.start', { channel: 'x', bogus: 1 }, allowed),
+    'invalid channels.start params: must NOT have additional properties (bogus)',
+  );
+  assert.equal(additionalPropertiesProblem('channels.start', { channel: 'x' }, allowed), null);
+  assert.equal(additionalPropertiesProblem('channels.start', {}, allowed), null);
+
+  // closedObjectProblem and the shared field types.
+  const types = { ...commonFieldTypes, flag: (v) => (v === true ? undefined : 'must be equal to constant') };
+  const schema = { required: ['name'], fields: { name: 'nonEmpty', note: 'string', on: 'boolean', hash: 'sha256', flag: 'flag' } };
+  assert.equal(closedObjectProblem(schema, {}, types), "at root: must have required property 'name'");
+  assert.equal(closedObjectProblem(schema, { name: 'a', extra: 1 }, types), "at root: unexpected property 'extra'");
+  assert.equal(closedObjectProblem(schema, { name: '' }, types), 'at /name: must NOT have fewer than 1 characters');
+  assert.equal(closedObjectProblem(schema, { name: 1 }, types), 'at /name: must be string');
+  assert.equal(closedObjectProblem(schema, { name: 'a', note: 1 }, types), 'at /note: must be string');
+  assert.equal(closedObjectProblem(schema, { name: 'a', on: 'yes' }, types), 'at /on: must be boolean');
+  assert.equal(closedObjectProblem(schema, { name: 'a', hash: 'abc' }, types), 'at /hash: must match pattern "^[a-fA-F0-9]{64}$"');
+  assert.equal(closedObjectProblem(schema, { name: 'a', flag: false }, types), 'at /flag: must be equal to constant');
+  assert.equal(closedObjectProblem(schema, { name: 'a', hash: 'A'.repeat(64), on: false, flag: true }, types), undefined);
+  assert.equal(closedObjectProblem({ fields: { a: 'string' } }, {}, types), undefined);
 }

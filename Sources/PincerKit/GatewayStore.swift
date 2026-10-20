@@ -1375,8 +1375,7 @@ public final class GatewayStore: Identifiable {
     /// `sessions.compact` needs `operator.admin`; without it, "Compact now" sends `/compact` instead.
     public var canCompactDirectly: Bool {
         guard self.hello?.scopes.contains(GatewayConnection.adminScope) == true else { return false }
-        let methods = self.hello?.methods ?? []
-        return methods.isEmpty || methods.contains("sessions.compact")
+        return GatewayMethodSupport.supports("sessions.compact", advertised: self.hello?.methods)
     }
 
     /// Slash commands for a session (Gateway `commands.list` plus client commands). Falls back to a
@@ -1395,7 +1394,7 @@ public final class GatewayStore: Identifiable {
         }
         guard self.state.isConnected, self.loadingCommands.insert(sessionKey).inserted else { return }
         defer { self.loadingCommands.remove(sessionKey) }
-        if let methods = self.hello?.methods, !methods.isEmpty, !methods.contains("commands.list") { return }
+        if !GatewayMethodSupport.supports("commands.list", advertised: self.hello?.methods) { return }
         let epoch = self.connectionEpoch
         var params: [String: JSONValue] = ["includeArgs": true, "scope": "text"]
         if let agentId { params["agentId"] = .string(agentId) }

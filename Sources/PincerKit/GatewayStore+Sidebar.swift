@@ -470,8 +470,7 @@ extension GatewayStore {
     /// Whether groups live in the gateway's catalog. Gateways that don't list their methods get a try.
     var usesGroupCatalog: Bool {
         guard !self.groupCatalogUnsupported else { return false }
-        let methods = self.hello?.methods ?? []
-        return methods.isEmpty || methods.contains("sessions.groups.put")
+        return GatewayMethodSupport.supports("sessions.groups.put", advertised: self.hello?.methods)
     }
 
     func loadGroups() async {

@@ -479,8 +479,8 @@ extension GatewayStore {
 
     /// The Sessions page: `sessions.list` is advertised (or the Gateway doesn't list its methods).
     public var supportsSessionManager: Bool {
-        guard let methods = self.hello?.methods, !methods.isEmpty else { return self.hello != nil }
-        return methods.contains(SessionManager.listMethod)
+        guard let hello = self.hello else { return false }
+        return GatewayMethodSupport.supports(SessionManager.listMethod, advertised: hello.methods)
     }
 
     /// A session's history changed on the Gateway (rewind, branch switch, recovery) or it was deleted:

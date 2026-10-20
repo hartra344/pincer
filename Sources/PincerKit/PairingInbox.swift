@@ -237,9 +237,8 @@ public final class PairingInboxModel {
 
     /// False when the Gateway has no `channels.pairing.list`.
     public var supported: Bool {
-        if self.unknownMethod { return false }
-        guard let methods = self.methods(), !methods.isEmpty else { return true }
-        return methods.contains(Self.listMethod)
+        GatewayMethodSupport.supports(Self.listMethod, advertised: self.methods(),
+                                      rejected: self.unknownMethod ? [Self.listMethod] : [])
     }
 
     /// Whether this connection may list and answer pairing requests: `operator.pairing`, or
@@ -317,23 +316,21 @@ public final class PairingInboxModel {
                 self.loadState = .idle
             }
         }
-        do {
-            let result = try await self.request(Self.listMethod, [:])
-            guard !Task.isCancelled, generation == self.generation else { return }
+        let outcome = await GatewayCallOutcome.run { try await self.request(Self.listMethod, [:]) }
+        guard !Task.isCancelled, generation == self.generation else { return }
+        switch outcome {
+        case let .success(result):
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
-        } catch let error where GatewayError.isUnknownMethod(error) {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case .unknownMethod:
             self.unknownMethod = true
             self.clearList()
             self.loadState = .idle
-        } catch let error where GatewayError.isMissingScope(error) {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case .missingScope:
             self.scopeDenied = true
             self.loadState = .failed(Self.missingScopeMessage)
-        } catch {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case let .failure(error):
             self.loadState = .failed(Self.message(for: error))
         }
         guard !Task.isCancelled, generation == self.generation else { return }

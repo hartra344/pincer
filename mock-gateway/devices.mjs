@@ -8,7 +8,7 @@
 import crypto from 'node:crypto';
 import { NODE_INVOKE_METHODS, dropNode, pendingNodeRequestId } from './nodes.mjs';
 import { hasPairingScope, hasScope } from './scopes.mjs';
-import { isObject } from './util.mjs';
+import { isObject, jsonClone } from './util.mjs';
 
 export const DEVICE_PAIRING_METHODS = ['device.pair.list', 'device.pair.approve', 'device.pair.reject', 'device.pair.remove', 'device.pair.rename'];
 export const NODE_METHODS = ['node.list', 'node.describe', 'node.rename', 'node.pair.remove', ...NODE_INVOKE_METHODS];
@@ -125,9 +125,9 @@ function isConnected(state, deviceId) {
 
 function pendingView(pending) {
   const { requestId, deviceId, publicKey, displayName, platform, deviceFamily, clientId, clientMode, role, roles, scopes, remoteIp, silent, isRepair, ts } = pending;
-  return JSON.parse(JSON.stringify({
+  return jsonClone({
     requestId, deviceId, publicKey, displayName, platform, deviceFamily, clientId, clientMode, role, roles, scopes, remoteIp, silent, isRepair, ts,
-  }));
+  });
 }
 
 // Like upstream redactPairedDevice: token lifecycle summaries, never token material or approvedScopes.
@@ -158,7 +158,7 @@ function pairedView(state, device, { withConnected = true } = {}) {
     approvedAtMs: device.approvedAtMs ?? device.pairedAt,
     lastSeenAtMs: device.lastSeenAtMs,
   };
-  return JSON.parse(JSON.stringify(view));
+  return jsonClone(view);
 }
 
 // Fills in who a device is the first time it connects, and when it was last seen.
@@ -262,7 +262,7 @@ function paramsError(method, params, required, optional = []) {
 function callerAuthz(conn) {
   return {
     callerDeviceId: conn.isDeviceTokenAuth ? conn.deviceId : null,
-    isAdminCaller: (conn.scopes ?? []).includes(ADMIN_SCOPE),
+    isAdminCaller: hasScope(conn, ADMIN_SCOPE),
   };
 }
 
@@ -277,7 +277,7 @@ function nodeRecords(state) {
 function nodeView(state, device) {
   const node = device.node ?? {};
   const connected = node.connected === true;
-  return JSON.parse(JSON.stringify({
+  return jsonClone({
     nodeId: device.deviceId,
     displayName: device.displayName,
     platform: device.platform,
@@ -296,7 +296,7 @@ function nodeView(state, device) {
     connected,
     ...(connected && (node.connectedAgoMs || node.connectedAtMs) ? { connectedAtMs: node.connectedAtMs ?? Date.now() - node.connectedAgoMs } : {}),
     lastSeenAtMs: device.lastSeenAtMs,
-  }));
+  });
 }
 
 export function handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broadcast }) {

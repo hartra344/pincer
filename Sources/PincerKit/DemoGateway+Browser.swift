@@ -8,7 +8,7 @@ extension DemoGateway {
     func handleBrowser(_ method: String, _ params: JSONValue) throws -> JSONValue? {
         guard method == "browser.request" else { return nil }
         guard let verb = params["method"]?.string, let path = params["path"]?.string else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid browser.request params", details: nil)
+            throw GatewayError.invalidRequest("invalid browser.request params")
         }
         let body = params["body"]
         switch (verb, path) {
@@ -19,7 +19,7 @@ extension DemoGateway {
         case ("POST", "/screencast"):
             let targetId = body?["targetId"]?.text ?? BrowserDemoPages.docs.targetId
             guard let tab = self.demoBrowserTabs.first(where: { $0.targetId == targetId }) else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tab not found", details: nil)
+                throw GatewayError.invalidRequest("tab not found")
             }
             var components = URLComponents()
             components.queryItems = [URLQueryItem(name: "url", value: tab.url), URLQueryItem(name: "title", value: tab.title)]
@@ -28,7 +28,7 @@ extension DemoGateway {
                     "targetId": .string(tab.targetId), "url": .string(tab.url)]
         case ("POST", "/navigate"):
             guard let url = body?["url"]?.text, let index = self.demoTabIndex(body?["targetId"]?.text) else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tab not found", details: nil)
+                throw GatewayError.invalidRequest("tab not found")
             }
             if url.contains("blocked.example") {
                 throw GatewayError.rpc(code: "UNAVAILABLE", message: "navigation blocked",
@@ -38,7 +38,7 @@ extension DemoGateway {
             return ["targetId": .string(self.demoBrowserTabs[index].targetId), "url": .string(url)]
         case ("POST", "/tabs/open"):
             guard let url = body?["url"]?.text else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "url required", details: nil)
+                throw GatewayError.invalidRequest("url required")
             }
             if url.contains("blocked.example") {
                 throw GatewayError.rpc(code: "UNAVAILABLE", message: "navigation blocked",
@@ -60,7 +60,7 @@ extension DemoGateway {
             return ["ok": true, "result": true]
         case ("POST", "/download"):
             guard let index = self.demoTabIndex(body?["targetId"]?.text) else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tab not found", details: nil)
+                throw GatewayError.invalidRequest("tab not found")
             }
             let tab = self.demoBrowserTabs[index]
             let host = URL(string: tab.url)?.host ?? "page"
@@ -69,7 +69,7 @@ extension DemoGateway {
         case ("DELETE", _) where path.hasPrefix("/tabs/"):
             let id = String(path.dropFirst("/tabs/".count)).removingPercentEncoding ?? ""
             guard let index = self.demoTabIndex(id) else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tab not found", details: nil)
+                throw GatewayError.invalidRequest("tab not found")
             }
             self.demoBrowserTabs.remove(at: index)
             return ["ok": true]

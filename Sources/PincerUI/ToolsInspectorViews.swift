@@ -83,10 +83,7 @@ struct ToolsInspectorView: View {
                 }
             } else if let error = model.error {
                 Section {
-                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                        Button(L("Retry")) { Task { await model.load() } }
-                    }
+                    LoadErrorRetryBlock(error: error) { Task { await model.load() } }
                 }
             } else {
                 Section { ProgressView().frame(maxWidth: .infinity) }
@@ -195,8 +192,7 @@ struct AgentToolsPage: View {
         let agent = self.gateway.agents.first { $0.id == self.agentId }
         Group {
             if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see this agent's tools.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see this agent's tools.", bundle: .module))
             } else if let model {
                 ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),

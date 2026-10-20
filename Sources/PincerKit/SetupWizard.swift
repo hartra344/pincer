@@ -794,8 +794,7 @@ public final class SetupWizardModel {
     // MARK: Loading
 
     private func isAdvertised(_ method: String) -> Bool {
-        guard let methods = self.environment.methods(), !methods.isEmpty else { return true }
-        return methods.contains(method)
+        GatewayMethodSupport.supports(method, advertised: self.environment.methods())
     }
 
     /// Runs the skill check (health and agents are kept current by the store).

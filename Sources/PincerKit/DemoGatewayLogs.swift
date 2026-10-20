@@ -101,7 +101,7 @@ struct DemoGatewayLogs {
     /// The Gateway's closed params: `cursor` ≥ 0, `limit` 1…5000, `maxBytes` 1…1,000,000.
     static func validate(_ params: JSONValue) throws -> (cursor: Int?, limit: Int, maxBytes: Int) {
         func invalid(_ message: String) -> GatewayError {
-            GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid logs.tail params: \(message)", details: nil)
+            GatewayError.invalidRequest("invalid logs.tail params: \(message)")
         }
         func integer(_ key: String, in range: ClosedRange<Int>) throws -> Int? {
             guard let value = params[key] else { return nil }

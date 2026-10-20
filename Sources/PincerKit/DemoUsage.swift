@@ -90,10 +90,6 @@ enum DemoUsage {
         }
     }
 
-    private static func invalid(_ message: String) -> GatewayError {
-        .rpc(code: "INVALID_REQUEST", message: message, details: nil)
-    }
-
     // MARK: Records
 
     private static func calendar(_ params: JSONValue) -> Calendar {
@@ -163,11 +159,11 @@ enum DemoUsage {
     private static func range(_ params: JSONValue, now: Date, calendar: Calendar) throws -> (start: String, end: String) {
         let start = params["startDate"]?.text
         let end = params["endDate"]?.text
-        if (start == nil) != (end == nil) { throw self.invalid("startDate and endDate must be provided together") }
+        if (start == nil) != (end == nil) { throw GatewayError.invalidRequest("startDate and endDate must be provided together") }
         if let start, let end {
             guard UsageDates.date(fromKey: start, calendar: calendar) != nil, UsageDates.date(fromKey: end, calendar: calendar) != nil
-            else { throw self.invalid("invalid startDate: expected a valid YYYY-MM-DD calendar date") }
-            guard start <= end else { throw self.invalid("startDate must not be after endDate") }
+            else { throw GatewayError.invalidRequest("invalid startDate: expected a valid YYYY-MM-DD calendar date") }
+            guard start <= end else { throw GatewayError.invalidRequest("startDate must not be after endDate") }
             return (start, end)
         }
         let days = UsageDateRange.last(params["days"]?.int ?? 30, now: now, calendar: calendar)
@@ -219,7 +215,7 @@ enum DemoUsage {
         let calendar = self.calendar(params)
         let (start, end) = try self.range(params, now: now, calendar: calendar)
         if params["agentScope"]?.string == "all", params["agentId"]?.text != nil {
-            throw self.invalid("agentScope=all cannot be combined with agentId")
+            throw GatewayError.invalidRequest("agentScope=all cannot be combined with agentId")
         }
         let agent = params["agentScope"]?.string == "all" ? nil : params["agentId"]?.text ?? "main"
         let records = self.records(now: now, calendar: calendar).filter {
@@ -247,8 +243,8 @@ enum DemoUsage {
         let key = params["key"]?.text
         let agentId = params["agentId"]?.text
         let allAgents = params["agentScope"]?.string == "all"
-        if allAgents, key != nil || agentId != nil { throw self.invalid("agentScope=all cannot be combined with key or agentId") }
-        if let key, !knownKeys.contains(key) { throw self.invalid("Invalid session key: \(key)") }
+        if allAgents, key != nil || agentId != nil { throw GatewayError.invalidRequest("agentScope=all cannot be combined with key or agentId") }
+        if let key, !knownKeys.contains(key) { throw GatewayError.invalidRequest("Invalid session key: \(key)") }
         let limit = max(1, min(1000, params["limit"]?.int ?? 50))
         let agent = allAgents ? nil : agentId ?? key.flatMap(SessionKey.agentId(from:)) ?? "main"
         let all = self.records(now: now, calendar: calendar).filter { $0.date >= start && $0.date <= end }
@@ -383,8 +379,8 @@ enum DemoUsage {
     // MARK: Timeseries and logs
 
     private static func session(_ params: JSONValue, knownKeys: Set<String>, detail: String) throws -> (key: String, index: Int?) {
-        guard let key = params["key"]?.text else { throw self.invalid("key is required for \(detail)") }
-        guard knownKeys.contains(key) else { throw self.invalid("Invalid session key: \(key)") }
+        guard let key = params["key"]?.text else { throw GatewayError.invalidRequest("key is required for \(detail)") }
+        guard knownKeys.contains(key) else { throw GatewayError.invalidRequest("Invalid session key: \(key)") }
         return (key, self.sessions.firstIndex { $0.key == key })
     }
 
@@ -392,7 +388,7 @@ enum DemoUsage {
         let (key, index) = try self.session(params, knownKeys: knownKeys, detail: "timeseries")
         let records = self.records(now: now, calendar: UsageDates.calendar()).filter { $0.session == index }
             .sorted { $0.timestamp < $1.timestamp }
-        guard index != nil, !records.isEmpty else { throw self.invalid("No transcript found for session: \(key)") }
+        guard index != nil, !records.isEmpty else { throw GatewayError.invalidRequest("No transcript found for session: \(key)") }
         // Two turns a day, the last 50.
         var points: [JSONValue] = []
         var cumulativeTokens = 0

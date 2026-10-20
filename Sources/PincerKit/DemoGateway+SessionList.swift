@@ -74,7 +74,7 @@ extension DemoGateway {
 
     func knownSession(_ key: JSONValue?) throws -> String {
         guard let key = key?.string, self.sessions[key] != nil else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown session", details: nil)
+            throw GatewayError.invalidRequest("unknown session")
         }
         return key
     }
@@ -131,12 +131,12 @@ extension DemoGateway {
         let key = try self.knownSession(params["key"])
         var row = self.sessions[key] ?? [:]
         if let expected = params["expectedSessionId"]?.string, expected != row["sessionId"]?.string {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "expectedSessionId mismatch", details: nil)
+            throw GatewayError.invalidRequest("expectedSessionId mismatch")
         }
         if params["archived"]?.bool == true {
             // Like the Gateway (and the demo's sessions.patchMany): main sessions stay, work in flight stops.
             if Self.isMainKey(key) {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Cannot archive an agent's main session.", details: nil)
+                throw GatewayError.invalidRequest("Cannot archive an agent's main session.")
             }
             self.stopRuns(key)
             row = self.sessions[key] ?? row
@@ -157,7 +157,7 @@ extension DemoGateway {
                 let parts = (model.string ?? "").split(separator: "/", maxSplits: 1).map(String.init)
                 guard parts.count == 2,
                       let choice = Self.modelCatalog.first(where: { $0["provider"]?.string == parts[0] && $0["id"]?.string == parts[1] })
-                else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "model not allowed", details: nil) }
+                else { throw GatewayError.invalidRequest("model not allowed") }
                 guard choice["available"]?.bool == true else {
                     throw GatewayError.rpc(code: "UNAVAILABLE", message: "That model isn't set up in the demo.", details: nil)
                 }
@@ -206,24 +206,21 @@ extension DemoGateway {
             return ["status": "conflict"]
         }
         let entries = params["entries"]?.object ?? [:]
-        func invalid(_ message: String, details: JSONValue? = nil) -> GatewayError {
-            .rpc(code: "INVALID_REQUEST", message: message, details: details)
-        }
         if entries.count > Self.UserPrefsLimits.entryCount {
-            throw invalid("invalid users.prefs.set entry: invalid-entry-count")
+            throw GatewayError.invalidRequest("invalid users.prefs.set entry: invalid-entry-count")
         }
         let resultingKeys = Set(self.prefs.keys)
             .subtracting(entries.filter { $0.value.isNull }.keys)
             .union(entries.filter { !$0.value.isNull }.keys)
         if resultingKeys.count > Self.UserPrefsLimits.profileKeys {
             let currentCount = self.prefs.keys.count
-            throw invalid("users.prefs.set exceeds the \(Self.UserPrefsLimits.profileKeys)-key profile limit (current count: \(currentCount))",
+            throw GatewayError.invalidRequest("users.prefs.set exceeds the \(Self.UserPrefsLimits.profileKeys)-key profile limit (current count: \(currentCount))",
                           details: ["code": "USER_PREFS_LIMIT_EXCEEDED",
                                     "limit": JSONValue(Self.UserPrefsLimits.profileKeys),
                                     "currentCount": JSONValue(currentCount)])
         }
         for (key, value) in entries where ((try? JSONEncoder().encode(value))?.count ?? 0) > Self.UserPrefsLimits.valueBytes {
-            throw invalid("invalid users.prefs.set entry for \(key): value-too-large")
+            throw GatewayError.invalidRequest("invalid users.prefs.set entry for \(key): value-too-large")
         }
         for (key, value) in entries {
             self.prefs[key] = value.isNull ? nil : value
@@ -237,11 +234,11 @@ extension DemoGateway {
         guard let channel = params["channel"]?.text, let action = params["action"]?.text,
               let inner = params["params"]?.object, let idempotencyKey = params["idempotencyKey"]?.text
         else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "message.action requires channel, action, params and idempotencyKey", details: nil)
+            throw GatewayError.invalidRequest("message.action requires channel, action, params and idempotencyKey")
         }
         if let existing = self.actionResults[idempotencyKey] { return existing }
         guard action == "react", channel == "discord", let emoji = inner["emoji"]?.text, inner["messageId"]?.text != nil else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unsupported message action \(action) on \(channel)", details: nil)
+            throw GatewayError.invalidRequest("unsupported message action \(action) on \(channel)")
         }
         self.recordAction(params)
         let result: JSONValue = inner["remove"]?.bool == true

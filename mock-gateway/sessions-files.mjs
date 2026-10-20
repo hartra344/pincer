@@ -14,6 +14,8 @@
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
 import { encodePng } from './png.mjs';
+import { closedObjectProblem, commonFieldTypes } from './params.mjs';
+import { isObject } from './util.mjs';
 
 export const SESSION_FILES_METHODS = ['sessions.files.list', 'sessions.files.get', 'sessions.files.set', 'artifacts.list'];
 export const SESSION_FILES_ROOT = '/Users/claw/.openclaw/workspace';
@@ -161,10 +163,9 @@ export function changeSessionFile(state, sessionKey, path, content) {
 
 // --- Closed params (the gateway-protocol typebox schemas) ---
 
-const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const fieldType = {
-  nonEmpty: (v) => (typeof v !== 'string' ? 'must be string' : v.length ? undefined : 'must NOT have fewer than 1 characters'),
-  string: (v) => (typeof v === 'string' ? undefined : 'must be string'),
+  nonEmpty: commonFieldTypes.nonEmpty,
+  string: commonFieldTypes.string,
   sha256: (v) => (typeof v === 'string' && /^[a-f0-9]{64}$/.test(v) ? undefined : 'must match pattern "^[a-f0-9]{64}$"'),
   assistant: (v) => (v === 'assistant' ? undefined : 'must be equal to constant'),
   image: (v) => (v === 'image' ? undefined : 'must be equal to constant'),
@@ -187,14 +188,7 @@ const SCHEMAS = {
 export function sessionFilesParamsProblem(method, params) {
   const schema = SCHEMAS[method];
   if (!isObject(params)) return 'at root: must be object';
-  for (const key of schema.required) if (!(key in params)) return `at root: must have required property '${key}'`;
-  for (const [key, value] of Object.entries(params)) {
-    const type = schema.fields[key];
-    if (!type) return `at root: unexpected property '${key}'`;
-    const problem = fieldType[type](value);
-    if (problem) return `at /${key}: ${problem}`;
-  }
-  return undefined;
+  return closedObjectProblem(schema, params, fieldType);
 }
 
 // --- Paths and projections ---

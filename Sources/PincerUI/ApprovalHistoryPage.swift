@@ -65,11 +65,7 @@ struct ApprovalHistoryPage: View {
     private func list(_ model: ApprovalHistoryModel, connected: Bool) -> some View {
         List {
             if let error = model.loadState.error, !model.items.isEmpty {
-                Section {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button(L("Try Again")) { Task { await model.refresh() } }
-                        .disabled(!connected)
-                }
+                LoadErrorSection(error: error, canRetry: connected) { Task { await model.refresh() } }
             }
             Section {
                 ForEach(model.items) { record in
@@ -128,8 +124,7 @@ struct ApprovalHistoryPage: View {
     @ViewBuilder private func state(_ model: ApprovalHistoryModel, connected: Bool) -> some View {
         if model.items.isEmpty {
             if !connected, !model.loadState.isRunning {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see its approval history.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see its approval history.", bundle: .module))
             } else if !model.hasLoaded || model.loadState.isRunning {
                 ProgressView()
             } else if let error = model.loadState.error {
@@ -270,8 +265,7 @@ struct ApprovalDetailPage: View {
             } else if model.detailState[self.approvalId]?.isRunning == true {
                 ProgressView()
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see this approval.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see this approval.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Approval Not Found"), systemImage: "checkmark.shield",
                                        description: Text(model.detailState[self.approvalId]?.error

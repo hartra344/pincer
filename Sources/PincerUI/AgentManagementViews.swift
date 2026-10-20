@@ -142,14 +142,10 @@ struct AgentReadOnlyNotice: View {
                 Image(systemName: "person.crop.circle.badge.exclamationmark")
             }
         } else if !self.model.hasAdmin {
-            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
-                    .font(.callout.weight(.medium))
-                Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button(L("Open Connection")) { self.navigator.destination = .connection }
-            }
+            FullManagementNotice(
+                title: L("Editing agents needs Full Management"),
+                message: Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module),
+                action: { self.navigator.destination = .connection })
         }
     }
 }
@@ -164,14 +160,10 @@ private struct AgentFilesReadOnlyNotice: View {
             if self.model.hasAdmin {
                 Label(reason, systemImage: "lock").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
-                        .font(.callout.weight(.medium))
-                    Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button(L("Open Connection")) { self.navigator.destination = .connection }
-                }
+                FullManagementNotice(
+                    title: L("Editing agents needs Full Management"),
+                    message: Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module),
+                    action: { self.navigator.destination = .connection })
             }
         }
     }
@@ -207,8 +199,7 @@ struct AgentPage: View {
             if let agent = self.agent {
                 self.form(agent)
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see this agent.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see this agent.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Agent Not Found"), systemImage: "person.crop.circle.badge.questionmark",
                                        description: Text("“\(self.agentId)” isn't an agent on this Gateway anymore.", bundle: .module))
@@ -837,8 +828,7 @@ struct AgentFileEditorPage: View {
                         .disabled(!self.gateway.state.isConnected)
                 }
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
             } else {
                 ProgressView()
             }

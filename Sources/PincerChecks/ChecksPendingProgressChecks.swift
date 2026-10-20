@@ -5,18 +5,23 @@ import Foundation
     let script = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("scripts/test_checks_pending_progress.py")
-    let result = await Task.detached {
-        let process = Process(), output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["python3", script.path, "--require-safe-identity"]
-        process.standardOutput = output; process.standardError = output
-        do {
-            try process.run()
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return (process.terminationStatus, String(decoding: data, as: UTF8.self))
-        } catch { return (Int32(-1), String(describing: error)) }
-    }.value
-    check(result.0 == 0, "actual runner exposes bounded pending lane metadata with unchanged completion/status/cleanup: \(result.1)")
+    for (arguments, label) in [
+        (["--require-safe-identity"], "actual runner exposes bounded pending lane metadata with unchanged completion/status/cleanup"),
+        (["--shard-controls"], "CHECKS_SHARD unit/checks/bogus/default run exactly their lanes"),
+    ] {
+        let result = await Task.detached {
+            let process = Process(), output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["python3", script.path] + arguments
+            process.standardOutput = output; process.standardError = output
+            do {
+                try process.run()
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+            } catch { return (Int32(-1), String(describing: error)) }
+        }.value
+        check(result.0 == 0, "\(label): \(result.1)")
+    }
     #endif
 }

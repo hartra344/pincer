@@ -25,7 +25,7 @@
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
 import { MOCK_STATE_DIR } from './agents.mjs';
-import { scopeApproved } from './scopes.mjs';
+import { hasScope } from './scopes.mjs';
 
 export const SESSION_MANAGER_METHODS = [
   'sessions.preview',
@@ -428,7 +428,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
   const problem = paramsProblem(method, params);
   if (problem) return invalid(`invalid ${method} params: ${problem}`);
   const required = requiredScope(method, params);
-  if (!scopeApproved(conn.scopes ?? [], required)) {
+  if (!hasScope(conn, required)) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${required}`, { code: 'MISSING_SCOPE', scope: required });
     return true;
   }
