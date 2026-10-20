@@ -169,16 +169,7 @@ public struct PairingRequest: Identifiable, Hashable, Sendable {
 @MainActor
 @Observable
 public final class PairingInboxModel {
-    public struct Notice: Identifiable, Equatable, Sendable {
-        public let id = UUID()
-        public let text: String
-        public let severity: SettingsNoticeSeverity
-
-        public init(text: String, severity: SettingsNoticeSeverity = .info) {
-            self.text = text
-            self.severity = severity
-        }
-    }
+    public typealias Notice = SettingsNotice
 
     public struct Limits: Hashable, Sendable {
         public let pendingPerAccount: Int?
@@ -217,7 +208,7 @@ public final class PairingInboxModel {
     @ObservationIgnored private var removedSinceList: Set<String> = []
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?) {
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = connection.modelRequest(timeout: 30)
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
     }

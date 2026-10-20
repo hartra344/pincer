@@ -312,16 +312,7 @@ enum DeviceRecords {
 @MainActor
 @Observable
 public final class DeviceManagementModel {
-    public struct Notice: Identifiable, Equatable, Sendable {
-        public let id = UUID()
-        public let text: String
-        public let severity: SettingsNoticeSeverity
-
-        public init(text: String, severity: SettingsNoticeSeverity = .info) {
-            self.text = text
-            self.severity = severity
-        }
-    }
+    public typealias Notice = SettingsNotice
 
     public nonisolated static let listMethod = "device.pair.list"
     public nonisolated static let approveMethod = "device.pair.approve"
@@ -374,7 +365,7 @@ public final class DeviceManagementModel {
     /// Built in `GatewayStore.init` (the sidebar badge reads it from a view body, #119); `bind(hello:)`
     /// connects it to the store's hello once the store exists.
     init(connection: GatewayConnection, selfDeviceId: String, allowsWritesWithoutAdmin: Bool) {
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = connection.modelRequest(timeout: 30)
         self.methods = { nil }
         self.scopes = { [] }
         self.selfDeviceId = selfDeviceId

@@ -618,7 +618,7 @@ public final class ExecPolicyModel {
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = connection.modelRequest(timeout: 30)
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
         self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
