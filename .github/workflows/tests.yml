@@ -72,11 +72,13 @@ jobs:
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "Full run: $code"
-          # SVGRasterizerTests spend minutes on a cold WebKit, so a pull request runs them only when it
-          # touches SVG rendering, the package manifest or this CI. Main always runs them, before TestFlight.
+          # The serialized hosted UIKit suite and SVG shard are the iOS-test long poles. Pull requests
+          # run the broad `lists` shard by default, add `svg` only when SVG paths (or this CI) changed,
+          # and leave `hosted` to pushes on main. Main runs all shards before TestFlight.
           svg='(^|/)[^/]*SVG[^/]*$|^Package\.(swift|resolved)$|^scripts/ci-|^\.github/workflows/tests\.yml$'
-          if [ "$EVENT" = pull_request ] && $listed && ! grep -qE "$svg" <<<"$files"; then
-            shards='["hosted","lists"]'
+          if [ "$EVENT" = pull_request ] && $listed; then
+            shards='["lists"]'
+            if grep -qE "$svg" <<<"$files"; then shards='["lists","svg"]'; fi
           else
             shards='["hosted","lists","svg"]'
           fi

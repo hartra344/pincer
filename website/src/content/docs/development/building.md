@@ -90,7 +90,7 @@ xcodebuild test -scheme PincerUITests-iOS \
   -only-testing:PincerUITests/SVGRasterizerTests
 ```
 
-Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions (size and rendered pixels) determine whether rasterization succeeded. CI runs `SVGRasterizerTests` as its own iOS shard. Pull requests run that shard only when SVG paths or this CI change; pushes to `main` always run it before TestFlight. Cancelling an in-flight iOS render (a row scrolled away) stops the web view load and returns no image.
+Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions (size and rendered pixels) determine whether rasterization succeeded. CI runs `SVGRasterizerTests` as its own iOS shard. Pull requests run the `lists` shard by default and add `svg` only when SVG paths or this CI changed; pushes to `main` always run `hosted`, `lists` and `svg` before TestFlight. Cancelling an in-flight iOS render (a row scrolled away) stops the web view load and returns no image.
 
 The iPad sidebar geometry probe hosts a 1,200-row transcript in `NavigationSplitView`, drives the public native `UISplitViewController` hide/show transition, and reports detail-width changes and row builds per display frame. It checks that the native column actually changes and that layouts stay bounded while the sidebar animates. This measures native geometry; it does not test the SwiftUI sidebar button binding. Run it on a regular-width iPad simulator (the default iPhone CI lane does not run this probe):
 
@@ -174,7 +174,7 @@ Every pull request runs it in the **Launch CPU** step of `tests.yml`, against th
 
 `.github/workflows/tests.yml` runs on every pull request and every push to `main`:
 
-1. **Detect changes** (Ubuntu): lists the changed files. If they're all docs (`website/`, `docs/`, top-level Markdown files or `LICENSE`), the next jobs are skipped, which counts as passing. Anything else, including workflows, `Package.swift`, `project.yml`, `scripts/`, `mock-gateway/` and the sources, runs them. If the list isn't available (a new branch or a force push), they run too. It also picks iOS shards for pull requests: `hosted` + `lists` by default, and adds `svg` when SVG paths or this CI changed. Pushes to `main` always run all iOS shards.
+1. **Detect changes** (Ubuntu): lists the changed files. If they're all docs (`website/`, `docs/`, top-level Markdown files or `LICENSE`), the next jobs are skipped, which counts as passing. Anything else, including workflows, `Package.swift`, `project.yml`, `scripts/`, `mock-gateway/` and the sources, runs them. If the list isn't available (a new branch or a force push), they run too. It also picks iOS shards for pull requests: `lists` by default and `svg` when SVG paths or this CI changed. Pushes to `main` always run all iOS shards.
 2. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
 3. **Swift unit** (macOS, `PINCER_KEYCHAIN=memory`):
    - Restores the unit shard's `.build` cache
