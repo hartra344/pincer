@@ -357,15 +357,6 @@ struct GatewayHealthPage: View {
         }
         self.navigator.destination = .channelStatus
     }
-
-    static func color(_ status: GatewayChannelHealth.Status) -> Color {
-        switch status {
-        case .connected, .running: .green
-        case .stopped: .orange
-        case .error: .red
-        case .disabled, .notConfigured, .unknown: .secondary
-        }
-    }
 }
 
 /// One Health issue: Dismiss or Always Ignore when active, Restore when dismissed, from the context
