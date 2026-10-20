@@ -95,6 +95,27 @@ struct SettingsSaveRebaseTests {
         }
     }
 
+    /// A model wired to `gateway`, with its config already loaded.
+    private func loadedModel(_ gateway: Gateway) async -> GatewaySettingsModel {
+        let model = GatewaySettingsModel(request: { method, params, timeout in
+            try await gateway.request(method, params, timeout)
+        }, scopes: { [GatewayConnection.adminScope] })
+        await model.reloadConfig()
+        return model
+    }
+
+    /// Edits the port, starts a save and returns once its config.patch is held by `gateway`.
+    private func beginSave(_ model: GatewaySettingsModel, _ gateway: Gateway) async throws -> Task<Bool, Never> {
+        model.set(Self.port, 18790)
+        let save = Task { await model.save() }
+        do { try await self.waitForPatch(gateway) } catch {
+            save.cancel()
+            gateway.release()
+            throw error
+        }
+        return save
+    }
+
     enum LaterEdit: String, CaseIterable, Sendable {
         case unchanged, differentPath, samePath, delete, revert
     }
@@ -102,15 +123,10 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)), arguments: LaterEdit.allCases)
     func actualSaveAcknowledgesOnlyItsCapturedPatch(_ later: LaterEdit) async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
+        let model = await self.loadedModel(gateway)
         try #require(model.savedValue(at: Self.port) == 18789 && !model.hasChanges)
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         try #require(model.isSaving)
         #expect(gateway.submitted == ["gateway": ["port": 18790]])
         let request = try #require(gateway.calls.first { $0.0 == "config.patch" })
@@ -152,18 +168,13 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)))
     func lateInvalidTextRetainsActualFieldInputAndErrorAfterSave() async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
+        let model = await self.loadedModel(gateway)
         let schema = ConfigSchema(schema: ["type": "object", "properties": ["gateway": ["type": "object",
             "properties": ["port": ["type": "integer"]]]]])
         let field = try #require(schema.field(at: Self.port, value: 18789))
         try #require(field.kind == .integer)
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         model.setText("not-a-port", for: field)
         try #require(model.inputError(for: field) != nil)
         gateway.release()
@@ -176,10 +187,7 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)))
     func rawApplyReplacesEarlierFormEditButRetainsLaterIntent() async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
+        let model = await self.loadedModel(gateway)
         model.set(Self.port, 18790)
         let raw: JSONValue = ["gateway": ["port": 19000, "bind": "loopback"]]
         let save = Task { await model.saveRaw(raw.compactString()) }
@@ -201,14 +209,9 @@ struct SettingsSaveRebaseTests {
         gateway.persistBeforeFailure = true
         gateway.writeError = .rpc(code: "UNAVAILABLE", message: "Saved, restart failed", details: [
             "persistedConfig": ["config": persisted, "hash": "after"]])
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         model.set(Self.port, 18791)
         gateway.release()
         let succeeded = await save.value
@@ -222,14 +225,9 @@ struct SettingsSaveRebaseTests {
         let gateway = Gateway()
         gateway.writeError = .rpc(code: "INVALID_REQUEST", message: "invalid config", details: [
             "issues": [["path": "gateway.port", "message": "Port rejected"]]])
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         model.set(Self.port, 18791)
         gateway.release()
         let succeeded = await save.value
@@ -241,14 +239,9 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)))
     func discardDuringSaveCannotAdmitASecondWriteAndRemainsUnsavedAfterAcknowledgment() async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         model.discardChanges()
         let second = await model.save()
         #expect(!second && model.isSaving)
@@ -289,14 +282,9 @@ struct SettingsSaveRebaseTests {
         let gateway = Gateway()
         let gate = SnapshotGate()
         gateway.secondReadGate = gate
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release(); gate.release() }
-        try await self.waitForPatch(gateway)
         model.set(Self.port, 18791)
         gateway.release()
         let deadline = ContinuousClock.now + .seconds(15)
@@ -317,14 +305,9 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)))
     func serverOnlyMidSaveReloadMustNotBecomeALocalEditAgainstNewerAcknowledgment() async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         gateway.config = gateway.config.setting("lan", at: Self.bind)
         await model.reloadConfig()
         try #require(model.value(at: Self.bind) == "lan" && !model.isChanged(Self.bind))
@@ -344,14 +327,9 @@ struct SettingsSaveRebaseTests {
         gateway.persistBeforeFailure = true
         gateway.writeError = .rpc(code: "UNAVAILABLE", message: "Saved, restart failed", details: [
             "persistedConfig": ["config": persisted, "hash": "older-write"]])
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         model.set(Self.port, 18791)
         gateway.config = ["gateway": ["port": 18790, "bind": "lan"]]
         gateway.snapshotHashOverride = "newer-reload"
@@ -369,14 +347,9 @@ struct SettingsSaveRebaseTests {
     @Test(.timeLimit(.minutes(2)), arguments: [false, true])
     func laterParentAndChildEditsKeepTheirActualOrder(_ parentFirst: Bool) async throws {
         let gateway = Gateway()
-        let model = GatewaySettingsModel(request: { method, params, timeout in
-            try await gateway.request(method, params, timeout)
-        }, scopes: { [GatewayConnection.adminScope] })
-        await model.reloadConfig()
-        model.set(Self.port, 18790)
-        let save = Task { await model.save() }
+        let model = await self.loadedModel(gateway)
+        let save = try await self.beginSave(model, gateway)
         defer { save.cancel(); gateway.release() }
-        try await self.waitForPatch(gateway)
         let parent: JSONValue = ["port": 19000, "bind": "lan"]
         if parentFirst {
             model.set(["gateway"], parent)
