@@ -119,6 +119,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'development/building' },
 						{ slug: 'development/mock-gateway' },
+						{ slug: 'development/linting' },
 						{ slug: 'development/contributing' },
 						{ slug: 'development/testflight' },
 						{ slug: 'development/localization' },

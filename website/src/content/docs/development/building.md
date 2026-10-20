@@ -195,11 +195,12 @@ Every pull request runs it in the **Launch CPU** step of `tests.yml`, against th
      - `PincerChecks --live-reconnect` (bootstrap races, overlapping reconnects and per-launch RPC counts) against its own mock
 
      Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Both `swift test` runs fail if any Swift Testing run they started exits without printing its final summary, so a test that stops the main run loop (for example with `NSApp.postEvent`) can't end the suite early and still pass. A test helper that crashes fails the run; it is never retried. A test whose fake parks a thread on a semaphore (so the code under test stays in flight) belongs in a suite marked `.parksCooperativeThread`: such tests take turns, because a few of them at once fill the small runners' cooperative thread pool, and then no `Task.sleep` wakes up and the run hangs. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
-5. **Swift build and checks** (Ubuntu aggregate): required check name for branch protection and TestFlight. It fails when either Swift shard fails.
-6. **iOS simulator tests (build)** (macOS): builds `PincerUITests-iOS` once and uploads `.build/xcode-ios` as an artifact.
-7. **iOS simulator tests (`hosted`/`lists`/`svg`)** (macOS): each shard downloads the shared products and runs only its suites with `test-without-building`.
-8. **iOS app UI tests** (macOS): Browser sheet XCUITest. Runs on `main` pushes and manual runs (not pull requests), so the release gate still exercises it before TestFlight.
-9. **iOS build** (macOS): release iOS app build. Runs on `main` pushes and manual runs.
+5. **Lint (jscpd, knip)** (Ubuntu) and **Lint (Periphery)** (macOS): the dead-code and duplication gates. See [Linting](../linting/).
+6. **Swift build and checks** (Ubuntu aggregate): required check name for branch protection and TestFlight. It fails when either Swift shard or either lint job fails.
+7. **iOS simulator tests (build)** (macOS): builds `PincerUITests-iOS` once and uploads `.build/xcode-ios` as an artifact.
+8. **iOS simulator tests (`hosted`/`lists`/`svg`)** (macOS): each shard downloads the shared products and runs only its suites with `test-without-building`.
+9. **iOS app UI tests** (macOS): Browser sheet XCUITest. Runs on `main` pushes and manual runs (not pull requests), so the release gate still exercises it before TestFlight.
+10. **iOS build** (macOS): release iOS app build. Runs on `main` pushes and manual runs.
 
 `.github/workflows/docs.yml` builds the website (`npm ci && npm run build` in `website/`) on pull requests and pushes to `main` that change it.
 

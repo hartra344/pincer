@@ -57,3 +57,7 @@ swift test                                               # PincerKit unit tests
 Live modes need a fresh mock each, because they change its state. Modes and environment variables are described in [Building](website/src/content/docs/development/building.md#self-checks).
 
 CI shards this script with `CHECKS_SHARD=unit` and `CHECKS_SHARD=checks`; locally the default (`all`) is unchanged.
+
+## Lint gates
+
+`scripts/lint.sh` runs the dead-code and duplication gates CI runs: Periphery for Swift, jscpd for copy-paste, and knip for `mock-gateway/` and `push-relay/`. Each fails only on findings beyond its baseline in `scripts/lint/`. Delete what's unused rather than baselining it; something used only from `Apps/` or iOS-only code gets a `// periphery:ignore - <reason>` comment. After removing duplication or dead code, run `scripts/lint.sh --update-baselines` so it stays gone. See [Linting](website/src/content/docs/development/linting.md).
