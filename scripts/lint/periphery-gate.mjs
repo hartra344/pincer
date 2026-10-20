@@ -111,7 +111,11 @@ const baselined = new Map(baseline.entries.map((e) => [key(e), e]));
 
 const failures = [];
 const matchedBaseline = new Set();
+// Same-named declarations of one kind in one file share a key; an entry's `count` (default 1) is
+// how many of them it covers, so another one still fails.
+const used = new Map();
 let retained = 0;
+let baselinedCount = 0;
 for (const r of results) {
   if (r.kind === 'var.parameter') {
     retained++;
@@ -122,18 +126,27 @@ for (const r of results) {
     retained++;
     continue;
   }
-  if (baselined.has(key(r))) {
+  const entry = baselined.get(key(r));
+  if (entry && (used.get(key(r)) ?? 0) < (entry.count ?? 1)) {
+    used.set(key(r), (used.get(key(r)) ?? 0) + 1);
     matchedBaseline.add(key(r));
+    baselinedCount++;
     continue;
   }
   failures.push(r);
 }
 
 if (update) {
-  const entries = [...baselined.values()].filter((e) => matchedBaseline.has(key(e)));
-  for (const r of failures) {
-    entries.push({ file: r.file, kind: r.kind, name: r.name, hint: r.hint, reason: 'TODO: why this must stay' });
+  const byKey = new Map();
+  for (const e of baselined.values()) {
+    if (matchedBaseline.has(key(e))) byKey.set(key(e), { ...e, count: used.get(key(e)) });
   }
+  for (const r of failures) {
+    const e = byKey.get(key(r)) ?? { file: r.file, kind: r.kind, name: r.name, hint: r.hint, reason: 'TODO: why this must stay', count: 0 };
+    e.count++;
+    byKey.set(key(r), e);
+  }
+  const entries = [...byKey.values()].map(({ count, ...e }) => (count > 1 ? { ...e, count } : e));
   entries.sort((a, b) => key(a).localeCompare(key(b)));
   writeFileSync(baselinePath, `${JSON.stringify({ entries }, null, 2)}\n`);
   console.log(`Wrote ${entries.length} baseline entries to ${relative(root, baselinePath)}. Fill in every reason.`);
@@ -143,7 +156,7 @@ if (update) {
 const stale = baseline.entries.filter((e) => !matchedBaseline.has(key(e)));
 console.log(
   `Periphery: ${results.length} results, ${retained} ignored (parameters, imports a skipped #if region may need), ` +
-    `${matchedBaseline.size} baselined, ${failures.length} new.`,
+    `${baselinedCount} baselined, ${failures.length} new.`,
 );
 if (stale.length) {
   console.log(`\nThese baseline entries no longer match anything; remove them from ${relative(root, baselinePath)}:`);

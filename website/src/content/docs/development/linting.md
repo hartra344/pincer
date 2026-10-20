@@ -34,7 +34,7 @@ scripts/lint.sh periphery --skip-build   # reuse the index store from the last b
   // periphery:ignore - called from Apps/iOS/IntentService.swift
   ```
 
-  or add it to `scripts/lint/periphery-baseline.json` with a `reason`. Matching ignores line numbers, so edits elsewhere in a file don't break it.
+  or add it to `scripts/lint/periphery-baseline.json` with a `reason`. Matching ignores line numbers, so edits elsewhere in a file don't break it; an entry with `count` covers that many same-named declarations in the file.
 - Unused function parameters aren't reported, and neither is an unused import in a file that has an iOS-only region.
 
 Configuration is in `.periphery.yml`. Public declarations count (most of PincerKit is `public`), `Codable` properties, `@objc` members and SwiftUI previews are kept.
