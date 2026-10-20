@@ -171,10 +171,7 @@ private func checkSeedsStored(profile: GatewayProfile, agentId: String) async {
 
 @MainActor
 func runDemoAvatars() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for avatars") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for avatars", reconnect: true)
     check(connected, "demo for avatars connected")
     guard connected else { return }
     defer { gateway.stop() }
@@ -271,9 +268,7 @@ func runDemoAvatars() async {
 func runLiveAvatars(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock avatars", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let connected = await waitFor("mock for avatars", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "mock for avatars", timeout: 25)
     check(connected, "mock for avatars connected")
     guard connected else { return }
     defer { gateway.stop() }

@@ -52,9 +52,7 @@ private func checkSeededLevels(_ settings: GatewaySettingsModel, label: String) 
 
 @MainActor
 func runDemoReactionLevel() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    let connected = await waitFor("demo for reaction level") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for reaction level")
     check(connected, "demo connected")
     defer { gateway.stop() }
     guard connected else { return }

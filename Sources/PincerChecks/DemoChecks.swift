@@ -17,10 +17,7 @@ func runDemo() async {
     setenv("PINCER_DEMO_LATER_APPROVAL_MS", "500", 1)
     let profile = GatewayProfile.demo()
     check(profile.isDemo && profile.authMode == .none, "demo profile")
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "demo connection", reconnect: true)
     check(connected, "demo connected and bootstrapped")
     guard connected else { return }
     _ = gateway.chat(for: "agent:main:dashboard:trip")

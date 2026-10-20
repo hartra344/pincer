@@ -8,9 +8,7 @@ import Foundation
 private func connect(_ name: String, url: String, token: String) async -> GatewayStore? {
     let profile = GatewayProfile(name: name, url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let connected = await waitFor(name, timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: name, timeout: 25)
     check(connected, "\(name) connected")
     return connected ? gateway : nil
 }

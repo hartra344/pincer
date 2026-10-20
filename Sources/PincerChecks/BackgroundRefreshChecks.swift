@@ -14,10 +14,8 @@ func runBackgroundRefreshLive(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock refresh", url: url, authMode: .token)
     profile.secret = token
     // The running app's own connection: it pairs the device and makes the new activity.
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
+    let (gateway, connected) = await startStore(profile, waiting: "refresh gateway", timeout: 25)
     defer { gateway.stop() }
-    let connected = await waitFor("refresh gateway", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "connected for background refresh")
     guard connected else { return }
 

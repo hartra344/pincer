@@ -134,10 +134,7 @@ private func checkForwardedWithOutbox(_ gateway: GatewayStore, _ chat: ChatStore
 
 @MainActor
 private func connectForwarded(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor(label, timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: label, timeout: 25, reconnect: true)
     check(connected, "\(label) connected")
     if !connected { gateway.stop() }
     return connected ? gateway : nil

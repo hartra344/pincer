@@ -383,9 +383,7 @@ func checkUsageLive(_ gateway: GatewayStore) async {
 func runLiveNoUsage(url: String, token: String) async {
     let profile = GatewayProfile(name: "No usage", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let connected = await waitFor("connection without usage", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "connection without usage", timeout: 25)
     check(connected, "connected to a gateway without usage")
     guard connected else { return }
     let usage = gateway.usage
