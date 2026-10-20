@@ -13453,6 +13453,16 @@
         }
       }
     },
+    "Reconnecting (%lld/%lld)…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecting (%lld/%lld)…"
+          }
+        }
+      }
+    },
     "Reconnecting in %llds (attempt %lld)": {
       "localizations": {
         "en": {
@@ -13469,16 +13479,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reconnecting to the Gateway starts over from its saved settings."
-          }
-        }
-      }
-    },
-    "Reconnecting (%lld/%lld)…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnecting (%lld/%lld)…"
           }
         }
       }
@@ -14429,16 +14429,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restarting needs Full Management access"
-          }
-        }
-      }
-    },
-    "Restarting needs Full Management access.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Restarting needs Full Management access."
           }
         }
       }
