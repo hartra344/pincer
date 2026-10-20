@@ -337,12 +337,7 @@ private func runOverlappingReconnects(url: String, token: String, control: MockC
 @MainActor
 private func runRequestCancellation(profile: GatewayProfile, control: MockControl) async {
     print("Request cancellation")
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     let up = await waitFor("cancellation connection", timeout: 25) { ready.value }
     guard up else { check(false, "cancellation connection"); return }

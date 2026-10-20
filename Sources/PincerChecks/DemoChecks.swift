@@ -494,12 +494,7 @@ func runDemo() async {
 /// The demo's `channels.pairing.*` replies use exactly the upstream keys (closed objects).
 @MainActor
 func checkDemoPairingShapes() async {
-    let connection = GatewayConnection(profile: .demo())
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(.demo())
     guard await waitFor("demo raw connection", timeout: 10, { ready.value }) else {
         check(false, "demo raw connection")
         return

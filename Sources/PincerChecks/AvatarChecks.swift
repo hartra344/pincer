@@ -102,12 +102,7 @@ func runAvatarSignalChecks() {}
 /// `agent.identity.get` over a raw connection: by id, by session key, the default, and an unknown agent.
 @MainActor
 func checkAgentIdentities(profile: GatewayProfile, agents: [AgentSummary], label: String) async {
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     guard await waitFor("\(label) raw connection for identities", timeout: 25, { ready.value }) else {
         check(false, "\(label) raw connection for identities")
@@ -158,12 +153,7 @@ private func checkRenameKeepsPet(_ gateway: GatewayStore, agentId: String, label
 /// The seed reached the Gateway's `pincer.avatars` map, read back over a raw connection.
 @MainActor
 private func checkSeedsStored(profile: GatewayProfile, agentId: String) async {
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     guard await waitFor("mock raw connection for prefs", timeout: 25, { ready.value }) else {
         check(false, "mock raw connection for prefs")
