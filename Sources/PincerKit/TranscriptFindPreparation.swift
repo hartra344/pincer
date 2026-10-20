@@ -17,7 +17,6 @@ package final class TranscriptFindPreparation {
     package init() {}
     #if DEBUG
     package var probe: TranscriptFindWorkerProbe?
-    package var activeTaskForChecks: Task<Void, Never>? { self.preparer.workerTask }
     #endif
     package func prepare(query: String, entries: [TranscriptEntry], options: TranscriptSearch.Options) async -> Result {
         #if DEBUG

@@ -393,24 +393,3 @@ private func checkDemoSessionDurationFormatting(running: SessionRow, failed: Ses
           && elapsed.map(SessionManager.formatDuration).map { !$0.isEmpty } == true,
           "actual connected Demo run durations retain their visible formatting")
 }
-
-/// Focused duration coverage without the session manager's unrelated destructive bulk checks.
-@MainActor
-func runDemoSessionDurationFormattingChecks() async {
-    let (defaults, suite) = scratchDefaults()
-    defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
-    defer { gateway.stop() }
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("session duration Demo", timeout: 25, {
-        gateway.state.isConnected && !gateway.sessions.isEmpty
-    }) else { check(false, "actual session duration Demo connects"); return }
-    let manager = gateway.sessionManager
-    await manager.load(filter: .all)
-    guard let running = manager.row("agent:coder:dashboard:refactor"),
-          let failed = manager.row("agent:coder:dashboard:ci-fix") else {
-        check(false, "actual session duration Demo retains its seeded runs"); return
-    }
-    checkDemoSessionDurationFormatting(running: running, failed: failed)
-}

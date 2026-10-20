@@ -132,7 +132,6 @@ private actor FakeScopedGateway {
     var global: [JSONValue]
     var owned: [String: [JSONValue]] = [:]
     var environments: [String: String?] = [:]
-    var closed = false
     private(set) var calls: [(method: String, params: JSONValue)] = []
 
     init(global: [JSONValue]) { self.global = global }

@@ -62,11 +62,6 @@ public enum TranscriptCache {
                 ?? (self.version < Self.currentVersion)
             self.forwardedSenderRefreshCompleted = false
         }
-
-        /// Whether a transcript of `committedCount` items is cut at `maxItems` when saved.
-        public static func isRetained(committedCount: Int) -> Bool {
-            committedCount > TranscriptCache.maxItems
-        }
     }
 
     /// Written next to each transcript so freshness checks don't decode the whole thing.
@@ -224,10 +219,6 @@ public enum TranscriptCache {
     /// (#563: v8 manifests were discarded, so every chat went back to the network after the v9 bump).
     /// A migration that changes items must end this range at its source version.
     static let manifestVersions: ClosedRange<Int> = 8...Snapshot.currentVersion
-
-    struct MigrationError: Error, CustomStringConvertible {
-        var description: String
-    }
 
     /// Decodes a transcript file, migrating an older one. Pure: never touches the disk.
     static func decode(_ data: Data) -> (snapshot: Snapshot?, outcome: LoadOutcome) {

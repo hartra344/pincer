@@ -11,7 +11,6 @@ private final class FirstRunFakeNetwork: @unchecked Sendable {
     private var _updates: [FirstRunSignInUpdate] = []
     private var _afterApproval: [FirstRunSignInUpdate] = []
     private var pending: AsyncStream<FirstRunSignInUpdate>.Continuation?
-    private var _signIns = 0
 
     private func locked<T>(_ body: () -> T) -> T {
         self.lock.lock()
@@ -23,8 +22,6 @@ private final class FirstRunFakeNetwork: @unchecked Sendable {
         get { self.locked { self._reachability } }
         set { self.locked { self._reachability = newValue } }
     }
-
-    var signIns: Int { self.locked { self._signIns } }
 
     func script(_ updates: [FirstRunSignInUpdate], thenOnApproval afterApproval: [FirstRunSignInUpdate] = []) {
         self.locked {
@@ -44,7 +41,6 @@ private final class FirstRunFakeNetwork: @unchecked Sendable {
             checkReachability: { _ in self.reachability },
             signIn: { _ in
                 let (updates, hold) = self.locked {
-                    self._signIns += 1
                     return (self._updates, !self._afterApproval.isEmpty)
                 }
                 return AsyncStream { continuation in

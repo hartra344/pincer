@@ -128,11 +128,6 @@ struct PremeasureKey: Hashable, Sendable {
     var source: String { self.textKey.source }
     var tone: TranscriptText.Tone { self.textKey.tone }
 
-    /// Rows with inline math never reach the worker, so their appearance never keys a premeasured body.
-    nonisolated init(source: String, tone: TranscriptText.Tone, styleGeneration: Int) {
-        self.init(source: source, tone: tone, styleGeneration: styleGeneration, dark: false)
-    }
-
     nonisolated init(source: String, tone: TranscriptText.Tone, styleGeneration: Int, dark: Bool) {
         self.textKey = TranscriptText.Key(source: source, tone: tone, dark: dark)
         self.styleGeneration = styleGeneration
@@ -370,9 +365,8 @@ struct PremeasureStats {
 /// messages in or out never shifts what is in flight.
 @MainActor
 final class TranscriptPremeasureDriver {
-    /// Rows waiting on the worker at once, and rows per hand-off.
+    /// Rows waiting on the worker at once.
     static let maxInFlight = 64
-    static let rowsPerJob = 16
     /// Row bodies retain their source strings, so both the number of rows and total source bytes
     /// stay bounded even when a transcript contains a few unusually large messages.
     static let memoRowLimit = TranscriptPremeasureBudget.rowLimit

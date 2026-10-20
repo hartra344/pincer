@@ -509,16 +509,6 @@ public final class ToolsInspectorModel: Identifiable {
     @ObservationIgnored package var searchProbe: ToolsInspectorSearchProbe?
     #endif
 
-    /// The exact existing query path used by the inspector's editable filter field.
-    public func searchFields(_ filter: ToolFilter, matching query: String) -> [InspectedToolGroup] {
-        #if DEBUG
-        let probe = self.searchProbe
-        return self.inspection?.filtered(filter, search: query, observe: { probe?.record(match: $0) }) ?? []
-        #else
-        return self.inspection?.filtered(filter, search: query) ?? []
-        #endif
-    }
-
     /// Exact off-main query preparation; stale/canceled requests return no groups.
     public func prepareSearchFields(_ filter: ToolFilter, matching query: String) async -> [InspectedToolGroup] {
         await self.prepareDisplaySearch(filter, matching: query, owner: UUID())?.groups ?? []

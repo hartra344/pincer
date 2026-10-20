@@ -438,20 +438,6 @@ private func runChatSubscriptionChecks(url: String, token: String, control: Mock
 }
 
 #if DEBUG
-/// Focused fresh-mock proof, independent of the unrelated disk-cache RPC-count prerequisite.
-@MainActor
-func runLiveHeldBootstrapTerminalProof(url: String, token: String) async {
-    let profile = GatewayProfile(name: "Held bootstrap control", url: url, authMode: .token)
-    profile.secret = token
-    let control = MockControl(profile: profile)
-    let ready = await control.start()
-    check(ready, "held bootstrap proof control connection is ready")
-    guard ready else { await control.stop(); return }
-    await runHeldBootstrapTerminalProof(url: url, token: token, control: control)
-    await runOldEpochTerminalProof(url: url, token: token, control: control)
-    await control.stop()
-}
-
 @MainActor
 private func runHeldBootstrapTerminalProof(url: String, token: String, control: MockControl) async {
     let gate = ReconnectTerminalGate()
@@ -484,54 +470,18 @@ private func runHeldBootstrapTerminalProof(url: String, token: String, control: 
     }
 }
 
-@MainActor
-private func runOldEpochTerminalProof(url: String, token: String, control: MockControl) async {
-    guard let gateway = await connectedStore(url: url, token: token) else {
-        check(false, "old-epoch proof initial bootstrap completes"); return
-    }
-    let gate = ReconnectTerminalGate()
-    let entered = Scripted(false)
-    defer { Task { await gate.release() }; gateway.stop() }
-    let previousEpoch = gateway.bootstrapProbeEpoch
-    gateway.beforeBootstrapReconciliation = { entered.value = true; await gate.hold() }
-    await control.call("resetStats")
-    await control.call("drop")
-    await withTaskCancellationHandler {
-        let admitted = await waitFor("new epoch reconciliation admission", timeout: 30) { entered.value }
-        check(admitted && gateway.bootstrapProbeEpoch > previousEpoch,
-              "real reconnect advances epoch and reaches new held background work")
-        guard admitted, let actualTask = gateway.bootstrapBackgroundTask else { await gate.release(); return }
-        let oldFinished = await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch)
-        check(!oldFinished, "old completed epoch cannot satisfy held new reconnect")
-        let canceled = Task { await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch) }
-        canceled.cancel()
-        let canceledResult = await canceled.value
-        check(!canceledResult, "canceled settling does not cancel or accept actual held background task")
-        await gate.release()
-        await actualTask.value
-        let done = await settleAfterReconnect(gateway, control: control, timeout: 4, afterEpoch: previousEpoch)
-        check(done, "new epoch actual task completion satisfies reconnect readiness")
-    } onCancel: { Task { await gate.release() } }
-}
-
 private actor ReconnectTerminalGate {
     private var entered = false
     private var open = false
     private var held: CheckedContinuation<Void, Never>?
-    private var arrival: CheckedContinuation<Void, Never>?
     func hold() async {
         self.entered = true
-        self.arrival?.resume(); self.arrival = nil
         if !self.open { await withCheckedContinuation { self.held = $0 } }
-    }
-    func waitForEntry() async {
-        if !self.entered, !self.open { await withCheckedContinuation { self.arrival = $0 } }
     }
     func isHeld() -> Bool { self.entered && !self.open }
     func release() {
         self.open = true
         self.held?.resume(); self.held = nil
-        self.arrival?.resume(); self.arrival = nil
     }
 }
 #endif

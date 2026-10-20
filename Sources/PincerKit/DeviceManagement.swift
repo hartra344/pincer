@@ -445,7 +445,6 @@ public final class DeviceManagementModel {
 
     public func isSelf(_ device: PairedDevice) -> Bool { !self.selfDeviceId.isEmpty && device.deviceId == self.selfDeviceId }
     public func isSelf(_ request: PendingDeviceRequest) -> Bool { !self.selfDeviceId.isEmpty && request.deviceId == self.selfDeviceId }
-    public func isSelf(_ node: GatewayNode) -> Bool { !self.selfDeviceId.isEmpty && node.nodeId == self.selfDeviceId }
 
     /// Devices waiting for approval, for the sidebar badge.
     public var pendingCount: Int {

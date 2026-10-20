@@ -264,12 +264,6 @@ public struct Outbox: Codable, Equatable, Sendable {
         return self.entries.first { $0.sessionKey == entry.sessionKey }?.id == id
     }
 
-    /// Whether a queued entry waits behind an earlier message of its chat.
-    public func isBlocked(id: String) -> Bool {
-        guard let entry = self.entry(id: id), entry.state == .queued else { return false }
-        return !self.isHead(id: id)
-    }
-
     public mutating func markSending(id: String) {
         guard let index = self.index(id) else { return }
         self.entries[index].state = .sending

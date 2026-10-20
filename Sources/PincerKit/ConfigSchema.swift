@@ -507,15 +507,6 @@ public struct ConfigSchema: Sendable {
         }
     }
 
-    /// Checks each field of the object at `path` against the draft value of that object.
-    public func validate(object value: JSONValue?, at path: [String]) -> [String: String] {
-        var problems: [String: String] = [:]
-        for field in self.fields(at: path, value: value) where field.kind != .object {
-            if let problem = field.validate(value?[field.key]) { problems[field.id] = problem }
-        }
-        return problems
-    }
-
     private func concreteBranch(_ node: JSONValue, value: JSONValue?) -> JSONValue {
         let branches = self.branches(node).filter { !self.types($0).elementsEqual(["null"]) }
         guard !branches.isEmpty, node["type"] == nil else { return node }

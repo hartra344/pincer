@@ -6,7 +6,6 @@ import SwiftUI
 /// search, toolbar and sheets around it.
 struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
-    @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
     @Environment(\.searchMessages) private var searchMessages
     @Environment(\.openChatWindow) private var openChatWindow

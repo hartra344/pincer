@@ -7,7 +7,6 @@ import SwiftUI
 /// when they ask (`exec.approvals.get` / `exec.approvals.set`). Its draft is separate from the config's.
 struct ExecPolicyPage: View {
     @Environment(GatewayStore.self) private var gateway
-    @Environment(SettingsNavigator.self) private var navigator
 
     private var model: ExecPolicyModel { self.gateway.execPolicy }
 

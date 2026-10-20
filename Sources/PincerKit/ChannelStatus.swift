@@ -262,8 +262,6 @@ public struct ChannelsStatusSnapshot: Hashable, Sendable {
     }
 }
 
-public typealias SetupChannelsSnapshot = ChannelsStatusSnapshot
-
 // MARK: Model
 
 /// Channel Status for one Gateway: every channel account's state from `channels.status` (operator.read),

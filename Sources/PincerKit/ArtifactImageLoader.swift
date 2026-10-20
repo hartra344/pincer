@@ -103,9 +103,6 @@ public final class ArtifactImageLoader {
         self.fetch(ref, sessionKey: sessionKey)
     }
 
-    /// Lookup that leaves the LRU order alone, for state checks that aren't display.
-    public func peek(_ ref: ImageRef) -> CGImage? { self.images[ref.cacheKey] }
-
     public func hasFailed(_ ref: ImageRef) -> Bool { self.failureRecords[ref.cacheKey] != nil }
 
     public func failure(_ ref: ImageRef) -> ImageLoadFailure? { self.failureRecords[ref.cacheKey]?.reason }

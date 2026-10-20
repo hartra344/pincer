@@ -134,7 +134,6 @@ public final class AttachmentThumbnailLoader {
     }
 
     var decodedBytes: Int { self.cache.totalBytes }
-    var cachedImageCount: Int { self.cache.count }
     var activeDecodeCount: Int { self.active == nil ? 0 : 1 }
     var pendingDecodeCount: Int { self.pending.count }
     var pendingDataBytes: Int { self.pendingBytes }
