@@ -44,5 +44,17 @@ struct SheetChromeTests {
         #expect(self.size(helped).width == 200 + 2 * Theme.Spacing.row)
         #expect(self.size(helped).height == 40 + Theme.Spacing.sm)
     }
+
+    @Test func bottomToastChromeMatchesTheInlineComposition() {
+        let content = Text(verbatim: "Saved").frame(width: 120, height: 20)
+        let inline = content
+            .padding(.horizontal, Theme.Spacing.xxl)
+            .padding(.vertical, Theme.Spacing.lg)
+            .glassSurface(in: Capsule())
+            .padding(.bottom, Theme.Spacing.section)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        #expect(self.size(content.bottomToastChrome()) == self.size(inline))
+        #expect(self.size(content.bottomToastChrome()).height == 20 + 2 * Theme.Spacing.lg + Theme.Spacing.section)
+    }
 }
 #endif

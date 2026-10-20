@@ -35,6 +35,15 @@ struct ChatCardChrome: ViewModifier {
 }
 
 extension View {
+    /// The bottom capsule toast chrome: glass capsule, lifted off the bottom edge, sliding in from it.
+    func bottomToastChrome() -> some View {
+        self.padding(.horizontal, Theme.Spacing.xxl)
+            .padding(.vertical, Theme.Spacing.lg)
+            .glassSurface(in: Capsule())
+            .padding(.bottom, Theme.Spacing.section)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
     func chatCardChrome(cornerRadius: CGFloat) -> some View {
         self.modifier(ChatCardChrome(cornerRadius: cornerRadius))
     }

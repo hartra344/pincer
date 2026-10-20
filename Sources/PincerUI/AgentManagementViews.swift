@@ -301,11 +301,7 @@ struct AgentPage: View {
                 Label(L("Agent saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.vertical, Theme.Spacing.lg)
-                    .glassSurface(in: Capsule())
-                    .padding(.bottom, Theme.Spacing.section)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .bottomToastChrome()
             }
         }
     }
@@ -924,11 +920,7 @@ struct AgentFileEditorPage: View {
                 Label(L("\(self.name) saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.vertical, Theme.Spacing.lg)
-                    .glassSurface(in: Capsule())
-                    .padding(.bottom, Theme.Spacing.section)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .bottomToastChrome()
             }
         }
     }

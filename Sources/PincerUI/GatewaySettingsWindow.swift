@@ -337,20 +337,12 @@ private struct GatewaySettingsRoot: View {
             Label(L("Command policy saved"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.callout)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .bottomToastChrome()
                 .onTapGesture { withAnimation { self.policyToast = nil } }
         } else if let toast = self.toast {
             SaveOutcomeLabel(outcome: toast.outcome)
                 .font(.callout)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .bottomToastChrome()
                 .onTapGesture { withAnimation { self.toast = nil } }
         }
     }

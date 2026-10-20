@@ -268,11 +268,7 @@ struct ChannelStatusNoticeView: View {
                 .foregroundStyle(self.notice.isError ? Color.red : Color.green)
                 .font(.callout)
         }
-        .padding(.horizontal, Theme.Spacing.xxl)
-        .padding(.vertical, Theme.Spacing.lg)
-        .glassSurface(in: Capsule())
-        .padding(.bottom, Theme.Spacing.section)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .bottomToastChrome()
         .onTapGesture { withAnimation { self.dismiss() } }
     }
 }
