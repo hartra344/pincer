@@ -134,14 +134,6 @@ public enum SharedContentLoader {
         return content
     }
 
-    public static func load(providers: [NSItemProvider], maxFileBytes: Int = maxFileBytes) async -> SharedContent {
-        var content = SharedContent()
-        for provider in providers {
-            await self.load(provider, into: &content, maxFileBytes: maxFileBytes)
-        }
-        return content
-    }
-
     private static func load(_ provider: NSItemProvider, into content: inout SharedContent, maxFileBytes: Int) async {
         let name = provider.suggestedName
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {

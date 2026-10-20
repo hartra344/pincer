@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 @Suite struct MCPServersModelInternalTests {
-    private func server(_ json: JSONValue) -> MCPServer { MCPServer(name: "s", json: json)! }
-
     @Test func switchingStdioToRemoteDropsStdioKeysInPatch() {
         let base: JSONValue = ["mcp": ["servers": ["s": ["command": "npx", "args": ["-y", "x"], "env": ["A": "1"], "cwd": "/tmp", "extra": true]]]]
         let original = MCPServers.servers(in: base)[0]

@@ -25,7 +25,6 @@ const AUTH_FAILURES = {
   device_token_mismatch: { code: 'AUTH_DEVICE_TOKEN_MISMATCH', message: 'unauthorized: device token mismatch (rotate/reissue device token)', next: 'update_auth_credentials' },
   rate_limited: { code: 'AUTH_RATE_LIMITED', message: 'unauthorized: too many failed authentication attempts (retry later)', next: 'wait_then_retry' },
 };
-export const AUTH_FAILURE_CODES = Object.fromEntries(Object.entries(AUTH_FAILURES).map(([reason, f]) => [reason, f.code]));
 export const RATE_LIMIT_RETRY_AFTER_MS = 60_000;
 
 /// Which failure (if any) a connect's `auth` gets. `mode` is the mock's gateway.auth.mode:

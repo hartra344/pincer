@@ -19,7 +19,6 @@ public final class ToolsInspectorSearchPreparation {
     #if DEBUG
     @ObservationIgnored package var probe: ToolsInspectorSearchProbe?
     @ObservationIgnored package var didPrepare: (@Sendable () async -> Void)?
-    package var workerTask: Task<Void, Never>? { preparer.workerTask }
     package var activeCount: Int { preparer.activeCount }
     package var pendingCount: Int { preparer.pendingCount }
     #endif

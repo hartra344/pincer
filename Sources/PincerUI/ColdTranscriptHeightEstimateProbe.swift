@@ -30,17 +30,5 @@ enum ColdTranscriptHeightEstimateProbe {
             records[rowID] = value
         }
     }
-    static func record(_ rowID: String, text: String, joined: Bool) {
-        self.records.withLock { records in
-            guard var value = records[rowID], value.operations < 256 else { return }
-            value.operations += 1
-            value.joinedSources += joined ? 1 : 0
-            if text.isContiguousUTF8,
-               let bytes = text.utf8.withContiguousStorageIfAvailable({ $0.count }) {
-                value.inputBytes += min(bytes, Int.max / 512)
-            }
-            records[rowID] = value
-        }
-    }
 }
 #endif

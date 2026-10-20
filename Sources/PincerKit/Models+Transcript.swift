@@ -384,14 +384,6 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         return self.outboxState == nil || self.outboxState == .sending
     }
 
-    /// A queued or failed message that hasn't gone out.
-    public var isUnsent: Bool {
-        switch self.outboxState {
-        case .queued?, .failed?: true
-        default: false
-        }
-    }
-
     /// A committed message that replies and reactions can point at.
     public var isReplyable: Bool {
         guard !self.isPending, let transcriptId, !transcriptId.hasPrefix(Self.pendingInputPrefix) else { return false }

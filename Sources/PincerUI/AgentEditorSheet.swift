@@ -222,7 +222,6 @@ private struct AgentDeleteConfirmation: ViewModifier {
     let onDeleted: () -> Void
     @Environment(GatewayStore.self) private var gateway
     @State private var error: String?
-    @State private var deleting = false
 
     func body(content: Content) -> some View {
         let target = self.agent

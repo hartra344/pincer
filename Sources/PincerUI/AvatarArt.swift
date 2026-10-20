@@ -551,8 +551,6 @@ private enum PixelArt {
 // MARK: - Plush
 
 enum PlushArt {
-    typealias P = AvatarArt.P
-
     static func draw(_ spec: AvatarArt.Spec, style: AvatarStyle, pose: AvatarPose, colors: AvatarArt.Colors,
                      in context: CGContext)
     {

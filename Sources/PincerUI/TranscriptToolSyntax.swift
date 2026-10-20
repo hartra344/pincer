@@ -232,8 +232,6 @@ struct ToolHighlights {
     /// Ranges in `ToolCallPresentation.Output.text`.
     let output: [ToolSyntax.Token]
 
-    static let none = ToolHighlights(arguments: [], output: [])
-
     static func make(_ presentation: ToolCallPresentation) -> ToolHighlights {
         var arguments: [ToolSyntax.Token] = []
         var offset = 0

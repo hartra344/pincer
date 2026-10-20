@@ -83,7 +83,6 @@ actor DemoGateway {
     var setup = DemoSetupState()
     /// Channels stopped or logged out from Channel Status (`DemoGateway+Channels.swift`).
     var channelLifecycle = DemoChannelsState()
-    var agentIds: [String] { self.agents.compactMap { $0["id"]?.text } }
     func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
     var execApprovalsExists = true
     /// Agent workspace files by workspace path (`agents.files.*`).

@@ -43,8 +43,6 @@ public final class BrowserPagePreviews {
     @ObservationIgnored private var epoch = 0
     #if DEBUG
     @ObservationIgnored package private(set) var requestCount = 0
-    package var cacheBytes: Int { self.totalBytes }
-    package var cacheCount: Int { self.entries.count }
     #endif
 
     public init() {}

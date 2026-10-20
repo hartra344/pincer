@@ -228,8 +228,6 @@ final class QuickCaptureController: NSObject, NSWindowDelegate {
 
     // MARK: Panel
 
-    var isShowing: Bool { self.panel?.isVisible == true }
-
     /// The hotkey: opens the panel, focuses it if it lost focus, or hides it.
     func toggle() {
         if let panel, panel.isVisible {

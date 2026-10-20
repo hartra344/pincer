@@ -84,9 +84,6 @@ public final class ChannelQRLoginController {
     }
     #endif
 
-    /// Any login showing a QR or starting.
-    public var hasRunning: Bool { self.logins.values.contains(where: \.isRunning) }
-
     /// `web.login.start` then `web.login.wait` (refreshing the QR when the provider rotates it)
     /// until connected, failed or cancelled.
     public func start(channel: String, accountId: String?, force: Bool = false) {
