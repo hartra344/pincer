@@ -130,6 +130,28 @@ private actor BookmarkPreparationGate {
     }
 }
 
+/// A `BookmarkStore` whose preview queue holds every preparation at `gate` until released.
+private struct GatedBookmarkRig {
+    let scratch = ScratchDefaults()
+    let gate = BookmarkPreparationGate()
+    let queue: BookmarkPreviewPreparationQueue
+    let store: BookmarkStore
+
+    @MainActor
+    init() {
+        let gate = self.gate
+        self.queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
+        self.store = BookmarkStore(gatewayId: UUID(), defaults: self.scratch.defaults)
+        self.store.previewPreparationQueue = self.queue
+    }
+
+    func tearDown() {
+        let gate = self.gate
+        Task { await gate.releaseAll() }
+        self.scratch.remove()
+    }
+}
+
 extension BookmarkPreviewPreparationTests {
     @Test(.timeLimit(.minutes(2))) func cancellationUnwindsGateAndQueueWaiters() async {
         let absentGate = BookmarkPreparationGate()
@@ -138,13 +160,9 @@ extension BookmarkPreviewPreparationTests {
         await arrival.value
         await absentGate.releaseAll()
 
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, queue, store) = (rig.gate, rig.queue, rig.store)
         #expect(store.toggle(ChatItem(id: "cancel", role: .assistant, blocks: [.text("Held")]), sessionKey: "main"))
         await gate.waitForEntered(1)
         let drain = Task { await store.waitForPreviewPreparation() }
@@ -157,13 +175,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func pendingRemovalReleasesBytesAndActiveRemovalCannotResurrect() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, queue, store) = (rig.gate, rig.queue, rig.store)
         let active = ChatItem(id: "active", role: .assistant, blocks: [.text("Active preview")])
         let pending = ChatItem(id: "pending", role: .assistant, blocks: [.text("Pending preview")])
         #expect(store.toggle(active, sessionKey: "main"))
@@ -181,13 +195,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func retoggleSameIdentityPublishesOnlyTheLatestPreview() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, store) = (rig.gate, rig.store)
         let old = ChatItem(id: "same", role: .assistant, blocks: [.text("Old text")])
         let new = ChatItem(id: "same", role: .user, blocks: [.text("New text")])
         #expect(store.toggle(old, sessionKey: "main"))
@@ -203,13 +213,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func authoritativeSyncAndConfirmedDeletionInvalidateInFlightPreparation() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, store) = (rig.gate, rig.store)
         #expect(store.toggle(ChatItem(id: "sync", role: .assistant, blocks: [.text("Stale local text")]), sessionKey: "main"))
         await gate.waitForEntered(1)
         let local = store.bookmarks.first!
@@ -229,13 +235,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func matchingSyncedPlaceholderPreservesPendingLocalPreview() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, store) = (rig.gate, rig.store)
         #expect(store.toggle(ChatItem(id: "equal", role: .assistant, blocks: [.text("Prepared after self echo")]), sessionKey: "main"))
         await gate.waitForEntered(1)
         let local = store.bookmarks.first!
@@ -250,18 +252,14 @@ extension BookmarkPreviewPreparationTests {
 
     @Test(.timeLimit(.minutes(2)), arguments: ["different", "same", "owned"])
     func preparedDropNoticeRespectsItsOperationOwnership(_ laterNotice: String) async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, store) = (rig.gate, rig.store)
         let gateway = GatewayStore(profile: GatewayProfile(id: UUID(), name: "Notice test", url: "ws://127.0.0.1:1", authMode: .none),
-                                   defaults: scratch.defaults, identity: Fixtures.identity())
+                                   defaults: rig.scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
         defer { gateway.stop() }
         let chat = ChatStore(sessionKey: "main", agentId: nil, gateway: gateway, headless: true)
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
         let messageID = "notice-message"
         let id = Bookmark.id(sessionKey: "main", messageId: messageID)
         let shard = Bookmark.shard(ofKey: id)
@@ -344,13 +342,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func remoteRemovalCannotBeResurrectedByHeldWorker() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, store) = (rig.gate, rig.store)
         #expect(store.toggle(ChatItem(id: "removed", role: .assistant, blocks: [.text("Old local preview")]), sessionKey: "main"))
         await gate.waitForEntered(1)
         let id = store.bookmarks.first!.id
@@ -362,13 +356,9 @@ extension BookmarkPreviewPreparationTests {
     }
 
     @Test(.timeLimit(.minutes(2))) func admissionAndQueueBudgetsKeepFallbackStarsImmediate() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let gate = BookmarkPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let queue = BookmarkPreviewPreparationQueue(beforePrepare: { await gate.arriveAndWait($0) })
-        let store = BookmarkStore(gatewayId: UUID(), defaults: scratch.defaults)
-        store.previewPreparationQueue = queue
+        let rig = GatedBookmarkRig()
+        defer { rig.tearDown() }
+        let (gate, queue, store) = (rig.gate, rig.queue, rig.store)
         #expect(store.toggle(ChatItem(id: "active", role: .assistant, blocks: [.text("Active")]), sessionKey: "main"))
         await gate.waitForEntered(1)
         for number in 0..<40 {
