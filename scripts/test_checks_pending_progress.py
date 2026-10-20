@@ -24,8 +24,12 @@ name = Path(sys.argv[0]).name
 if name == "swift":
     if "--show-bin-path" in sys.argv:
         print(root / "bin"); sys.exit(0)
+    if "test" in sys.argv:
+        with open(root / "swift-test-calls", "a") as calls: calls.write("x\n")
     print("◇ Test run started.", flush=True)
-    if "--parallel" in sys.argv:
+    if "--parallel" in sys.argv and "CHECKS_FIXTURE_NOGATE" in os.environ:
+        pass
+    elif "--parallel" in sys.argv:
         (root / "unit-admitted").touch()
         print("◇ Test heldUnitFixture() started.", flush=True)
         print("PRIVATE_FIXTURE_LOG_CONTENT", flush=True)
@@ -87,6 +91,7 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
         env = dict(os.environ, PATH=str(root / "fake") + os.pathsep + os.environ["PATH"],
                    CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "", CHECKS_LOG_DIR=str(root / "logs"),
                    CHECKS_PORT_BASE="29801", CHECKS_PROGRESS_INTERVAL="0.1")
+        env.pop("CHECKS_SHARD", None)  # a CI shard's own setting must not narrow the runner under test
         if fail_lane: env["CHECKS_FIXTURE_FAILURE"] = "--demo-extras"
         # The runner's own pipe, so the fixture knows which stdout the progress helper must not share:
         # Node makes a pipe non-blocking for every writer, and the runner's output then fails with EAGAIN.
@@ -197,6 +202,69 @@ def execute(require_progress, fail_lane, require_identity=False, interrupt=False
                 except ProcessLookupError: pass
 
 
+ALL_LANES = ["unit-tests", "self-checks", "demo-core", "demo-extras", "live-core", "live-extras", "live-no-usage",
+             "live-no-reply-to", "live-reconnect", "live-no-session-reactions", "perf-smoke", "perf-tests"]
+UNIT_LANES = ["unit-tests", "perf-tests"]
+CHECKS_LANES = [lane for lane in ALL_LANES if lane not in UNIT_LANES]
+
+
+def execute_shard(shard, lean=False):
+    """Runs the real script with CHECKS_SHARD; returns (exit code, output, lanes, mock count, swift test calls)."""
+    source = Path(__file__).resolve().with_name("run-checks.sh")
+    with tempfile.TemporaryDirectory(prefix="pincer-checks-shard-") as temporary:
+        root = Path(temporary)
+        (root / "scripts").mkdir()
+        shutil.copyfile(source, root / "scripts" / "run-checks.sh")
+        helper = source.with_name("checks-pending-progress.mjs")
+        if helper.exists(): shutil.copyfile(helper, root / "scripts" / helper.name)
+        for directory in ("bin", "fake", "mocks", "completed", "logs"):
+            (root / directory).mkdir()
+        if not lean:
+            (root / "mock-gateway" / "node_modules").mkdir(parents=True)
+        for name in ("swift", "node", "nc") + (() if lean else ("PincerChecks",)):
+            command = root / ("bin" if name == "PincerChecks" else "fake") / name
+            command.write_text(FAKE); command.chmod(0o755)
+        env = dict(os.environ, PATH=str(root / "fake") + os.pathsep + os.environ["PATH"],
+                   CHECKS_FIXTURE_ROOT=str(root), CHECKS_FIXTURE_REAL_NODE=shutil.which("node") or "",
+                   CHECKS_LOG_DIR=str(root / "logs"), CHECKS_PORT_BASE="29901", CHECKS_PROGRESS_INTERVAL="0.1",
+                   CHECKS_FIXTURE_NOGATE="1")
+        if shard is None: env.pop("CHECKS_SHARD", None)
+        else: env["CHECKS_SHARD"] = shard
+        done = subprocess.run(["/bin/bash", str(root / "scripts" / "run-checks.sh")], env=env, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+        text = done.stdout.decode("utf-8", errors="replace")
+        lines = text.splitlines()
+        lanes = []
+        if "Lane               Result  Time   Last line" in lines:
+            for line in lines[lines.index("Lane               Result  Time   Last line") + 1:]:
+                if line.startswith("Logs:"): break
+                if line.split(): lanes.append(line.split()[0])
+        calls = root / "swift-test-calls"
+        return done.returncode, text, lanes, len(list((root / "mocks").glob("*.pid"))), len(calls.read_text().split()) if calls.exists() else 0
+
+
+def shard_controls():
+    results = {}
+    code, text, lanes, mocks, calls = execute_shard("unit", lean=True)
+    results["unitShardRunsExactlyUnitLanes"] = code == 0 and lanes == UNIT_LANES
+    results["unitShardStartsNoMock"] = mocks == 0 and calls == 2
+    code, text, lanes, mocks, calls = execute_shard("checks")
+    results["checksShardRunsExactlyCheckLanes"] = code == 0 and lanes == CHECKS_LANES
+    results["checksShardNeverRunsSwiftTest"] = calls == 0 and mocks == 6
+    code, text, lanes, mocks, calls = execute_shard("bogus")
+    results["bogusShardRejected"] = code != 0 and "CHECKS_SHARD must be all, unit or checks, not bogus" in text and not lanes and mocks == 0 and calls == 0
+    code, text, lanes, mocks, calls = execute_shard(None)
+    results["defaultShardRunsAllLanes"] = code == 0 and lanes == ALL_LANES and calls == 2 and mocks == 6
+    code, text, lanes, mocks, calls = execute_shard("all")
+    results["explicitAllMatchesDefault"] = code == 0 and lanes == ALL_LANES
+    print(json.dumps(results, sort_keys=True))
+    failed = [key for key, ok in results.items() if not ok]
+    if failed:
+        print("shard fixture failed: " + ", ".join(failed), file=sys.stderr)
+        return 1
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--completed-control", action="store_true")
@@ -204,8 +272,11 @@ def main():
     parser.add_argument("--require-safe-identity", action="store_true")
     parser.add_argument("--interrupt-control", action="store_true")
     parser.add_argument("--stale-completion-control", action="store_true")
+    parser.add_argument("--shard-controls", action="store_true")
     args = parser.parse_args()
-    return execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control)
+    if args.shard_controls: return shard_controls()
+    status = execute(not (args.completed_control or args.failed_lane_control), args.failed_lane_control, args.require_safe_identity, args.interrupt_control, args.stale_completion_control)
+    return status or (shard_controls() if len(sys.argv) == 1 else 0)
 
 
 if __name__ == "__main__":

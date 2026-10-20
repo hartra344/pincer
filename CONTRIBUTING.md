@@ -55,3 +55,5 @@ swift test                                               # PincerKit unit tests
 ```
 
 Live modes need a fresh mock each, because they change its state. Modes and environment variables are described in [Building](website/src/content/docs/development/building.md#self-checks).
+
+CI shards this script with `CHECKS_SHARD=unit` and `CHECKS_SHARD=checks`; locally the default (`all`) is unchanged.

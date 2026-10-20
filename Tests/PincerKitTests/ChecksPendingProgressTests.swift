@@ -23,6 +23,10 @@ struct ChecksPendingProgressTests {
         let result = try await execute([])
         #expect(result.0 == 0, "Actual run-checks.sh must expose bounded pending metadata before releasing the held unit lane: \(result.1)")
     }
+    @Test func shardsRunTheirOwnLanesOnly() async throws {
+        let result = try await execute(["--shard-controls"])
+        #expect(result.0 == 0, "CHECKS_SHARD unit/checks/bogus/default run exactly their lanes: \(result.1)")
+    }
     @Test func pendingUnitProgressContainsOnlyASafeTestIdentifier() async throws {
         let result = try await execute(["--require-safe-identity"])
         #expect(result.0 == 0, "Held unit test identity is visible without publishing its private log payload: \(result.1)")
