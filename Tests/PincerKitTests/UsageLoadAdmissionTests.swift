@@ -2,36 +2,6 @@ import Foundation
 import Testing
 @testable import PincerKit
 
-@MainActor private final class UsageAdmissionGate {
-    private var entered = false
-    private var released = false
-    private var entry: CheckedContinuation<Void, Never>?
-    private var delivery: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                entry?.resume(); entry = nil
-                if released || Task.isCancelled { continuation.resume() }
-                else { delivery = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func waitForEntry() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if entered || Task.isCancelled { continuation.resume() } else { entry = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-    func release() {
-        released = true
-        entry?.resume(); entry = nil
-        delivery?.resume(); delivery = nil
-    }
-}
-
 @MainActor @Suite(.timeLimit(.minutes(2)))
 struct UsageLoadAdmissionTests {
     private static func response(_ name: String) -> JSONValue {
@@ -40,7 +10,7 @@ struct UsageLoadAdmissionTests {
     }
 
     @Test func canceledCallerCannotDisplaceCurrentStatusRead() async throws {
-        let gate = UsageAdmissionGate()
+        let gate = AdmissionTestGate()
         let expected = Self.response("Current")
         var requests = 0
         let model = UsageModel { method, params in
@@ -63,7 +33,7 @@ struct UsageLoadAdmissionTests {
     }
 
     @Test func ordinaryNewerStatusReadWins() async throws {
-        let gate = UsageAdmissionGate()
+        let gate = AdmissionTestGate()
         var requests = 0
         let model = UsageModel { _, _ in
             requests += 1
@@ -88,7 +58,7 @@ struct UsageLoadAdmissionTests {
     }
 
     @Test func independentCostReadDoesNotDisplaceStatus() async throws {
-        let gate = UsageAdmissionGate()
+        let gate = AdmissionTestGate()
         let expected = Self.response("Current")
         let model = UsageModel { method, _ in
             if method == "usage.status" { await gate.hold(); return expected }
@@ -106,7 +76,7 @@ struct UsageLoadAdmissionTests {
 
     @Test(arguments: [false, true])
     func canceledAdmittedReadCannotPublishLateResult(fails: Bool) async throws {
-        let gate = UsageAdmissionGate()
+        let gate = AdmissionTestGate()
         var requests = 0
         let expected = Self.response("Retained")
         let model = UsageModel { _, _ in
@@ -126,7 +96,7 @@ struct UsageLoadAdmissionTests {
     }
 
     @Test func canceledOldCleanupCannotEraseNewerRunningOwner() async throws {
-        let oldGate = UsageAdmissionGate(), newGate = UsageAdmissionGate()
+        let oldGate = AdmissionTestGate(), newGate = AdmissionTestGate()
         var requests = 0
         let model = UsageModel { _, _ in
             requests += 1

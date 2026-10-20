@@ -2,36 +2,6 @@ import Foundation
 import Testing
 @testable import PincerKit
 
-@MainActor private final class SkillsLoadGate {
-    private var entered = false
-    private var released = false
-    private var entry: CheckedContinuation<Void, Never>?
-    private var delivery: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                entry?.resume(); entry = nil
-                if released || Task.isCancelled { continuation.resume() }
-                else { delivery = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func waitForEntry() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if entered || Task.isCancelled { continuation.resume() } else { entry = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-    func release() {
-        released = true
-        entry?.resume(); entry = nil
-        delivery?.resume(); delivery = nil
-    }
-}
-
 @MainActor @Suite(.timeLimit(.minutes(2)))
 struct SkillsLoadAdmissionTests {
     private static func report(_ agent: String) -> JSONValue {
@@ -39,7 +9,7 @@ struct SkillsLoadAdmissionTests {
     }
 
     @Test func canceledAgentLoadCannotDisplaceCurrentReportOrFeedback() async throws {
-        let gate = SkillsLoadGate()
+        let gate = AdmissionTestGate()
         var hold = false, requests = 0
         let model = SkillsModel(request: { method, params in
             if method == Skills.installMethod {
@@ -73,7 +43,7 @@ struct SkillsLoadAdmissionTests {
     }
 
     @Test func ordinaryNewerAgentLoadWins() async throws {
-        let gate = SkillsLoadGate()
+        let gate = AdmissionTestGate()
         let model = SkillsModel(request: { _, params in
             let agent = params["agentId"]?.text ?? "main"
             if agent == "main" { await gate.hold() }
@@ -96,7 +66,7 @@ struct SkillsLoadAdmissionTests {
 
     @Test(arguments: [false, true])
     func canceledAdmittedLoadCannotPublishLateResult(fails: Bool) async throws {
-        let gate = SkillsLoadGate()
+        let gate = AdmissionTestGate()
         var calls = 0
         let model = SkillsModel(request: { _, _ in
             calls += 1
@@ -115,7 +85,7 @@ struct SkillsLoadAdmissionTests {
     }
 
     @Test func canceledOlderLoadCannotIdleNewerOwner() async throws {
-        let oldGate = SkillsLoadGate(), newGate = SkillsLoadGate()
+        let oldGate = AdmissionTestGate(), newGate = AdmissionTestGate()
         let model = SkillsModel(request: { _, params in
             let agent = params["agentId"]?.text ?? "main"
             if agent == "main" { await oldGate.hold() } else { await newGate.hold() }
