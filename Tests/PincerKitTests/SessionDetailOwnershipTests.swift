@@ -99,26 +99,11 @@ struct SessionDetailOwnershipTests {
         #expect(model.details[Self.key]?.raw == Self.row && model.detailErrors[Self.key] == nil)
         #expect(server.describeCalls == 1 && server.deleteCalls == 0)
     }
-    @MainActor private final class Reads {
-        var entered = 0
-        var released: Set<Int> = []
-        var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
-        var failures: Set<Int> = []
-        func release(_ index: Int) { released.insert(index); waiters.removeValue(forKey: index)?.resume() }
-        func releaseAll() { release(1); release(2) }
+    @MainActor private final class Reads: RoundGate {
         func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
             if method == SessionManager.previewMethod { return ["previews": []] }
             #expect(method == SessionManager.describeMethod)
-            entered += 1
-            let index = entered
-            await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    if released.contains(index) || Task.isCancelled { continuation.resume() }
-                    else { waiters[index] = continuation }
-                }
-            } onCancel: { Task { @MainActor in self.release(index) } }
-            try Task.checkCancellation()
-            if failures.contains(index) { throw GatewayError.closed("describe round \(index) failed") }
+            let index = try await hold { GatewayError.closed("describe round \($0) failed") }
             return ["session": index == 1 ? SessionDetailOwnershipTests.row
                 : ["key": .string(SessionDetailOwnershipTests.key), "title": "Fresh detail"]]
         }
