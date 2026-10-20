@@ -2,21 +2,6 @@
 import Foundation
 @testable import PincerKit
 
-private actor PaletteCreationDelivery {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold(_ method: String) async {
-        guard method == "sessions.create" else { return }
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { await self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
-
 @MainActor private func checkPaletteCreation(change: Int, palette: Bool) async {
     let (defaults, suite) = scratchDefaults()
     GatewayProfileStore.save([.demo(), .demo()], to: defaults)
@@ -37,7 +22,7 @@ private actor PaletteCreationDelivery {
     app.open(Notifier.Target(gatewayId: gateway.id, sessionKey: first))
     if change == 4 { app.open(Notifier.Target(gatewayId: other.id, sessionKey: otherKey)) }
     let before = Set(gateway.sessions.keys)
-    let delivery = PaletteCreationDelivery()
+    let delivery = MethodDeliveryGate(method: "sessions.create")
     await gateway.connection.setDemoResponseDelivery { await delivery.hold($0) }
     let action = Task {
         if palette { return await app.createPaletteChat(gateway: gateway, agentId: "research") }

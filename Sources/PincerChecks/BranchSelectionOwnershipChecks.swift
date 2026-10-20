@@ -2,20 +2,6 @@
 import Foundation
 @testable import PincerKit
 
-private actor BranchDelivery {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold(_ method: String) async {
-        guard method == "sessions.fork" else { return }
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { await self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
 @MainActor private func checkActualBranchSelection(change: Int) async {
     let (defaults, suite) = scratchDefaults()
     let gateway = GatewayStore(profile: .demo(), defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
@@ -39,7 +25,7 @@ private actor BranchDelivery {
     check(true, "actual committed user has editor text and can branch")
     gateway.selectedKey = sourceKey
     let before = Set(gateway.sessions.keys)
-    let delivery = BranchDelivery()
+    let delivery = MethodDeliveryGate(method: "sessions.fork")
     await gateway.connection.setDemoResponseDelivery { await delivery.hold($0) }
     let action = Task { await chat.branch(from: user.id) }
     let deadline = ContinuousClock.now.advanced(by: .seconds(15))
