@@ -10,7 +10,6 @@ import UIKit
 extension TranscriptLayoutBuilder {
     static let quoteInset: CGFloat = 10
     static let quotePadding: CGFloat = 6
-    static let quoteSpinner: CGFloat = 18
 
     func replyQuote(_ quote: ReplyQuote, isLocating: Bool, width: CGFloat) -> TranscriptPart.ReplyQuote {
         let sender: String? = switch quote.sender {

@@ -529,13 +529,6 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
     @ObservationIgnored var nextEventTap = 0
 
-    public func update(profile: GatewayProfile) {
-        self.profile = profile
-        self.images.media.reset()
-        self.pagePreviews.reset()
-        self.browserPanel.clearAllThumbnails()
-    }
-
     public var serverNameOverrides: [String: String] {
         didSet { self.defaults.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
     }
