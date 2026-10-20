@@ -63,9 +63,7 @@ struct ImagePreview: View {
                 self.vectorImage = image
             }
             .navigationTitle(self.ref.alt ?? "Image")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L("Done")) { self.dismiss() }

@@ -229,9 +229,7 @@ struct MCPPasteCodeSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(L("Paste Code or URL"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -275,9 +273,7 @@ struct MCPSimulatedConsentSheet: View {
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle(L("Sign In"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel"), action: self.cancel) }
             }

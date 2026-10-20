@@ -5,7 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apnsHeaders, createProviderToken, createRelay, loadEnvFile, openId, sealId } from './relay.mjs';
+import { apnsHeaders, base64urlJSON, createProviderToken, createRelay, idKey, loadEnvFile, openId, sealId } from './relay.mjs';
 
 const SECRET = 'test-secret-that-is-at-least-32-characters';
 const TOKEN = 'ab'.repeat(32);
@@ -196,4 +196,18 @@ test('.env files: comments, quotes and empty values', () => {
   assert.deepEqual(loadEnvFile(file), { RELAY_SECRET: 'abc=def', APNS_KEY_ID: 'KEY 1', PORT: '9000' });
   assert.deepEqual(loadEnvFile(path.join(path.dirname(file), 'missing')), {});
   fs.rmSync(path.dirname(file), { recursive: true });
+});
+
+test('idKey is the SHA-256 of the secret and seals ids openId can read', () => {
+  assert.deepEqual(idKey(SECRET), crypto.createHash('sha256').update(SECRET).digest());
+  assert.equal(idKey(SECRET).length, 32);
+  assert.deepEqual(openId(SECRET, sealId(SECRET, TOKEN, 'sandbox', 'chat.pincer')), {
+    token: TOKEN, environment: 'sandbox', topic: 'chat.pincer',
+  });
+});
+
+test('base64urlJSON encodes JSON as base64url', () => {
+  const value = { alg: 'ES256', kid: 'K/+=' };
+  assert.equal(base64urlJSON(value), Buffer.from(JSON.stringify(value)).toString('base64url'));
+  assert.deepEqual(JSON.parse(Buffer.from(base64urlJSON(value), 'base64url').toString('utf8')), value);
 });

@@ -41,9 +41,7 @@ struct PairingRequestsPage: View {
                     }
                 }
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(model.loadState.isRunning)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: model.loadState.isRunning) { await model.refresh() }
                 }
             }
         }

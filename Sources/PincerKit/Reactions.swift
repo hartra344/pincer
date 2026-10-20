@@ -539,17 +539,10 @@ public enum Reactions {
 
     /// Agent reactions (transcript order) then yours (pref order), one group per emoji.
     public static func groups(agent: [String], agentName: String, mine: [String]) -> [ReactionGroup] {
-        var groups: [ReactionGroup] = []
-        func add(_ emoji: String, _ actor: ReactionActor) {
-            if let index = groups.firstIndex(where: { $0.emoji == emoji }) {
-                if !groups[index].actors.contains(actor) { groups[index].actors.append(actor) }
-            } else {
-                groups.append(ReactionGroup(emoji: emoji, actors: [actor]))
-            }
-        }
-        for emoji in agent { add(emoji, .agent(agentName)) }
-        for emoji in mine { add(emoji, .you) }
-        return groups
+        var groups = ReactionGroupBuilder()
+        for emoji in agent { groups.add(emoji, .agent(agentName)) }
+        for emoji in mine { groups.add(emoji, .you) }
+        return groups.groups
     }
 
     // MARK: Gateway reactions (session.reactions.*)
@@ -559,21 +552,14 @@ public enum Reactions {
     public static func groups(agent: [String], agentName: String, shared: [ReactionSummary],
                               selfId: String?) -> [ReactionGroup]
     {
-        var groups: [ReactionGroup] = []
-        func add(_ emoji: String, _ actor: ReactionActor) {
-            if let index = groups.firstIndex(where: { $0.emoji == emoji }) {
-                if !groups[index].actors.contains(actor) { groups[index].actors.append(actor) }
-            } else {
-                groups.append(ReactionGroup(emoji: emoji, actors: [actor]))
-            }
-        }
-        for emoji in agent { add(emoji, .agent(agentName)) }
+        var groups = ReactionGroupBuilder()
+        for emoji in agent { groups.add(emoji, .agent(agentName)) }
         for summary in shared {
             for identity in summary.identities {
-                add(summary.emoji, actor(for: identity, selfId: selfId))
+                groups.add(summary.emoji, actor(for: identity, selfId: selfId))
             }
         }
-        return groups
+        return groups.groups
     }
 
     static func actor(for identity: ReactionIdentity, selfId: String?) -> ReactionActor {
@@ -862,5 +848,18 @@ public struct ReactionStore: @unchecked Sendable {
         for name in self.bucketNames { self.defaults.removeObject(forKey: self.bucketKey(name)) }
         self.defaults.removeObject(forKey: self.indexKey)
         self.defaults.removeObject(forKey: self.legacyKey)
+    }
+}
+
+/// Collects reactions into one `ReactionGroup` per emoji, in first-seen order, each actor once.
+struct ReactionGroupBuilder {
+    private(set) var groups: [ReactionGroup] = []
+
+    mutating func add(_ emoji: String, _ actor: ReactionActor) {
+        if let index = self.groups.firstIndex(where: { $0.emoji == emoji }) {
+            if !self.groups[index].actors.contains(actor) { self.groups[index].actors.append(actor) }
+        } else {
+            self.groups.append(ReactionGroup(emoji: emoji, actors: [actor]))
+        }
     }
 }

@@ -218,8 +218,7 @@ struct MCPServersPage: View {
                 }
             }
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                    .disabled(!connected || model.loadState.isRunning)
+                RefreshButton(isDisabled: !connected || model.loadState.isRunning, showsHelp: false) { await model.load() }
             }
         }
         .sheet(item: self.$editor) { target in

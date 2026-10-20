@@ -158,8 +158,7 @@ private struct AutomationsRoot: View {
         .refreshable { await model.load() }
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                    .disabled(!self.gateway.state.isConnected || model.loadState.isRunning)
+                RefreshButton(isDisabled: !self.gateway.state.isConnected || model.loadState.isRunning, showsHelp: false) { await model.load() }
             }
             ToolbarItem {
                 Button(action: self.create) { Label(L("New Automation"), systemImage: "plus") }

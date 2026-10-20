@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import PincerKit
 import UniformTypeIdentifiers
 
 /// One entry in the composer's **+** attach menu.
@@ -60,15 +61,11 @@ enum CapturedPhotoEncoder {
     static let fileName = "Photo.jpg"
 
     nonisolated static func jpeg(_ image: CGImage, orientation: CGImagePropertyOrientation = .up, quality: Double = 0.9) -> Data? {
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
         let properties: [CFString: Any] = [
             kCGImageDestinationLossyCompressionQuality: quality,
             kCGImagePropertyOrientation: orientation.rawValue,
         ]
-        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return data as Data
+        return ImageEncoding.data(image, type: .jpeg, properties: properties)
     }
 
     /// Encodes on a detached task so the shutter dismissal never waits on JPEG compression.

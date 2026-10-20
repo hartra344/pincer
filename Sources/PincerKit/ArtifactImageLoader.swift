@@ -553,11 +553,6 @@ public enum ImageCodec {
         ]
         if let maxPixel { thumbOptions[kCGImageSourceThumbnailMaxPixelSize] = maxPixel }
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions as CFDictionary) else { return nil }
-        let output = NSMutableData()
-        let type = (png ? UTType.png : UTType.jpeg).identifier as CFString
-        guard let destination = CGImageDestinationCreateWithData(output, type, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return output as Data
+        return ImageEncoding.data(image, type: png ? .png : .jpeg, quality: quality)
     }
 }

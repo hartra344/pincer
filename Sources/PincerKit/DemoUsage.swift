@@ -223,7 +223,7 @@ enum DemoUsage {
         }
         let byDate = Dictionary(grouping: records, by: \.date)
         let daily = byDate.keys.sorted().map { date -> JSONValue in
-            var day = self.json(byDate[date]!.reduce(.zero) { $0 + $1.totals })
+            var day = self.json(self.sumTotals(byDate[date]!))
             day["date"] = .string(date)
             return .object(day)
         }
@@ -231,7 +231,7 @@ enum DemoUsage {
             "updatedAt": .number((now.timeIntervalSince1970 * 1000).rounded()),
             "days": JSONValue(byDate.count),
             "daily": .array(daily),
-            "totals": .object(self.json(records.reduce(.zero) { $0 + $1.totals })),
+            "totals": .object(self.json(self.sumTotals(records))),
         ]
     }
 
@@ -257,8 +257,8 @@ enum DemoUsage {
         let computing = key == nil && longRange ? "agent:main:discord:channel:123" : nil
         var matched = indices.filter { grouped[$0] != nil || key != nil }
         matched.sort { lhs, rhs in
-            let l = grouped[lhs]?.reduce(UsageTotals.zero) { $0 + $1.totals } ?? .zero
-            let r = grouped[rhs]?.reduce(UsageTotals.zero) { $0 + $1.totals } ?? .zero
+            let l = grouped[lhs].map(self.sumTotals) ?? .zero
+            let r = grouped[rhs].map(self.sumTotals) ?? .zero
             return l.totalCost == r.totalCost ? l.totalTokens > r.totalTokens : l.totalCost > r.totalCost
         }
         let counted = matched.filter { self.sessions[$0].key != computing }
@@ -287,27 +287,19 @@ enum DemoUsage {
         let dates = Set(records.map(\.date)).sorted()
         let byDate = Dictionary(grouping: records, by: \.date)
         let costDaily = dates.map { date -> JSONValue in
-            var day = self.json(byDate[date]!.reduce(.zero) { $0 + $1.totals })
+            var day = self.json(self.sumTotals(byDate[date]!))
             day["date"] = .string(date)
             return .object(day)
         }
         let daily = dates.map { date -> JSONValue in
             let day = byDate[date]!
-            let totals = day.reduce(UsageTotals.zero) { $0 + $1.totals }
+            let totals = self.sumTotals(day)
             return ["date": .string(date), "tokens": JSONValue(totals.totalTokens), "cost": .number(totals.totalCost),
                     "messages": JSONValue(day.reduce(0) { $0 + $1.messages.total }),
                     "toolCalls": JSONValue(day.reduce(0) { $0 + $1.messages.toolCalls }),
                     "errors": JSONValue(day.reduce(0) { $0 + $1.messages.errors })]
         }
-        var messages = UsageMessageCounts()
-        for record in records {
-            messages.total += record.messages.total
-            messages.user += record.messages.user
-            messages.assistant += record.messages.assistant
-            messages.toolCalls += record.messages.toolCalls
-            messages.toolResults += record.messages.toolResults
-            messages.errors += record.messages.errors
-        }
+        let messages = self.sumMessages(records)
         let byAgent = Dictionary(grouping: records) { self.sessions[$0.session].agentId }
         let byChannel = Dictionary(grouping: records) { self.sessions[$0.session].channel }
         var result: [String: JSONValue] = [
@@ -315,7 +307,7 @@ enum DemoUsage {
             "startDate": .string(start),
             "endDate": .string(end),
             "sessions": .array(rows),
-            "totals": .object(self.json(records.reduce(.zero) { $0 + $1.totals })),
+            "totals": .object(self.json(self.sumTotals(records))),
             "aggregates": [
                 "sessionCount": JSONValue(matched.count),
                 "messages": self.json(messages),
@@ -325,8 +317,8 @@ enum DemoUsage {
                 ]],
                 "byModel": .array(self.modelBuckets(records, provider: false)),
                 "byProvider": .array(self.modelBuckets(records, provider: true)),
-                "byAgent": .array(byAgent.keys.sorted().map { ["agentId": .string($0), "totals": .object(self.json(byAgent[$0]!.reduce(.zero) { $0 + $1.totals }))] }),
-                "byChannel": .array(byChannel.keys.sorted().map { ["channel": .string($0), "totals": .object(self.json(byChannel[$0]!.reduce(.zero) { $0 + $1.totals }))] }),
+                "byAgent": .array(byAgent.keys.sorted().map { ["agentId": .string($0), "totals": .object(self.json(self.sumTotals(byAgent[$0]!)))] }),
+                "byChannel": .array(byChannel.keys.sorted().map { ["channel": .string($0), "totals": .object(self.json(self.sumTotals(byChannel[$0]!)))] }),
                 "daily": .array(daily),
                 "costDaily": .array(costDaily),
             ],
@@ -337,10 +329,27 @@ enum DemoUsage {
         return .object(result)
     }
 
+    private static func sumTotals(_ records: [Record]) -> UsageTotals {
+        records.reduce(.zero) { $0 + $1.totals }
+    }
+
+    private static func sumMessages(_ records: [Record]) -> UsageMessageCounts {
+        var messages = UsageMessageCounts()
+        for record in records {
+            messages.total += record.messages.total
+            messages.user += record.messages.user
+            messages.assistant += record.messages.assistant
+            messages.toolCalls += record.messages.toolCalls
+            messages.toolResults += record.messages.toolResults
+            messages.errors += record.messages.errors
+        }
+        return messages
+    }
+
     private static func modelBuckets(_ records: [Record], provider: Bool) -> [JSONValue] {
         let groups = Dictionary(grouping: records) { provider ? $0.model.provider : "\($0.model.provider)/\($0.model.model)" }
         return groups.values.map { group -> (UsageTotals, JSONValue) in
-            let totals = group.reduce(UsageTotals.zero) { $0 + $1.totals }
+            let totals = self.sumTotals(group)
             var bucket: [String: JSONValue] = ["provider": .string(group[0].model.provider),
                                                "count": JSONValue(group.reduce(0) { $0 + $1.entries }),
                                                "totals": .object(self.json(totals))]
@@ -352,7 +361,7 @@ enum DemoUsage {
     }
 
     private static func summary(_ records: [Record]) -> JSONValue {
-        var summary = self.json(records.reduce(.zero) { $0 + $1.totals })
+        var summary = self.json(self.sumTotals(records))
         let first = records.map(\.timestamp).min()
         let last = records.map(\.timestamp).max()
         if let first, let last {
@@ -361,15 +370,7 @@ enum DemoUsage {
             summary["durationMs"] = .number(Double(records.count) * 23 * 60_000)
         }
         summary["activityDates"] = JSONValue(Set(records.map(\.date)).sorted())
-        var messages = UsageMessageCounts()
-        for record in records {
-            messages.total += record.messages.total
-            messages.user += record.messages.user
-            messages.assistant += record.messages.assistant
-            messages.toolCalls += record.messages.toolCalls
-            messages.toolResults += record.messages.toolResults
-            messages.errors += record.messages.errors
-        }
+        let messages = self.sumMessages(records)
         summary["messageCounts"] = self.json(messages)
         summary["toolUsage"] = ["totalCalls": JSONValue(messages.toolCalls), "uniqueTools": 3, "tools": []]
         summary["modelUsage"] = .array(self.modelBuckets(records, provider: false))

@@ -62,18 +62,12 @@ extension BrowserPanelModel {
         let scale = min(1, Double(Self.thumbnailMaxWidth) / Double(max(1, image.width)))
         let width = max(1, Int((Double(image.width) * scale).rounded()))
         let height = max(1, Int((Double(image.height) * scale).rounded()))
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
-        else { return nil }
+        guard let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .noneSkipLast) else { return nil }
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
-        guard let scaled = context.makeImage() else { return nil }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, scaled, [kCGImageDestinationLossyCompressionQuality: Self.thumbnailQuality] as CFDictionary)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return ImageRef(artifactId: nil, base64: (data as Data).base64EncodedString(), url: nil, mimeType: "image/jpeg",
+        guard let scaled = context.makeImage(),
+              let data = ImageEncoding.data(scaled, type: .jpeg, quality: Self.thumbnailQuality) else { return nil }
+        return ImageRef(artifactId: nil, base64: data.base64EncodedString(), url: nil, mimeType: "image/jpeg",
                         alt: nil, width: width, height: height)
     }
 }

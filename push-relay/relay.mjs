@@ -19,8 +19,18 @@ const APNS_ORIGINS = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[0-9a-f]{64,200}$/i;
 
+/** The AES-256-GCM key that seals registration ids: SHA-256 of the relay secret. */
+export function idKey(secret) {
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+/** Base64url of a value's JSON, as used for JWT segments. */
+export function base64urlJSON(value) {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
 export function sealId(secret, token, environment, topic) {
-  const key = crypto.createHash('sha256').update(secret).digest();
+  const key = idKey(secret);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const body = Buffer.concat([cipher.update(JSON.stringify({ v: 1, t: token, e: environment, a: topic })), cipher.final()]);
@@ -31,7 +41,7 @@ export function openId(secret, id) {
   try {
     const raw = Buffer.from(id, 'base64url');
     if (raw.length < 29) return null;
-    const key = crypto.createHash('sha256').update(secret).digest();
+    const key = idKey(secret);
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
     decipher.setAuthTag(raw.subarray(raw.length - 16));
     const plain = Buffer.concat([decipher.update(raw.subarray(12, raw.length - 16)), decipher.final()]);
@@ -49,8 +59,8 @@ export function createProviderToken({ keyId, teamId, key }) {
   return () => {
     const now = Math.floor(Date.now() / 1000);
     if (cached && now - cached.iat < 40 * 60) return cached.jwt;
-    const header = Buffer.from(JSON.stringify({ alg: 'ES256', kid: keyId })).toString('base64url');
-    const claims = Buffer.from(JSON.stringify({ iss: teamId, iat: now })).toString('base64url');
+    const header = base64urlJSON({ alg: 'ES256', kid: keyId });
+    const claims = base64urlJSON({ iss: teamId, iat: now });
     const signature = crypto
       .sign('sha256', Buffer.from(`${header}.${claims}`), { key, dsaEncoding: 'ieee-p1363' })
       .toString('base64url');

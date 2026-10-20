@@ -164,9 +164,7 @@ struct ChatToolsInspectorSheet: View {
                 self.openGatewaySettings(self.gateway, at: destination)
             }
             .navigationTitle(L("Tools & Policy"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }

@@ -77,9 +77,7 @@ struct HTMLPreviewSheet: View {
                     .background(.bar)
                 }
                 .navigationTitle(Text("HTML Preview", bundle: .module))
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
+                .inlineNavigationBarTitle()
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button { self.dismiss() } label: { Text("Done", bundle: .module) }

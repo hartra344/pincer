@@ -481,9 +481,7 @@ struct SymbolPickerSheet: View {
             }
             .searchable(text: self.$search, prompt: L("Search symbols"))
             .navigationTitle(L("Change Icon"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .destructiveAction) {
@@ -596,9 +594,7 @@ struct ChatColorSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(L("Chat Color"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

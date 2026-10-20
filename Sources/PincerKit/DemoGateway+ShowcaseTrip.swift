@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import UniformTypeIdentifiers
 
 /// Demo showcase: the Japan trip chat.
@@ -172,9 +171,7 @@ extension DemoGateway {
     /// A small bar chart, drawn rather than bundled so the demo needs no assets.
     static func chartPNG() -> Data {
         let (width, height) = (640, 400)
-        guard let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .premultipliedLast)
         else { return Data() }
         context.setFillColor(CGColor(red: 0.10, green: 0.11, blue: 0.15, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
@@ -188,13 +185,7 @@ extension DemoGateway {
         }
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.25))
         context.fill(CGRect(x: 40, y: 38, width: width - 80, height: 2))
-        guard let image = context.makeImage() else { return Data() }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
-            return Data()
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        CGImageDestinationFinalize(destination)
-        return data as Data
+        guard let image = context.makeImage(), let data = ImageEncoding.data(image, type: .png) else { return Data() }
+        return data
     }
 }

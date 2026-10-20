@@ -171,13 +171,8 @@ actor OutboxImagePreviewWorker {
             ]
             guard !Task.isCancelled, let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { continue }
             let isPNG = Self.hasAlpha(image)
-            let output = NSMutableData()
-            let encodedType = (isPNG ? UTType.png : UTType.jpeg).identifier as CFString
-            guard let destination = CGImageDestinationCreateWithData(output, encodedType, 1, nil) else { continue }
             let properties: [CFString: Any] = isPNG ? [:] : [kCGImageDestinationLossyCompressionQuality: 0.62]
-            CGImageDestinationAddImage(destination, image, properties as CFDictionary)
-            guard CGImageDestinationFinalize(destination) else { continue }
-            let encodedData = output as Data
+            guard let encodedData = ImageEncoding.data(image, type: isPNG ? .png : .jpeg, properties: properties) else { continue }
             guard encodedData.count <= Self.maxEncodedBytes else { continue }
             let encoded = encodedData.base64EncodedString()
             let previewMIME = isPNG ? "image/png" : "image/jpeg"

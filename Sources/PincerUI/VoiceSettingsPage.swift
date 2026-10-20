@@ -37,8 +37,7 @@ struct VoiceSettingsPage: View {
         .navigationTitle(L("Voice"))
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                    .disabled(!connected || model.isLoading)
+                RefreshButton(isDisabled: !connected || model.isLoading, showsHelp: false) { await model.refresh() }
             }
         }
         .task(id: connected) { if connected { await model.refresh() } }

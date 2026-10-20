@@ -56,9 +56,7 @@ struct BookmarksView: View {
                 }
             }
             .navigationTitle(L("Bookmarks"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }

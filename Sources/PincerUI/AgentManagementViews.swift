@@ -639,9 +639,7 @@ struct AgentEditorSheet: View {
             .formStyle(.grouped)
             .disabled(self.state.isRunning)
             .navigationTitle(self.title)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(L("Cancel")) { self.dismiss() }.disabled(self.state.isRunning)
@@ -1025,9 +1023,7 @@ private struct AgentFileCompareSheet: View {
                 #endif
             }
             .navigationTitle(L("Compare \(self.conflict.name)"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }

@@ -36,9 +36,7 @@ struct UsagePage: View {
                 if model.isLoading, model.hasData {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(!connected || model.isLoading)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: !connected || model.isLoading) { await model.refresh() }
                 }
             }
         }

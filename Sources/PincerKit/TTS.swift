@@ -4,7 +4,7 @@ import Foundation
 // Parsing is tolerant: optional fields may be missing and unknown fields are ignored.
 // Each model is Decodable and also builds from a `JSONValue` with `init?(_:)`.
 
-public struct TTSProviderState: Hashable, Sendable, Identifiable, Decodable {
+public struct TTSProviderState: Hashable, Sendable, Identifiable, JSONValueDecodable {
     public var id: String
     public var label: String
     public var configured: Bool
@@ -20,14 +20,10 @@ public struct TTSProviderState: Hashable, Sendable, Identifiable, Decodable {
         self.init(id: id, label: json["label"]?.text ?? id, configured: json["configured"]?.bool ?? false)
     }
 
-    public init(from decoder: Decoder) throws {
-        let json = try JSONValue(from: decoder)
-        guard let value = Self(json) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "missing id") }
-        self = value
-    }
+    public static let decodingFailure = "missing id"
 }
 
-public struct TTSProvider: Hashable, Sendable, Identifiable, Decodable {
+public struct TTSProvider: Hashable, Sendable, Identifiable, JSONValueDecodable {
     public var id: String
     public var name: String
     public var configured: Bool
@@ -49,14 +45,10 @@ public struct TTSProvider: Hashable, Sendable, Identifiable, Decodable {
                   voices: json["voices"]?.array?.compactMap(\.text) ?? [])
     }
 
-    public init(from decoder: Decoder) throws {
-        let json = try JSONValue(from: decoder)
-        guard let value = Self(json) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "missing id") }
-        self = value
-    }
+    public static let decodingFailure = "missing id"
 }
 
-public struct TTSPersona: Hashable, Sendable, Identifiable, Decodable {
+public struct TTSPersona: Hashable, Sendable, Identifiable, JSONValueDecodable {
     public var id: String
     public var label: String?
     public var description: String?
@@ -74,11 +66,7 @@ public struct TTSPersona: Hashable, Sendable, Identifiable, Decodable {
         self.init(id: id, label: json["label"]?.text, description: json["description"]?.text, provider: json["provider"]?.text)
     }
 
-    public init(from decoder: Decoder) throws {
-        let json = try JSONValue(from: decoder)
-        guard let value = Self(json) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "missing id") }
-        self = value
-    }
+    public static let decodingFailure = "missing id"
 
     /// The label, else the id.
     public var displayName: String { self.label.flatMap { $0.isEmpty ? nil : $0 } ?? self.id }
@@ -101,7 +89,7 @@ public enum TTSAutoMode: String, Sendable, CaseIterable {
     public var isNotSettable: Bool { self == .inbound || self == .tagged }
 }
 
-public struct TTSStatus: Hashable, Sendable, Decodable {
+public struct TTSStatus: Hashable, Sendable, JSONValueDecodable {
     public var enabled: Bool
     /// "off", "always", "inbound" or "tagged".
     public var auto: String
@@ -134,11 +122,7 @@ public struct TTSStatus: Hashable, Sendable, Decodable {
                   providerStates: json["providerStates"]?.array?.compactMap(TTSProviderState.init) ?? [])
     }
 
-    public init(from decoder: Decoder) throws {
-        let json = try JSONValue(from: decoder)
-        guard let value = Self(json) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "not an object") }
-        self = value
-    }
+    public static let decodingFailure = "not an object"
 
     /// nil for a value this version doesn't know.
     public var autoMode: TTSAutoMode? { TTSAutoMode(rawValue: self.auto.lowercased()) }
