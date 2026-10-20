@@ -5,33 +5,6 @@ import SwiftUI
 @testable import PincerUI
 
 @MainActor
-private final class HelperHost: TranscriptListHost {
-    var rowCount: () -> Int = { 0 }
-    var offset: CGFloat = 0
-    var height: CGFloat = 300
-    var layoutWidth: CGFloat = 400
-    var isLayoutFrozen = false
-    var isScrolling = false
-
-    var viewport: TranscriptViewport? {
-        TranscriptViewport(offset: self.offset, height: self.height,
-                           range: 0...max(0, CGFloat(self.rowCount()) * 100 - self.height))
-    }
-
-    func rowTop(_ row: Int) -> CGFloat? { row < self.rowCount() ? CGFloat(row) * 100 : nil }
-    func row(atContentY y: CGFloat) -> Int? {
-        let count = self.rowCount()
-        return count == 0 ? nil : min(max(Int(y / 100), 0), count - 1)
-    }
-
-    var visibleRows: ClosedRange<Int>? { nil }
-    func rowWindow(screens: CGFloat, minimum: CGFloat) -> (range: ClosedRange<Int>, center: Int)? { nil }
-    func heightsChanged(_ rows: IndexSet) {}
-    func settle(changed: IndexSet) {}
-    func reveal(_ id: String) {}
-}
-
-@MainActor
 private final class HelperLog {
     var text = ""
     var events: [String] = []
@@ -61,23 +34,8 @@ func runSharedPlatformHelperChecks() {
     // B: layoutCorrectingHeight
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
-                               defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
-    let key = "agent:list:main"
-    let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
-                                    agent: AgentSummary(id: "check", name: "Check"), sessionKey: key,
-                                    previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
-    let controller = TranscriptListController(context: context, prefetchBudget: 0.006,
-                                              premeasureAdmission: TranscriptPremeasureAdmission())
-    let host = HelperHost()
-    host.rowCount = { [unowned controller] in controller.rows.count }
-    controller.host = host
-    let rows: [TranscriptRow] = (0..<3).map { n in
-        var item = ChatItem(id: "u\(n)", role: .user, blocks: [.text("Hello \(n)")],
-                            timestamp: Date(timeIntervalSince1970: 1_700_000_000 + Double(n)))
-        item.transcriptId = item.id
-        return .entry(.user(item))
-    }
+    let stub = makeStubTranscript(defaults: defaults, rowCount: 3, windowed: false)
+    let (controller, host, rows) = (stub.controller, stub.host, stub.rows)
     _ = controller.accept(rows, contextChanged: false)
     _ = controller.measure([0, 1, 2], width: host.layoutWidth, deadline: nil)
     let laidOut = controller.layoutCorrectingHeight(controller.rows[1], width: host.layoutWidth)
