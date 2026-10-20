@@ -1,0 +1,14 @@
+# Periphery (Swift dead code), run by scripts/lint/periphery.sh against the SwiftPM index store
+# (`swift build --build-tests`), so PincerChecks, PincerMacDev and both test targets count as consumers.
+# scripts/lint/periphery-gate.mjs then retains anything named from Apps/ or from code the macOS
+# debug build doesn't compile (#if os(iOS), release-only branches), and applies the baseline.
+retain_public: false
+# Making declarations less public is churn, not dead code.
+disable_redundant_public_analysis: true
+# Gateway models mirror upstream shapes; decoded/encoded fields stay even when nothing reads them.
+retain_codable_properties: true
+# Selectors and Objective-C entry points are reached at runtime.
+retain_objc_annotated: true
+retain_swift_ui_previews: true
+relative_results: true
+disable_update_check: true
