@@ -5,7 +5,6 @@ import ImageIO
 import Network
 import Observation
 import PincerKit
-import PincerPush
 import SQLite3
 import Synchronization
 import UniformTypeIdentifiers

@@ -59,17 +59,6 @@ public struct ApprovalRecord: Identifiable, Hashable, Sendable {
             }
         }
 
-        public var rawValue: String {
-            switch self {
-            case .allowed: "allowed"
-            case .denied: "denied"
-            case .expired: "expired"
-            case .cancelled: "cancelled"
-            case .pending: "pending"
-            case let .other(raw): raw
-            }
-        }
-
         public var label: String {
             switch self {
             case .allowed: "Allowed"
@@ -94,15 +83,6 @@ public struct ApprovalRecord: Identifiable, Hashable, Sendable {
             case "allow-always": self = .allowAlways
             case "deny": self = .deny
             default: self = .other(raw)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .allowOnce: "allow-once"
-            case .allowAlways: "allow-always"
-            case .deny: "deny"
-            case let .other(raw): raw
             }
         }
 
@@ -136,19 +116,6 @@ public struct ApprovalRecord: Identifiable, Hashable, Sendable {
             case "gateway-restart": self = .gatewayRestart
             case "storage-corrupt": self = .storageCorrupt
             default: self = .other(raw)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .user: "user"
-            case .timeout: "timeout"
-            case .malformedVerdict: "malformed-verdict"
-            case .noRoute: "no-route"
-            case .runAborted: "run-aborted"
-            case .gatewayRestart: "gateway-restart"
-            case .storageCorrupt: "storage-corrupt"
-            case let .other(raw): raw
             }
         }
 

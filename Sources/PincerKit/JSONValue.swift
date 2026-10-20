@@ -131,7 +131,6 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral, Ex
 public extension JSONValue {
     init(_ value: String?) { self = value.map(JSONValue.string) ?? .null }
     init(_ value: Int) { self = .number(Double(value)) }
-    init(_ value: Int64) { self = .number(Double(value)) }
     init(_ value: [String]) { self = .array(value.map(JSONValue.string)) }
 
     static func decode(_ data: Data) throws -> JSONValue {

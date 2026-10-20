@@ -419,23 +419,94 @@ jobs:
             build/cpu-check-state/app.log
           if-no-files-found: ignore
 
-  # The ruleset requires this name. It passes when every shard passed (or was skipped for a docs-only
-  # change) and fails when any failed or was cancelled.
+  # Dead code and duplication (scripts/lint.sh runs the same gates locally). Each gate fails on
+  # anything new beyond its baseline in scripts/lint/.
+  lint-js:
+    name: Lint (jscpd, knip)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the duplication report lists clones in files changed since origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/lint/package-lock.json
+      - run: scripts/lint/js.sh
+
+  # Builds with the index store on, so it keeps its own build cache.
+  lint-periphery:
+    name: Lint (Periphery)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        id: xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
+          echo "periphery=$(sed -n 's/^PERIPHERY_VERSION=//p' scripts/lint/periphery.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Periphery
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/periphery
+          key: periphery-${{ steps.xcode.outputs.periphery }}-${{ runner.os }}
+
+      - name: Restore the build cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .build
+          key: swiftpm-lint-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          restore-keys: swiftpm-lint-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
+
+      - name: Build with the index store
+        run: swift build --build-tests --enable-index-store -Xswiftc -enable-incremental-file-hashing
+
+      - name: Save the build cache
+        if: ${{ env.SAVE_CACHES == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .build
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Periphery
+        env:
+          PERIPHERY_CACHE: ${{ runner.temp }}/periphery
+        run: scripts/lint/periphery.sh --skip-build -Xswiftc -enable-incremental-file-hashing
+
+  # The ruleset requires this name. It passes when every shard and lint job passed (or was skipped
+  # for a docs-only change) and fails when any failed or was cancelled.
   swift:
     name: Swift build and checks
-    needs: [changes, swift-shards]
+    needs: [changes, swift-shards, lint-js, lint-periphery]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Every Swift shard passed
+      - name: Every Swift shard and lint job passed
         env:
-          RESULT: ${{ needs.swift-shards.result }}
+          SHARDS: ${{ needs.swift-shards.result }}
+          LINT_JS: ${{ needs.lint-js.result }}
+          LINT_PERIPHERY: ${{ needs.lint-periphery.result }}
           CHANGES: ${{ needs.changes.result }}
         run: |
-          echo "Detect changes: $CHANGES; Swift shards: $RESULT"
-          case "$RESULT" in
-            success) ;;
-            skipped) [ "$CHANGES" = success ] ;;  # skipped only counts for a docs-only change
-            *) exit 1 ;;
-          esac
+          echo "Detect changes: $CHANGES; Swift shards: $SHARDS; lint: $LINT_JS, $LINT_PERIPHERY"
+          for result in "$SHARDS" "$LINT_JS" "$LINT_PERIPHERY"; do
+            case "$result" in
+              success) ;;
+              skipped) [ "$CHANGES" = success ] || exit 1 ;;  # skipped only counts for a docs-only change
+              *) exit 1 ;;
+            esac
+          done

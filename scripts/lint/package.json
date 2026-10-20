@@ -1,0 +1,11 @@
+{
+  "name": "pincer-lint",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only lint tooling (jscpd duplication ratchet, knip). Run via scripts/lint/js.sh.",
+  "devDependencies": {
+    "jscpd": "4.3.0",
+    "knip": "5.88.1"
+  }
+}

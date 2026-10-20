@@ -479,14 +479,6 @@ public final class AppModel {
         for gateway in self.gateways { gateway.discardOutbox() }
     }
 
-    public func move(_ id: UUID, by offset: Int) {
-        guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
-        let target = min(max(index + offset, 0), self.gateways.count - 1)
-        guard target != index else { return }
-        self.gateways.swapAt(index, target)
-        self.persist()
-    }
-
     /// Writes every Gateway's unsent messages to disk now, on this thread: the app is quitting,
     /// and a write still queued might not get to run.
     public func saveOutboxesNow() {

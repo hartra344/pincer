@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  // server.mjs / selftest.mjs come from package.json scripts. selftest.mjs loads selftest/<name>.mjs
+  // with a template-literal dynamic import, which knip cannot follow, so list them as entries.
+  "entry": ["selftest/*.mjs"],
+  "project": ["**/*.mjs"],
+  // An export that is only used inside its own file is harmless; don't flag it.
+  "ignoreExportsUsedInFile": true
+  // A test hook for server-side tests is exported on purpose: tag it `@public` in its JSDoc.
+}

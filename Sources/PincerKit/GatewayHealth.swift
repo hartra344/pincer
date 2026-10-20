@@ -104,18 +104,6 @@ public struct GatewayChannelHealth: Identifiable, Hashable, Sendable {
         case disabled
         case notConfigured
         case unknown
-
-        public var label: String {
-            switch self {
-            case .connected: "Connected"
-            case .running: "Running"
-            case .stopped: "Stopped"
-            case .error: "Error"
-            case .disabled: "Disabled"
-            case .notConfigured: "Not set up"
-            case .unknown: "Unknown"
-            }
-        }
     }
 
     public let id: String

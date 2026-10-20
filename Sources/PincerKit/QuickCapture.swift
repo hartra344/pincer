@@ -130,7 +130,6 @@ public struct HotKeyShortcut: Codable, Hashable, Sendable {
     // MARK: Key names
 
     public enum KeyCode {
-        public static let `return`: UInt32 = 36
         public static let tab: UInt32 = 48
         public static let space: UInt32 = 49
         public static let delete: UInt32 = 51
