@@ -5,15 +5,30 @@ import Testing
 @MainActor
 @Suite("Cold-launch routes")
 struct ColdLaunchRouteTests {
-    @Test func unknownSenderRouteWaitsForSavedGatewayToLoad() {
+    /// An app model over `count` saved (never-connected) gateways.
+    func launch(gateways count: Int = 1) -> (app: AppModel, scratch: ScratchDefaults, profiles: [GatewayProfile]) {
         let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let profiles = [
+            GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none),
+            GatewayProfile(name: "Office", url: "ws://127.0.0.1:2", authMode: .none),
+        ].prefix(count).map { $0 }
+        GatewayProfileStore.save(profiles, to: scratch.defaults)
+        return (AppModel(defaults: scratch.defaults), scratch, profiles)
+    }
+
+    func shutDown(_ app: AppModel, _ scratch: ScratchDefaults) {
+        app.gateways.forEach { $0.stop() }
+        scratch.remove()
+    }
+
+    /// Delivers a session list holding only `key` to `gateway`.
+    func list(_ key: String, on gateway: GatewayStore) {
+        gateway.applySnapshot(Fixtures.json(#"{"sessions":[{"key":"\#(key)"}]}"#))
+    }
+
+    @Test func unknownSenderRouteWaitsForSavedGatewayToLoad() {
+        let (app, scratch, _) = self.launch()
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(
             gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123")
@@ -23,14 +38,9 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func knownLocalGatewayRouteOpensWithoutWaitingForItsSessionList() {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, profiles) = self.launch()
+        let profile = profiles[0]
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(
             gateway: .id(profile.id), sessionKey: "agent:main:discord:channel:123")
@@ -41,14 +51,9 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func coldRouteOpensOnceSavedGatewayListsItsMatchingChat() {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, profiles) = self.launch()
+        let profile = profiles[0]
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123",
                                 messageId: "message-1")
@@ -56,9 +61,7 @@ struct ColdLaunchRouteTests {
         #expect(app.routeNotice == nil)
         #expect(app.pendingExternalRoute == route)
 
-        app.gateways[0].applySnapshot(Fixtures.json("""
-        {"sessions":[{"key":"agent:main:discord:channel:123"}]}
-        """))
+        self.list("agent:main:discord:channel:123", on: app.gateways[0])
 
         #expect(app.selectedGatewayId == profile.id)
         #expect(app.messageJump?.messageId == "message-1")
@@ -67,23 +70,12 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func provisionalHolderWaitsForEveryColdGatewayBeforeChoosing() {
-        let scratch = ScratchDefaults()
-        let profiles = [
-            GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none),
-            GatewayProfile(name: "Office", url: "ws://127.0.0.1:2", authMode: .none),
-        ]
-        GatewayProfileStore.save(profiles, to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, profiles) = self.launch(gateways: 2)
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123")
         #expect(app.open(route) == .unknownGateway)
-        app.gateways[0].applySnapshot(Fixtures.json("""
-        {"sessions":[{"key":"agent:main:discord:channel:123"}]}
-        """))
+        self.list("agent:main:discord:channel:123", on: app.gateways[0])
         #expect(app.pendingExternalRoute == route)
         #expect(app.openRequests == 0)
 
@@ -96,20 +88,9 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func knownCachedUniqueHolderOpensImmediatelyWhileAnotherGatewayIsCold() {
-        let scratch = ScratchDefaults()
-        let profiles = [
-            GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none),
-            GatewayProfile(name: "Office", url: "ws://127.0.0.1:2", authMode: .none),
-        ]
-        GatewayProfileStore.save(profiles, to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
-        app.gateways[0].applySnapshot(Fixtures.json("""
-        {"sessions":[{"key":"agent:main:discord:channel:123"}]}
-        """))
+        let (app, scratch, profiles) = self.launch(gateways: 2)
+        defer { self.shutDown(app, scratch) }
+        self.list("agent:main:discord:channel:123", on: app.gateways[0])
 
         let route = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123")
         #expect(app.open(route) == .openChat(
@@ -119,14 +100,8 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func partialSessionEventsBeforeFirstListDoNotResolveAColdRoute() throws {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, _) = self.launch()
+        defer { self.shutDown(app, scratch) }
 
         let key = "agent:main:discord:channel:123"
         let row = try #require(SessionRow(Fixtures.json(#"{"key":"\#(key)"}"#)))
@@ -136,14 +111,8 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func unknownRouteResolvesWhenSavedGatewayListIsSuccessfullyEmpty() {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, _) = self.launch()
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123")
         #expect(app.open(route) == .unknownGateway)
@@ -154,15 +123,9 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func zeroDeadlineShowsUnknownOnlyAfterFinalResolution() async {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
+        let (app, scratch, _) = self.launch()
         app.pendingExternalRouteTimeout = .zero
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        defer { self.shutDown(app, scratch) }
 
         #expect(app.open(PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:123")) == .unknownGateway)
         #expect(app.routeNotice == nil)
@@ -173,19 +136,14 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func directChatOpenCancelsOlderPendingRouteAndLaterSnapshotCannotStealFocus() {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, profiles) = self.launch()
+        let profile = profiles[0]
+        defer { self.shutDown(app, scratch) }
 
         _ = app.open(PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:old",
                                  messageId: "old-message"))
         app.open(Notifier.Target(gatewayId: profile.id, sessionKey: "agent:main:main"))
-        app.gateways[0].applySnapshot(Fixtures.json(#"{"sessions":[{"key":"agent:main:discord:channel:old"}]}"#))
+        self.list("agent:main:discord:channel:old", on: app.gateways[0])
         #expect(app.pendingExternalRoute == nil)
         #expect(app.selectedGatewayId == profile.id)
         #expect(app.gateways[0].selectedKey == "agent:main:main")
@@ -194,22 +152,13 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func gatewaySelectionCancelsPendingRouteAndLaterSnapshotCannotStealFocus() {
-        let scratch = ScratchDefaults()
-        let profiles = [
-            GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none),
-            GatewayProfile(name: "Office", url: "ws://127.0.0.1:2", authMode: .none),
-        ]
-        GatewayProfileStore.save(profiles, to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, profiles) = self.launch(gateways: 2)
+        defer { self.shutDown(app, scratch) }
 
         _ = app.open(PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:old",
                                  messageId: "old-message"))
         app.selectedGatewayId = profiles[1].id
-        app.gateways[0].applySnapshot(Fixtures.json(#"{"sessions":[{"key":"agent:main:discord:channel:old"}]}"#))
+        self.list("agent:main:discord:channel:old", on: app.gateways[0])
         #expect(app.pendingExternalRoute == nil)
         #expect(app.selectedGatewayId == profiles[1].id)
         #expect(app.messageJump == nil)
@@ -217,14 +166,8 @@ struct ColdLaunchRouteTests {
     }
 
     @Test func automaticSessionSelectionDoesNotCancelPendingExternalRoute() {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Home", url: "ws://127.0.0.1:1", authMode: .none)
-        GatewayProfileStore.save([profile], to: scratch.defaults)
-        let app = AppModel(defaults: scratch.defaults)
-        defer {
-            app.gateways.forEach { $0.stop() }
-            scratch.remove()
-        }
+        let (app, scratch, _) = self.launch()
+        defer { self.shutDown(app, scratch) }
 
         let route = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:discord:channel:old")
         _ = app.open(route)
