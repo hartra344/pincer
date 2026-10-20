@@ -57,6 +57,7 @@ const METHODS = [
   'chat.message.get',
   'chat.send',
   'chat.abort',
+  'sessions.abort',
   'message.action',
   'users.self',
   ...REACTION_METHODS,

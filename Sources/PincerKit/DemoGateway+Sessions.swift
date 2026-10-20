@@ -550,7 +550,7 @@ extension DemoGateway {
     }
 
     /// Ends the seeded run in flight (it has no task behind it).
-    private func stopStubRun(_ key: String) {
+    func stopStubRun(_ key: String) {
         guard var row = self.sessions[key],
               row["activeRunIds"]?.array?.contains(.string(SessionManagerSeed.refactorRunId)) == true
         else { return }

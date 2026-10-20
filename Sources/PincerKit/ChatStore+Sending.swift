@@ -415,10 +415,57 @@ extension ChatStore {
         self.compaction = .finished(before: before, after: self.gateway?.sessions[self.sessionKey]?.totalTokens)
     }
 
+    /// Stop: the live run when we know its id, otherwise the whole session (`sessions.abort`).
     public func abort() async {
         guard let gateway else { return }
-        var params = self.params(keyName: "sessionKey")
-        if let runId = self.live?.runId { params["runId"] = .string(runId) }
-        _ = try? await gateway.connection.request("chat.abort", .object(params))
+        if let runId = self.live?.runId {
+            var params = self.params(keyName: "sessionKey")
+            params["runId"] = .string(runId)
+            do {
+                _ = try await gateway.connection.request("chat.abort", .object(params))
+            } catch {
+                self.errorMessage = L("Couldn’t stop: \(error.localizedDescription)")
+            }
+        } else {
+            await self.abortSession()
+        }
+    }
+
+    /// Aborts every run of this session (and its subagents) with `sessions.abort`; falls back to
+    /// `chat.abort` on a Gateway without it. Never queued while offline.
+    @discardableResult
+    public func abortSession() async -> Bool {
+        guard let gateway, gateway.state.isConnected else {
+            self.errorMessage = L("Couldn’t stop: not connected")
+            return false
+        }
+        let methods = gateway.hello?.methods ?? []
+        let fallback = !methods.isEmpty && !methods.contains("sessions.abort")
+        do {
+            if !fallback {
+                var params = self.params(keyName: "key")
+                if !SessionKey.isGlobal(self.sessionKey, scopeIsGlobal: gateway.agentScopeIsGlobal) {
+                    params["clearQueued"] = .bool(true)
+                }
+                do {
+                    let result = try await gateway.connection.request("sessions.abort", .object(params))
+                    // sessions.changed doesn't update the row store, so re-read: clears a stale Stop button
+                    // (no-active-run) and the rows of stopped subagents.
+                    Task { await gateway.refreshSessions() }
+                    if let warning = result["warning"]?.text, !warning.isEmpty {
+                        self.errorMessage = L("Couldn’t stop everything: \(warning)")
+                    }
+                    return true
+                } catch {
+                    // An older Gateway without sessions.abort: fall through to chat.abort.
+                    guard GatewayError.isUnknownMethod(error) else { throw error }
+                }
+            }
+            _ = try await gateway.connection.request("chat.abort", .object(self.params(keyName: "sessionKey")))
+            return true
+        } catch {
+            self.errorMessage = L("Couldn’t stop: \(error.localizedDescription)")
+            return false
+        }
     }
 }

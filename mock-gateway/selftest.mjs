@@ -35,6 +35,7 @@ const SECTIONS = [
   'channels',
   'agents',
   'subagents',
+  'session-abort',
   'devices',
   'nodes',
   'skills',
