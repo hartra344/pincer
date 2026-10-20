@@ -76,6 +76,23 @@ struct MessageEditTests {
         return chat
     }
 
+    /// A fork of the seeded garden chat, loaded, with the source chat discarded.
+    func forkedChat(_ gateway: GatewayStore) async -> ChatStore {
+        let source = await self.loaded(gateway, Self.garden)
+        return await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+    }
+
+    /// A fork whose last user message was edited and resent, leaving two branches with the new one active.
+    func editedFork(_ gateway: GatewayStore) async -> (chat: ChatStore, original: [String]) {
+        let chat = await self.forkedChat(gateway)
+        await chat.refreshBranches()
+        let original = chat.items.map(\.plainText)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        return (chat, original)
+    }
+
     func messages(_ chat: ChatStore, _ role: ChatRole) -> [ChatItem] {
         chat.items.filter { $0.role == role && $0.transcriptId != nil }
     }
@@ -138,8 +155,7 @@ struct MessageEditTests {
 
     @Test func beginAndCancelEditRestoreTheDraft() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         let user = self.messages(chat, .user).last!
         chat.draft = ComposerDraft(text: "half-written")
         chat.replyTarget = ReplyTarget(messageId: "x", senderLabel: "s", preview: "p", isAssistant: false)
@@ -171,8 +187,7 @@ struct MessageEditTests {
 
     @Test func aFailedRewindKeepsEditMode() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         let user = self.messages(chat, .user).last!
         #expect(chat.beginEdit(user.id))
         var target = chat.editTarget!
@@ -187,8 +202,7 @@ struct MessageEditTests {
 
     @Test func regenerateRewindsAndResendsTheSameMessage() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         let user = self.messages(chat, .user).last!
         let reply = self.messages(chat, .assistant).last!
         #expect(await chat.regenerate(reply.id))
@@ -241,8 +255,7 @@ struct MessageEditTests {
 
     @Test func editingCreatesABranchYouCanSwitchBackTo() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         await chat.refreshBranches()
         #expect(!chat.hasBranches)
         let original = chat.items.map(\.plainText)
@@ -260,13 +273,7 @@ struct MessageEditTests {
     /// #1010: a history reply that left the Gateway before a branch switch must not overwrite the switched branch.
     @Test func staleHistoryReplyCannotOverwriteASwitchedBranch() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
-        await chat.refreshBranches()
-        let original = chat.items.map(\.plainText)
-        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
-        _ = await chat.sendEdit("something else", attachments: [])
-        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        let (chat, original) = await self.editedFork(gateway)
         guard let old = chat.branches.first(where: { !$0.active }) else { Issue.record("no old branch"); return }
         let edited = chat.items.map(\.plainText)
         #expect(edited != original)
@@ -288,13 +295,7 @@ struct MessageEditTests {
     /// #1010: a branch switch arriving while another invalidation of the chat is mid-fetch must still reload last.
     @Test func branchSwitchDuringAnInFlightInvalidationStillLoadsTheSwitchedBranch() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
-        await chat.refreshBranches()
-        let original = chat.items.map(\.plainText)
-        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
-        _ = await chat.sendEdit("something else", attachments: [])
-        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        let (chat, original) = await self.editedFork(gateway)
         guard let old = chat.branches.first(where: { !$0.active }) else { Issue.record("no old branch"); return }
         await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
 
@@ -339,13 +340,7 @@ struct MessageEditTests {
     /// #1010: the `sessions.changed` echo of an edit or switch (during or after the RPC path's reload) must not blank twice.
     @Test(arguments: [true, false]) func echoOfABranchSwitchBlanksTheTranscriptOnce(_ duringReload: Bool) async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
-        await chat.refreshBranches()
-        let original = chat.items.map(\.plainText)
-        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
-        _ = await chat.sendEdit("something else", attachments: [])
-        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 && chat.activeBranchNumber == 2 }
+        let (chat, original) = await self.editedFork(gateway)
         await self.settle { gateway.invalidatingTranscripts.isEmpty && chat.loadTask == nil }
         let key = chat.sessionKey
         gateway.lastTranscriptInvalidation[key] = nil // The setup's own echo window is over.
@@ -417,8 +412,7 @@ struct MessageEditTests {
 
     @Test func branchAnchorIsTheForkedMessageOnEitherBranch() async {
         let gateway = await self.connected()
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         await chat.refreshBranches()
         #expect(!chat.hasBranches && chat.branchAnchorId == nil)
         #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
@@ -467,8 +461,7 @@ struct MessageEditTests {
     // MARK: Review fixes
 
     func editableFork(_ gateway: GatewayStore) async -> (chat: ChatStore, user: ChatItem) {
-        let source = await self.loaded(gateway, Self.garden)
-        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let chat = await self.forkedChat(gateway)
         return (chat, self.messages(chat, .user).last!)
     }
 
