@@ -17,7 +17,6 @@ import { hasPairingScope, hasScope } from './scopes.mjs';
 
 export const NODE_INVOKE_METHODS = ['node.invoke', 'node.pair.list', 'node.pair.approve', 'node.pair.reject'];
 export const NODE_ROLE_METHODS = ['node.invoke.result'];
-export const NODE_EVENTS = ['node.invoke.request'];
 
 // Upstream platform default allowlist for ios/macos (node-command-policy.ts); anything else a
 // node declares never becomes invocable.
@@ -66,10 +65,6 @@ export function nodeTokenFor(state, deviceId) {
   const device = state.pairedDevices.get(deviceId);
   device.nodeToken ??= `dt_${randHex(18)}`;
   return device.nodeToken;
-}
-
-function sameSet(a, b) {
-  return a.length === b.length && a.every((v) => b.includes(v));
 }
 
 function pendingView(request) {
