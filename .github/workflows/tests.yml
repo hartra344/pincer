@@ -306,7 +306,6 @@ jobs:
         shard: [unit, checks]
     env:
       PINCER_KEYCHAIN: memory
-      CHECKS_SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v5
 
@@ -346,7 +345,7 @@ jobs:
       # The unit shard needs the test bundle; the checks shard only the two executables.
       - name: Build
         run: |
-          if [ "$CHECKS_SHARD" = unit ]; then
+          if [ "${{ matrix.shard }}" = unit ]; then
             swift build --build-tests $SWIFT_FLAGS
           else
             swift build --product PincerChecks $SWIFT_FLAGS
@@ -365,6 +364,7 @@ jobs:
         timeout-minutes: 15
         env:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
+          CHECKS_SHARD: ${{ matrix.shard }}
         run: scripts/run-checks.sh $SWIFT_FLAGS
 
       # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
