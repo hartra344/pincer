@@ -445,8 +445,6 @@ jobs:
     if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 25
-    env:
-      PERIPHERY_CACHE: ${{ runner.temp }}/periphery
     steps:
       - uses: actions/checkout@v5
 
@@ -484,6 +482,8 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
       - name: Periphery
+        env:
+          PERIPHERY_CACHE: ${{ runner.temp }}/periphery
         run: scripts/lint/periphery.sh --skip-build -Xswiftc -enable-incremental-file-hashing
 
   # The ruleset requires this name. It passes when every shard and lint job passed (or was skipped
