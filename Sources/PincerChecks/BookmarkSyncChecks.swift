@@ -106,9 +106,8 @@ func runDemoBookmarkSync() async {
           "bookmark demo: the bookmark comes back from users.prefs")
 
     // Relaunch: the demo's prefs start over, but the seeded bookmarks come back with them.
-    let relaunched = GatewayStore(profile: .demo(), defaults: defaults)
-    relaunched.start()
-    let back = await waitFor("bookmark demo relaunch") { relaunched.state.isConnected && relaunched.bookmarkStore.bookmarks.count >= 3 }
+    let (relaunched, back) = await startStore(.demo(), waiting: "bookmark demo relaunch", defaults: defaults,
+                                              until: { $0.state.isConnected && $0.bookmarkStore.bookmarks.count >= 3 })
     check(back, "bookmark demo: a relaunched demo still has its seeded bookmarks (\(relaunched.bookmarkStore.bookmarks.count))")
     relaunched.stop()
 

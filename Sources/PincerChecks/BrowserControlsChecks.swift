@@ -90,10 +90,9 @@ func runDemoBrowserControlsChecks() async {
 func runLiveBrowserControlsChecks(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock browser controls", url: url, authMode: .token, access: .admin)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("mock for browser controls", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
+    let (gateway, controlsUp) = await startStore(profile, waiting: "mock for browser controls", timeout: 25, reconnect: true,
+                                                 until: { $0.state.isConnected && $0.bootstrapped })
+    guard controlsUp else {
         check(false, "browser controls: mock connected")
         return
     }

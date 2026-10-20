@@ -68,13 +68,10 @@ private typealias DeviceAdmissionGate = CheckGate
     defer { defaults.removePersistentDomain(forName: suite) }
     let profile = GatewayProfile(name: "Device admission check", url: url, authMode: .token, access: .admin)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile, defaults: defaults)
-    gateway.cacheRoot = nil
-    gateway.outboxRoot = nil
-    gateway.notifier = nil
-    gateway.start()
+    let (gateway, connected) = await startStore(profile, waiting: "device list admission mock connection", defaults: defaults,
+                                                prepare: { $0.cacheRoot = nil; $0.outboxRoot = nil; $0.notifier = nil },
+                                                until: { $0.state.isConnected && $0.hello != nil })
     defer { gateway.stop() }
-    let connected = await waitFor("device list admission mock connection") { gateway.state.isConnected && gateway.hello != nil }
     check(connected, "actual mock device list connection is ready")
     guard connected else { return }
     let authorized = gateway.hello?.scopes.contains(GatewayConnection.adminScope) == true

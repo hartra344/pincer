@@ -516,9 +516,7 @@ func runLive(url: String, token: String) async {
     check(legacyAdmin?.access == .admin, "legacy manageSettings → Full Management")
     let reencoded = try? JSONDecoder().decode(GatewayProfile.self, from: JSONEncoder().encode(adminProfile))
     check(reencoded?.access == .admin, "access level round-trips")
-    let admin = GatewayStore(profile: adminProfile)
-    admin.start()
-    let adminConnected = await waitFor("admin connection") { admin.state.isConnected && admin.hello != nil }
+    let (admin, adminConnected) = await startStore(adminProfile, waiting: "admin connection", until: { $0.state.isConnected && $0.hello != nil })
     check(adminConnected && admin.settings.canEdit, "admin scope granted")
     let adminAutomations = admin.automations
     await adminAutomations.load()

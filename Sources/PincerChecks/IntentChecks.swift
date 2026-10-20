@@ -468,9 +468,7 @@ func runDemoIntents() async {
 
     // Answering the seeded push finishes Forge's story, either way.
     for (decision, reply) in [("allow-once", "Pushed fix/login-timeout to origin."), ("deny", "OK, I won't push.")] {
-        let app = GatewayStore(profile: demo)
-        app.start()
-        let ready = await waitFor("demo for \(decision)") { app.state.isConnected && !app.approvals.isEmpty }
+        let (app, ready) = await startStore(demo, waiting: "demo for \(decision)", until: { $0.state.isConnected && !$0.approvals.isEmpty })
         guard ready, let seeded = app.approvals.first(where: { $0.command == "git push origin fix/login-timeout" }) else {
             check(false, "seeded push approval for \(decision)")
             app.stop()

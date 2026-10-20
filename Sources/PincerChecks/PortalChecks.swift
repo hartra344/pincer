@@ -157,14 +157,11 @@ private actor Counter {
 func runDemoPortalChecks() async {
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
-    gateway.cacheRoot = nil
-    gateway.outboxRoot = nil
-    gateway.notifier = nil
+    let (gateway, portalUp) = await startStore(.demo(), waiting: "portal Demo connection", timeout: 25, reconnect: true, defaults: defaults,
+                                               prepare: { $0.cacheRoot = nil; $0.outboxRoot = nil; $0.notifier = nil },
+                                               until: { $0.state.isConnected && $0.bootstrapped })
     defer { gateway.stop() }
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("portal Demo connection", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
+    guard portalUp else {
         check(false, "portal demo connects")
         return
     }
@@ -228,11 +225,8 @@ func runLivePortalChecks(url: String, token: String) async {
     func connect(_ name: String) async -> GatewayStore? {
         let profile = GatewayProfile(name: name, url: url, authMode: .token, access: .admin)
         profile.secret = token
-        let gateway = GatewayStore(profile: profile)
-        gateway.start()
-        gateway.reconnectIfNeeded()
-        guard await waitFor("\(name) connected", timeout: 25, { gateway.state.isConnected && !gateway.sessions.isEmpty }) else { return nil }
-        return gateway
+        let (gateway, up) = await startStore(profile, waiting: "\(name) connected", timeout: 25, reconnect: true)
+        return up ? gateway : nil
     }
     guard let gateway = await connect("Mock portals"), let watcher = await connect("Mock portal watcher") else {
         check(false, "portals: mock connected")

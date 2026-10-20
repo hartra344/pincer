@@ -58,7 +58,7 @@ enum Suites {
         Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks(); await runDemoEffectiveAgentCompatibilityChecks() },
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Settings notice") { checkSettingsNotice() },
-            Section("Check gate") { await checkCheckGate(); await checkMethodDeliveryGate(); await checkRawConnectionSupport() },
+            Section("Check gate") { await checkCheckGate(); await checkMethodDeliveryGate(); await checkRawConnectionSupport(); await checkStartStoreSupport() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Shared utilities") { await runSharedUtilityChecks() },
             Section("Refactor pass 3 helpers") { runRefactorPass3Checks() },

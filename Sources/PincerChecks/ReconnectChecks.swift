@@ -70,9 +70,8 @@ private func summary(_ stats: MockControl.Stats) -> String {
 private func connectedStore(url: String, token: String) async -> GatewayStore? {
     let profile = GatewayProfile(name: "Reconnect", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let ok = await waitFor("connected and bootstrapped", timeout: 30) { gateway.state.isConnected && !gateway.sessions.isEmpty && probeBootstrapTerminal(gateway) }
+    let (gateway, ok) = await startStore(profile, waiting: "connected and bootstrapped", timeout: 30,
+                                         until: { $0.state.isConnected && !$0.sessions.isEmpty && probeBootstrapTerminal($0) })
     guard ok else { gateway.stop(); return nil }
     return gateway
 }
