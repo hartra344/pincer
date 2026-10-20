@@ -51,7 +51,7 @@ When a pull request removes duplication or dead code, lower the baseline so it s
 scripts/lint.sh --update-baselines
 ```
 
-For Periphery, this writes every current finding to the baseline, and new entries get a `TODO` reason. The gate fails until every `TODO` is replaced with a real reason, so only keep entries you can justify; delete the rest of the code instead. Stale entries (whose code is gone) are listed so you can remove them.
+For Periphery, this writes every current finding to the baseline, and new entries get a `TODO` reason. The gate fails until every `TODO` is replaced with a real reason, so only keep entries you can justify; delete the rest of the code instead. Stale entries (whose code is gone) are listed so you can remove them. Some results depend on the Xcode version (CI's can differ from yours); mark those entries `"toolchainDependent": true` so they're kept and never listed as stale.
 
 ## SwiftLint
 

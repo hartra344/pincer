@@ -268,6 +268,14 @@
       "count": 2
     },
     {
+      "file": "Sources/PincerUI/TipsOverlay.swift",
+      "kind": "struct",
+      "name": "CompactTipsCard",
+      "hint": "unused",
+      "reason": "used under #if os(iOS) in TipsOverlay.swift; only Xcode 26's index store reports it",
+      "toolchainDependent": true
+    },
+    {
       "file": "Sources/PincerUI/TranscriptAccessibility.swift",
       "kind": "function.constructor",
       "name": "init(matching:voiceOverEnabled:)",
@@ -308,6 +316,14 @@
       "name": "openGatewaySettings",
       "hint": "unused",
       "reason": "read in the iOS branch (#else of os(macOS)) of VoiceSetupReadAloudRow.swift"
+    },
+    {
+      "file": "Sources/PincerUI/VoiceSetupVoiceSection.swift",
+      "kind": "struct",
+      "name": "VoiceBrowserPage",
+      "hint": "unused",
+      "reason": "used in the #else (iOS) branch of VoiceSetupVoiceSection.swift; only Xcode 26's index store reports it",
+      "toolchainDependent": true
     }
   ]
 }

@@ -152,6 +152,7 @@ if (update) {
   const byKey = new Map();
   for (const e of baselined.values()) {
     if (matchedBaseline.has(key(e))) byKey.set(key(e), { ...e, count: used.get(key(e)) });
+    else if (e.toolchainDependent) byKey.set(key(e), { ...e });
   }
   for (const r of failures) {
     const e = byKey.get(key(r)) ?? { file: r.file, kind: r.kind, name: r.name, hint: r.hint, reason: 'TODO: why this must stay', count: 0 };
@@ -165,7 +166,9 @@ if (update) {
   process.exit(0);
 }
 
-const stale = baseline.entries.filter((e) => !matchedBaseline.has(key(e)));
+// `toolchainDependent` entries are reported by some Xcode versions only (CI's and a newer local one
+// can differ), so they aren't stale when this toolchain doesn't report them.
+const stale = baseline.entries.filter((e) => !matchedBaseline.has(key(e)) && !e.toolchainDependent);
 console.log(
   `Periphery: ${results.length} results, ${retained} ignored (parameters, $projections, imports a skipped #if region may need), ` +
     `${baselinedCount} baselined, ${failures.length} new.`,
@@ -183,7 +186,7 @@ if (failures.length) {
     if (process.env.GITHUB_ACTIONS) console.log(`::error file=${r.file},line=${r.line}::${text}`);
   }
   console.log(
-    '\nDelete it. If it really is used (reflection, a runtime entry point, a Apps/ or iOS-only code, which Periphery can\'t see), ' +
+    '\nDelete it. If it really is used (reflection, a runtime entry point, or code only Apps/ or iOS uses, which Periphery can\'t see), ' +
       "add `// periphery:ignore - <reason>` above the declaration, or list it with a reason in " +
       `${relative(root, baselinePath)} (scripts/lint.sh --update-baselines adds new results).`,
   );
