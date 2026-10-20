@@ -107,7 +107,6 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
     /// The Gateway doesn't allow changing this session's model.
     public var isModelSelectionLocked: Bool { self.raw["modelSelectionLocked"]?.bool ?? false }
     public var reasoningLevel: String? { self.raw["reasoningLevel"]?.text }
-    public var thinkingLevel: String? { self.raw["thinkingLevel"]?.text }
 
     // Token accounting. `totalTokens` is the context snapshot; input/output are the latest run's.
     public var totalTokens: Int? { Self.tokens(self.raw["totalTokens"]) }

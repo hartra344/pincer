@@ -48,7 +48,6 @@ public enum AvatarMotion {
     public static let blinkDuration: TimeInterval = 0.12
     /// Blinks come once per cycle at a varying offset, so gaps between them run 4–7 s.
     static let blinkCycle: TimeInterval = 5.5
-    static let blinkJitter: TimeInterval = 1.5
     /// Idle breathing moves 1px every this long.
     public static let breathPeriod: TimeInterval = 1.8
     /// Success hop and error wobble play once, over this long, then hold.

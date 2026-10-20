@@ -755,7 +755,6 @@ struct FirstRunModelTests {
         private var _updates: [FirstRunSignInUpdate] = [.connecting, .connected(sampleVerified)]
         private var _probed: [URL] = []
         private var _secrets: [String?] = []
-        private var _profiles: [GatewayProfile] = []
 
         private func locked<T>(_ body: () -> T) -> T { self.lock.lock(); defer { self.lock.unlock() }; return body() }
         var reachability: FirstRunReachability {
@@ -768,7 +767,6 @@ struct FirstRunModelTests {
         }
         var probed: [URL] { self.locked { self._probed } }
         var secrets: [String?] { self.locked { self._secrets } }
-        var profiles: [GatewayProfile] { self.locked { self._profiles } }
 
         var environment: FirstRunModel.Environment {
             FirstRunModel.Environment(
@@ -778,7 +776,6 @@ struct FirstRunModelTests {
                 },
                 signIn: { profile in
                     self.locked {
-                        self._profiles.append(profile)
                         self._secrets.append(profile.secret)
                     }
                     let updates = self.updates

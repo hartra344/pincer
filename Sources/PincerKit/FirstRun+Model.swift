@@ -34,7 +34,6 @@ public enum FirstRunCopy {
     public static let notAGateway = "Something answered, but it isn't an OpenClaw Gateway. Check the address and port (usually 18789)."
     public static let tlsFailed =
         "Couldn't make a secure connection to that address. If you use Tailscale Serve, check that HTTPS is enabled for your tailnet."
-    public static let pinMismatch = "The Gateway's certificate doesn't match the fingerprint you entered."
 
     public static let tokenWrong = "That token didn't work. Copy it again with the command below and paste the whole thing."
     public static let tokenMissing = "This Gateway needs a token."

@@ -7,11 +7,7 @@ import Testing
 /// (persistence, assignment, validation).
 @Suite("Keyboard shortcuts")
 struct KeyboardShortcutsTests {
-    typealias Modifiers = KeyCombo.Modifiers
-
     // MARK: NSEvent.modifierFlags raw values (see HotKeyShortcut.Modifiers.event)
-    static let shiftFlag: UInt = 1 << 17
-    static let controlFlag: UInt = 1 << 18
     static let optionFlag: UInt = 1 << 19
     static let commandFlag: UInt = 1 << 20
 

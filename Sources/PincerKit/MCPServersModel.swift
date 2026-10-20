@@ -320,7 +320,6 @@ public final class MCPServersModel {
 
     public func operation(for name: String) -> OperationState { self.operations[name] ?? .idle }
 
-    public func clearOperation(_ name: String) { self.operations[name] = nil }
 
     public func reconnect(_ name: String) async {
         guard self.canRun(name, method: MCPServers.reconnectMethod) else { return }

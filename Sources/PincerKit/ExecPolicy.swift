@@ -43,8 +43,6 @@ public enum ExecPolicyField: String, CaseIterable, Identifiable, Hashable, Senda
         }
     }
 
-    public var isToggle: Bool { self == .autoAllowSkills }
-
     /// Known values, safest first.
     public var options: [Option] {
         switch self {
@@ -915,6 +913,4 @@ public final class ExecPolicyModel {
             return .failed(kind)
         }
     }
-
-    public func dismissBanner() { self.banner = nil }
 }

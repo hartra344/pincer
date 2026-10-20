@@ -187,10 +187,6 @@ extension GatewayStore {
         self.finishBootstrapPrefsPull(epoch: epoch, readSucceeded: readSucceeded)
     }
 
-    func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
-    func pullChatIcons() async { await self.pull(self.syncedMap(Self.chatIconsPref)) }
-    func pullChatColors() async { await self.pull(self.syncedMap(Self.chatColorsPref)) }
-
     func pull(_ map: SyncedMap) async {
         let fetchEpoch = self.connectionEpoch
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }

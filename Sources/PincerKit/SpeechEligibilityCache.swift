@@ -74,10 +74,6 @@ public struct SpeechEligibilityCache {
         self.entries.value(for: messageID)?.value
     }
 
-    public mutating func isPending(messageID: String) -> Bool {
-        self.entries.value(for: messageID)?.isPending ?? false
-    }
-
     /// Applies a worker result only if its token is still current. Eligibility survives even
     /// when normalized speech text exceeds the cache's explicit byte budget.
     @discardableResult

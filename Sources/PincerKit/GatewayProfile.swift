@@ -124,12 +124,6 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
         GatewayProfile(name: "Demo (forwarded sender refresh)", url: DemoGateway.forwardedSenderRefreshURL, authMode: .none)
     }
 
-    public var initials: String {
-        let words = self.name.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-        let letters = words.prefix(2).compactMap(\.first).map(String.init).joined()
-        return letters.isEmpty ? "OC" : letters.uppercased()
-    }
-
     /// Validated WebSocket URL. `ws://` is only accepted for loopback, private LAN and
     /// Tailscale (100.64.0.0/10, *.ts.net) hosts so credentials never cross the internet in cleartext.
     public func resolvedURL() throws -> URL {

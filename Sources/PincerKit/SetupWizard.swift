@@ -618,8 +618,6 @@ public final class SetupWizardModel {
     /// Steps done or skipped, for "3 of 5".
     public var settledCount: Int { SetupStep.allCases.count { self.status(of: $0).isSettled } }
 
-    public var attentionCount: Int { SetupStep.allCases.count { self.status(of: $0).needsAttention } }
-
     // MARK: Offering and navigation
 
     /// Showing, or going to be offered on this connection: tips wait for it.
@@ -768,13 +766,6 @@ public final class SetupWizardModel {
     public func markTestMessageSent(chatKey: String? = nil) {
         if let chatKey { self.testChatKey = chatKey }
         self.update { $0.testMessageSent = true }
-    }
-
-    /// Forgets this gateway's progress, so the wizard is offered again.
-    public func reset() {
-        self.progress = SetupProgress()
-        self.defaults.removeObject(forKey: SetupProgress.key(for: self.gatewayId))
-        self.hasSavedProgress = false
     }
 
     private func update(_ change: (inout SetupProgress) -> Void) {

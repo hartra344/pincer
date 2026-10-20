@@ -295,15 +295,6 @@ extension BrowserPanelModel {
         return target
     }
 
-    /// Deletes leftover `pincer-browser-*` download folders; call once at launch, off the main actor.
-    public nonisolated static func cleanTemporaryDownloads() {
-        let temp = FileManager.default.temporaryDirectory
-        for url in (try? FileManager.default.contentsOfDirectory(at: temp, includingPropertiesForKeys: nil)) ?? []
-        where url.lastPathComponent.hasPrefix("pincer-browser-") {
-            try? FileManager.default.removeItem(at: url)
-        }
-    }
-
     nonisolated static func writeTemp(_ data: Data, name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-browser-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

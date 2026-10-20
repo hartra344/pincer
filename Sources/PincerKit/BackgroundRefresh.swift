@@ -261,9 +261,6 @@ public final class BackgroundRefresh {
         self.timer = timer
     }
 
-    public static var lastRun: Date? { UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date }
-    public static var lastResult: String? { UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") }
-
     /// Skips unless notifications are on and the mode is background refresh.
     public func run(budget: TimeInterval = defaultBudget, trigger: Trigger = .scheduled, late: PushedTargetsBox? = nil) async -> Report {
         var report = Report()

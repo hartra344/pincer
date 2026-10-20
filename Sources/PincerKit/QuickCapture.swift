@@ -136,7 +136,6 @@ public struct HotKeyShortcut: Codable, Hashable, Sendable {
         public static let delete: UInt32 = 51
         public static let escape: UInt32 = 53
         public static let forwardDelete: UInt32 = 117
-        public static let keypadEnter: UInt32 = 76
     }
 
     /// Command, shift, caps lock, option, control (left and right) and fn.

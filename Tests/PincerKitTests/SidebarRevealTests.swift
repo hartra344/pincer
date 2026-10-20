@@ -23,8 +23,6 @@ struct SidebarRevealTests {
 
     // MARK: collapse state follows group renames and deletes
 
-    func collapsed(_ ids: [String]) -> [String: Bool] { Dictionary(uniqueKeysWithValues: ids.map { ($0, true) }) }
-
     @Test func moveCarriesBothKeyShapes() {
         defer { self.scratch.remove() }
         let store = self.store([])

@@ -85,7 +85,6 @@ public final class GatewayHealthModel {
 
     public nonisolated static let restartReason = "Pincer: Restart Gateway"
     public nonisolated static let refreshInterval: Duration = .seconds(30)
-    public nonisolated static var adminRequiredMessage: String { L("Restarting needs Full Management access.") }
 
     public private(set) var health: GatewayHealthSummary?
     public private(set) var heartbeat: GatewayHeartbeat?
