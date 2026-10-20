@@ -435,7 +435,7 @@ public final class ApprovalHistoryModel {
     /// Loads the first page for the current filter, replacing what's shown.
     public func load() async {
         guard !Task.isCancelled else { return }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains("approval.history") {
+        if !GatewayMethodSupport.supports("approval.history", advertised: self.methods()) {
             self.markUnsupported()
             return
         }
@@ -448,20 +448,19 @@ public final class ApprovalHistoryModel {
                 self.loadState = .idle
             }
         }
-        do {
-            let page = try await self.fetch(cursor: nil)
-            guard !Task.isCancelled, generation == self.generation else { return }
+        let outcome = await GatewayCallOutcome.run { try await self.fetch(cursor: nil) }
+        guard !Task.isCancelled, generation == self.generation else { return }
+        switch outcome {
+        case let .success(page):
             self.items = Self.deduplicated(page.items)
             self.usedCursors = []
             self.nextCursor = page.nextCursor
             self.supported = true
             self.loadState = .idle
             self.loadMoreState = .idle
-        } catch let error where GatewayError.isUnknownMethod(error) {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case .unknownMethod:
             self.markUnsupported()
-        } catch {
-            guard !Task.isCancelled, generation == self.generation else { return }
+        case let .missingScope(error), let .failure(error):
             self.loadState = .failed(Self.message(for: error))
         }
         guard !Task.isCancelled, generation == self.generation else { return }
@@ -514,7 +513,7 @@ public final class ApprovalHistoryModel {
     /// `approval.get`: the full record for the detail view. Failing keeps the row's data.
     public func loadDetail(_ id: String) async {
         guard self.detailState[id]?.isRunning != true else { return }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains("approval.get") { return }
+        if !GatewayMethodSupport.supports("approval.get", advertised: self.methods()) { return }
         self.detailState[id] = .running
         do {
             let result = try await self.request("approval.get", ["id": .string(id)])

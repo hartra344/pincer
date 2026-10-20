@@ -49,7 +49,7 @@ extension DemoGateway {
 
     func putGroups(_ params: JSONValue) throws -> JSONValue {
         guard let raw = params["names"]?.array else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "names required", details: nil)
+            throw GatewayError.invalidRequest("names required")
         }
         var names: [String] = []
         for name in raw.compactMap(\.string).map({ $0.trimmingCharacters(in: .whitespaces) }) where !name.isEmpty && !names.contains(name) {
@@ -68,9 +68,9 @@ extension DemoGateway {
     func renameGroup(_ params: JSONValue) throws -> JSONValue {
         guard let from = params["name"]?.string?.trimmingCharacters(in: .whitespaces), !from.isEmpty,
               let to = params["to"]?.string?.trimmingCharacters(in: .whitespaces), !to.isEmpty
-        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "group rename requires non-empty names", details: nil) }
+        else { throw GatewayError.invalidRequest("group rename requires non-empty names") }
         guard self.groups.contains(from) else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown session group: \(from)", details: nil)
+            throw GatewayError.invalidRequest("unknown session group: \(from)")
         }
         let updated = from == to ? 0 : self.moveMembers(of: from, to: .string(to))
         if from != to, self.groups.contains(to) {
@@ -84,7 +84,7 @@ extension DemoGateway {
 
     func deleteGroup(_ params: JSONValue) throws -> JSONValue {
         guard let name = params["name"]?.string?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "group delete requires a non-empty name", details: nil)
+            throw GatewayError.invalidRequest("group delete requires a non-empty name")
         }
         let updated = self.moveMembers(of: name, to: .null)
         self.groups.removeAll { $0 == name }

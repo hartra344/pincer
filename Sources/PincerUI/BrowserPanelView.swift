@@ -48,13 +48,10 @@ struct BrowserPanelView: View {
     @ViewBuilder private var content: some View {
         switch self.model.status {
         case .needsFullManagement:
-            ContentUnavailableView {
-                Label(L("Viewing the agent's browser needs Full Management"), systemImage: "lock.shield")
-            } description: {
-                Text("Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
-            } actions: {
-                Button(L("Open Connection")) { self.openGatewaySettings(self.gateway, at: .connection) }
-            }
+            FullManagementUnavailable(
+                title: L("Viewing the agent's browser needs Full Management"),
+                message: Text("Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module),
+                action: { self.openGatewaySettings(self.gateway, at: .connection) })
         case .notRunning:
             ContentUnavailableView {
                 Label(L("The agent's browser isn't running"), systemImage: "globe")

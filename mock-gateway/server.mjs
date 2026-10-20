@@ -36,6 +36,7 @@ import { createSeedState } from './seed.mjs';
 import { broadcastSessionChanged, handleSessionListRequest, registerGroup, updateSessionRow } from './session-list.mjs';
 import { CONTROL_METHOD, handleControlRequest, initControl, noteRequest } from './control.mjs';
 import { broadcast, clone, makeMessage, nowMs, randHex, sendErr, sendEvent, sendJson, sendRes, shortId, textBlock } from './util.mjs';
+import { scopeApproved } from './scopes.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
@@ -163,11 +164,6 @@ function deviceTokenFor(state, deviceId, scopes = []) {
   const now = nowMs();
   state.pairedDevices.set(deviceId, { deviceId, deviceToken, pairedAt: now, createdAtMs: now, approvedAtMs: now, tokenCreatedAtMs: now, scopes: new Set(scopes) });
   return deviceToken;
-}
-
-// Like the Gateway: operator.admin covers every operator scope, operator.write covers read.
-function scopeApproved(scope, approved) {
-  return approved.has(scope) || approved.has('operator.admin') || (scope === 'operator.read' && approved.has('operator.write'));
 }
 
 function approvePairing(state, requestId) {
@@ -334,7 +330,7 @@ function handleConnect(state, conn, msg, options) {
   const requestedScopes = isNodeRole ? [] : Array.isArray(params.scopes) ? params.scopes : [];
   const paired = state.pairedDevices.get(deviceId);
   // A paired device asking for scopes it was never approved for needs a scope upgrade.
-  const upgrade = isNodeRole ? paired && !hasNodeRole(paired) : paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
+  const upgrade = isNodeRole ? paired && !hasNodeRole(paired) : paired && requestedScopes.some((scope) => !scopeApproved(paired.scopes, scope));
   if ((!paired || upgrade) && options.pairing !== 'off') {
     const reason = paired ? (isNodeRole ? 'role-upgrade' : 'scope-upgrade') : 'not-paired';
     // MOCK_LEGACY_PAIRING=1 approves first pairings without operator.questions, like a device

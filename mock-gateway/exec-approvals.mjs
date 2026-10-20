@@ -7,6 +7,7 @@
 // MOCK_EXEC_APPROVALS_MISSING=1 starts without a policy file.
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
+import { isObject } from './util.mjs';
 
 export const EXEC_APPROVALS_METHODS = ['exec.approvals.get', 'exec.approvals.set'];
 export const EXEC_APPROVALS_PATH = '~/.openclaw/exec-approvals.json';
@@ -94,8 +95,6 @@ function withoutVersion(file) {
 }
 
 // --- Params schema (closed objects, like the gateway-protocol typebox schema) ---
-
-const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 function closed(value, path, allowed, required = []) {
   if (!isObject(value)) return `${path}: must be object`;

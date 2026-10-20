@@ -23,16 +23,16 @@ extension DemoGateway {
             for field in ["agentId", "sessionKey"] {
                 if let raw = params[field] {
                     guard case let .string(value) = raw else {
-                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must be string")
+                        throw GatewayError.invalidRequest("invalid skills.status params: at /\(field): must be string")
                     }
                     guard !value.isEmpty else {
-                        throw Self.skillsInvalid("invalid skills.status params: at /\(field): must NOT have fewer than 1 characters")
+                        throw GatewayError.invalidRequest("invalid skills.status params: at /\(field): must NOT have fewer than 1 characters")
                     }
                 }
             }
             let agentId = try self.skillsAgentId(params)
             if let key = params["sessionKey"]?.text, !self.hasSession(key) {
-                throw Self.skillsInvalid("Session not found.")
+                throw GatewayError.invalidRequest("Session not found.")
             }
             return ["workspaceDir": .string(self.workspaceDir(agentId)), "managedSkillsDir": .string(Self.managedSkillsDir),
                     "agentId": .string(agentId), "skills": .array(self.skillEntries.map(Self.publicSkill))]
@@ -40,32 +40,32 @@ extension DemoGateway {
             try Self.checkKeys(method, params, ["query", "limit"])
             if let query = params["query"] {
                 guard case let .string(value) = query else {
-                    throw Self.skillsInvalid("invalid skills.search params: at /query: must be string")
+                    throw GatewayError.invalidRequest("invalid skills.search params: at /query: must be string")
                 }
                 guard !value.isEmpty else {
-                    throw Self.skillsInvalid("invalid skills.search params: at /query: must NOT have fewer than 1 characters")
+                    throw GatewayError.invalidRequest("invalid skills.search params: at /query: must NOT have fewer than 1 characters")
                 }
             }
             if let limit = params["limit"] {
                 guard case let .number(value) = limit, value.isFinite, value.rounded() == value else {
-                    throw Self.skillsInvalid("invalid skills.search params: at /limit: must be integer")
+                    throw GatewayError.invalidRequest("invalid skills.search params: at /limit: must be integer")
                 }
-                guard value >= 1 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be >= 1") }
-                guard value <= 100 else { throw Self.skillsInvalid("invalid skills.search params: at /limit: must be <= 100") }
+                guard value >= 1 else { throw GatewayError.invalidRequest("invalid skills.search params: at /limit: must be >= 1") }
+                guard value <= 100 else { throw GatewayError.invalidRequest("invalid skills.search params: at /limit: must be <= 100") }
             }
             return ["results": .array(self.searchClawHub(params["query"]?.text, limit: params["limit"]?.int ?? 20))]
         case "skills.detail":
             try Self.checkKeys(method, params, ["slug", "version"])
-            guard let ref = params["slug"]?.text else { throw Self.skillsInvalid("invalid skills.detail params: must have required property 'slug'") }
+            guard let ref = params["slug"]?.text else { throw GatewayError.invalidRequest("invalid skills.detail params: must have required property 'slug'") }
             let rawVersion = params["version"]
             if let rawVersion, rawVersion.string == nil || rawVersion.string?.isEmpty == true {
-                throw Self.skillsInvalid("invalid skills.detail params: version must be a non-empty string")
+                throw GatewayError.invalidRequest("invalid skills.detail params: version must be a non-empty string")
             }
             guard let entry = self.catalogEntry(ref) else {
                 throw GatewayError.rpc(code: "UNAVAILABLE", message: Self.missingSkillDetailMessage(ref), details: nil)
             }
             if entry["installOnly"]?.bool == true {
-                throw Self.skillsInvalid("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
+                throw GatewayError.invalidRequest("ClawHub cannot return details for \(ref); external skill sources are install-only. Install it directly, or run \"openclaw skills install \(ref)\".")
             }
             return Self.detail(entry, selectedVersion: rawVersion?.text ?? entry["version"]?.text)
         case "skills.install":
@@ -76,15 +76,15 @@ extension DemoGateway {
             try Self.checkKeys(method, params, ["agentId", "includePlugins"])
             if let agentId = params["agentId"] {
                 guard case let .string(value) = agentId else {
-                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must be string")
+                    throw GatewayError.invalidRequest("invalid tools.catalog params: at /agentId: must be string")
                 }
                 guard !value.isEmpty else {
-                    throw Self.skillsInvalid("invalid tools.catalog params: at /agentId: must NOT have fewer than 1 characters")
+                    throw GatewayError.invalidRequest("invalid tools.catalog params: at /agentId: must NOT have fewer than 1 characters")
                 }
             }
             if let includePlugins = params["includePlugins"] {
                 guard case .bool = includePlugins else {
-                    throw Self.skillsInvalid("invalid tools.catalog params: at /includePlugins: must be boolean")
+                    throw GatewayError.invalidRequest("invalid tools.catalog params: at /includePlugins: must be boolean")
                 }
             }
             let agentId = try self.skillsAgentId(params)
@@ -96,20 +96,20 @@ extension DemoGateway {
         case "tools.effective":
             try Self.checkKeys(method, params, ["agentId", "sessionKey"])
             guard let key = params["sessionKey"]?.text else {
-                throw Self.skillsInvalid("invalid tools.effective params: must have required property 'sessionKey'")
+                throw GatewayError.invalidRequest("invalid tools.effective params: must have required property 'sessionKey'")
             }
             if let value = params["agentId"] {
                 guard case .string(let raw) = value else {
-                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must be string")
+                    throw GatewayError.invalidRequest("invalid tools.effective params: at /agentId: must be string")
                 }
                 guard !raw.isEmpty else {
-                    throw Self.skillsInvalid("invalid tools.effective params: at /agentId: must NOT have fewer than 1 characters")
+                    throw GatewayError.invalidRequest("invalid tools.effective params: at /agentId: must NOT have fewer than 1 characters")
                 }
             }
-            guard self.hasSession(key) else { throw Self.skillsInvalid("unknown session key \"\(key)\"") }
+            guard self.hasSession(key) else { throw GatewayError.invalidRequest("unknown session key \"\(key)\"") }
             let sessionAgent = self.sessionAgentId(key)
             if let requested = params["agentId"]?.text, requested != sessionAgent {
-                throw Self.skillsInvalid("agent id \"\(requested)\" does not match session agent \"\(sessionAgent)\"")
+                throw GatewayError.invalidRequest("agent id \"\(requested)\" does not match session agent \"\(sessionAgent)\"")
             }
             return self.mcpEffective(Self.seedEffectiveTools(agentId: sessionAgent))
         default:
@@ -143,7 +143,7 @@ extension DemoGateway {
         if source == "clawhub" {
             try Self.checkKeys("skills.install", params, ["agentId", "source", "slug", "version", "force", "timeoutMs"])
             _ = try self.skillsAgentId(params)
-            guard let ref = params["slug"]?.text else { throw Self.skillsInvalid("invalid skills.install params: must have required property 'slug'") }
+            guard let ref = params["slug"]?.text else { throw GatewayError.invalidRequest("invalid skills.install params: must have required property 'slug'") }
             guard let entry = self.catalogEntry(ref), let slug = entry["slug"]?.text else {
                 throw GatewayError.rpc(code: "UNAVAILABLE", message: "ClawHub skill \"\(ref)\" not found", details: nil)
             }
@@ -165,11 +165,11 @@ extension DemoGateway {
             }
             return .object(response)
         }
-        if source != nil { throw Self.skillsInvalid("invalid skills.install params: unsupported source \"\(source ?? "")\"") }
+        if source != nil { throw GatewayError.invalidRequest("invalid skills.install params: unsupported source \"\(source ?? "")\"") }
         try Self.checkKeys("skills.install", params, ["agentId", "name", "installId", "dangerouslyForceUnsafeInstall", "timeoutMs"])
         _ = try self.skillsAgentId(params)
         guard let name = params["name"]?.text, let installId = params["installId"]?.text else {
-            throw Self.skillsInvalid("invalid skills.install params: must have required property 'name' and 'installId'")
+            throw GatewayError.invalidRequest("invalid skills.install params: must have required property 'name' and 'installId'")
         }
         guard let index = self.skillEntries.firstIndex(where: { $0["name"]?.text == name }) else {
             throw GatewayError.rpc(code: "UNAVAILABLE", message: "Skill not found: \(name)", details: nil)
@@ -192,12 +192,12 @@ extension DemoGateway {
     private func updateSkill(_ params: JSONValue) throws -> JSONValue {
         if params["source"] != nil {
             try Self.checkKeys("skills.update", params, ["agentId", "source", "slug", "all", "force"])
-            guard params["source"]?.text == "clawhub" else { throw Self.skillsInvalid("invalid skills.update params: unsupported source") }
+            guard params["source"]?.text == "clawhub" else { throw GatewayError.invalidRequest("invalid skills.update params: unsupported source") }
             _ = try self.skillsAgentId(params)
             let slug = params["slug"]?.text
             let all = params["all"]?.bool == true
-            if slug == nil, !all { throw Self.skillsInvalid("clawhub skills.update requires \"slug\" or \"all\"") }
-            if slug != nil, all { throw Self.skillsInvalid("clawhub skills.update accepts either \"slug\" or \"all\", not both") }
+            if slug == nil, !all { throw GatewayError.invalidRequest("clawhub skills.update requires \"slug\" or \"all\"") }
+            if slug != nil, all { throw GatewayError.invalidRequest("clawhub skills.update accepts either \"slug\" or \"all\", not both") }
             let force = params["force"]?.bool == true
             let indices = self.skillEntries.indices.filter { index in
                 guard let linked = self.skillEntries[index]["clawhub"]?["slug"]?.text else { return false }
@@ -236,14 +236,14 @@ extension DemoGateway {
             return ["ok": true, "skillKey": .string(slug ?? "*"), "config": ["source": "clawhub", "results": .array(results)]]
         }
         try Self.checkKeys("skills.update", params, ["skillKey", "enabled", "apiKey", "env"])
-        guard let key = params["skillKey"]?.text else { throw Self.skillsInvalid("invalid skills.update params: must have required property 'skillKey'") }
+        guard let key = params["skillKey"]?.text else { throw GatewayError.invalidRequest("invalid skills.update params: must have required property 'skillKey'") }
         if let enabled = params["enabled"] {
             guard case .bool = enabled else {
-                throw Self.skillsInvalid("invalid skills.update params: at /enabled: must be boolean")
+                throw GatewayError.invalidRequest("invalid skills.update params: at /enabled: must be boolean")
             }
         }
         if let apiKey = params["apiKey"], apiKey.string == nil {
-            throw Self.skillsInvalid("invalid skills.update params: at /apiKey: must be string")
+            throw GatewayError.invalidRequest("invalid skills.update params: at /apiKey: must be string")
         }
         var config: [String: JSONValue] = [:]
         if let index = self.skillEntries.firstIndex(where: { $0["skillKey"]?.text == key }) {
@@ -285,7 +285,7 @@ extension DemoGateway {
 
     private func skillsAgentId(_ params: JSONValue) throws -> String {
         guard let raw = params["agentId"]?.text else { return "main" }
-        guard self.agents.contains(where: { $0["id"]?.text == raw }) else { throw Self.skillsInvalid("unknown agent id \"\(raw)\"") }
+        guard self.agents.contains(where: { $0["id"]?.text == raw }) else { throw GatewayError.invalidRequest("unknown agent id \"\(raw)\"") }
         return raw
     }
 
@@ -403,13 +403,9 @@ extension DemoGateway {
         guard let object = params.object else { return }
         if let extra = object.keys.sorted().first(where: { !allowed.contains($0) }) {
             if method == "skills.detail" {
-                throw Self.skillsInvalid("invalid \(method) params: at root: unexpected property '\(extra)'")
+                throw GatewayError.invalidRequest("invalid \(method) params: at root: unexpected property '\(extra)'")
             }
-            throw Self.skillsInvalid("invalid \(method) params: must NOT have additional properties (\(extra))")
+            throw GatewayError.invalidRequest("invalid \(method) params: must NOT have additional properties (\(extra))")
         }
-    }
-
-    private static func skillsInvalid(_ message: String) -> GatewayError {
-        GatewayError.rpc(code: "INVALID_REQUEST", message: message, details: nil)
     }
 }

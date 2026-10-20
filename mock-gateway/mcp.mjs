@@ -3,7 +3,7 @@
 // tiny HTTP OAuth consent flow (/mcp-oauth/authorize and /mcp-oauth/callback).
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { scopeApproved } from './scopes.mjs';
+import { hasScope } from './scopes.mjs';
 
 export const MCP_METHODS = [
   'mcp.status',
@@ -421,7 +421,7 @@ export function handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast
   if (!MCP_METHODS.includes(method) || mcpDisabled()) return false;
   const params = msg.params ?? {};
   const required = ADMIN_METHODS.has(method) ? ADMIN_SCOPE : READ_SCOPE;
-  if (!scopeApproved(conn.scopes ?? [], required)) {
+  if (!hasScope(conn, required)) {
     sendErr(conn, id, 'FORBIDDEN', `missing scope: ${required}`, { code: 'MISSING_SCOPE', scope: required });
     return true;
   }

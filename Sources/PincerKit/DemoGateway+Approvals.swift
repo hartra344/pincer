@@ -24,7 +24,7 @@ extension DemoGateway {
     func resolveExecApproval(_ params: JSONValue) throws -> JSONValue {
         guard let id = params["id"]?.string, let decision = params["decision"]?.string,
               ["allow-once", "allow-always", "deny"].contains(decision)
-        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid decision", details: nil) }
+        else { throw GatewayError.invalidRequest("invalid decision") }
         if let previous = self.resolvedApprovals[id] {
             guard previous == decision else {
                 throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval already resolved",
@@ -63,7 +63,7 @@ extension DemoGateway {
         if let cursor = params["cursor"]?.string {
             guard let data = Data(base64Encoded: cursor), let text = String(data: data, encoding: .utf8),
                   let value = Int(text), value >= 0
-            else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid approval.history cursor", details: nil) }
+            else { throw GatewayError.invalidRequest("invalid approval.history cursor") }
             offset = value
         }
         let kind = params["kind"]?.string

@@ -35,8 +35,7 @@ extension ChatStore {
         guard let gateway else { return false }
         let scopes = gateway.hello?.scopes ?? []
         guard gateway.profile.isDemo || scopes.contains("operator.write") || scopes.contains(GatewayConnection.adminScope) else { return false }
-        let methods = gateway.hello?.methods ?? []
-        return methods.isEmpty || methods.contains(Self.forkMethod)
+        return GatewayMethodSupport.supports(Self.forkMethod, advertised: gateway.hello?.methods)
     }
 
     /// The Gateway refuses fork, rewind and branch switches while the agent is working.

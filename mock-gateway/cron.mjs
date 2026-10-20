@@ -2,6 +2,7 @@
 // broadcasting `cron` events. Writes need operator.admin, like the real Gateway.
 import crypto from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
+import { jsonClone as clone } from './util.mjs';
 
 export const CRON_METHODS = ['cron.status', 'cron.list', 'cron.get', 'cron.runs', 'cron.add', 'cron.update', 'cron.remove', 'cron.run'];
 const ADMIN_METHODS = new Set(['cron.add', 'cron.update', 'cron.remove', 'cron.run']);
@@ -10,10 +11,6 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 // How long a started run takes to finish.
 export const RUN_DURATION_MS = 1200;
-
-function clone(value) {
-  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-}
 
 // Definition fields only, so scheduler state doesn't change the revision.
 function revisionOf(job) {

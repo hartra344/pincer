@@ -266,7 +266,7 @@ public final class UsageModel {
         decode: (JSONValue) -> Value?, recover: ((Error) -> Value?)? = nil
     ) async {
         guard !Task.isCancelled else { return }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains(method) {
+        if !GatewayMethodSupport.supports(method, advertised: self.methods()) {
             edit { $0.markUnsupported() }
             return
         }

@@ -465,7 +465,7 @@ public final class GatewayLogsModel {
     /// One `logs.tail` request from the current cursor. Only one runs at a time.
     public func poll() async {
         guard !self.isFetching else { return }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains("logs.tail") {
+        if !GatewayMethodSupport.supports("logs.tail", advertised: self.methods()) {
             self.markUnsupported()
             return
         }

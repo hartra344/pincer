@@ -213,7 +213,7 @@ extension DemoGateway {
     func handleAgents(_ method: String, _ params: JSONValue) throws -> JSONValue? {
         guard method == "agents.list" || Self.agentMethods.contains(method) else { return nil }
         if let problem = Self.agentParamsProblem(method, params) {
-            throw Self.agentInvalid("invalid \(method) params: \(problem)")
+            throw GatewayError.invalidRequest("invalid \(method) params: \(problem)")
         }
         switch method {
         case "agents.list":
@@ -262,7 +262,7 @@ extension DemoGateway {
 
     private func configuredAgentId(_ raw: String) throws -> String {
         guard let id = Self.normalizedAgentId(raw), self.agentIndex(id) != nil else {
-            throw Self.agentInvalid("agent \"\(Self.normalizedAgentId(raw) ?? raw)\" not found")
+            throw GatewayError.invalidRequest("agent \"\(Self.normalizedAgentId(raw) ?? raw)\" not found")
         }
         return id
     }
@@ -313,12 +313,12 @@ extension DemoGateway {
     }
 
     private func createAgent(_ params: JSONValue) throws -> JSONValue {
-        guard let rawName = Self.trimmed(params["name"]) else { throw Self.agentInvalid("agent name is required") }
+        guard let rawName = Self.trimmed(params["name"]) else { throw GatewayError.invalidRequest("agent name is required") }
         guard let agentId = Self.normalizedAgentId(rawName) else {
-            throw Self.agentInvalid("Agent name \"\(rawName)\" has no valid id characters. Use at least one letter a-z or digit.")
+            throw GatewayError.invalidRequest("Agent name \"\(rawName)\" has no valid id characters. Use at least one letter a-z or digit.")
         }
-        if Self.reservedAgentIds.contains(agentId) { throw Self.agentInvalid("\"\(agentId)\" is reserved") }
-        if self.agentIndex(agentId) != nil { throw Self.agentInvalid("agent \"\(agentId)\" already exists") }
+        if Self.reservedAgentIds.contains(agentId) { throw GatewayError.invalidRequest("\"\(agentId)\" is reserved") }
+        if self.agentIndex(agentId) != nil { throw GatewayError.invalidRequest("agent \"\(agentId)\" already exists") }
         let name = Self.oneLine(rawName)
         let emoji = Self.trimmed(params["emoji"])
         let avatar = Self.trimmed(params["avatar"])
@@ -344,7 +344,7 @@ extension DemoGateway {
     private func updateAgent(_ params: JSONValue) throws -> JSONValue {
         let agentId = try self.configuredAgentId(params["agentId"]?.string ?? "")
         guard let index = self.agentIndex(agentId), var agent = self.agents[index].object else {
-            throw Self.agentInvalid("agent \"\(agentId)\" not found")
+            throw GatewayError.invalidRequest("agent \"\(agentId)\" not found")
         }
         let name = Self.trimmed(params["name"]).map(Self.oneLine)
         let emoji = Self.trimmed(params["emoji"])
@@ -384,7 +384,7 @@ extension DemoGateway {
     private func deleteAgent(_ params: JSONValue) throws -> JSONValue {
         let agentId = try self.configuredAgentId(params["agentId"]?.string ?? "")
         if self.agents.count == 1 {
-            throw Self.agentInvalid("Agent \"\(agentId)\" is the only configured agent and cannot be deleted.")
+            throw GatewayError.invalidRequest("Agent \"\(agentId)\" is the only configured agent and cannot be deleted.")
         }
         let dir = self.workspaceDir(agentId)
         let deleteFiles = params["deleteFiles"]?.bool ?? true
@@ -408,7 +408,7 @@ extension DemoGateway {
     private func agentFile(_ params: JSONValue) throws -> (agentId: String, name: String) {
         let agentId = try self.configuredAgentId(params["agentId"]?.string ?? "")
         let name = (params["name"]?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.workspaceFileNames.contains(name) else { throw Self.agentInvalid("unsupported file \"\(name)\"") }
+        guard Self.workspaceFileNames.contains(name) else { throw GatewayError.invalidRequest("unsupported file \"\(name)\"") }
         return (agentId, name)
     }
 
@@ -449,10 +449,6 @@ extension DemoGateway {
     }
 
     // MARK: Schema
-
-    private static func agentInvalid(_ message: String) -> GatewayError {
-        .rpc(code: "INVALID_REQUEST", message: message, details: nil)
-    }
 
     private enum FieldKind { case nonEmpty, string, bool, nullableNonEmpty, sha256, trueLiteral }
 

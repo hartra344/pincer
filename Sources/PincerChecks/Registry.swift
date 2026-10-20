@@ -59,7 +59,7 @@ enum Suites {
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Check gate") { await checkCheckGate() },
             Section("Payload & identity") { runIdentityChecks() },
-            Section("Shared utilities") { runSharedUtilityChecks() },
+            Section("Shared utilities") { await runSharedUtilityChecks() },
             Section("Shared platform helpers") { runSharedPlatformHelperChecks() },
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },

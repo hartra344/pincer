@@ -3,17 +3,11 @@ import CryptoKit
 import Foundation
 @testable import PincerKit
 
-@MainActor private final class ShareTargetGate {
-    var entered = 0, open = false
-    var held: [CheckedContinuation<Void, Never>] = []
-    // Already-computed delivery intentionally remains held across pump cancellation;
-    // the fixture owner releases it and awaits the actual pump before teardown.
-    func hold() async { entered += 1; if !open { await withCheckedContinuation { held.append($0) } } }
-    func release() { open = true; let values = held; held = []; for value in values { value.resume() } }
-}
 @MainActor private func checkDisconnectedShareTargets(defaults: UserDefaults, profile: GatewayProfile, hello: GatewayHello,
                                                      request: @escaping @MainActor (String, JSONValue, TimeInterval) async throws -> JSONValue) async {
-    let gate = ShareTargetGate()
+    // Already-computed delivery intentionally remains held across pump cancellation;
+    // the fixture owner releases it and awaits the actual pump before teardown.
+    let gate = CheckGate(releasesOnCancel: false)
     var state: ShareConnection.StateHandler?
     let model = ShareModel(profiles: [profile], identity: DeviceIdentity(privateKey: .init()), defaults: defaults,
         connectionFactory: { _, _ in ShareConnection(request: { method, params, timeout in
@@ -30,7 +24,7 @@ import Foundation
     model.connect()
     guard let task = model.actualPumpTask else { check(false, "actual pump task is admitted"); model.disconnect(); return }
     defer { gate.release(); model.disconnect() }
-    guard await waitFor("actual share target responses", timeout: 15, { gate.entered == 2 }) else {
+    guard await waitFor("actual share target responses", timeout: 15, { gate.enteredCount == 2 }) else {
         check(false, "actual ShareModel pump reaches both held target responses"); gate.release(); model.disconnect(); await task.value; return
     }
     let agents = model.agents, chats = model.chats, target = model.target, phase = model.phase

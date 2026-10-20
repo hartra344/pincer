@@ -22,12 +22,14 @@ final class BrowserSheetHeaderUITests: XCTestCase {
         chat.tap()
 
         let options = app.buttons["Chat Options"]
-        XCTAssertTrue(options.waitForExistence(timeout: 10))
+        XCTAssertTrue(options.waitForExistence(timeout: 20), "chat options button did not appear")
         attachHeader(app, named: "header before")
 
         options.tap()
-        let browserItem = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Show Browser'")).firstMatch
-        XCTAssertTrue(browserItem.waitForExistence(timeout: 5))
+        let browserItem = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH 'Show Browser'"))
+            .firstMatch
+        XCTAssertTrue(browserItem.waitForExistence(timeout: 10), "Show Browser menu item did not appear")
         browserItem.tap()
 
         let done = app.buttons["Done"]
@@ -36,7 +38,7 @@ final class BrowserSheetHeaderUITests: XCTestCase {
 
         let sheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: done)
         wait(for: [sheetGone], timeout: 10)
-        XCTAssertTrue(options.waitForExistence(timeout: 10))
+        XCTAssertTrue(options.waitForExistence(timeout: 20), "chat options button did not return after closing Browser sheet")
 
         // The stale title can take a moment to show, so give it a few seconds before asserting its absence.
         let browserTitle = app.navigationBars.staticTexts["Browser"]

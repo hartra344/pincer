@@ -434,18 +434,14 @@ private struct ExecPolicyStates<Content: View>: View {
             ContentUnavailableView(L("Command Policy Isn't Available"), systemImage: "lock.slash",
                                    description: Text("This Gateway can't share its command policy. Update OpenClaw to manage it here.", bundle: .module))
         } else if self.model.needsAdmin {
-            ContentUnavailableView {
-                Label(L("Needs Full Management"), systemImage: "lock.shield")
-            } description: {
-                Text(ExecPolicy.needsAdminMessage)
-            } actions: {
-                Button(L("Open Connection")) { self.navigator.destination = .connection }
-            }
+            FullManagementUnavailable(
+                title: L("Needs Full Management"),
+                message: Text(ExecPolicy.needsAdminMessage),
+                action: { self.navigator.destination = .connection })
         } else if self.model.snapshot != nil {
             self.content
         } else if !self.connected, !self.model.loadState.isRunning {
-            ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the Gateway to see its command policy.", bundle: .module))
+            NotConnectedView(description: Text("Connect to the Gateway to see its command policy.", bundle: .module))
         } else if let error = self.model.loadState.error {
             ContentUnavailableView {
                 Label(L("Couldn't Load Command Policy"), systemImage: "exclamationmark.triangle")

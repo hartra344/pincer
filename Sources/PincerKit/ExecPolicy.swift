@@ -651,8 +651,7 @@ public final class ExecPolicyModel {
     public var canWrite: Bool {
         guard self.allowsWritesWithoutAdmin || self.scopes().contains(GatewayConnection.adminScope) else { return false }
         if self.setRejectedAsUnknown { return false }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains(ExecPolicy.setMethod) { return false }
-        return true
+        return GatewayMethodSupport.supports(ExecPolicy.setMethod, advertised: self.methods())
     }
 
     /// Why the page is read-only, nil when it isn't.
@@ -773,7 +772,7 @@ public final class ExecPolicyModel {
     public func load(discardingDraft: Bool = false) async {
         guard !Task.isCancelled else { return }
         if self.hasChanges, !discardingDraft { return }
-        if let methods = self.methods(), !methods.isEmpty, !methods.contains(ExecPolicy.getMethod) {
+        if !GatewayMethodSupport.supports(ExecPolicy.getMethod, advertised: self.methods()) {
             self.markUnsupported()
             return
         }

@@ -247,7 +247,7 @@ extension DemoGateway {
         case "tts.setProvider":
             guard let id = params["provider"]?.text, Self.voiceProviders.contains(where: { $0.id == id }) else {
                 let given = params["provider"]?.text ?? ""
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Invalid provider. Use one of: openai, elevenlabs. (got \"\(given)\")", details: nil)
+                throw GatewayError.invalidRequest("Invalid provider. Use one of: openai, elevenlabs. (got \"\(given)\")")
             }
             self.voice.provider = id
             return ["provider": .string(id)]
@@ -258,12 +258,12 @@ extension DemoGateway {
             } else if self.voicePersonas.contains(where: { $0.id == id }) {
                 self.voice.persona = id
             } else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Unknown persona \"\(id)\".", details: nil)
+                throw GatewayError.invalidRequest("Unknown persona \"\(id)\".")
             }
             return ["persona": JSONValue(self.activeVoicePersona?.id)]
         case "tts.convert":
             guard let text = params["text"]?.text, !text.isEmpty else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tts.convert requires text", details: nil)
+                throw GatewayError.invalidRequest("tts.convert requires text")
             }
             let requested = params["provider"]?.text
             let used = try self.voiceSynthesize(provider: requested ?? self.voiceProvider,
@@ -273,10 +273,10 @@ extension DemoGateway {
                     "outputFormat": "mp3", "voiceCompatible": false]
         case "tts.speak":
             guard let text = params["text"]?.text, !text.isEmpty else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "tts.speak requires text", details: nil)
+                throw GatewayError.invalidRequest("tts.speak requires text")
             }
             guard text.count <= 4096 else {
-                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "text too long", details: nil)
+                throw GatewayError.invalidRequest("text too long")
             }
             let used = try self.voiceSynthesize(provider: self.voiceProvider, model: nil, fallback: true)
             return ["audioBase64": .string(Self.demoTone().base64EncodedString()), "provider": .string(used),

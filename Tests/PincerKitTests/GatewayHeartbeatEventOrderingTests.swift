@@ -17,9 +17,8 @@ struct GatewayHeartbeatEventOrderingTests {
                                  "channels": ["telegram": ["accountId": "default", "enabled": true,
                                                              "configured": true, "running": true, "connected": false]]]
         var heartbeatError: GatewayError?
-        var entered: Set<String> = []
-        private var waiters: [String: CheckedContinuation<Void, Never>] = [:]
-        private var released = false
+        private let gate = KeyedTestGate<String>()
+        var entered: Set<String> { gate.entered }
 
         init(failed: Bool) {
             self.oldHeartbeat = GatewayHeartbeatEventOrderingTests.heartbeat(failed: failed, timestamp: 1700000000000)
@@ -32,15 +31,7 @@ struct GatewayHeartbeatEventOrderingTests {
             }
             // These responses represent snapshots computed before the intervening event.
             let response = method == "health" ? self.health : self.oldHeartbeat
-            self.entered.insert(method)
-            await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    if self.released || Task.isCancelled { continuation.resume() }
-                    else { self.waiters[method] = continuation }
-                }
-            } onCancel: {
-                Task { @MainActor [weak self] in self?.release() }
-            }
+            await self.gate.hold(method)
             try Task.checkCancellation()
             if method == "last-heartbeat", let error = self.heartbeatError { throw error }
             return response
@@ -59,12 +50,7 @@ struct GatewayHeartbeatEventOrderingTests {
             }
         }
 
-        func release() {
-            self.released = true
-            let waiters = self.waiters.values
-            self.waiters = [:]
-            for waiter in waiters { waiter.resume() }
-        }
+        func release() { self.gate.release() }
     }
 
     @Test(.timeLimit(.minutes(2)), arguments: [false, true])

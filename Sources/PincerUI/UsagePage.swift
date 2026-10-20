@@ -24,8 +24,7 @@ struct UsagePage: View {
                         .disabled(!connected || model.isLoading)
                 }
             } else if !connected, !model.hasData, !model.isLoading {
-                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the Gateway to see its usage and cost.", bundle: .module))
+                NotConnectedView(description: Text("Connect to the Gateway to see its usage and cost.", bundle: .module))
             } else {
                 self.form(model, connected: connected)
             }

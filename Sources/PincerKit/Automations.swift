@@ -470,7 +470,7 @@ public final class AutomationsModel {
     public func load() async {
         guard !self.loadState.isRunning else { return }
         // Gateways list their methods in `hello`; skip the round trip when cron isn't there.
-        if let methods = self.hello()?.methods, !methods.isEmpty, !methods.contains("cron.list") {
+        if !GatewayMethodSupport.supports("cron.list", advertised: self.hello()?.methods) {
             self.supported = false
             self.hasLoaded = true
             return
