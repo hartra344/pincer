@@ -34,13 +34,6 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
         return Locale.preferredLanguages.first.flatMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
     }
 
-    /// Whether the recognizer for the current language can run on-device, and that language's name; nil when
-    /// there is no recognizer at all.
-    static func onDeviceSupport() -> (language: String, supported: Bool)? {
-        guard let recognizer = makeRecognizer() else { return nil }
-        return (Self.languageName(recognizer), recognizer.supportsOnDeviceRecognition)
-    }
-
     private static func languageName(_ recognizer: SFSpeechRecognizer) -> String {
         let identifier = recognizer.locale.identifier
         return Locale.current.localizedString(forIdentifier: identifier) ?? identifier

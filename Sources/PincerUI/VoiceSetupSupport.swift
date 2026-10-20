@@ -174,14 +174,6 @@ struct VoiceUseProviderButton: View {
     }
 }
 
-extension GatewayVoiceModel {
-    /// The display name of a model id ("Eleven v4 Turbo"), or the id itself when it isn't a known one.
-    func modelDisplayName(_ id: String?, provider: String) -> String? {
-        guard let id, !id.isEmpty else { return nil }
-        return self.modelOptions(for: provider).first { $0.id == id }?.name ?? id
-    }
-}
-
 /// The outcome of the last change, next to the control that made it.
 struct VoiceScopedMessage: View {
     let setup: VoiceSetupController

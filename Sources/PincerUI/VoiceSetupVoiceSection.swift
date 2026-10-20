@@ -14,8 +14,6 @@ struct VoiceSetupVoiceSection: View {
     @State private var needsKey = false
     @State private var loading = false
 
-    static let defaultVoiceId = "pMsXgVXv3BLzUgSXRplE"
-
     /// A raw ID is already visible in the Voice ID field below.
     private var showsCurrentRow: Bool {
         guard let current = self.current else { return true }

@@ -10,8 +10,6 @@ public typealias PlatformImage = UIImage
 #endif
 
 enum Theme {
-    static let bubbleCorner: CGFloat = Radius.bubble
-
     /// Corner radii. Names map the values the views already used; nothing is rounded.
     enum Radius {
         static let hairline: CGFloat = 2
@@ -70,22 +68,6 @@ enum Theme {
     static var filterSymbol: String {
         if #available(macOS 26, iOS 26, *) { "line.3.horizontal.decrease" } else { "line.3.horizontal.decrease.circle" }
     }
-
-    static var sidebarBackground: Color {
-        #if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color(uiColor: .secondarySystemBackground)
-        #endif
-    }
-
-    static var codeBackground: Color {
-        #if os(macOS)
-        Color(nsColor: .textBackgroundColor).opacity(0.6)
-        #else
-        Color(uiColor: .tertiarySystemBackground)
-        #endif
-    }
 }
 
 // MARK: Liquid Glass
@@ -131,16 +113,6 @@ extension View {
     func glassGroup(spacing: CGFloat = 8) -> some View {
         if #available(macOS 26, iOS 26, *) {
             GlassEffectContainer(spacing: spacing) { self }
-        } else {
-            self
-        }
-    }
-
-    /// Soft scroll-edge fade under floating chrome (macOS 26 / iOS 26).
-    @ViewBuilder
-    func softScrollEdges() -> some View {
-        if #available(macOS 26, iOS 26, *) {
-            self.scrollEdgeEffectStyle(.soft, for: .all)
         } else {
             self
         }
