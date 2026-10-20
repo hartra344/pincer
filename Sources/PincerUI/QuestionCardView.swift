@@ -39,9 +39,7 @@ struct QuestionCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
-        .padding(.horizontal, Theme.Spacing.row)
-        .padding(.top, Theme.Spacing.sm)
+        .chatCardChrome(cornerRadius: Self.corner)
         .focusable()
         .focusEffectDisabled()
         .focused(self.$focus, equals: .card)
@@ -378,9 +376,7 @@ struct QuestionAccessHint: View {
         }
         .padding(Theme.Spacing.row)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xxLarge, style: .continuous))
-        .padding(.horizontal, Theme.Spacing.row)
-        .padding(.top, Theme.Spacing.sm)
+        .chatCardChrome(cornerRadius: Theme.Radius.xxLarge)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

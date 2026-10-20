@@ -27,9 +27,7 @@ struct ProgressCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
-        .padding(.horizontal, Theme.Spacing.row)
-        .padding(.top, Theme.Spacing.sm)
+        .chatCardChrome(cornerRadius: Self.corner)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 

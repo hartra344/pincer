@@ -307,9 +307,7 @@ private struct PairingStatusRow: View {
             NavigationStack {
                 ScrollView { PairingView(requestId: self.requestId, deviceId: self.deviceId) }
                     .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button(L("Close")) { self.showing = false }
-                        }
+                        SheetCancelToolbarItem(title: L("Close")) { self.showing = false }
                     }
             }
             .environment(self.gateway)
@@ -353,7 +351,7 @@ struct NewSessionSheet: View {
             .formStyle(.grouped)
             .navigationTitle(L("New Chat"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Create")) {
                         self.creating = true
@@ -391,7 +389,7 @@ struct RenameSheet: View {
             .formStyle(.grouped)
             .navigationTitle(L("Rename Chat"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Save")) {
                         let value = self.label.trimmingCharacters(in: .whitespaces)
@@ -483,7 +481,7 @@ struct SymbolPickerSheet: View {
             .navigationTitle(L("Change Icon"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .destructiveAction) {
                     Button(L("Use Default")) {
                         self.onPick(nil)
@@ -549,7 +547,7 @@ struct TextPromptSheet: View {
             .formStyle(.grouped)
             .navigationTitle(self.prompt.title)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) { Button(L("Save"), action: self.save) }
             }
         }
@@ -596,7 +594,7 @@ struct ChatColorSheet: View {
             .navigationTitle(L("Chat Color"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Done")) {
                         if let hex = self.color.rgbHex { self.gateway.setColor(hex, for: self.row.key) }

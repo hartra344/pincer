@@ -142,7 +142,7 @@ struct ConnectionSheet: View {
             .formStyle(.grouped)
             .navigationTitle(L("Add Gateway"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Connect"), action: self.save).disabled(!self.draft.canSave)
                 }

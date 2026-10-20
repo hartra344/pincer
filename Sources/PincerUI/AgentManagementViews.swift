@@ -1025,7 +1025,7 @@ private struct AgentFileCompareSheet: View {
             .navigationTitle(L("Compare \(self.conflict.name)"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
+                SheetDoneToolbarItem { self.dismiss() }
             }
         }
         #if os(macOS)

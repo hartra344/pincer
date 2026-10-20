@@ -62,6 +62,7 @@ enum Suites {
             Section("Shared utilities") { await runSharedUtilityChecks() },
             Section("Refactor pass 3 helpers") { runRefactorPass3Checks() },
             Section("Shared platform helpers") { runSharedPlatformHelperChecks() },
+            Section("Sheet chrome") { runSheetChromeChecks() },
             Section("Selection defaults") { await runSelectionDefaultsChecks() },
             Section("Leave demo") { runLeaveDemoOfflineChecks() },
             Section("Gateways settings") { runGatewaysSettingsOfflineChecks() },

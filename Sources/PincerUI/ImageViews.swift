@@ -65,9 +65,7 @@ struct ImagePreview: View {
             .navigationTitle(self.ref.alt ?? "Image")
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("Done")) { self.dismiss() }
-                }
+                SheetCancelToolbarItem(title: L("Done")) { self.dismiss() }
                 if let exportData {
                     ToolbarItem(placement: .primaryAction) {
                         ShareLink(

@@ -231,7 +231,7 @@ struct MCPPasteCodeSheet: View {
             .navigationTitle(L("Paste Code or URL"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Complete")) {
                         self.isWorking = true
@@ -275,7 +275,7 @@ struct MCPSimulatedConsentSheet: View {
             .navigationTitle(L("Sign In"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel"), action: self.cancel) }
+                SheetCancelToolbarItem(action: self.cancel)
             }
         }
         .interactiveDismissDisabled()
