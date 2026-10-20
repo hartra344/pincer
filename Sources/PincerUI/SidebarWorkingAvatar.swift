@@ -214,9 +214,7 @@ enum SidebarDance {
     private static func render(size: CGSize, scale: CGFloat, _ draw: (CGContext) -> Void) -> CGImage? {
         let width = Int(ceil(size.width * scale)), height = Int(ceil(size.height * scale))
         guard width > 0, height > 0,
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
+              let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .premultipliedFirst) else { return nil }
         context.scaleBy(x: scale, y: scale)
         draw(context)
         return context.makeImage()

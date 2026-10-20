@@ -632,9 +632,7 @@ struct ReviewChangesSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(L("Unsaved Changes"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Close")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

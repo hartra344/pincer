@@ -80,9 +80,7 @@ struct MCPServerEditor: View {
             }
             }
             .navigationTitle(self.isNew ? L("Add Server") : L("Edit \(self.initial.originalName ?? "")"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

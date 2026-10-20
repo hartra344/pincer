@@ -123,9 +123,7 @@ struct ChatInspectorChrome: ViewModifier {
                     }
                     .onPreferenceChange(WorkspaceTitlePreference.self) { self.workspaceTitle = $0 }
                     .navigationTitle(WorkspaceTitlePreference.sheetTitle(panel: self.current, workspaceTitle: self.workspaceTitle))
-                    #if os(iOS)
-                    .navigationBarTitleDisplayMode(.inline)
-                    #endif
+                    .inlineNavigationBarTitle()
                     // Inside the sheet: a presenter whose sheet is up can't show a second modal.
                     .modifier(DiscardPrompt(isPresented: self.confirmBinding(compact: true), discard: self.discardClose))
                     .toolbar {

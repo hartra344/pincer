@@ -61,17 +61,13 @@ struct SessionUsagePage: View {
             }
         }
         .navigationTitle(title)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .inlineNavigationBarTitle()
         .toolbar {
             ToolbarItem {
                 if loading, detail?.totals.value != nil {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { Task { await model.loadSession(self.sessionKey) } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(!connected || loading)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: !connected || loading) { await model.loadSession(self.sessionKey) }
                 }
             }
         }

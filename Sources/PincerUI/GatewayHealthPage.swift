@@ -30,9 +30,7 @@ struct GatewayHealthPage: View {
         .navigationTitle(L("Health"))
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                    .disabled(!connected || model.loadState.isRunning)
-                    .help(L("Refresh"))
+                RefreshButton(isDisabled: !connected || model.loadState.isRunning) { await model.load() }
             }
         }
         #if os(iOS)

@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import UniformTypeIdentifiers
 
 /// Where the demo's seeded unsent message lives, for checks and screenshots.
@@ -51,9 +50,7 @@ extension DemoGateway {
     /// A 240×160 table diagram: a round table with six seats.
     static func seatingPlanPNG() -> Data {
         let (width, height) = (240, 160)
-        guard let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .premultipliedLast)
         else { return Data() }
         context.setFillColor(CGColor(red: 0.97, green: 0.95, blue: 0.91, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
@@ -66,12 +63,8 @@ extension DemoGateway {
             context.setFillColor(CGColor(red: 0.30 + hue * 0.5, green: 0.55 - hue * 0.2, blue: 0.80 - hue * 0.5, alpha: 1))
             context.fillEllipse(in: CGRect(x: center.x + cos(angle) * 62 - 13, y: center.y + sin(angle) * 62 - 13, width: 26, height: 26))
         }
-        guard let image = context.makeImage() else { return Data() }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return Data() }
-        CGImageDestinationAddImage(destination, image, nil)
-        CGImageDestinationFinalize(destination)
-        return data as Data
+        guard let image = context.makeImage(), let data = ImageEncoding.data(image, type: .png) else { return Data() }
+        return data
     }
 
     /// The Gateway-side transcript of the *Dinner party* chat the failed message follows.

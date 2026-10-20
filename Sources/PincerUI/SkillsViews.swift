@@ -600,9 +600,7 @@ private struct ClawHubSkillSheet: View {
             }
             .formStyle(.grouped)
             .navigationTitle(self.result.displayName)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }

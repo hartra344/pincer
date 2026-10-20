@@ -1,7 +1,6 @@
 import CoreGraphics
 import CryptoKit
 import Foundation
-import ImageIO
 import UniformTypeIdentifiers
 
 /// What the first-run setup wizard reads from the demo, shaped like `mock-gateway/setup.mjs`:
@@ -219,13 +218,9 @@ extension DemoGateway {
                 context.fill(CGRect(x: (x + quiet) * scale, y: size - (y + quiet + 1) * scale, width: scale, height: scale))
             }
         }
-        let data = NSMutableData()
-        guard let image = context.makeImage(),
-              let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)
+        guard let image = context.makeImage(), let data = ImageEncoding.data(image, type: .png)
         else { return "data:image/png;base64," }
-        CGImageDestinationAddImage(destination, image, nil)
-        CGImageDestinationFinalize(destination)
-        return "data:image/png;base64,\((data as Data).base64EncodedString())"
+        return "data:image/png;base64,\(data.base64EncodedString())"
     }
 
     // MARK: Helpers

@@ -52,9 +52,7 @@ enum AvatarArt {
     {
         let width = Int(ceil(size.width * scale)), height = Int(ceil(size.height * scale))
         guard width > 0, height > 0,
-              let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
+              let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .premultipliedFirst) else { return nil }
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: scale, y: -scale)
         let rect = CGRect(origin: .zero, size: size)

@@ -45,9 +45,7 @@ struct ChannelStatusPage: View {
                     .help(L("Probe: ask each channel to check its connection now"))
                 }
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(model.loadState.isRunning)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: model.loadState.isRunning) { await model.refresh() }
                 }
             }
         }
@@ -533,9 +531,7 @@ struct ChannelQRLoginSheet: View {
             .padding(Theme.Spacing.section)
             .frame(maxWidth: .infinity, alignment: .leading)
             .navigationTitle(L("Link \(self.channelLabel)"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(state.isConnected ? L("Done") : L("Cancel")) { self.dismiss() }

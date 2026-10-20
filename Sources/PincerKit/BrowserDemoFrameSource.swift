@@ -99,9 +99,7 @@ public struct BrowserDemoFrameSource: BrowserFrameSource {
 
     static func render(_ page: BrowserDemoPages.Page, tick: Int) -> CGImage? {
         let width = 800, height = 500
-        guard let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        guard let context = ImageEncoding.bitmapContext(width: width, height: height, alpha: .premultipliedLast)
         else { return nil }
         let size = CGSize(width: width, height: height)
         context.setFillColor(CGColor(red: 0.98, green: 0.98, blue: 0.99, alpha: 1))

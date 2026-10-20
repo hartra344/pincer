@@ -58,9 +58,7 @@ struct ExportSheet: View {
                 Text(L("Couldn't load the full history. Try again."))
             }
             .navigationTitle(L("Export Chat"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

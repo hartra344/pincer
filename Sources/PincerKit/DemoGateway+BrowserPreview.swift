@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import UniformTypeIdentifiers
 
 /// The demo's `browser` tool call and its `controlUi.linkPreview` answer, mirrored by
@@ -49,12 +48,9 @@ extension DemoGateway {
               let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
                                   space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
-                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent),
+              let out = ImageEncoding.data(image, type: .png)
         else { return "" }
-        let out = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil) else { return "" }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return "" }
-        return "data:image/png;base64," + (out as Data).base64EncodedString()
+        return "data:image/png;base64," + out.base64EncodedString()
     }
 }

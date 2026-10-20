@@ -35,9 +35,7 @@ struct DevicesPage: View {
         .toolbar {
             if connected, model.supported, !model.needsAccess {
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(model.loadState.isRunning)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: model.loadState.isRunning) { await model.refresh() }
                 }
             }
         }
@@ -526,9 +524,7 @@ struct NodesPage: View {
         .toolbar {
             if connected, model.nodesSupported {
                 ToolbarItem {
-                    Button { Task { await model.loadNodes() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
-                        .disabled(model.nodesLoadState.isRunning)
-                        .help(L("Refresh"))
+                    RefreshButton(isDisabled: model.nodesLoadState.isRunning) { await model.loadNodes() }
                 }
             }
         }
