@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  // server.mjs / selftest.mjs come from package.json scripts. selftest.mjs loads selftest/<name>.mjs
+  // with a template-literal dynamic import, which knip cannot follow, so list them as entries.
+  "entry": ["selftest/*.mjs"],
+  "project": ["**/*.mjs"],
+  // An export that is only used inside its own file is harmless; don't flag it.
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    // Known unused exports at the time the gate landed (#1058). Delete each entry when the export
+    // is removed or used (#1057 may do so); do not add new ones.
+    "connect-auth.mjs": ["exports"],
+    "nodes.mjs": ["exports"],
+    "sessions-files.mjs": ["exports"]
+  }
+}

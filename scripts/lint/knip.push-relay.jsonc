@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  // server.mjs and relay.test.mjs come from package.json scripts (`node server.mjs`, `node --test`).
+  "project": ["**/*.mjs"],
+  // An export that is only used inside its own file is harmless; don't flag it.
+  "ignoreExportsUsedInFile": true
+}

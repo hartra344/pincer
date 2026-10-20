@@ -1,0 +1,19 @@
+{
+  "path": ["Sources", "Apps", "mock-gateway", "push-relay"],
+  "format": ["swift", "javascript"],
+  "formatsExts": { "javascript": ["mjs"], "swift": ["swift"] },
+  "maxSize": "2mb",
+  "minTokens": 70,
+  "minLines": 8,
+  "ignore": [
+    "**/node_modules/**",
+    "**/.build/**",
+    "**/*.xcstrings",
+    "**/*.xcodeproj/**",
+    "**/Generated/**",
+    "**/package-lock.json"
+  ],
+  "gitignore": true,
+  "reporters": ["json"],
+  "silent": true
+}
