@@ -106,6 +106,12 @@ for (const file of [...swiftFiles(join(root, 'Sources')), ...swiftFiles(join(roo
   if (skippedRegions(readFileSync(file, 'utf8')).trim()) blindFiles.add(relative(root, file));
 }
 
+const fileText = new Map();
+const projected = (r) => {
+  if (!fileText.has(r.file)) fileText.set(r.file, readFileSync(join(root, r.file), 'utf8'));
+  return new RegExp(`\\$${r.name}\\b`).test(fileText.get(r.file));
+};
+
 const baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : { entries: [] };
 const baselined = new Map(baseline.entries.map((e) => [key(e), e]));
 
@@ -118,6 +124,12 @@ let retained = 0;
 let baselinedCount = 0;
 for (const r of results) {
   if (r.kind === 'var.parameter') {
+    retained++;
+    continue;
+  }
+  // Periphery 3.8 doesn't count a property wrapper's projected value (`$name`, as in a `@State`
+  // passed on as a binding) as a read.
+  if (r.kind === 'var.instance' && projected(r)) {
     retained++;
     continue;
   }
@@ -155,7 +167,7 @@ if (update) {
 
 const stale = baseline.entries.filter((e) => !matchedBaseline.has(key(e)));
 console.log(
-  `Periphery: ${results.length} results, ${retained} ignored (parameters, imports a skipped #if region may need), ` +
+  `Periphery: ${results.length} results, ${retained} ignored (parameters, $projections, imports a skipped #if region may need), ` +
     `${baselinedCount} baselined, ${failures.length} new.`,
 );
 if (stale.length) {

@@ -1,0 +1,313 @@
+{
+  "entries": [
+    {
+      "file": "Sources/PincerKit/AppModel.swift",
+      "kind": "function.constructor",
+      "name": "init(defaults:ownerNameIdleWait:)",
+      "hint": "unused",
+      "reason": "used by iOS-only SettingsOwnerNameTypingTests"
+    },
+    {
+      "file": "Sources/PincerKit/AppModel.swift",
+      "kind": "function.method.instance",
+      "name": "flushOutboxWrites()",
+      "hint": "unused",
+      "reason": "called on iOS backgrounding in ChatWindow.swift (#else of os(macOS))"
+    },
+    {
+      "file": "Sources/PincerKit/IntentService.swift",
+      "kind": "var.instance",
+      "name": "gateways",
+      "hint": "unused",
+      "reason": "used by Apps/Intents/PincerEntities.swift"
+    },
+    {
+      "file": "Sources/PincerKit/IntentService.swift",
+      "kind": "var.instance",
+      "name": "target",
+      "hint": "unused",
+      "reason": "used by Apps/Intents/PincerIntents.swift (open chat)"
+    },
+    {
+      "file": "Sources/PincerKit/SilentPushRefreshRuns.swift",
+      "kind": "var.static",
+      "name": "shared",
+      "hint": "unused",
+      "reason": "used from Apps/iOS/PincerApp.swift (silent push)"
+    },
+    {
+      "file": "Sources/PincerKit/Usage+Format.swift",
+      "kind": "var.instance",
+      "name": "label",
+      "hint": "unused",
+      "reason": "read under #if os(iOS) in UsagePage.swift (session sort picker)"
+    },
+    {
+      "file": "Sources/PincerKit/VoiceSettingsDraft.swift",
+      "kind": "var.instance",
+      "name": "pendingRevision",
+      "hint": "unused",
+      "reason": "read by iOS-only VoiceSettingsDraftOwnershipHostedTests"
+    },
+    {
+      "file": "Sources/PincerMacDev/main.swift",
+      "kind": "var.instance",
+      "name": "delegate",
+      "hint": "unused",
+      "reason": "@NSApplicationDelegateAdaptor wrapper; read by SwiftUI runtime"
+    },
+    {
+      "file": "Sources/PincerUI/AgentAvatarView.swift",
+      "kind": "function.constructor",
+      "name": "init(seed:report:)",
+      "hint": "unused",
+      "reason": "DEBUG probe built by iOS-only CenteredChatHeaderHostedTests"
+    },
+    {
+      "file": "Sources/PincerUI/ApprovalHistoryPage.swift",
+      "kind": "function.method.instance",
+      "name": "callAsFunction()",
+      "hint": "unused",
+      "reason": "callAsFunction: closeSettings() on iOS in ApprovalHistoryPage.swift"
+    },
+    {
+      "file": "Sources/PincerUI/ApprovalHistoryPage.swift",
+      "kind": "function.method.instance",
+      "name": "callAsFunction(then:)",
+      "hint": "unused",
+      "reason": "callAsFunction: closeSettings { } on iOS in ConnectionViews.swift and SetupWizardView.swift"
+    },
+    {
+      "file": "Sources/PincerUI/ApprovalHistoryPage.swift",
+      "kind": "var.instance",
+      "name": "closeSettings",
+      "hint": "unused",
+      "reason": "called on iOS (#else of os(macOS)) in ApprovalHistoryPage.swift"
+    },
+    {
+      "file": "Sources/PincerUI/AppTheme.swift",
+      "kind": "var.instance",
+      "name": "colorScheme",
+      "hint": "unused",
+      "reason": "read under #if os(iOS) in ThemeRoot (preferredColorScheme)"
+    },
+    {
+      "file": "Sources/PincerUI/AttachmentIngest.swift",
+      "kind": "function.method.static",
+      "name": "displayedPreviewIdentity(for:)",
+      "hint": "unused",
+      "reason": "used by iOS-only AttachmentThumbnailUIKitHosted tests"
+    },
+    {
+      "file": "Sources/PincerUI/AttachmentIngest.swift",
+      "kind": "function.method.static",
+      "name": "loaderOwner(for:)",
+      "hint": "unused",
+      "reason": "used by iOS-only AttachmentThumbnailUIKitHosted tests"
+    },
+    {
+      "file": "Sources/PincerUI/ChannelList.swift",
+      "kind": "var.instance",
+      "name": "openAppSettings",
+      "hint": "unused",
+      "reason": "called under #if os(iOS) in ChannelList.swift"
+    },
+    {
+      "file": "Sources/PincerUI/ChannelList.swift",
+      "kind": "var.static",
+      "name": "hasSplitView",
+      "hint": "unused",
+      "reason": "read under #if os(iOS) in ChannelList.swift"
+    },
+    {
+      "file": "Sources/PincerUI/CommandPaletteView.swift",
+      "kind": "var.instance",
+      "name": "sidebarToggle",
+      "hint": "unused",
+      "reason": "read in the iOS branch (#else of os(macOS)) of CommandPaletteView.swift"
+    },
+    {
+      "file": "Sources/PincerUI/Composer.swift",
+      "kind": "function.method.instance",
+      "name": "addImage(_:name:)",
+      "hint": "unused",
+      "reason": "called under #if os(iOS) (paste) in Composer.swift"
+    },
+    {
+      "file": "Sources/PincerUI/Composer.swift",
+      "kind": "function.method.instance",
+      "name": "attachCapturedPhoto(_:orientation:)",
+      "hint": "unused",
+      "reason": "camera capture callback under #if os(iOS) in Composer.swift"
+    },
+    {
+      "file": "Sources/PincerUI/ConnectionViews.swift",
+      "kind": "var.instance",
+      "name": "closeSettings",
+      "hint": "unused",
+      "reason": "callAsFunction: closeSettings { } on iOS in ConnectionViews.swift"
+    },
+    {
+      "file": "Sources/PincerUI/DeviceNodeHandlers.swift",
+      "kind": "struct",
+      "name": "ActivityPayload",
+      "hint": "unused",
+      "reason": "used by the iOS motion handlers in DeviceNodeHandlers.swift"
+    },
+    {
+      "file": "Sources/PincerUI/DeviceNodeHandlers.swift",
+      "kind": "struct",
+      "name": "MotionParams",
+      "hint": "unused",
+      "reason": "used by the iOS motion handlers in DeviceNodeHandlers.swift"
+    },
+    {
+      "file": "Sources/PincerUI/DeviceNodeHandlers.swift",
+      "kind": "struct",
+      "name": "PedometerPayload",
+      "hint": "unused",
+      "reason": "used by the iOS motion handlers in DeviceNodeHandlers.swift"
+    },
+    {
+      "file": "Sources/PincerUI/FirstRunTour.swift",
+      "kind": "function.method.static",
+      "name": "startIfRequested()",
+      "hint": "unused",
+      "reason": "called from Apps/iOS/PincerApp.swift"
+    },
+    {
+      "file": "Sources/PincerUI/FirstRunView.swift",
+      "kind": "function.method.instance",
+      "name": "dismissed()",
+      "hint": "unused",
+      "reason": "fullScreenCover onDismiss under #if os(iOS) in FirstRunView.swift"
+    },
+    {
+      "file": "Sources/PincerUI/FirstRunView.swift",
+      "kind": "var.instance",
+      "name": "afterDismiss",
+      "hint": "unused",
+      "reason": "read in dismissed() / set by FirstRunDismissQueue under #if os(iOS)"
+    },
+    {
+      "file": "Sources/PincerUI/FirstRunView.swift",
+      "kind": "var.instance",
+      "name": "app",
+      "hint": "unused",
+      "reason": "FirstRunCover reads it under #if os(iOS)"
+    },
+    {
+      "file": "Sources/PincerUI/MCPServerEditor.swift",
+      "kind": "var.instance",
+      "name": "token",
+      "hint": "unused",
+      "reason": "Equatable identity: makes repeated scroll requests distinct"
+    },
+    {
+      "file": "Sources/PincerUI/NotificationAppDelegate.swift",
+      "kind": "class",
+      "name": "NotificationAppDelegate",
+      "hint": "unused",
+      "reason": "used by @NSApplicationDelegateAdaptor in Apps/macOS/PincerApp.swift and PincerMacDev"
+    },
+    {
+      "file": "Sources/PincerUI/NotificationLastCheckedValue.swift",
+      "kind": "struct",
+      "name": "NotificationLastCheckedValue",
+      "hint": "unused",
+      "reason": "used under #if os(iOS) in NotificationSettingsSection.swift"
+    },
+    {
+      "file": "Sources/PincerUI/PairingRequestsPage.swift",
+      "kind": "var.static",
+      "name": "dismissHelp",
+      "hint": "unused",
+      "reason": "used under #if os(iOS) in PairingRequestsPage.swift"
+    },
+    {
+      "file": "Sources/PincerUI/PortalWebView.swift",
+      "kind": "function.method.instance",
+      "name": "webView(_:didReceive:)",
+      "hint": "unused",
+      "reason": "WKNavigationDelegate witness (server-trust challenge)"
+    },
+    {
+      "file": "Sources/PincerUI/SettingsPages.swift",
+      "kind": "function.method.static",
+      "name": "parseError(_:)",
+      "hint": "unused",
+      "reason": "used by iOS-only RawConfigEditorHostedTests"
+    },
+    {
+      "file": "Sources/PincerUI/SettingsPages.swift",
+      "kind": "var.instance",
+      "name": "counts",
+      "hint": "unused",
+      "reason": "read by iOS-only RawConfigEditorHostedTests (DEBUG parser probe)"
+    },
+    {
+      "file": "Sources/PincerUI/SetupWizardView.swift",
+      "kind": "var.instance",
+      "name": "closeGatewaySettings",
+      "hint": "unused",
+      "reason": "callAsFunction on iOS (#else of os(macOS)) in SetupWizardView.swift"
+    },
+    {
+      "file": "Sources/PincerUI/SidebarSupport.swift",
+      "kind": "var.instance",
+      "name": "groupNamesInOrder",
+      "hint": "unused",
+      "reason": "used by SidebarList+UIKit.swift (iOS)"
+    },
+    {
+      "file": "Sources/PincerUI/SidebarToggle.swift",
+      "kind": "var.instance",
+      "name": "sidebarToggle",
+      "hint": "unused",
+      "reason": "@Entry key paths read on iOS (SidebarToggle.swift, CommandPaletteView.swift) and by iOS tests",
+      "count": 2
+    },
+    {
+      "file": "Sources/PincerUI/TranscriptAccessibility.swift",
+      "kind": "function.constructor",
+      "name": "init(matching:voiceOverEnabled:)",
+      "hint": "unused",
+      "reason": "DEBUG probe built by iOS-only SlashMenuAnnouncementTests"
+    },
+    {
+      "file": "Sources/PincerUI/TranscriptRenderer.swift",
+      "kind": "var.instance",
+      "name": "activeSpeechPreparationCount",
+      "hint": "unused",
+      "reason": "read by iOS-only TranscriptUIKitHostedTests"
+    },
+    {
+      "file": "Sources/PincerUI/TranscriptRenderer.swift",
+      "kind": "var.instance",
+      "name": "pendingSpeechPreparationCount",
+      "hint": "unused",
+      "reason": "read by iOS-only TranscriptUIKitHostedTests"
+    },
+    {
+      "file": "Sources/PincerUI/TranscriptRenderer.swift",
+      "kind": "var.instance",
+      "name": "pendingSpeechPreparationOrderCount",
+      "hint": "unused",
+      "reason": "read by iOS-only TranscriptUIKitHostedTests"
+    },
+    {
+      "file": "Sources/PincerUI/TranscriptStyle.swift",
+      "kind": "function.method.static",
+      "name": "reload()",
+      "hint": "unused",
+      "reason": "called on iOS content-size change in TranscriptRenderer.swift"
+    },
+    {
+      "file": "Sources/PincerUI/VoiceSetupReadAloudRow.swift",
+      "kind": "var.instance",
+      "name": "openGatewaySettings",
+      "hint": "unused",
+      "reason": "read in the iOS branch (#else of os(macOS)) of VoiceSetupReadAloudRow.swift"
+    }
+  ]
+}

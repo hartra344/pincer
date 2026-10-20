@@ -144,10 +144,6 @@ public struct ExecPolicySettings: Hashable, Sendable {
         self.values = values
     }
 
-    public init(values: [ExecPolicyField: JSONValue] = [:]) {
-        self.values = values
-    }
-
     public subscript(field: ExecPolicyField) -> JSONValue? { self.values[field] }
 
     public var isEmpty: Bool { self.values.isEmpty }

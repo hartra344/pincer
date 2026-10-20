@@ -7,7 +7,7 @@ Pincer has two lint gates. Both fail only on something **new**: each has a check
 
 | Gate | Finds | Covers | Baseline |
 | --- | --- | --- | --- |
-| Periphery | Unused Swift declarations, assign-only properties, unused imports | `Sources/`, `Tests/` | `scripts/lint/periphery-baseline.json` |
+| Periphery | Unused Swift declarations and imports | `Sources/`, `Tests/` | `scripts/lint/periphery-baseline.json` |
 | jscpd | Copy-pasted blocks (at least 70 tokens and 8 lines) | Swift and `.mjs` in `Sources/`, `Apps/`, `mock-gateway/`, `push-relay/` | `scripts/lint/jscpd-baseline.json` |
 | knip | Unused files, exports and dependencies | `mock-gateway/`, `push-relay/` | none; it must be clean |
 
@@ -27,7 +27,7 @@ scripts/lint.sh periphery --skip-build   # reuse the index store from the last b
 
 **Periphery** prints each new finding as `file:line: description`, and CI annotates the line.
 
-- Delete the unused declaration, or the property that's only ever written.
+- Delete the unused declaration.
 - If it is used, but only from somewhere Periphery can't see, keep it and say why. Periphery scans the macOS debug SwiftPM build, so it can't see `Apps/` (the app targets, extensions and intents) or code behind `#if os(iOS)`, `canImport(UIKit)` or the `#else` of `#if DEBUG`. Add a comment on the declaration:
 
   ```swift
@@ -35,9 +35,9 @@ scripts/lint.sh periphery --skip-build   # reuse the index store from the last b
   ```
 
   or add it to `scripts/lint/periphery-baseline.json` with a `reason`. Matching ignores line numbers, so edits elsewhere in a file don't break it; an entry with `count` covers that many same-named declarations in the file.
-- Unused function parameters aren't reported, and neither is an unused import in a file that has an iOS-only region.
+- Unused function parameters aren't reported, and neither is an unused import in a file that has an iOS-only region, or a property read only through its `$` projection (a `@State` passed on as a binding), which Periphery 3.8 misses.
 
-Configuration is in `.periphery.yml`. Public declarations count (most of PincerKit is `public`), `Codable` properties, `@objc` members and SwiftUI previews are kept.
+Configuration is in `.periphery.yml`. Public declarations count (most of PincerKit is `public`). `Codable` properties, `@objc` members, SwiftUI previews and properties that are only ever assigned are kept: assign-only reports were nearly all `Equatable` task keys, retained tasks and observers, and decoded fields.
 
 **jscpd** fails when the number of clones or the duplicated percentage goes above the baseline. It lists the clones in files you changed. Extract the shared code into a helper instead of copying it.
 

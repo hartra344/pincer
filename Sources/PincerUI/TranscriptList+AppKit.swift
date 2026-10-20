@@ -357,12 +357,6 @@ extension TranscriptList: NSViewRepresentable {
             }
         }
 
-        // MARK: Prefetch
-
-        func prefetchStep() {
-            self.controller.prefetchStep()
-        }
-
         @objc private func liveScrollStarted() {
             self.isLiveScrolling = true
             self.isScrollingToBottom = false

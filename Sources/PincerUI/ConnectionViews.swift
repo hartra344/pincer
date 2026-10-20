@@ -281,7 +281,6 @@ extension String {
 struct PairingView: View {
     let requestId: String?
     let deviceId: String
-    @Environment(GatewayStore.self) private var gateway
     @Environment(\.appTheme) private var theme
 
     var body: some View {

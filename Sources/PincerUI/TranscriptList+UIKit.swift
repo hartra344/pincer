@@ -175,8 +175,6 @@ extension TranscriptList: UIViewRepresentable {
 
         func apply(_ highlight: TranscriptHighlight) { self.controller.apply(highlight) }
 
-        func prefetchStep() { self.controller.prefetchStep() }
-
         // MARK: Heights
 
         /// Rows span the safe area, so they don't run under the notch or rounded corners in

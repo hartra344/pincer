@@ -152,7 +152,10 @@ function workspaceFor(state, sessionKey) {
   return ws;
 }
 
-/** Test hook: rewrites a file as if something else on the Gateway host changed it. Returns the new hash. */
+/**
+ * Test hook: rewrites a file as if something else on the Gateway host changed it. Returns the new hash.
+ * @public (for server-side tests; see the README)
+ */
 export function changeSessionFile(state, sessionKey, path, content) {
   const file = workspaceFor(state, sessionKey).files.get(path);
   if (!file) throw new Error(`no such file: ${path}`);
