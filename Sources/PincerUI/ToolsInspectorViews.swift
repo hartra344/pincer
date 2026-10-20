@@ -166,7 +166,7 @@ struct ChatToolsInspectorSheet: View {
             .navigationTitle(L("Tools & Policy"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
+                SheetDoneToolbarItem { self.dismiss() }
             }
         }
         #if os(macOS)

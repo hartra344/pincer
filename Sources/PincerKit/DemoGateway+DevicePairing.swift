@@ -18,6 +18,14 @@ extension DemoGateway {
         "node.pair.remove": ["nodeId"],
     ]
 
+    /// Removes and returns the pending pairing request, or throws the Gateway's `unknown requestId`.
+    func takeDevicePending(_ requestId: String) throws -> JSONValue {
+        guard let index = self.devicePending.firstIndex(where: { $0["requestId"]?.text == requestId }) else {
+            throw GatewayError.invalidRequest("unknown requestId")
+        }
+        return self.devicePending.remove(at: index)
+    }
+
     func handleDevices(_ method: String, _ params: JSONValue) throws -> JSONValue? {
         guard let allowed = Self.deviceParamKeys[method] else { return nil }
         let fields = params.object ?? [:]
@@ -30,10 +38,7 @@ extension DemoGateway {
             return ["pending": .array(self.devicePending), "paired": .array(self.devicePaired)]
         case "device.pair.approve":
             let requestId = try Self.required(params, "requestId", method)
-            guard let index = self.devicePending.firstIndex(where: { $0["requestId"]?.text == requestId }) else {
-                throw GatewayError.invalidRequest("unknown requestId")
-            }
-            let request = self.devicePending.remove(at: index)
+            let request = try self.takeDevicePending(requestId)
             let device = Self.pairedDevice(from: request, nowMs: nowMs)
             let deviceId = device["deviceId"]?.text ?? ""
             self.devicePaired.removeAll { $0["deviceId"]?.text == deviceId }
@@ -43,10 +48,7 @@ extension DemoGateway {
             return ["requestId": .string(requestId), "device": device]
         case "device.pair.reject":
             let requestId = try Self.required(params, "requestId", method)
-            guard let index = self.devicePending.firstIndex(where: { $0["requestId"]?.text == requestId }) else {
-                throw GatewayError.invalidRequest("unknown requestId")
-            }
-            let deviceId = self.devicePending.remove(at: index)["deviceId"] ?? .null
+            let deviceId = try self.takeDevicePending(requestId)["deviceId"] ?? .null
             self.emit("device.pair.resolved", ["requestId": .string(requestId), "deviceId": deviceId,
                                                "decision": "rejected", "ts": nowMs])
             return ["requestId": .string(requestId), "deviceId": deviceId]

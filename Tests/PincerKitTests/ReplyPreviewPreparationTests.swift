@@ -192,6 +192,31 @@ extension ReplyPreviewPreparationTests {
         return (chat, gateway)
     }
 
+    /// A chat whose reply service holds every normalization at `gate` until released.
+    @MainActor private struct GatedRig {
+        let scratch = ScratchDefaults()
+        let gate = ReplyPreparationGate()
+        let service = ReplyPreviewPreparationService()
+        var chat: ChatStore!
+        var gateway: GatewayStore!
+
+        func tearDown() {
+            let gate = self.gate
+            Task { await gate.releaseAll() }
+            self.gateway.stop()
+            self.scratch.remove()
+        }
+    }
+
+    private func gatedRig(_ items: [ChatItem]) -> GatedRig {
+        var rig = GatedRig()
+        (rig.chat, rig.gateway) = self.setup(items, defaults: rig.scratch.defaults)
+        let gate = rig.gate
+        rig.service.normalizationGate = { await gate.arriveAndWait($0) }
+        rig.chat.replyPreviewPreparation = rig.service
+        return rig
+    }
+
     private func source(_ id: String, _ text: String, role: ChatRole = .assistant) -> ChatItem {
         var item = ChatItem(id: "local-\(id)", role: role, blocks: [.text(text)])
         item.transcriptId = id
@@ -200,15 +225,9 @@ extension ReplyPreviewPreparationTests {
 
     @Test(.timeLimit(.minutes(2)), arguments: ["different", "same", "cancel"])
     func delayedPreviewRespectsCurrentSelectionIdentity(_ action: String) async throws {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let (chat, gateway) = self.setup([self.source("a", "Original A"), self.source("b", "New B")], defaults: scratch.defaults)
-        defer { gateway.stop() }
-        let gate = ReplyPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let service = ReplyPreviewPreparationService()
-        service.normalizationGate = { await gate.arriveAndWait($0) }
-        chat.replyPreviewPreparation = service
+        let rig = self.gatedRig([self.source("a", "Original A"), self.source("b", "New B")])
+        defer { rig.tearDown() }
+        let (chat, gate, service) = (rig.chat!, rig.gate, rig.service)
         chat.selectReply(to: "a", you: "You", agent: "Claw")
         let original = try #require(chat.replyTarget)
         #expect(original.messageId == "a" && original.preview.isEmpty)
@@ -284,16 +303,10 @@ extension ReplyPreviewPreparationTests {
 
 extension ReplyPreviewPreparationTests {
     @Test(.timeLimit(.minutes(2))) func admittedPendingSourcesAndCompletedCacheStayBounded() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
         let sources = (0..<140).map { self.source("cache-\($0)", "Opening \($0) " + String(repeating: "x", count: 8_000)) }
-        let (chat, gateway) = self.setup(sources, defaults: scratch.defaults)
-        defer { gateway.stop() }
-        let gate = ReplyPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let service = ReplyPreviewPreparationService()
-        service.normalizationGate = { await gate.arriveAndWait($0) }
-        chat.replyPreviewPreparation = service
+        let rig = self.gatedRig(sources)
+        defer { rig.tearDown() }
+        let (chat, gate, service) = (rig.chat!, rig.gate, rig.service)
         _ = chat.replyTarget(for: "cache-0", you: "You", agent: "Claw")
         await gate.waitForEntered(1)
         for number in 1..<40 {
@@ -356,15 +369,9 @@ private final class ReplyReservationEvents {
 extension ReplyPreviewPreparationTests {
     @Test(.timeLimit(.minutes(2)), arguments: ["ready", "delete", "cancel"])
     func coldReplyReservationHoldsLaterSendAndPersistenceUntilItsCapturedQuoteIsReady(_ releaseMode: String) async throws {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let (chat, gateway) = self.setup([self.source("original", "Original captured quote"), self.source("new-selection", "New selection quote")], defaults: scratch.defaults)
-        defer { gateway.stop() }
-        let gate = ReplyPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let service = ReplyPreviewPreparationService()
-        service.normalizationGate = { await gate.arriveAndWait($0) }
-        chat.replyPreviewPreparation = service
+        let rig = self.gatedRig([self.source("original", "Original captured quote"), self.source("new-selection", "New selection quote")])
+        defer { rig.tearDown() }
+        let (chat, gate, service, gateway) = (rig.chat!, rig.gate, rig.service, rig.gateway!)
         let events = ReplyReservationEvents()
         defer { events.cancelAll(); chat.replyPreparationDidReserve = nil }
         chat.replyPreparationDidReserve = { events.reserved($0) }
@@ -443,15 +450,9 @@ extension ReplyPreviewPreparationTests {
 extension ReplyPreviewPreparationTests {
     @Test(.timeLimit(.minutes(2)), arguments: ["edit", "remove", "stop"])
     func heldPreviewCannotPublishStaleHistoryOrStoppedLifecycle(_ change: String) async throws {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let (chat, gateway) = self.setup([self.source("edited", "Old history text")], defaults: scratch.defaults)
-        defer { gateway.stop() }
-        let gate = ReplyPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let service = ReplyPreviewPreparationService()
-        service.normalizationGate = { await gate.arriveAndWait($0) }
-        chat.replyPreviewPreparation = service
+        let rig = self.gatedRig([self.source("edited", "Old history text")])
+        defer { rig.tearDown() }
+        let (chat, gate, service) = (rig.chat!, rig.gate, rig.service)
         chat.selectReply(to: "edited", you: "You", agent: "Claw")
         let selection = try #require(chat.replyTarget?.selectionID)
         await gate.waitForEntered(1)
@@ -522,15 +523,9 @@ extension ReplyPreviewPreparationTests {
 
 extension ReplyPreviewPreparationTests {
     @Test(.timeLimit(.minutes(2))) func canceledReadinessWaitDoesNotCancelPinnedPreparationOrHangCleanup() async {
-        let scratch = ScratchDefaults()
-        defer { scratch.remove() }
-        let (chat, gateway) = self.setup([self.source("cancel-wait", "Prepared after waiter cancellation")], defaults: scratch.defaults)
-        defer { gateway.stop() }
-        let gate = ReplyPreparationGate()
-        defer { Task { await gate.releaseAll() } }
-        let service = ReplyPreviewPreparationService()
-        service.normalizationGate = { await gate.arriveAndWait($0) }
-        chat.replyPreviewPreparation = service
+        let rig = self.gatedRig([self.source("cancel-wait", "Prepared after waiter cancellation")])
+        defer { rig.tearDown() }
+        let (chat, gate, service) = (rig.chat!, rig.gate, rig.service)
         _ = chat.replyTarget(for: "cancel-wait", you: "You", agent: "Claw")
         await gate.waitForEntered(1)
         let wait = Task { await chat.waitForReplyPreviewPreparation() }

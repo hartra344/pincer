@@ -79,11 +79,8 @@ private let richRenderingKey = "agent:main:dashboard:rate-limiter"
 
 @MainActor
 func runDemoRichRendering() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for rich rendering", timeout: 25, reconnect: true)
     defer { gateway.stop() }
-    let connected = await waitFor("demo for rich rendering", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo connected")
     guard connected else { return }
     check(gateway.sessions[richRenderingKey] != nil, "demo has the Rate limiter design chat")

@@ -138,10 +138,8 @@ func runDemoBrowserChecks() async {
 func runLiveBrowserChecks(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock browser", url: url, authMode: .token, access: .admin)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("mock for the browser panel", timeout: 25, { gateway.state.isConnected && !gateway.sessions.isEmpty }) else {
+    let (gateway, browserUp) = await startStore(profile, waiting: "mock for the browser panel", timeout: 25, reconnect: true)
+    guard browserUp else {
         check(false, "browser: mock connected")
         return
     }

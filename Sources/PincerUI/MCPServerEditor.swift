@@ -82,7 +82,7 @@ struct MCPServerEditor: View {
             .navigationTitle(self.isNew ? L("Add Server") : L("Edit \(self.initial.originalName ?? "")"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Done")) {
                         if problems.isEmpty {

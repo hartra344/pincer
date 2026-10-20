@@ -327,10 +327,9 @@ func runDemoSessionFilesChecks() async {
 func runLiveSessionFilesChecks(url: String, token: String) async {
     let admin = GatewayProfile(name: "Mock files", url: url, authMode: .token, access: .admin)
     admin.secret = token
-    let gateway = GatewayStore(profile: admin)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("mock for files", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
+    let (gateway, filesUp) = await startStore(admin, waiting: "mock for files", timeout: 25, reconnect: true,
+                                              until: { $0.state.isConnected && $0.bootstrapped })
+    guard filesUp else {
         check(false, "live files: mock connected")
         return
     }
@@ -438,11 +437,10 @@ func runLiveSessionFilesChecks(url: String, token: String) async {
     // Without admin: read works, set is refused, nothing is editable
     let reader = GatewayProfile(name: "Mock files (read)", url: url, authMode: .token)
     reader.secret = token
-    let readGateway = GatewayStore(profile: reader)
-    readGateway.start()
-    readGateway.reconnectIfNeeded()
+    let (readGateway, readUp) = await startStore(reader, waiting: "mock read-only for files", timeout: 25, reconnect: true,
+                                                 until: { $0.state.isConnected && $0.bootstrapped })
     defer { readGateway.stop() }
-    guard await waitFor("mock read-only for files", timeout: 25, { readGateway.state.isConnected && readGateway.bootstrapped }) else {
+    guard readUp else {
         check(false, "live files: read-only connection")
         return
     }

@@ -103,9 +103,9 @@ struct SetupWizardView: View {
                 SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
             }
             .navigationTitle(L("Set Up \(self.gateway.profile.name)"))
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Close")) { self.setup.close() } }
+                SheetCancelToolbarItem(title: L("Close")) { self.setup.close() }
             }
         }
     }

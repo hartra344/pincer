@@ -2,19 +2,6 @@
 import Foundation
 @testable import PincerKit
 
-private actor VoiceTestGate {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold(_ method: String) async {
-        guard method == "tts.speak" else { return }
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { c in if released { c.resume() } else { waiter = c } }
-        } onCancel: { Task { await self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
-
 /// #918: a stopped Gateway Voice test (queued or in flight) publishes nothing and plays nothing,
 /// and still runs its cleanup exactly once.
 @MainActor func runVoiceTestStopChecks() async {
@@ -30,7 +17,7 @@ private actor VoiceTestGate {
 
         let completion = VoiceTestCompletion()
         var results: [TTSTestResult] = [], clips: [TTSClip] = [], finishedCount = 0
-        let gate = VoiceTestGate()
+        let gate = MethodDeliveryGate(method: "tts.speak")
         await gateway.connection.setDemoResponseDelivery { await gate.hold($0) }
         let task = completion.start(model: gateway.voice, sample: "Owned voice test",
                                     publish: { results.append($0) }, finished: { finishedCount += 1 }, play: { clips.append($0) })

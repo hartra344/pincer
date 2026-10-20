@@ -315,9 +315,8 @@ func runLiveCacheRecovery(url: String, token: String) async {
     profile.secret = token
     let key = "agent:main:main"
 
-    let first = GatewayStore(profile: profile)
-    first.start()
-    guard await waitFor("cache connect", timeout: 25, { first.state.isConnected && !first.sessions.isEmpty }) else {
+    let (first, cacheUp) = await startStore(profile, waiting: "cache connect", timeout: 25)
+    guard cacheUp else {
         return check(false, "connected for the cache check")
     }
     let chat = first.chat(for: key)

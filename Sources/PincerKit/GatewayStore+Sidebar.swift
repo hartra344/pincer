@@ -291,12 +291,16 @@ extension GatewayStore {
             return true
         }
         if let old = self.sessions[key]?.category { self.registerGroups([old]) }
-        if self.chatPositions[key] != nil {
-            self.chatPositions[key] = nil
-            Task { await self.push(self.syncedMap(Self.chatOrderPref), key, nil) }
-        }
+        self.clearChatPosition(key)
         await self.patch(key, ["category": value])
         return true
+    }
+
+    /// Drops a chat's manual position and syncs the removal, when it has one.
+    private func clearChatPosition(_ key: String) {
+        guard self.chatPositions[key] != nil else { return }
+        self.chatPositions[key] = nil
+        Task { await self.push(self.syncedMap(Self.chatOrderPref), key, nil) }
     }
 
     /// The row a grouped sub-session or thread nests under when ungrouped; `nil` for standalone chats.
@@ -312,10 +316,7 @@ extension GatewayStore {
     public func moveBackUnderParent(_ key: String) async {
         guard let row = self.sessions[key] else { return }
         if let old = row.category { self.registerGroups([old]) }
-        if self.chatPositions[key] != nil {
-            self.chatPositions[key] = nil
-            Task { await self.push(self.syncedMap(Self.chatOrderPref), key, nil) }
-        }
+        self.clearChatPosition(key)
         await self.patch(key, ["category": .null])
     }
 

@@ -18,10 +18,7 @@ func checkPaletteSearchOrdering() {
 
 @MainActor
 func runDemoSearchTrackChecks() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for the search track") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for the search track", reconnect: true)
     check(connected, "demo for the search track connected")
     defer { gateway.stop() }
     guard connected else { return }

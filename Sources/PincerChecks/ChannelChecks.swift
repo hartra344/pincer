@@ -94,9 +94,7 @@ func checkChannelStatus() async {
 @MainActor
 func runDemoChannels() async {
     let profile = GatewayProfile.demo()
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let up = await waitFor("demo for channels") { gateway.state.isConnected && gateway.hello != nil }
+    let (gateway, up) = await startStore(profile, waiting: "demo for channels", until: { $0.state.isConnected && $0.hello != nil })
     check(up, "demo for channels connected")
     guard up else { return }
     defer { gateway.stop() }

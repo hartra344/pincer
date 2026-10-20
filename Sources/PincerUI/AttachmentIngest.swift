@@ -305,14 +305,7 @@ struct AttachmentIngest: Sendable {
                 }
                 gate.setProviderProgress(progress)
             }
-            switch loaded {
-            case let .file(file):
-                return await Task.detached(priority: .userInitiated) {
-                    Self.prepare(file.data, type: file.type, name: file.name, limits: limits, lastKnown: lastKnown)
-                }.value
-            case let .failure(message):
-                return .failure(message)
-            }
+            return await Self.prepareLoaded(loaded, limits: limits, lastKnown: lastKnown)
         }
         guard let type else { return .failure("That item can’t be attached.") }
         let loaded = await withCheckedContinuation { (continuation: CheckedContinuation<ProviderReadResult, Never>) in
@@ -340,6 +333,14 @@ struct AttachmentIngest: Sendable {
             }
             gate.setProviderProgress(progress)
         }
+        return await Self.prepareLoaded(loaded, limits: limits, lastKnown: lastKnown)
+    }
+
+    private static func prepareLoaded(
+        _ loaded: ProviderReadResult,
+        limits: UploadLimits,
+        lastKnown: Bool) async -> AttachmentIngestResult
+    {
         switch loaded {
         case let .file(file):
             return await Task.detached(priority: .userInitiated) {

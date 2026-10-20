@@ -2,36 +2,6 @@ import Foundation
 import Testing
 @testable import PincerKit
 
-@MainActor private final class PolicyLoadGate {
-    private var entered = false
-    private var released = false
-    private var entry: CheckedContinuation<Void, Never>?
-    private var delivery: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                entry?.resume(); entry = nil
-                if released || Task.isCancelled { continuation.resume() }
-                else { delivery = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func waitForEntry() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if entered || Task.isCancelled { continuation.resume() } else { entry = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-    func release() {
-        released = true
-        entry?.resume(); entry = nil
-        delivery?.resume(); delivery = nil
-    }
-}
-
 @MainActor @Suite(.timeLimit(.minutes(2)))
 struct ExecPolicyLoadAdmissionTests {
     private static func snapshot(_ hash: String, ask: String = "on-miss") -> JSONValue {
@@ -40,7 +10,7 @@ struct ExecPolicyLoadAdmissionTests {
     }
 
     @Test func canceledCallerCannotDisplaceCurrentPolicyRead() async throws {
-        let gate = PolicyLoadGate()
+        let gate = AdmissionTestGate()
         let expected = Self.snapshot("healthy-current")
         var requests = 0
         let model = ExecPolicyModel { method, params in
@@ -66,7 +36,7 @@ struct ExecPolicyLoadAdmissionTests {
     }
 
     @Test func ordinaryNewerReadWinsAnOlderCompletion() async throws {
-        let gate = PolicyLoadGate()
+        let gate = AdmissionTestGate()
         var requests = 0
         let model = ExecPolicyModel { _, _ in
             requests += 1
@@ -93,7 +63,7 @@ struct ExecPolicyLoadAdmissionTests {
     }
 
     @Test func typingDuringAValidReloadPreservesTheDraft() async throws {
-        let gate = PolicyLoadGate()
+        let gate = AdmissionTestGate()
         var requests = 0
         let model = ExecPolicyModel { _, _ in
             requests += 1
@@ -115,7 +85,7 @@ struct ExecPolicyLoadAdmissionTests {
 extension ExecPolicyLoadAdmissionTests {
     @Test(arguments: [false, true])
     func cancellationAfterAdmissionCannotPublishLateResult(fails: Bool) async throws {
-        let gate = PolicyLoadGate()
+        let gate = AdmissionTestGate()
         let model = ExecPolicyModel { _, _ in
             await gate.hold()
             if fails {

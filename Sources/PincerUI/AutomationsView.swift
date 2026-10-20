@@ -40,7 +40,7 @@ struct AutomationsWindow: View {
                                    description: Text("This Gateway is no longer in Pincer.", bundle: .module))
                 .toolbar {
                     if let close = self.close {
-                        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: close) }
+                        SheetDoneToolbarItem(action: close)
                     }
                 }
         }
@@ -115,7 +115,7 @@ private struct AutomationsRoot: View {
 
     @ToolbarContentBuilder private var doneButton: some ToolbarContent {
         if let close = self.close {
-            ToolbarItem(placement: .cancellationAction) { Button(L("Done"), action: close) }
+            SheetCancelToolbarItem(title: L("Done"), action: close)
         }
     }
 
@@ -577,11 +577,9 @@ private struct AutomationEditor: View {
             .formStyle(.grouped)
             .navigationTitle(self.draft.isNew ? "New Automation" : "Edit Automation")
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L("Cancel")) {
-                        self.model.clearError(for: self.operationKey)
-                        self.dismiss()
-                    }
+                SheetCancelToolbarItem {
+                    self.model.clearError(for: self.operationKey)
+                    self.dismiss()
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(self.draft.isNew ? L("Create") : L("Save"), action: self.save)

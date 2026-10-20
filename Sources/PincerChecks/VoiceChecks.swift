@@ -216,12 +216,7 @@ private func voiceFallbackChecks() async {
 /// beats `voiceId`, a `model` key is flagged as ignored, and removing the key leaves ElevenLabs unconfigured.
 @MainActor
 private func voiceFollowUpChecks(profile: GatewayProfile, label: String) async {
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     guard await waitFor("\(label) raw voice connection", timeout: 25, { ready.value }) else {
         check(false, "\(label): raw voice connection")
@@ -322,9 +317,7 @@ private func voiceFollowUpChecks(profile: GatewayProfile, label: String) async {
 
 @MainActor
 private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let up = await waitFor("\(label) connected", timeout: 25) { gateway.state.isConnected && gateway.hello != nil }
+    let (gateway, up) = await startStore(profile, waiting: "\(label) connected", timeout: 25, until: { $0.state.isConnected && $0.hello != nil })
     check(up, "\(label): connected for voice")
     guard up else { gateway.stop(); return nil }
     return gateway

@@ -32,11 +32,8 @@ func runComposerAttachMenuChecks() async {
 /// Demo: a captured photo lands in a demo chat's draft through the composer's own ingest.
 @MainActor
 func runDemoComposerAttachMenuChecks() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for the attach menu", reconnect: true)
     defer { gateway.stop() }
-    let connected = await waitFor("demo for the attach menu") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo for the attach menu connected")
     guard connected else { return }
     let chat = gateway.chat(for: "agent:main:main")

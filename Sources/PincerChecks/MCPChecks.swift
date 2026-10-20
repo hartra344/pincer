@@ -8,9 +8,7 @@ private let seedNames = ["acme.docs", "filesystem", "github", "home-assistant", 
 
 @MainActor
 private func mcpConnect(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let up = await waitFor("\(label) connected", timeout: 25) { gateway.state.isConnected && gateway.hello != nil }
+    let (gateway, up) = await startStore(profile, waiting: "\(label) connected", timeout: 25, until: { $0.state.isConnected && $0.hello != nil })
     check(up, "\(label) connected")
     guard up else { gateway.stop(); return nil }
     return gateway

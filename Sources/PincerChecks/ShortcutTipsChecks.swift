@@ -39,10 +39,8 @@ func runDemoShortcutTips() async {
         capture.defaults.set(oldEnabled, forKey: QuickCaptureSettings.enabledKey)
         capture.defaults.set(oldCapture, forKey: QuickCaptureSettings.shortcutKey)
     }
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
+    let (gateway, ready) = await startStore(.demo(), waiting: "demo shortcut tips connected")
     defer { gateway.stop() }
-    let ready = await waitFor("demo shortcut tips connected") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(ready, "demo shortcut tips connected")
     guard ready else { return }
     let chat = gateway.chat(for: "agent:main:main")

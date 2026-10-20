@@ -146,10 +146,7 @@ private func checkLinkPreviewLimits(_ previews: BrowserPagePreviews, label: Stri
 
 @MainActor
 func runDemoBrowserPagePreview() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for browser page preview", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for browser page preview", timeout: 25, reconnect: true)
     check(connected, "demo for browser page preview connected")
     guard connected else { return }
     defer { gateway.stop() }
@@ -160,10 +157,7 @@ func runDemoBrowserPagePreview() async {
 func runLiveBrowserPagePreview(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock browser page", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("mock for browser page preview", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "mock for browser page preview", timeout: 25, reconnect: true)
     check(connected, "mock for browser page preview connected")
     guard connected else { return }
     defer { gateway.stop() }

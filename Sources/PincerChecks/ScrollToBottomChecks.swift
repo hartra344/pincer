@@ -7,11 +7,8 @@ import PincerKit
 
 @MainActor
 func runDemoScrollToBottom() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for scroll to bottom", reconnect: true)
     defer { gateway.stop() }
-    let connected = await waitFor("demo for scroll to bottom") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo for scroll to bottom connected")
     guard connected else { return }
     let chat = gateway.chat(for: "agent:main:main")

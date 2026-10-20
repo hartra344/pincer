@@ -12,10 +12,8 @@ func runSidebarSplitActionChecks() {
 
 @MainActor
 func runDemoSidebarSplitActions() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
+    let (gateway, ready) = await startStore(.demo(), waiting: "demo split sidebar chats", until: { $0.sessions.count >= 2 })
     defer { gateway.stop() }
-    let ready = await waitFor("demo split sidebar chats") { gateway.sessions.count >= 2 }
     check(ready, "demo split sidebar has multiple chats")
     guard ready else { return }
     // The same policy used by every sidebar row reads the current layout each time.

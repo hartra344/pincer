@@ -2,20 +2,6 @@
 import Foundation
 @testable import PincerKit
 
-private actor QuickCapturePreparedSendGate {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold() async {
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { await self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
-
 /// Kit-level ordinary coverage only: the macOS UI test exercises actual pending ingestion.
 @MainActor private func checkQuickCapturePreparedAttachment() async {
     let (defaults, suite) = scratchDefaults()
@@ -48,10 +34,8 @@ private actor QuickCapturePreparedSendGate {
           "only the owning panel blocks Send while preparation is reserved")
     finish(); finish()
     check(model.canSend && model.pendingAttachmentPreparations == 0, "idempotent completion restores Send admission")
-    let gate = QuickCapturePreparedSendGate()
-    await gateway.connection.setDemoResponseDelivery { method in
-        if method == "chat.send" { await gate.hold() }
-    }
+    let gate = MethodDeliveryGate(method: "chat.send")
+    await gateway.connection.setDemoResponseDelivery { await gate.hold($0) }
     let sending = Task { await model.send() }
     let deadline = ContinuousClock.now.advanced(by: .seconds(25))
     while !(await gate.entered), !Task.isCancelled, ContinuousClock.now < deadline {

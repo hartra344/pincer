@@ -10,12 +10,9 @@ func runDemoQuotePreviewChecks() async {
     #if DEBUG
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
-    gateway.cacheRoot = nil
+    let (gateway, connected) = await startStore(.demo(), waiting: "quoted-row Demo connection", timeout: 25, reconnect: true,
+                                                defaults: defaults, prepare: { $0.cacheRoot = nil })
     defer { gateway.stop() }
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("quoted-row Demo connection", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "quoted-row preview: connects to real built-in Demo")
     guard connected else { return }
     let chat = gateway.chat(for: "agent:main:main")

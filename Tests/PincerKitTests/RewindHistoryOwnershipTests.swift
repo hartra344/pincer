@@ -105,26 +105,11 @@ struct RewindHistoryOwnershipTests {
         #expect(model.rewindPoints[Self.key]?.map(\.entryId) == ["u2", "u1"])
         #expect(model.rewindErrors[Self.key] == nil && server.historyCalls == 1)
     }
-    @MainActor private final class ReadRounds {
-        var entered = 0
-        var waiters: [Int: CheckedContinuation<Void, Never>] = [:]
-        var released: Set<Int> = []
-        var failures: Set<Int> = []
-        func release(_ index: Int) { released.insert(index); waiters.removeValue(forKey: index)?.resume() }
-        func releaseAll() { release(1); release(2) }
+    @MainActor private final class ReadRounds: RoundGate {
         func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
             if method == SessionManager.previewMethod { return ["previews": []] }
             #expect(method == SessionManager.historyMethod)
-            entered += 1
-            let index = entered
-            await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    if released.contains(index) || Task.isCancelled { continuation.resume() }
-                    else { waiters[index] = continuation }
-                }
-            } onCancel: { Task { @MainActor in self.release(index) } }
-            try Task.checkCancellation()
-            if failures.contains(index) { throw GatewayError.closed("history round \(index) failed") }
+            let index = try await hold { GatewayError.closed("history round \($0) failed") }
             return index == 1 ? RewindHistoryOwnershipTests.oldHistory : RewindHistoryOwnershipTests.freshHistory
         }
     }

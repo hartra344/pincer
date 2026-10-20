@@ -60,7 +60,7 @@ struct ExportSheet: View {
             .navigationTitle(L("Export Chat"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Export")) { self.export() }.disabled(self.isExporting)
                 }

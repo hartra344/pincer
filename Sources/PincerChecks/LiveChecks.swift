@@ -516,9 +516,7 @@ func runLive(url: String, token: String) async {
     check(legacyAdmin?.access == .admin, "legacy manageSettings → Full Management")
     let reencoded = try? JSONDecoder().decode(GatewayProfile.self, from: JSONEncoder().encode(adminProfile))
     check(reencoded?.access == .admin, "access level round-trips")
-    let admin = GatewayStore(profile: adminProfile)
-    admin.start()
-    let adminConnected = await waitFor("admin connection") { admin.state.isConnected && admin.hello != nil }
+    let (admin, adminConnected) = await startStore(adminProfile, waiting: "admin connection", until: { $0.state.isConnected && $0.hello != nil })
     check(adminConnected && admin.settings.canEdit, "admin scope granted")
     let adminAutomations = admin.automations
     await adminAutomations.load()
@@ -711,9 +709,7 @@ func runLive(url: String, token: String) async {
     // Dismissing on one device hides it on another device of the same user, through users.prefs.
     let secondProfile = GatewayProfile(name: "Mock health", url: url, authMode: .token)
     secondProfile.secret = token
-    let second = GatewayStore(profile: secondProfile)
-    second.start()
-    let secondReady = await waitFor("second health device") { second.state.isConnected && !second.sessions.isEmpty }
+    let (second, secondReady) = await startStore(secondProfile, waiting: "second health device")
     await second.health.load()
     if secondReady, let delivery = health.activeIssues.first(where: { $0.id == deliveryId }) {
         check(!delivery.canAlwaysIgnore && delivery.fingerprint == "count=1", "failed deliveries dismiss until the count goes up")

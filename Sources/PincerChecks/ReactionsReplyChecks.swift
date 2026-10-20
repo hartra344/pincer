@@ -357,10 +357,7 @@ private func recordedActions(_ gateway: GatewayStore, atLeast count: Int, timeou
 
 @MainActor
 private func connectDemo(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor(label) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: label, reconnect: true)
     check(connected, "\(label) connected")
     return connected ? gateway : nil
 }
@@ -706,9 +703,7 @@ func runDemoPrefsReactions() async {
 private func connectLive(_ name: String, url: String, token: String) async -> GatewayStore? {
     let profile = GatewayProfile(name: name, url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let connected = await waitFor(name, timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: name, timeout: 25)
     check(connected, "\(name) connected")
     return connected ? gateway : nil
 }

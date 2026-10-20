@@ -284,13 +284,7 @@ struct TranscriptPremeasureHostedTests {
     }
 
     static func makeHost() async -> Host {
-        let scratch = ScratchDefaults()
-        let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
-        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
-        let key = "agent:probe:main"
-        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
-                                        agent: AgentSummary(id: "probe", name: "Probe"), sessionKey: key,
-                                        previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
+        let context = PremeasureProbe.context()
         let coordinator = TranscriptList.Coordinator(context: context)
         let scroll = coordinator.makeScrollView()
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 900),
@@ -309,14 +303,7 @@ struct TranscriptPremeasureHostedTests {
     }
 
     static func assistant(_ id: String, text: String, streaming: Bool = false, at n: Int) -> TranscriptRow {
-        let stamp = Date(timeIntervalSince1970: 1_700_000_000 + Double(n))
-        var turn = AssistantTurn(id: id, timestamp: stamp)
-        turn.text = [text]
-        turn.textTimestamps = [stamp]
-        turn.textModelNames = [nil]
-        turn.textIds = [id]
-        turn.isStreaming = streaming
-        return .entry(.assistant(turn))
+        PremeasureProbe.assistant(id, text: text, streaming: streaming, at: n)
     }
 
     /// `TranscriptPrefetchProbe.rows` with `salt` in every text and id, so its text isn't already in the process-wide caches.

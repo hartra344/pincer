@@ -50,10 +50,8 @@ func runLiveMCPToolLinks(url: String, token: String) async {
 
 @MainActor
 private func runGatewayMCPToolLinks(profile: GatewayProfile, label: String) async {
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
+    let (gateway, connected) = await startStore(profile, waiting: label, timeout: 25, until: { $0.state.isConnected && $0.hello != nil })
     defer { gateway.stop() }
-    let connected = await waitFor(label, timeout: 25) { gateway.state.isConnected && gateway.hello != nil }
     check(connected, "\(label): connected")
     guard connected else { return }
     await gateway.settings.load()

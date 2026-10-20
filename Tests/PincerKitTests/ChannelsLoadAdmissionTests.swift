@@ -2,44 +2,13 @@ import Foundation
 import Testing
 @testable import PincerKit
 
-@MainActor private final class ChannelsReadGate {
-    private var entered = false
-    private var released = false
-    private var entry: CheckedContinuation<Void, Never>?
-    private var delivery: CheckedContinuation<Void, Never>?
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                entry?.resume(); entry = nil
-                if released || Task.isCancelled { continuation.resume() }
-                else { delivery = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-    func waitForEntry() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if entered || Task.isCancelled { continuation.resume() }
-                else { entry = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-    func release() {
-        released = true
-        entry?.resume(); entry = nil
-        delivery?.resume(); delivery = nil
-    }
-}
-
 @MainActor @Suite(.timeLimit(.minutes(2)))
 struct ChannelsLoadAdmissionTests {
     // Official channels.status schema/handler at bca3c49262e585c0fe2f52b8af7b113d262e783c.
     // The established fixture includes full account, issue, warning and timestamp metadata.
     @Test(arguments: [false, true])
     func canceledReadCannotDisplaceCurrentStatus(probe: Bool) async throws {
-        let gate = ChannelsReadGate()
+        let gate = AdmissionTestGate()
         let response = ChannelFixtures.status
         let expected = try #require(ChannelsStatusSnapshot(response))
         try #require(!expected.channels.isEmpty)
@@ -66,7 +35,7 @@ struct ChannelsLoadAdmissionTests {
     }
 
     @Test func ordinaryNewerProbeWins() async throws {
-        let gate = ChannelsReadGate()
+        let gate = AdmissionTestGate()
         let oldResponse = ChannelFixtures.status
         var object = try #require(oldResponse.object)
         object["ts"] = .number(1700000001000)
@@ -108,7 +77,7 @@ struct ChannelsLoadAdmissionTests {
 struct ChannelsAdmittedCancellationTests {
     @Test(arguments: [false, true])
     func canceledProbeRetainsSnapshotAndDoesNotPublishLateResult(fails: Bool) async throws {
-        let gate = ChannelsReadGate()
+        let gate = AdmissionTestGate()
         let response = ChannelFixtures.status
         let expected = try #require(ChannelsStatusSnapshot(response))
         var calls = 0
@@ -132,7 +101,7 @@ struct ChannelsAdmittedCancellationTests {
     }
 
     @Test func canceledOlderReadCannotIdleNewerProbe() async throws {
-        let oldGate = ChannelsReadGate(), newGate = ChannelsReadGate()
+        let oldGate = AdmissionTestGate(), newGate = AdmissionTestGate()
         let response = ChannelFixtures.status
         let expected = try #require(ChannelsStatusSnapshot(response))
         var calls = 0

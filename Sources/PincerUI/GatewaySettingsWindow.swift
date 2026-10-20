@@ -82,7 +82,7 @@ struct GatewaySettingsWindow: View {
                                    description: Text("This Gateway is no longer in Pincer.", bundle: .module))
                 .toolbar {
                     if let close = self.close {
-                        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: close) }
+                        SheetDoneToolbarItem(action: close)
                     }
                 }
         }
@@ -337,20 +337,12 @@ private struct GatewaySettingsRoot: View {
             Label(L("Command policy saved"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.callout)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .bottomToastChrome()
                 .onTapGesture { withAnimation { self.policyToast = nil } }
         } else if let toast = self.toast {
             SaveOutcomeLabel(outcome: toast.outcome)
                 .font(.callout)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .bottomToastChrome()
                 .onTapGesture { withAnimation { self.toast = nil } }
         }
     }
@@ -634,7 +626,7 @@ struct ReviewChangesSheet: View {
             .navigationTitle(L("Unsaved Changes"))
             .inlineNavigationBarTitle()
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Close")) { self.dismiss() } }
+                SheetCancelToolbarItem(title: L("Close")) { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     if settings.isSaving {
                         ProgressView().controlSize(.small)

@@ -2,47 +2,11 @@ import Foundation
 import Testing
 @testable import PincerKit
 
-/// Holds an already computed transport result; cancellation releases owned continuations.
-@MainActor private final class ChannelActionDeliveryGate {
-    private var entered = false
-    private var released = false
-    private var entryWaiter: CheckedContinuation<Void, Never>?
-    private var delivery: CheckedContinuation<Void, Never>?
-
-    func hold() async {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                entered = true
-                entryWaiter?.resume()
-                entryWaiter = nil
-                if released || Task.isCancelled { continuation.resume() }
-                else { delivery = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-    }
-
-    func waitForEntry() async throws {
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if entered || Task.isCancelled { continuation.resume() }
-                else { entryWaiter = continuation }
-            }
-        } onCancel: { Task { @MainActor in self.release() } }
-        try Task.checkCancellation()
-    }
-
-    func release() {
-        released = true
-        entryWaiter?.resume(); entryWaiter = nil
-        delivery?.resume(); delivery = nil
-    }
-}
-
 @Suite(.timeLimit(.minutes(2))) @MainActor
 struct ChannelActionCompletionOwnershipTests {
     @Test(arguments: [false, true])
     func clearedLifecycleCannotResurrectOldFailure(reset: Bool) async throws {
-        let gate = ChannelActionDeliveryGate()
+        let gate = AdmissionTestGate()
         let key = ChannelAccountKey(channel: "telegram", accountId: "default")
         let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { method, params in
             if method == "channels.stop" {
@@ -66,8 +30,8 @@ struct ChannelActionCompletionOwnershipTests {
 
     @Test(arguments: [false, true])
     func oldCompletionCannotReplaceNewSameAccountAction(oldFails: Bool) async throws {
-        let first = ChannelActionDeliveryGate()
-        let second = ChannelActionDeliveryGate()
+        let first = AdmissionTestGate()
+        let second = AdmissionTestGate()
         let key = ChannelAccountKey(channel: "telegram", accountId: "default")
         var calls = 0
         let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { method, _ in
@@ -99,7 +63,7 @@ struct ChannelActionCompletionOwnershipTests {
     }
 
     @Test func ordinaryAndDifferentAccountCompletionRemainIndependent() async throws {
-        let gate = ChannelActionDeliveryGate()
+        let gate = AdmissionTestGate()
         let heldKey = ChannelAccountKey(channel: "telegram", accountId: "default")
         let otherKey = ChannelAccountKey(channel: "discord", accountId: "default")
         let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { method, params in
@@ -133,7 +97,7 @@ extension ChannelActionCompletionOwnershipTests {
     }
 
     @Test func canceledActionDoesNotPublishComputedResponse() async throws {
-        let gate = ChannelActionDeliveryGate()
+        let gate = AdmissionTestGate()
         let key = ChannelAccountKey(channel: "telegram", accountId: "default")
         let model = ChannelsModel(scopes: { [GatewayConnection.adminScope] }) { method, _ in
             if method == "channels.stop" { await gate.hold() }

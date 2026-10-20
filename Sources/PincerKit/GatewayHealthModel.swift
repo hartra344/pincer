@@ -146,7 +146,7 @@ public final class GatewayHealthModel {
          simulatedRestart: Bool = false, quietsInitialIssues: Bool = false) {
         self.simulatedRestart = simulatedRestart
         self.quietsInitialIssues = quietsInitialIssues
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = connection.modelRequest(timeout: 30)
         self.hello = hello
         self.localDeviceId = localDeviceId
         self.localInstanceId = GatewayConnection.instanceId

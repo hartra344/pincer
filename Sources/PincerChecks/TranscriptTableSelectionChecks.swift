@@ -62,10 +62,7 @@ func runTranscriptTableSelectionChecks() {
 
 @MainActor
 func runDemoTranscriptTableSelectionChecks() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for table selection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for table selection", reconnect: true)
     check(connected, "demo for table selection connected")
     defer { gateway.stop() }
     guard connected else { return }

@@ -5,11 +5,8 @@ import Foundation
 /// and the shared load still finishes for everyone else. The demo's `chat.history` is held open.
 @MainActor
 func runDemoSharedLoadChecks() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for shared load", reconnect: true)
     defer { gateway.stop() }
-    let connected = await waitFor("demo for shared load") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo for shared load connected")
     guard connected else { return }
     let key = "agent:main:dashboard:garden"

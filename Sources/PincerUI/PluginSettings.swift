@@ -169,7 +169,7 @@ struct AddPluginSheet: View {
             .formStyle(.grouped)
             .navigationTitle(L("Add Plugin"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                SheetCancelToolbarItem { self.dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L("Install"), action: self.install)
                         .disabled(self.spec.nilIfBlank == nil || operation.isRunning)

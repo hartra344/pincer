@@ -28,12 +28,9 @@ func runDemoGroupedMessageKeyboardChecks() async {
     #if DEBUG
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
+    let (gateway, connected) = await startStore(.demo(), waiting: "grouped keyboard demo connection", timeout: 25, reconnect: true,
+                                                defaults: defaults, prepare: { $0.cacheRoot = nil })
     defer { gateway.stop() }
-    gateway.cacheRoot = nil
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("grouped keyboard demo connection", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "grouped keyboard connects to seeded Demo")
     guard connected else { return }
     let chat = gateway.chat(for: "agent:main:dashboard:tool-cards")

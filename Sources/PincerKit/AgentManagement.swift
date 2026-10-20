@@ -462,7 +462,7 @@ public final class AgentManagementModel {
          onAgentDeleted: @escaping @MainActor (String) -> Void = { _ in })
     {
         self.onAgentDeleted = onAgentDeleted
-        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.request = connection.modelRequest(timeout: 30)
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
         self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin

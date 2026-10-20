@@ -102,12 +102,7 @@ func runAvatarSignalChecks() {}
 /// `agent.identity.get` over a raw connection: by id, by session key, the default, and an unknown agent.
 @MainActor
 func checkAgentIdentities(profile: GatewayProfile, agents: [AgentSummary], label: String) async {
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     guard await waitFor("\(label) raw connection for identities", timeout: 25, { ready.value }) else {
         check(false, "\(label) raw connection for identities")
@@ -158,12 +153,7 @@ private func checkRenameKeepsPet(_ gateway: GatewayStore, agentId: String, label
 /// The seed reached the Gateway's `pincer.avatars` map, read back over a raw connection.
 @MainActor
 private func checkSeedsStored(profile: GatewayProfile, agentId: String) async {
-    let connection = GatewayConnection(profile: profile)
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(profile)
     defer { Task { await connection.stop() } }
     guard await waitFor("mock raw connection for prefs", timeout: 25, { ready.value }) else {
         check(false, "mock raw connection for prefs")
@@ -181,10 +171,7 @@ private func checkSeedsStored(profile: GatewayProfile, agentId: String) async {
 
 @MainActor
 func runDemoAvatars() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for avatars") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for avatars", reconnect: true)
     check(connected, "demo for avatars connected")
     guard connected else { return }
     defer { gateway.stop() }
@@ -281,9 +268,7 @@ func runDemoAvatars() async {
 func runLiveAvatars(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock avatars", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    let connected = await waitFor("mock for avatars", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "mock for avatars", timeout: 25)
     check(connected, "mock for avatars connected")
     guard connected else { return }
     defer { gateway.stop() }

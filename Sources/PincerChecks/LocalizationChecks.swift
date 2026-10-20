@@ -82,10 +82,7 @@ func runLocalizationChecks() {
 /// Every seeded demo session and transcript row gets a spoken label from `AccessibilityText`.
 @MainActor
 func runDemoAccessibility() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for accessibility") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for accessibility", reconnect: true)
     check(connected, "demo for accessibility connected")
     guard connected else { return }
     defer { gateway.stop() }

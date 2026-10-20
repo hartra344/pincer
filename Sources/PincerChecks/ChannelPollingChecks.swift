@@ -32,12 +32,7 @@ func runChannelPollingChecks() async {
 /// Exercise the same fallback with realistic status data and the built-in Gateway transport.
 @MainActor
 func runDemoChannelPollingChecks() async {
-    let connection = GatewayConnection(profile: .demo())
-    let ready = Scripted(false)
-    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
-        if state.isConnected { Task { @MainActor in ready.value = true } }
-    })
-    await connection.start()
+    let (connection, ready) = await startRawConnection(.demo())
     defer { Task { await connection.stop() } }
     let connected = await waitFor("channel polling demo connection") { ready.value }
     guard connected else {

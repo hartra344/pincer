@@ -2,21 +2,6 @@
 import Foundation
 @testable import PincerKit
 
-private actor QuickCaptureDeliveryGate {
-    var entered = false, released = false
-    var waiter: CheckedContinuation<Void, Never>?
-    func hold(_ method: String) async {
-        guard method == "chat.send" else { return }
-        entered = true
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if released { continuation.resume() } else { waiter = continuation }
-            }
-        } onCancel: { Task { await self.release() } }
-    }
-    func release() { released = true; waiter?.resume(); waiter = nil }
-}
-
 @MainActor private func checkQuickCapturePendingTarget(selectionChanges: Int) async {
     let (defaults, suite) = scratchDefaults()
     GatewayProfileStore.save([.demo()], to: defaults)
@@ -36,7 +21,7 @@ private actor QuickCaptureDeliveryGate {
     let nonce = "quick-target-" + UUID().uuidString
     model.text = nonce
     await gateway.connection.demoTrackSendRequests(matchingText: nonce)
-    let gate = QuickCaptureDeliveryGate()
+    let gate = MethodDeliveryGate(method: "chat.send")
     await gateway.connection.setDemoResponseDelivery { await gate.hold($0) }
     let sending = Task { await model.send() }
     let deadline = ContinuousClock.now.advanced(by: .seconds(15))

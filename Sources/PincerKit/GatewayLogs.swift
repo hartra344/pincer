@@ -433,7 +433,7 @@ public final class GatewayLogsModel {
     @ObservationIgnored private(set) var consecutiveFailures = 0
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?) {
-        self.request = { method, params in try await connection.request(method, params, timeout: 10) }
+        self.request = connection.modelRequest(timeout: 10)
         self.methods = { hello()?.methods }
     }
 

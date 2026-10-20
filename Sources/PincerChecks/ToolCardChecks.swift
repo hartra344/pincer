@@ -225,10 +225,7 @@ private func checkWebSearchCard(_ call: ToolActivity, label: String) {
 
 @MainActor
 func runDemoToolCards() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("demo for tool cards", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(.demo(), waiting: "demo for tool cards", timeout: 25, reconnect: true)
     check(connected, "demo for tool cards connected")
     guard connected else { return }
     defer { gateway.stop() }
@@ -239,10 +236,7 @@ func runDemoToolCards() async {
 func runLiveToolCards(url: String, token: String) async {
     let profile = GatewayProfile(name: "Mock tool cards", url: url, authMode: .token)
     profile.secret = token
-    let gateway = GatewayStore(profile: profile)
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let connected = await waitFor("mock for tool cards", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    let (gateway, connected) = await startStore(profile, waiting: "mock for tool cards", timeout: 25, reconnect: true)
     check(connected, "mock for tool cards connected")
     guard connected else { return }
     defer { gateway.stop() }
