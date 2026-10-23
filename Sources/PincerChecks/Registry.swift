@@ -112,6 +112,7 @@ enum Suites {
             Section("Portal scoping (#1029)") { await runPortalScopingOfflineChecks() },
             Section("Session files: parsing, errors, editability, thumbnails") { await runSessionFilesOfflineChecks() },
             Section("Composer sizing") { runComposerSizingChecks() },
+            Section("Composer Markdown") { runComposerMarkdownChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
@@ -488,6 +489,7 @@ enum Suites {
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
+        Section("Composer Markdown (demo)") { await runDemoComposerMarkdownChecks() },
         Section("Quick Look file ownership (demo)") { await runDemoQuickLookFileOwnershipChecks() },
         Section("Transcript footer metadata (demo)") { await runDemoFooterMetadataChecks() },
     ]
@@ -623,5 +625,6 @@ enum Suites {
         Section("Session files perf smoke") { await checkSessionFilesPerfSmoke() },
         Section("Message index perf smoke") { await withScratchCache { root in await checkMessageIndexPerfSmoke(root: root) } },
         Section("Invalidation perf") { runInvalidationPerfChecks() },
+        Section("Composer Markdown perf") { runComposerMarkdownPerfChecks() },
     ]
 }
