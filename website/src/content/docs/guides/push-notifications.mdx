@@ -80,7 +80,7 @@ The gateway pushes when a reply finishes, an exec approval is waiting, an agent 
 <Aside type="caution" title="There's no public relay">
 Pincer doesn't come with a relay, and there's no shared one. Pushes have to be signed with the APNs key of the Apple Developer team that signed **your** copy of Pincer.
 
-- **If you build Pincer yourself,** use your own team's key, and set `APNS_TOPICS` to your app's bundle id (the default is `chat.pincer.ios`).
+- **If you build Pincer yourself,** use your own team's key, and set `APNS_TOPICS` to your app's bundle id (the default is `chat.pincer.mac,chat.pincer.ios`: the iOS app uses `chat.pincer.mac` since 1.1, and `chat.pincer.ios` keeps earlier installs working).
 - **If you use a TestFlight build,** the key belongs to the maintainer's team, so you can't create it yourself. [Ask on GitHub](https://github.com/hartra344/pincer/issues) how to get a relay for TestFlight builds.
 </Aside>
 
@@ -107,7 +107,7 @@ The relay is a Node server with no dependencies. The easiest place to run it is 
    - Key Name: `Pincer Push Relay`;
    - enable **Apple Push Notifications service (APNs)**, then **Configure**;
    - Environment: **Sandbox & Production**;
-   - Key restriction: **Team Scoped (All Topics)**, or Topic Specific with `chat.pincer.ios`.
+   - Key restriction: **Team Scoped (All Topics)**, which covers both `chat.pincer.mac` (the iOS app since 1.1) and `chat.pincer.ios` (earlier builds).
 
    Download `AuthKey_XXXXXXXXXX.p8`. You can only download it once, so keep a copy. Note the **Key ID** and your **Team ID**.
 

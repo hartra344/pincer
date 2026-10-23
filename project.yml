@@ -83,7 +83,9 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Pincer
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX)
+        # Same bundle ID as the Mac app: one App Store Connect record for both platforms
+        # (universal purchase, #1065). Builds before 1.1 shipped as chat.pincer.ios.
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac$(PINCER_DEV_SUFFIX)
         CODE_SIGN_ENTITLEMENTS: Apps/iOS/Pincer.entitlements
         INFOPLIST_FILE: Apps/Shared/Info.plist
         PINCER_APP_GROUP: group.chat.pincer$(PINCER_DEV_SUFFIX)
@@ -114,7 +116,7 @@ targets:
       - target: Pincer-iOS
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.appuitests
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac.appuitests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: Pincer-iOS
     scheme:
@@ -151,7 +153,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: PincerShare
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).share
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac$(PINCER_DEV_SUFFIX).share
         CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/iOS/PincerShare.entitlements
         PINCER_APP_GROUP: group.chat.pincer$(PINCER_DEV_SUFFIX)
         GENERATE_INFOPLIST_FILE: YES
@@ -171,7 +173,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: PincerNotifications
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).notifications
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac$(PINCER_DEV_SUFFIX).notifications
         CODE_SIGN_ENTITLEMENTS: Apps/iOSNotificationService/PincerNotifications.entitlements
         INFOPLIST_FILE: Apps/iOSNotificationService/Info.plist
         GENERATE_INFOPLIST_FILE: YES

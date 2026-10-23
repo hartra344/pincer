@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRelay, loadEnvFile } from './relay.mjs';
+import { DEFAULT_TOPICS, createRelay, loadEnvFile } from './relay.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const env = { ...loadEnvFile(process.env.RELAY_ENV_FILE ?? path.join(here, '.env')), ...process.env };
@@ -24,7 +24,7 @@ const relay = createRelay({
   keyId: env.APNS_KEY_ID,
   teamId: env.APNS_TEAM_ID,
   key,
-  topics: (env.APNS_TOPICS ?? 'chat.pincer.ios').split(',').map((s) => s.trim()).filter(Boolean),
+  topics: (env.APNS_TOPICS ?? DEFAULT_TOPICS.join(',')).split(',').map((s) => s.trim()).filter(Boolean),
   origins: {
     ...(env.APNS_PRODUCTION_ORIGIN ? { production: env.APNS_PRODUCTION_ORIGIN } : {}),
     ...(env.APNS_SANDBOX_ORIGIN ? { sandbox: env.APNS_SANDBOX_ORIGIN } : {}),

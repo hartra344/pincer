@@ -30,6 +30,10 @@ Pincer runs on **macOS 15** and **iOS 18** or later.
 		<Aside>
 		No Gateway yet? Choose **Try the Demo** when Pincer opens to explore with sample chats and agents.
 		</Aside>
+
+		<Aside type="note" title="Upgrading from an iOS beta before 1.1">
+		From 1.1, Pincer for iPhone and iPad is part of the same App Store app as Pincer for Mac, so it installs as a **new app** next to the old one. Open the new one: it already has your gateways, sign-ins and paired device, because both apps share the same storage. App preferences (such as theme), unsent drafts, queued offline messages and the push relay address don't carry over. Send anything still queued from the old app, re-enter your relay URL in **Settings → Notifications** if you use one, then delete the old app.
+		</Aside>
 	</TabItem>
 	<TabItem label="Build from source (macOS)">
 		You need a current **Xcode** (Swift 6, with the macOS 15 SDK or later) with its license accepted. The Command Line Tools alone won't build the UI, because the SwiftUI macros only ship inside Xcode.app.

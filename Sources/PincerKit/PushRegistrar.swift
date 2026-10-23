@@ -23,6 +23,14 @@ public final class PushRegistrar {
 
     public static let shared = PushRegistrar()
     public static let relayKey = "pincer.pushRelay"
+    /// APNs topic when the bundle ID is unavailable. iOS ships under the Mac app's bundle ID
+    /// (universal purchase, #1065); builds before 1.1 used `chat.pincer.ios`.
+    package nonisolated static let defaultTopic = "chat.pincer.mac"
+
+    package nonisolated static func topic(bundleIdentifier: String?) -> String {
+        guard let id = bundleIdentifier, !id.isEmpty else { return self.defaultTopic }
+        return id
+    }
 
     /// APNs device token, hex. Set by the iOS app delegate.
     public private(set) var deviceToken: String?
@@ -157,7 +165,7 @@ public final class PushRegistrar {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "token": token,
             "environment": environment,
-            "topic": Bundle.main.bundleIdentifier ?? "chat.pincer.ios",
+            "topic": self.topic(bundleIdentifier: Bundle.main.bundleIdentifier),
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
