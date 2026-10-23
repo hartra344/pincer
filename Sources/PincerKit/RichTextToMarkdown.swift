@@ -286,6 +286,8 @@ private struct HTMLMarkdownConverter {
         case "blockquote":
             hasFormatting = true
             beginBlock(blank: true)
+            if pendingBlank, !out.isEmpty, !lastLineBlank { blankLine() }
+            pendingBlank = false
             quoteDepth += 1
         case "ul", "ol":
             if pendingMarker != nil {
