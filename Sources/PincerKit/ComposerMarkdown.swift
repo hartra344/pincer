@@ -57,6 +57,27 @@ public enum ComposerMarkdown {
         return text.lineRange(for: NSRange(location: location, length: upper - location))
     }
 
+    /// True when hardware Return should insert a newline instead of sending: the caret is on an opening
+    /// fence line or inside a fenced block (an unclosed fence counts to the end). False on the closing
+    /// fence line and outside blocks. O(n); only call on Return.
+    public static func returnInsertsNewline(in text: NSString, at location: Int) -> Bool {
+        let length = text.length
+        guard length > 0 else { return false }
+        let loc = min(max(location, 0), length)
+        let line = text.lineRange(for: NSRange(location: loc, length: 0))
+        let index = ComposerMarkdownIndex(text: text)
+        var before = 0
+        var onFence = false
+        for f in index.fences {
+            if f.location < line.location { before += 1 } else {
+                onFence = f.location == line.location
+                break
+            }
+        }
+        if onFence { return before & 1 == 0 }
+        return before & 1 == 1
+    }
+
     static func withBuffer<R>(_ text: NSString, _ range: NSRange, _ body: (UnsafePointer<unichar>) -> R) -> R {
         if range.length == 0 {
             var zero: unichar = 0

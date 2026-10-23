@@ -200,6 +200,34 @@ public enum ComposerFormatting {
         return (t.hasPrefix("http://") || t.hasPrefix("https://")) && !t.contains(where: { $0.isWhitespace })
     }
 
+    /// Pasting a single http(s)/mailto URL over a non-empty selection → `[selection](url)`, caret after it.
+    /// nil when the selection is empty, multi-line, inside code or a link, or `pasted` isn't a lone URL.
+    public static func pasteLink(_ pasted: String, in text: NSString, selection: NSRange) -> ComposerEdit? {
+        let sel = clamp(selection, text)
+        guard sel.length > 0 else { return nil }
+        let url = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = url.lowercased()
+        guard !url.isEmpty, !url.contains(where: { $0.isWhitespace }),
+              (lower.hasPrefix("http://") && url.count > 7) || (lower.hasPrefix("https://") && url.count > 8)
+              || (lower.hasPrefix("mailto:") && url.count > 7) else { return nil }
+        let selected = text.substring(with: sel)
+        guard !selected.contains(where: { $0.isNewline }) else { return nil }
+        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location) else { return nil }
+        let line = text.lineRange(for: NSRange(location: sel.location, length: 0))
+        let lineText = text.substring(with: line)
+        for span in ComposerMarkdown.tokenize(lineText) where span.kind == .inlineCode || span.kind == .link {
+            let r = NSRange(location: span.range.location + line.location, length: span.range.length)
+            if NSIntersectionRange(r, sel).length > 0 || (r.location <= sel.location && NSMaxRange(sel) <= NSMaxRange(r)) {
+                return nil
+            }
+        }
+        let safe = url.replacingOccurrences(of: "(", with: "%28").replacingOccurrences(of: ")", with: "%29")
+        let replacement = "[\(selected)](\(safe))"
+        return ComposerEdit(
+            range: sel, replacement: replacement,
+            selection: NSRange(location: sel.location + (replacement as NSString).length, length: 0))
+    }
+
     // MARK: Lists
 
     /// Toggles `- ` on every line the selection touches.

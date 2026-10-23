@@ -46,6 +46,8 @@ public enum RichTextToMarkdown {
                 segments.append((text, style))
             }
         }
+        let visible = segments.filter { !$0.text.allSatisfy { $0.isWhitespace } }
+        if !visible.isEmpty, visible.allSatisfy({ $0.style.mono }) { return nil }
         guard segments.contains(where: { !$0.style.isPlain && !$0.text.allSatisfy { $0.isWhitespace } }) else { return nil }
 
         var result = ""
@@ -157,6 +159,7 @@ private struct HTMLMarkdownConverter {
         var styles: [Style]
         var start: Int?
         var href: String?
+        var semantic = false
     }
 
     var out: [UInt8] = []
@@ -309,7 +312,6 @@ private struct HTMLMarkdownConverter {
             lists[lists.count - 1].width = marker.utf8.count
             pendingMarker = Array(marker.utf8)
         case "pre":
-            hasFormatting = true
             beginBlock(blank: true)
             write(Array("```".utf8))
             inPre = true
@@ -326,6 +328,7 @@ private struct HTMLMarkdownConverter {
                 if preAwaiting, let cls = attrs["class"], let lang = languageClass(cls) {
                     out += Array(lang.utf8)
                 }
+                hasFormatting = true
             } else {
                 pushInline(name, attrs, base: [.code])
             }
@@ -354,7 +357,8 @@ private struct HTMLMarkdownConverter {
             if !styles.contains(.strike), style.contains("line-through") { styles.append(.strike) }
         }
         if styles.contains(.code) { codeDepth += 1 }
-        stack.append(Entry(tag: name, styles: styles, start: atLineStart ? nil : out.count, href: href))
+        stack.append(Entry(tag: name, styles: styles, start: atLineStart ? nil : out.count, href: href,
+                           semantic: !base.isEmpty))
     }
 
     private func isNormalWeight(_ style: String?) -> Bool {
@@ -551,7 +555,7 @@ private struct HTMLMarkdownConverter {
         }
         seg = [UInt8](repeating: 32, count: lead) + Array(core.utf8) + [UInt8](repeating: 32, count: trail)
         out.replaceSubrange(start..., with: seg)
-        hasFormatting = true
+        if entry.semantic { hasFormatting = true }
     }
 
     // MARK: Cleanup
