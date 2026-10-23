@@ -604,7 +604,7 @@ final class ComposerUITextView: UITextView {
     ]
 
     private static let formatCommands: [UIKeyCommand] = {
-        Self.formatKeys.map { action, input, flags in
+        ComposerUITextView.formatKeys.map { action, input, flags in
             let command = UIKeyCommand(title: action.title, action: #selector(ComposerUITextView.formatKey(_:)), input: input, modifierFlags: flags)
             command.wantsPriorityOverSystemBehavior = true
             return command

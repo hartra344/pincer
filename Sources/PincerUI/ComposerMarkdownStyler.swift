@@ -212,7 +212,7 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
     // MARK: Incremental styling
 
     nonisolated func textStorage(
-        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions,
         range editedRange: NSRange, changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
