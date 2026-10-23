@@ -4,10 +4,12 @@ import PincerKit
 import AppKit
 typealias MarkdownFont = NSFont
 typealias MarkdownColor = NSColor
+typealias MarkdownEditActions = NSTextStorageEditActions
 #else
 import UIKit
 typealias MarkdownFont = UIFont
 typealias MarkdownColor = UIColor
+typealias MarkdownEditActions = NSTextStorage.EditActions
 #endif
 
 /// The base font plus the bold/italic/monospaced variants Markdown styling needs, built lazily.
@@ -212,7 +214,7 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
     // MARK: Incremental styling
 
     nonisolated func textStorage(
-        _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions,
+        _ textStorage: NSTextStorage, didProcessEditing editedMask: MarkdownEditActions,
         range editedRange: NSRange, changeInLength delta: Int
     ) {
         guard editedMask.contains(.editedCharacters) else { return }
