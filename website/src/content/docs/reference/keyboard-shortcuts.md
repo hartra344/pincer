@@ -102,8 +102,16 @@ With keyboard focus in the sidebar, **Up** and **Down** move through chats and s
 | Reply to Last Message | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
 | [Read Last Reply Aloud](../../guides/read-aloud/), or stop | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd> |
 | Cancel the reply | <kbd>Esc</kbd> |
+| Bold, italic, code | <kbd>⌘</kbd> <kbd>B</kbd>, <kbd>⌘</kbd> <kbd>I</kbd>, <kbd>⌘</kbd> <kbd>E</kbd> |
+| Strikethrough | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>X</kbd> |
+| Link, with text selected | <kbd>⌘</kbd> <kbd>K</kbd> |
+| Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> |
+| Indent or outdent a list item | <kbd>Tab</kbd> / <kbd>⇧</kbd> <kbd>Tab</kbd> |
+| Paste and Match Style | <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd> |
 
 <kbd>Return</kbd> sends on a Mac and on iPad or iPhone with a hardware keyboard; on iPad it's listed as **Send** when you hold <kbd>⌘</kbd>. On the on-screen keyboard it starts a new line instead. See [Sending messages](../../guides/composer/#sending-messages).
+
+The formatting shortcuts are in [Formatting with Markdown](../../guides/composer/#formatting-with-markdown). With no text selected, <kbd>⌘</kbd> <kbd>K</kbd> opens the command palette.
 
 Dictation is in the [composer guide](../../guides/composer/#dictation). It works on iPad with a hardware keyboard, and toggles the pane you're using in split view.
 

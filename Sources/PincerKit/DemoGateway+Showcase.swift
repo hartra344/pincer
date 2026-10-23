@@ -7,6 +7,28 @@ import UniformTypeIdentifiers
 extension DemoGateway {
     // MARK: Content
 
+    static let markdownComposeKey = "agent:main:dashboard:release-notes"
+    static let markdownComposeTitle = "Release notes"
+    static let markdownComposePreview = "Here's a tightened version of the notes."
+
+    /// The Markdown a user typed into the composer; it is sent as written, so the transcript holds the raw markers.
+    static let markdownComposeMessage = """
+    Tighten the **1.1 release notes**. Keep my structure:
+
+    ## What's new
+    - **Markdown composing**: `⌘B`, `⌘I`, and `⌘E` style the text as you type
+    - ~~Dark mode toggle~~ now follows the system
+    - Lists continue on `⇧Return`:
+      1. Press `Tab` to indent
+      2. Press `⇧Tab` to outdent
+
+    > Ship it Friday, see [the checklist](https://example.com/release-checklist).
+
+    ```swift
+    let version = "1.1"
+    ```
+    """
+
     static func reply(to text: String, usedTool: Bool, note: String? = nil, paletteShortcut: String? = "⌘K", findShortcut: String? = "⌘F",
                       quickCaptureShortcut: String? = HotKeyShortcut.default.displayString) -> String {
         let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
@@ -525,6 +547,13 @@ extension DemoGateway {
             messages: Self.seedFileEditsTranscript())
         add(Self.richRenderingKey, agent: "main", title: Self.richRenderingTitle, preview: Self.richRenderingPreview,
             age: 8 * 60_000, messages: Self.seedRichRenderingTranscript())
+        add(Self.markdownComposeKey, agent: "main", title: Self.markdownComposeTitle,
+            preview: Self.markdownComposePreview, age: 6 * 60_000, messages: [
+                said("user", Self.markdownComposeMessage, ago: 7 * minute),
+                said("assistant", """
+                Here's a tightened version of the notes. I kept your headings and lists and cut each bullet to one line.
+                """, ago: 6 * minute),
+            ])
         add(Self.longChatKey, agent: "main", title: Self.longChatTitle, preview: Self.longChatPreview,
             age: 3 * 86_400_000, messages: Self.seedLongChatTranscript())
         add(Self.toolCardsKey, agent: "main", title: Self.toolCardsTitle, preview: Self.toolCardsPreview, age: 3 * 60_000,

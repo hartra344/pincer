@@ -1413,6 +1413,16 @@
         }
       }
     },
+    "A row of Markdown formatting buttons above the keyboard.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A row of Markdown formatting buttons above the keyboard."
+          }
+        }
+      }
+    },
     "A server named “%@” already exists.": {
       "localizations": {
         "en": {
@@ -2883,6 +2893,26 @@
         }
       }
     },
+    "Bold": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bold"
+          }
+        }
+      }
+    },
+    "Bold, italic, code and lists show as you write. Your message is still sent as plain Markdown.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bold, italic, code and lists show as you write. Your message is still sent as plain Markdown."
+          }
+        }
+      }
+    },
     "Bookmark": {
       "localizations": {
         "en": {
@@ -3039,6 +3069,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Browser, %@"
+          }
+        }
+      }
+    },
+    "Bulleted List": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulleted List"
           }
         }
       }
@@ -3923,6 +3963,16 @@
         }
       }
     },
+    "Code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code"
+          }
+        }
+      }
+    },
     "Code or link": {
       "localizations": {
         "en": {
@@ -4159,6 +4209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Complete"
+          }
+        }
+      }
+    },
+    "Composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Composer"
           }
         }
       }
@@ -7463,6 +7523,16 @@
         }
       }
     },
+    "Formatting shortcuts, smart lists and pasting formatted text as Markdown keep working when styling is off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatting shortcuts, smart lists and pasting formatted text as Markdown keep working when styling is off."
+          }
+        }
+      }
+    },
     "Forward": {
       "localizations": {
         "en": {
@@ -8683,6 +8753,16 @@
         }
       }
     },
+    "Italic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Italic"
+          }
+        }
+      }
+    },
     "Item": {
       "localizations": {
         "en": {
@@ -9119,6 +9199,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Like OpenClaw's web UI. The image's website can see your IP address."
+          }
+        }
+      }
+    },
+    "Link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link"
           }
         }
       }
@@ -16293,6 +16383,16 @@
         }
       }
     },
+    "Show formatting bar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show formatting bar"
+          }
+        }
+      }
+    },
     "Show in Channel Status": {
       "localizations": {
         "en": {
@@ -17233,12 +17333,32 @@
         }
       }
     },
+    "Strikethrough": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strikethrough"
+          }
+        }
+      }
+    },
     "Style": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Style"
+          }
+        }
+      }
+    },
+    "Style Markdown as you type": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Style Markdown as you type"
           }
         }
       }

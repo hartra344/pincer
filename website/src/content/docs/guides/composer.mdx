@@ -17,13 +17,53 @@ The message box keeps the selected chat's name if its session row is briefly mis
 | --- | --- |
 | Send | <kbd>Return</kbd> |
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
+| Send, even inside a code block | <kbd>⌘</kbd> <kbd>Return</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
 
 <kbd>Return</kbd> sends when you type on a hardware keyboard: on a Mac, and on iPad or iPhone with a keyboard attached. On the on-screen keyboard, <kbd>Return</kbd> starts a new line, and you send with the **Send** button.
 
+In a code block, between a pair of ``` lines, <kbd>Return</kbd> starts a new line instead of sending, so you can type or paste multi-line code. This includes the opening ``` line. <kbd>⌘</kbd> <kbd>Return</kbd> and the **Send** button still send.
+
 <kbd>Return</kbd> does nothing when the message can't be sent, such as when it's empty, or it's a slash command while you're offline (<kbd>⇧</kbd> <kbd>Return</kbd> still starts a new line). While you're typing with an input method that composes text, such as Japanese or Chinese, <kbd>Return</kbd> confirms the candidate first; press it again to send.
 
 If you're offline, or a message can't be sent, it stays in the chat marked **Queued** or **Failed — Retry**. See [Offline sending & retry](../offline-outbox/).
+
+## Formatting with Markdown
+
+The message box is plain Markdown, and your message is sent exactly as you typed it. Pincer styles it as you go: bold looks bold, code is monospaced, headings are bold, and links take the accent color. The Markdown marks (`**`, `_`, `` ` ``, `#`, list bullets and so on) stay in the text, dimmed. Nothing is hidden, so what you see is what's sent. Inside a code block, no other styling applies.
+
+| Action | Keys |
+| --- | --- |
+| **Bold** | <kbd>⌘</kbd> <kbd>B</kbd> |
+| *Italic* | <kbd>⌘</kbd> <kbd>I</kbd> |
+| `Code` | <kbd>⌘</kbd> <kbd>E</kbd> |
+| ~~Strikethrough~~ | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>X</kbd> |
+| Link (with text selected) | <kbd>⌘</kbd> <kbd>K</kbd> |
+| Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> |
+| Indent or outdent a list item | <kbd>Tab</kbd> / <kbd>⇧</kbd> <kbd>Tab</kbd> |
+
+The style shortcuts wrap your selection in its marks, or remove them if they're already there. A selection that spans several lines is wrapped line by line. With nothing selected, they insert an empty pair and put the cursor between them. <kbd>⌘</kbd> <kbd>K</kbd> turns the selected text into `[text](url)` and selects `url` so you can paste a link. Press it again inside a link to unwrap it. With no text selected, <kbd>⌘</kbd> <kbd>K</kbd> still opens the [command palette](../command-palette-and-navigation/); use **Link** in the Format menu to insert `[](url)` without a selection. <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> adds or removes `- ` on every selected line. These shortcuts work on a Mac, and on iPad with a hardware keyboard.
+
+### Lists and code blocks
+
+- A new line on a list item continues the list with the same indent and marker. Numbers count up (`3.` becomes `4.`), and task items continue as `- [ ] `. Quotes (`> `) continue too. Use <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> for the new line; <kbd>Return</kbd> still sends. On the on-screen keyboard, <kbd>Return</kbd> does it.
+- A new line on an empty item removes the marker and ends the list.
+- <kbd>Tab</kbd> indents the list item the cursor is on, and <kbd>⇧</kbd> <kbd>Tab</kbd> outdents it. On a list item, <kbd>Tab</kbd> indents instead of moving focus. <kbd>⇧</kbd> <kbd>Tab</kbd> on a top-level item does nothing. Anywhere else, <kbd>Tab</kbd> behaves as before, including while suggestions are showing. Numbered lists continue as you type, but they aren't renumbered when you delete an item.
+- Typing <code>```</code> on its own line adds the closing fence below it and leaves the cursor after the opening one, so you can type a language and press <kbd>Return</kbd> to start the code.
+
+### The Format menu and formatting bar
+
+On a Mac, right-click the message box and choose **Format**. On iPhone and iPad, select text and choose **Format** in the edit menu. It lists bold, italic, code, strikethrough, link and bulleted list. On iPhone and iPad you can also show a formatting bar above the keyboard; it's off by default.
+
+### Pasting
+
+When you paste from another app, such as a web page or a document, bold, italic, links, headings, lists, quotes and code come across as Markdown. Plain text is pasted as is. Code copied from Xcode, Terminal or VS Code is pasted as plain text, and anything you paste inside a code block is plain. Pasting a URL while text is selected turns the selection into a link, `[selection](url)`. To paste without any conversion, choose **Paste and Match Style**: <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd> on a Mac, or the edit menu on iPhone and iPad. It always pastes plain text. Pasting an image or file still adds an attachment. Copying from the message box on iPhone and iPad copies plain Markdown.
+
+### Settings
+
+In **Settings → Chats**, under **Composer**, turn off **Style Markdown as you type** to show your text plain. This only turns off the styling: the shortcuts, smart lists and paste conversion keep working. On iPhone and iPad, **Show formatting bar** adds the bar above the keyboard.
+
+Styling skips text you're still composing with an input method, such as Japanese, and catches up when you confirm it. You can try all of this in the built-in demo: the **Release notes** chat has a message written in Markdown.
 
 ## Location context
 
@@ -146,7 +186,7 @@ A few notes:
 - `/clear` is sent as `/reset`, like the Control UI.
 - Gateways that don't support `commands.list` get a built-in list of common commands.
 
-On Mac, when suggestions are closed, <kbd>Tab</kbd> and <kbd>⇧</kbd> <kbd>Tab</kbd> move to the next or previous keyboard control. Use <kbd>⌥</kbd> <kbd>Tab</kbd> to insert a tab in the draft. While suggestions are open, plain <kbd>Tab</kbd> completes the selected command.
+On Mac, when suggestions are closed and the cursor isn't on a list item, <kbd>Tab</kbd> and <kbd>⇧</kbd> <kbd>Tab</kbd> move to the next or previous keyboard control. Use <kbd>⌥</kbd> <kbd>Tab</kbd> to insert a tab in the draft. While suggestions are open, plain <kbd>Tab</kbd> completes the selected command.
 
 With VoiceOver, moving through suggestions speaks the selected command or argument choice. Changing the query announces the number of suggestions, including when none match. Announcements pause while an input method is composing text or the caret is away from the end of the draft.
 

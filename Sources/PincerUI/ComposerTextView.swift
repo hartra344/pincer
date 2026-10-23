@@ -158,6 +158,9 @@ final class ComposerHeightCache {
     private var text = ""
     private var heights: [Key: CGFloat] = [:]
 
+    /// Forgets measured heights, such as after styling changed how the same text wraps.
+    func invalidate() { self.heights.removeAll(keepingCapacity: true) }
+
     /// The field height for `text` at `width`; `measure` lays the text out at that width and returns its used height.
     func height(for text: String, lineHeight: CGFloat, width: CGFloat, maxLines: Int, measure: (CGFloat) -> CGFloat) -> CGFloat {
         let utf16Count = (text as NSString).length
@@ -186,18 +189,171 @@ final class ComposerNSTextView: NSTextView {
     var onMedia: (([PastedMedia]) -> Void)?
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
+    /// Where the user just typed a backtick, so the fence auto-close can look at the line after the change lands.
+    var typedBacktickLocation: Int?
+
+    /// Bumped on every change, so an async paste can tell the text moved under it.
+    private(set) var changeVersion = 0
+    weak var styler: ComposerMarkdownStyler?
+
+    override func didChangeText() {
+        self.changeVersion += 1
+        super.didChangeText()
+    }
 
     override func paste(_ sender: Any?) {
         let items = MediaPasteboard.items(from: .general)
-        if items.isEmpty {
-            super.paste(sender)
-        } else {
+        guard items.isEmpty else {
             self.onMedia?(items)
+            return
         }
+        let selection = self.selectedRange()
+        if self.styler?.isInsideCodeBlock(selection.location, in: self.string as NSString) == true || self.hasMarkedText() {
+            super.paste(sender)
+            return
+        }
+        if selection.length > 0, let pasted = NSPasteboard.general.string(forType: .string), pasted.utf16.count < 2_048,
+           let edit = ComposerFormatting.pasteLink(pasted, in: self.string as NSString, selection: selection)
+        {
+            self.apply(edit)
+            return
+        }
+        guard let payload = ComposerRichPaste.payload(from: .general) else {
+            super.paste(sender)
+            return
+        }
+        if let quick = ComposerRichPaste.quickMarkdown(from: payload) {
+            self.finishRichPaste(quick, selection: selection, sender: sender)
+            return
+        }
+        let changeCount = NSPasteboard.general.changeCount
+        let version = self.changeVersion
+        Task { @MainActor [weak self] in
+            let markdown = await ComposerRichPaste.markdown(from: payload)
+            guard let self, NSPasteboard.general.changeCount == changeCount, self.changeVersion == version,
+                  self.selectedRange() == selection
+            else { return }
+            self.finishRichPaste(markdown, selection: selection, sender: sender)
+        }
+    }
+
+    /// Paste and Match Style: the pasteboard's plain string, verbatim.
+    override func pasteAsPlainText(_ sender: Any?) {
+        let items = MediaPasteboard.items(from: .general)
+        guard items.isEmpty else {
+            self.onMedia?(items)
+            return
+        }
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return }
+        let range = self.selectedRange()
+        self.apply(ComposerEdit(
+            range: range, replacement: text, selection: NSRange(location: range.location + (text as NSString).length, length: 0)))
+    }
+
+    private func finishRichPaste(_ markdown: String?, selection: NSRange, sender: Any?) {
+        guard let markdown else {
+            self.pastePlain(sender)
+            return
+        }
+        self.apply(ComposerEdit(
+            range: selection, replacement: markdown,
+            selection: NSRange(location: selection.location + (markdown as NSString).length, length: 0)))
+    }
+
+    private func pastePlain(_ sender: Any?) { super.paste(sender) }
+
+    /// Replaces text through the text system, so undo, the binding and completion all see an ordinary edit.
+    /// Each call is its own undo step, even right after typing in the same event (fence auto-close).
+    func apply(_ edit: ComposerEdit) {
+        guard self.isEditable else { return }
+        if edit.range.length == 0, edit.replacement.isEmpty {
+            self.setSelectedRange(edit.selection)
+            return
+        }
+        guard self.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+        self.breakUndoCoalescing()
+        if let undoManager = self.undoManager, undoManager.groupingLevel > 0 {
+            undoManager.endUndoGrouping()
+            undoManager.beginUndoGrouping()
+        }
+        self.textStorage?.replaceCharacters(in: edit.range, with: edit.replacement)
+        self.didChangeText()
+        self.breakUndoCoalescing()
+        self.setSelectedRange(edit.selection)
+    }
+
+    func perform(_ action: ComposerFormatAction) {
+        let text = self.string as NSString
+        let selection = self.selectedRange()
+        guard !self.hasMarkedText(), self.styler?.blocks(action, selection: selection, in: text) != true else { return }
+        self.apply(action.edit(in: text, selection: selection))
+    }
+
+    @objc private func formatMenuItem(_ item: NSMenuItem) {
+        guard let index = item.representedObject as? Int, ComposerFormatAction.allCases.indices.contains(index) else { return }
+        self.perform(ComposerFormatAction.allCases[index])
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let menu = super.menu(for: event) else { return nil }
+        // Fonts and layout orientation mean nothing in a plain-Markdown field.
+        let unwanted = ["orderFrontFontPanel:", "addFontTrait:", "changeLayoutOrientation:"].map(NSSelectorFromString)
+        for item in menu.items.reversed() where item.submenu?.items.contains(where: { $0.action.map(unwanted.contains) ?? false }) == true {
+            menu.removeItem(item)
+        }
+        guard self.isEditable else { return menu }
+        let format = NSMenu(title: L("Format"))
+        for (index, action) in ComposerFormatAction.allCases.enumerated() {
+            let item = NSMenuItem(title: action.title, action: #selector(self.formatMenuItem(_:)), keyEquivalent: action.keyEquivalent.key)
+            item.keyEquivalentModifierMask = action.keyEquivalent.modifiers
+            item.target = self
+            item.representedObject = index
+            format.addItem(item)
+        }
+        let parent = NSMenuItem(title: L("Format"), action: nil, keyEquivalent: "")
+        parent.submenu = format
+        menu.addItem(.separator())
+        menu.addItem(parent)
+        return menu
+    }
+
+    private static func formatAction(for event: NSEvent) -> ComposerFormatAction? {
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if flags == .command {
+            switch key {
+            case "b": return .bold
+            case "i": return .italic
+            case "e": return .code
+            case "k": return .link
+            default: return nil
+            }
+        }
+        if flags == [.command, .shift] {
+            if key == "x" { return .strikethrough }
+            // ⇧⌘7: the character is "&" on US layouts, so match the physical key.
+            if event.keyCode == 26 { return .bulletList }
+        }
+        return nil
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if self.window?.firstResponder === self, self.isEditable, !self.hasMarkedText(),
+           let action = Self.formatAction(for: event)
+        {
+            // ⌘K without a selection belongs to the Command Palette.
+            if action == .link, self.selectedRange().length == 0 { return super.performKeyEquivalent(with: event) }
+            self.perform(action)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(paste(_:)), MediaPasteboard.hasMedia(.general) { return true }
+        if item.action == #selector(pasteAsPlainText(_:)) {
+            return self.isEditable && (MediaPasteboard.hasMedia(.general) || NSPasteboard.general.string(forType: .string)?.isEmpty == false)
+        }
         return super.validateUserInterfaceItem(item)
     }
 
@@ -229,6 +385,7 @@ final class ComposerTextMeasurer {
     private let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
     private var text = ""
     private var font: NSFont?
+    private var styleVersion = 0
 
     init() {
         self.container.lineFragmentPadding = 0
@@ -236,11 +393,13 @@ final class ComposerTextMeasurer {
         self.storage.addLayoutManager(self.layoutManager)
     }
 
-    func usedHeight(of text: String, font: NSFont, width: CGFloat) -> CGFloat {
-        if text != self.text || font != self.font {
+    /// `styled` is the live text view's attributed string when Markdown styling is on, so monospaced code wraps like it will draw.
+    func usedHeight(of text: String, font: NSFont, width: CGFloat, styleVersion: Int = 0, styled: () -> NSAttributedString? = { nil }) -> CGFloat {
+        if text != self.text || font != self.font || styleVersion != self.styleVersion {
             self.text = text
             self.font = font
-            self.storage.setAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
+            self.styleVersion = styleVersion
+            self.storage.setAttributedString(styled() ?? NSAttributedString(string: text, attributes: [.font: font]))
         }
         if self.container.size.width != width {
             self.container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
@@ -280,6 +439,7 @@ extension PlatformComposerTextView: NSViewRepresentable {
         textView.string = self.text
         textView.onMedia = self.onMedia
         textView.autoFocus = self.autoFocus
+        context.coordinator.attachStyler(to: textView)
 
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false
@@ -307,12 +467,18 @@ extension PlatformComposerTextView: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         let width = proposal.width ?? nsView.frame.width
-        let text = (nsView.documentView as? NSTextView)?.string ?? self.text
+        let textView = nsView.documentView as? NSTextView
+        let text = textView?.string ?? self.text
         let coordinator = context.coordinator
         let height = coordinator.heights.height(
             for: text, lineHeight: Self.lineHeight, width: width, maxLines: self.maxLines
         ) { width in
-            coordinator.measurer.usedHeight(of: text, font: Self.font, width: width)
+            coordinator.measurer.usedHeight(of: text, font: Self.font, width: width, styleVersion: coordinator.styleVersion) {
+                guard coordinator.styler?.isEnabled == true, let storage = textView?.textStorage,
+                      storage.length == (text as NSString).length
+                else { return nil }
+                return NSAttributedString(attributedString: storage)
+            }
         }
         return CGSize(width: width, height: height)
     }
@@ -320,12 +486,58 @@ extension PlatformComposerTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: ComposerCoordinatorBase, NSTextViewDelegate {
         let measurer = ComposerTextMeasurer()
+        private(set) var styler: ComposerMarkdownStyler?
+        private(set) var styleVersion = 0
+        private weak var textView: ComposerNSTextView?
+        private let observers = NotificationTokens()
+
+        /// Hooks live Markdown styling into the text view's storage and follows the Settings toggle.
+        func attachStyler(to textView: ComposerNSTextView) {
+            guard let storage = textView.textStorage else { return }
+            let styler = ComposerMarkdownStyler(baseFont: PlatformComposerTextView.font, isEnabled: ComposerMarkdownSettings().liveStyling)
+            styler.hasMarkedText = { [weak textView] in textView?.hasMarkedText() ?? false }
+            styler.onRestyled = { [weak self] in self?.stylingChanged() }
+            styler.attach(to: storage)
+            styler.restyleAll(storage)
+            self.styler = styler
+            textView.styler = styler
+            self.textView = textView
+            self.observers.add(NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.syncStylingSetting() }
+            })
+        }
+
+        private func syncStylingSetting() {
+            guard let styler, let storage = self.textView?.textStorage else { return }
+            let enabled = ComposerMarkdownSettings().liveStyling
+            if enabled != styler.isEnabled { styler.setEnabled(enabled, storage: storage) }
+        }
+
+        private func stylingChanged() {
+            self.styleVersion += 1
+            self.heights.invalidate()
+            self.textView?.enclosingScrollView?.invalidateIntrinsicContentSize()
+        }
+
+        func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
+            (textView as? ComposerNSTextView)?.typedBacktickLocation = replacementString == "`" && !textView.hasMarkedText() ? range.location : nil
+            return true
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
+            if !textView.hasMarkedText(), let storage = textView.textStorage { self.styler?.flushDeferred(storage) }
             self.reportCaret(textView.selectedRange(), length: textView.textStorage?.length, hasMarkedText: textView.hasMarkedText())
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
+            if let composer = textView as? ComposerNSTextView, let location = composer.typedBacktickLocation {
+                composer.typedBacktickLocation = nil
+                if !textView.hasMarkedText(), let edit = ComposerFormatting.autoCloseFence(in: textView.string as NSString, typedAt: location) {
+                    composer.apply(edit)
+                }
+            }
         }
 
         func textDidBeginEditing(_ notification: Notification) { self.parent.onFocusChange(true) }
@@ -344,6 +556,15 @@ extension PlatformComposerTextView: NSViewRepresentable {
             let isForwardTab = selector == #selector(NSResponder.insertTab(_:))
             let isBackwardTab = selector == #selector(NSResponder.insertBacktab(_:))
             if isForwardTab || isBackwardTab {
+                if !self.parent.menuActive, !textView.hasMarkedText(), !modifierFlags.contains(.option),
+                   let composer = textView as? ComposerNSTextView,
+                   let edit = ComposerFormatting.indent(
+                       in: textView.string as NSString, selection: textView.selectedRange(),
+                       outdent: isBackwardTab || modifierFlags.contains(.shift))
+                {
+                    composer.apply(edit)
+                    return true
+                }
                 let action = ComposerTabAction.resolve(
                     menuActive: self.parent.menuActive,
                     backwards: isBackwardTab || modifierFlags.contains(.shift),
@@ -387,8 +608,23 @@ extension PlatformComposerTextView: NSViewRepresentable {
                 supportsSendAndOpen: self.parent.onCommandSubmit != nil, canSubmit: self.parent.canSubmit)
             {
             case .system: return false
-            case .newline: textView.insertNewlineIgnoringFieldEditor(nil)
-            case .send: self.parent.onSubmit()
+            case .newline:
+                if let composer = textView as? ComposerNSTextView,
+                   let edit = ComposerFormatting.newline(in: textView.string as NSString, selection: textView.selectedRange())
+                {
+                    composer.apply(edit)
+                } else {
+                    textView.insertNewlineIgnoringFieldEditor(nil)
+                }
+            case .send:
+                if !self.parent.menuActive, !modifierFlags.contains(.command), let composer = textView as? ComposerNSTextView,
+                   ComposerMarkdown.returnInsertsNewline(in: textView.string as NSString, at: textView.selectedRange().location)
+                {
+                    let range = textView.selectedRange()
+                    composer.apply(ComposerEdit(range: range, replacement: "\n", selection: NSRange(location: range.location + 1, length: 0)))
+                } else {
+                    self.parent.onSubmit()
+                }
             case .sendAndOpen: self.parent.onCommandSubmit?()
             case .ignore: break
             }
@@ -407,6 +643,12 @@ final class ComposerUITextView: UITextView {
     var onSubmit: (() -> Void)?
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
+    /// Where the user just typed a backtick, so the fence auto-close can look at the line after the change lands.
+    var typedBacktickLocation: Int?
+    /// Bumped by the coordinator on every `textViewDidChange`, to tell whether a programmatic edit notified it.
+    var didChangeCount = 0
+    private(set) var isApplyingEdit = false
+    private var formatBar: UIToolbar?
 
     private static let menuKeys: [(String, ComposerKey)] = [
         (UIKeyCommand.inputUpArrow, .up), (UIKeyCommand.inputDownArrow, .down), ("\t", .tab),
@@ -419,7 +661,116 @@ final class ComposerUITextView: UITextView {
             command.wantsPriorityOverSystemBehavior = true
             return command
         }
-        return menu + Self.returnCommands + (super.keyCommands ?? [])
+        return menu + Self.returnCommands + Self.indentCommands + Self.formatCommands + (super.keyCommands ?? [])
+    }
+
+    private static let indentCommands: [UIKeyCommand] = [[], UIKeyModifierFlags.shift].map { flags in
+        let command = UIKeyCommand(input: "\t", modifierFlags: flags, action: #selector(ComposerUITextView.indentKey(_:)))
+        command.wantsPriorityOverSystemBehavior = true
+        return command
+    }
+
+    /// Markdown formatting shortcuts, titled so iPad's hold-⌘ overlay lists them.
+    private static let formatKeys: [(action: ComposerFormatAction, input: String, flags: UIKeyModifierFlags)] = [
+        (.bold, "b", .command), (.italic, "i", .command), (.code, "e", .command),
+        (.strikethrough, "x", [.command, .shift]), (.link, "k", .command), (.bulletList, "7", [.command, .shift]),
+    ]
+
+    private static let formatCommands: [UIKeyCommand] = {
+        ComposerUITextView.formatKeys.map { action, input, flags in
+            let command = UIKeyCommand(title: action.title, action: #selector(ComposerUITextView.formatKey(_:)), input: input, modifierFlags: flags)
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+    }()
+
+    private func formatAction(for command: UIKeyCommand?) -> ComposerFormatAction? {
+        guard let command else { return nil }
+        return Self.formatKeys.first { $0.input == command.input && $0.flags == command.modifierFlags }?.action
+    }
+
+    @objc private func formatKey(_ command: UIKeyCommand) {
+        guard let action = self.formatAction(for: command) else { return }
+        self.perform(action)
+    }
+
+    @objc private func indentKey(_ command: UIKeyCommand) {
+        guard let edit = self.indentEdit(outdent: command.modifierFlags.contains(.shift)) else { return }
+        self.apply(edit)
+    }
+
+    private func indentEdit(outdent: Bool) -> ComposerEdit? {
+        guard !self.menuActive, self.markedTextRange == nil else { return nil }
+        return ComposerFormatting.indent(in: self.text as NSString, selection: self.selectedRange, outdent: outdent)
+    }
+
+    /// Replaces text through the text system (undo and the binding see an ordinary edit) and reports the change once.
+    func apply(_ edit: ComposerEdit) {
+        guard self.isEditable, !self.isApplyingEdit,
+              let start = self.position(from: self.beginningOfDocument, offset: edit.range.location),
+              let end = self.position(from: start, offset: edit.range.length),
+              let range = self.textRange(from: start, to: end)
+        else { return }
+        if edit.range.length == 0, edit.replacement.isEmpty {
+            self.selectedRange = edit.selection
+            return
+        }
+        self.isApplyingEdit = true
+        defer { self.isApplyingEdit = false }
+        // Its own undo step, even right after typing in the same event (fence auto-close).
+        if let undoManager = self.undoManager, undoManager.groupingLevel > 0 {
+            undoManager.endUndoGrouping()
+            undoManager.beginUndoGrouping()
+        }
+        let before = self.didChangeCount
+        self.replace(range, withText: edit.replacement)
+        if self.didChangeCount == before { self.delegate?.textViewDidChange?(self) }
+        self.selectedRange = edit.selection
+    }
+
+    func perform(_ action: ComposerFormatAction) {
+        let text = self.text as NSString
+        guard self.markedTextRange == nil, self.styler?.blocks(action, selection: self.selectedRange, in: text) != true else { return }
+        self.apply(action.edit(in: text, selection: self.selectedRange))
+    }
+
+    /// Shows or hides the optional formatting bar above the keyboard.
+    func setShowsFormatBar(_ shows: Bool) {
+        guard shows != (self.inputAccessoryView != nil) else { return }
+        if shows {
+            let bar = self.formatBar ?? ComposerFormatBar.make { [weak self] in self?.perform($0) }
+            self.formatBar = bar
+            self.inputAccessoryView = bar
+        } else {
+            self.inputAccessoryView = nil
+        }
+        if self.isFirstResponder { self.reloadInputViews() }
+    }
+
+    /// Copy and cut put plain Markdown on the pasteboard: styled runs would round-trip through the rich paste converter and double the markers.
+    override func copy(_ sender: Any?) {
+        guard let range = self.selectedTextRange, !range.isEmpty, let text = self.text(in: range) else { return }
+        UIPasteboard.general.string = text
+    }
+
+    override func cut(_ sender: Any?) {
+        guard let range = self.selectedTextRange, !range.isEmpty else { return }
+        self.copy(sender)
+        self.replace(range, withText: "")
+    }
+
+    override func toggleBoldface(_ sender: Any?) { self.perform(.bold) }
+    override func toggleItalics(_ sender: Any?) { self.perform(.italic) }
+
+    /// Newline from the hardware ⇧↩/⌥↩: continues lists and quotes, else a plain line break.
+    func insertSmartNewline() {
+        if self.markedTextRange == nil,
+           let edit = ComposerFormatting.newline(in: self.text as NSString, selection: self.selectedRange)
+        {
+            self.apply(edit)
+        } else {
+            self.insertText("\n")
+        }
     }
 
     /// Hardware-keyboard Return sends; ⇧↩ and ⌥↩ aren't claimed, so they insert a newline as usual.
@@ -444,10 +795,19 @@ final class ComposerUITextView: UITextView {
 
     @objc private func hardwareReturn(_ command: UIKeyCommand) {
         switch self.returnKey(for: command) {
+        case .send where self.returnInsertsPlainNewline(command):
+            let range = self.selectedRange
+            self.apply(ComposerEdit(range: range, replacement: "\n", selection: NSRange(location: range.location + 1, length: 0)))
         case .send, .sendAndOpen: self.onSubmit?()
-        case .newline: self.insertText("\n")
+        case .newline: self.insertSmartNewline()
         case .system, .ignore: break
         }
+    }
+
+    /// Return inside a code fence types a line break instead of sending (⌘↩ still sends).
+    private func returnInsertsPlainNewline(_ command: UIKeyCommand) -> Bool {
+        !self.menuActive && !command.modifierFlags.contains(.command) && self.markedTextRange == nil
+            && ComposerMarkdown.returnInsertsNewline(in: self.text as NSString, at: self.selectedRange.location)
     }
 
     @objc private func menuKey(_ command: UIKeyCommand) {
@@ -465,17 +825,80 @@ final class ComposerUITextView: UITextView {
             if self.menuActive { return true }
             return self.escapeActive && (sender as? UIKeyCommand)?.input == UIKeyCommand.inputEscape
         }
+        if action == #selector(self.indentKey(_:)) {
+            return self.isEditable && self.indentEdit(outdent: (sender as? UIKeyCommand)?.modifierFlags.contains(.shift) == true) != nil
+        }
+        if action == #selector(self.formatKey(_:)) {
+            guard self.isEditable, self.markedTextRange == nil else { return false }
+            // ⌘K without a selection belongs to the Command Palette.
+            if self.formatAction(for: sender as? UIKeyCommand) == .link { return self.selectedRange.length > 0 }
+            return true
+        }
         if action == #selector(paste(_:)), MediaPasteboard.hasMedia(.general) { return true }
         return super.canPerformAction(action, withSender: sender)
     }
 
+    weak var styler: ComposerMarkdownStyler?
+
     override func paste(_ sender: Any?) {
         let items = MediaPasteboard.items(from: .general)
-        if items.isEmpty {
-            super.paste(sender)
-        } else {
+        guard items.isEmpty else {
             self.onMedia?(items)
+            return
         }
+        let selection = self.selectedRange
+        if self.styler?.isInsideCodeBlock(selection.location, in: self.text as NSString) == true || self.markedTextRange != nil {
+            super.paste(sender)
+            return
+        }
+        if selection.length > 0, let pasted = UIPasteboard.general.string, pasted.utf16.count < 2_048,
+           let edit = ComposerFormatting.pasteLink(pasted, in: self.text as NSString, selection: selection)
+        {
+            self.apply(edit)
+            return
+        }
+        guard let payload = ComposerRichPaste.payload(from: .general) else {
+            super.paste(sender)
+            return
+        }
+        if let quick = ComposerRichPaste.quickMarkdown(from: payload) {
+            self.finishRichPaste(quick, selection: selection, sender: sender)
+            return
+        }
+        let changeCount = UIPasteboard.general.changeCount
+        let version = self.didChangeCount
+        Task { @MainActor [weak self] in
+            let markdown = await ComposerRichPaste.markdown(from: payload)
+            guard let self, UIPasteboard.general.changeCount == changeCount, self.didChangeCount == version,
+                  self.selectedRange == selection
+            else { return }
+            self.finishRichPaste(markdown, selection: selection, sender: sender)
+        }
+    }
+
+    private func finishRichPaste(_ markdown: String?, selection: NSRange, sender: Any?) {
+        guard let markdown else {
+            self.pastePlain(sender)
+            return
+        }
+        self.apply(ComposerEdit(
+            range: selection, replacement: markdown,
+            selection: NSRange(location: selection.location + (markdown as NSString).length, length: 0)))
+    }
+
+    private func pastePlain(_ sender: Any?) { super.paste(sender) }
+
+    /// Paste and Match Style: the pasteboard's plain string, verbatim.
+    override func pasteAndMatchStyle(_ sender: Any?) {
+        let items = MediaPasteboard.items(from: .general)
+        guard items.isEmpty else {
+            self.onMedia?(items)
+            return
+        }
+        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        let range = self.selectedRange
+        self.apply(ComposerEdit(
+            range: range, replacement: text, selection: NSRange(location: range.location + (text as NSString).length, length: 0)))
     }
 
     override func didMoveToWindow() {
@@ -513,6 +936,7 @@ extension PlatformComposerTextView: UIViewRepresentable {
         textView.onSubmit = self.onSubmit
         textView.onKey = self.onKey
         textView.autoFocus = self.autoFocus
+        context.coordinator.attachStyler(to: textView)
         return textView
     }
 
@@ -549,6 +973,44 @@ extension PlatformComposerTextView: UIViewRepresentable {
     final class Coordinator: ComposerCoordinatorBase, UITextViewDelegate {
         private var lineHeightFont: UIFont?
         private var cachedLineHeight: CGFloat = 0
+        private(set) var styler: ComposerMarkdownStyler?
+        private weak var textView: ComposerUITextView?
+        private let observers = NotificationTokens()
+
+        /// Hooks live Markdown styling into the text storage; follows the Settings toggles and Dynamic Type.
+        func attachStyler(to textView: ComposerUITextView) {
+            let settings = ComposerMarkdownSettings()
+            let styler = ComposerMarkdownStyler(baseFont: .preferredFont(forTextStyle: .body), isEnabled: settings.liveStyling)
+            styler.hasMarkedText = { [weak textView] in textView?.markedTextRange != nil }
+            styler.onRestyled = { [weak self] in self?.stylingChanged() }
+            styler.attach(to: textView.textStorage)
+            textView.styler = styler
+            styler.restyleAll(textView.textStorage)
+            self.styler = styler
+            self.textView = textView
+            textView.setShowsFormatBar(settings.showsFormatBar)
+            self.observers.add(NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.syncSettings() }
+            })
+            self.observers.add(NotificationCenter.default.addObserver(forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, let textView = self.textView, let styler = self.styler else { return }
+                    styler.setBaseFont(.preferredFont(forTextStyle: .body), storage: textView.textStorage)
+                }
+            })
+        }
+
+        private func syncSettings() {
+            guard let styler, let textView else { return }
+            let settings = ComposerMarkdownSettings()
+            if settings.liveStyling != styler.isEnabled { styler.setEnabled(settings.liveStyling, storage: textView.textStorage) }
+            textView.setShowsFormatBar(settings.showsFormatBar)
+        }
+
+        private func stylingChanged() {
+            self.heights.invalidate()
+            self.textView?.invalidateIntrinsicContentSize()
+        }
 
         /// One laid-out line, which UITextView makes taller than `UIFont.lineHeight`; the empty
         /// field and the line cap use it so they match the measured text heights.
@@ -563,9 +1025,28 @@ extension PlatformComposerTextView: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
+            let composer = textView as? ComposerUITextView
+            composer?.didChangeCount += 1
+            if textView.markedTextRange == nil { self.styler?.flushDeferred(textView.textStorage) }
             self.reportCaret(textView.selectedRange, length: textView.textStorage.length, hasMarkedText: textView.markedTextRange != nil)
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
+            if let composer, let location = composer.typedBacktickLocation {
+                composer.typedBacktickLocation = nil
+                if textView.markedTextRange == nil,
+                   let edit = ComposerFormatting.autoCloseFence(in: textView.text as NSString, typedAt: location)
+                {
+                    composer.apply(edit)
+                }
+            }
+        }
+
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard let composer = textView as? ComposerUITextView, composer.isEditable else { return UIMenu(children: suggestedActions) }
+            let format = UIMenu(title: L("Format"), children: ComposerFormatAction.allCases.map { action in
+                UIAction(title: action.title, image: UIImage(systemName: action.symbolName)) { [weak composer] _ in composer?.perform(action) }
+            })
+            return UIMenu(children: suggestedActions + [format])
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) { self.parent.onFocusChange(true) }
@@ -579,9 +1060,19 @@ extension PlatformComposerTextView: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard textView.markedTextRange == nil, (textView as? ComposerUITextView)?.isApplyingEdit != true else { return true }
+            (textView as? ComposerUITextView)?.typedBacktickLocation = text == "`" ? range.location : nil
+            guard text == "\n" else { return true }
             // Return picks the highlighted suggestion (or sends a finished command) while the menu is open.
-            guard text == "\n", self.parent.menuActive, textView.markedTextRange == nil else { return true }
-            self.parent.onSubmit()
+            if self.parent.menuActive {
+                self.parent.onSubmit()
+                return false
+            }
+            // The on-screen Return continues lists and quotes.
+            guard let composer = textView as? ComposerUITextView,
+                  let edit = ComposerFormatting.newline(in: textView.text as NSString, selection: range)
+            else { return true }
+            composer.apply(edit)
             return false
         }
     }
