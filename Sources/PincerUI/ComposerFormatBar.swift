@@ -1,6 +1,8 @@
 import Foundation
 import PincerKit
-#if os(iOS)
+#if os(macOS)
+import AppKit
+#else
 import UIKit
 #endif
 
@@ -29,6 +31,20 @@ enum ComposerFormatAction: CaseIterable {
         case .bulletList: "list.bullet"
         }
     }
+
+    #if os(macOS)
+    /// The shortcut shown beside the item in the Format menu.
+    var keyEquivalent: (key: String, modifiers: NSEvent.ModifierFlags) {
+        switch self {
+        case .bold: ("b", .command)
+        case .italic: ("i", .command)
+        case .strikethrough: ("x", [.command, .shift])
+        case .code: ("e", .command)
+        case .link: ("k", .command)
+        case .bulletList: ("7", [.command, .shift])
+        }
+    }
+    #endif
 
     func edit(in text: NSString, selection: NSRange) -> ComposerEdit {
         switch self {

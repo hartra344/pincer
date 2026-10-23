@@ -23,6 +23,14 @@ enum ComposerRichPaste {
         return nil
     }
 
+    /// Small HTML converts right away (the walker is microseconds), so ordinary pastes never wait a turn.
+    /// Returns nil when the payload is too big or needs an RTF load; `.some(nil)` means no formatting.
+    @MainActor
+    static func quickMarkdown(from payload: Payload) -> String?? {
+        guard case .html(let html) = payload, html.utf16.count <= 8_192 else { return nil }
+        return .some(RichTextToMarkdown.markdown(fromHTML: html))
+    }
+
     /// Markdown for the payload, or nil when it carries no real formatting (paste the plain text instead).
     static func markdown(from payload: Payload) async -> String? {
         await Task.detached(priority: .userInitiated) { () -> String? in

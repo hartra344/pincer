@@ -7523,6 +7523,16 @@
         }
       }
     },
+    "Formatting shortcuts, smart lists and pasting formatted text as Markdown keep working when styling is off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatting shortcuts, smart lists and pasting formatted text as Markdown keep working when styling is off."
+          }
+        }
+      }
+    },
     "Forward": {
       "localizations": {
         "en": {

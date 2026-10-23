@@ -258,6 +258,25 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
         return clamped
     }
 
+    /// Whether a format command would only mangle the Markdown at `selection`: inside a code block, a code span
+    /// (except ⌘E, which unwraps it) or a link's URL (except ⌘K, which unwraps the link).
+    func blocks(_ action: ComposerFormatAction, selection: NSRange, in text: NSString) -> Bool {
+        guard self.isEnabled, let index = self.index, selection.location <= text.length else { return false }
+        let paragraph = ComposerMarkdown.paragraphRange(in: text, covering: selection)
+        func contains(_ range: NSRange) -> Bool {
+            selection.location >= range.location && NSMaxRange(selection) <= NSMaxRange(range)
+        }
+        for span in index.spans(in: text, range: paragraph) {
+            switch span.kind {
+            case .codeBlock, .codeFence: if contains(span.range) { return true }
+            case .inlineCode: if action != .code, contains(span.range) { return true }
+            case .link: if action != .link, span.markerRanges.count > 2, contains(span.markerRanges[2]) { return true }
+            default: break
+            }
+        }
+        return false
+    }
+
     private func style(range: NSRange, in storage: NSTextStorage) {
         guard range.length > 0, let index = self.index else { return }
         let text = storage.string as NSString

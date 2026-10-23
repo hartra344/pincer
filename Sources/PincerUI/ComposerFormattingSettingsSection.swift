@@ -22,6 +22,8 @@ struct ComposerFormattingSettingsSection: View {
             #endif
         } header: {
             Text("Composer", bundle: .module)
+        } footer: {
+            Text("Formatting shortcuts, smart lists and pasting formatted text as Markdown keep working when styling is off.", bundle: .module)
         }
     }
 }
