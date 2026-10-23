@@ -258,10 +258,22 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
         return clamped
     }
 
+    /// The live index when it matches `text`; otherwise a one-shot tokenize, so code-context rules hold with styling
+    /// off or while an off-main restyle is pending. Per paste/shortcut only, never per keystroke.
+    private func freshIndex(for text: NSString) -> ComposerMarkdownIndex {
+        if self.isEnabled, let index = self.index { return index }
+        return ComposerMarkdownIndex(text: text)
+    }
+
+    func isInsideCodeBlock(_ location: Int, in text: NSString) -> Bool {
+        self.freshIndex(for: text).isInsideCodeBlock(location)
+    }
+
     /// Whether a format command would only mangle the Markdown at `selection`: inside a code block, a code span
     /// (except ⌘E, which unwraps it) or a link's URL (except ⌘K, which unwraps the link).
     func blocks(_ action: ComposerFormatAction, selection: NSRange, in text: NSString) -> Bool {
-        guard self.isEnabled, let index = self.index, selection.location <= text.length else { return false }
+        guard selection.location <= text.length else { return false }
+        let index = self.freshIndex(for: text)
         let paragraph = ComposerMarkdown.paragraphRange(in: text, covering: selection)
         func contains(_ range: NSRange) -> Bool {
             selection.location >= range.location && NSMaxRange(selection) <= NSMaxRange(range)

@@ -61,6 +61,15 @@ struct ComposerMarkdownStylerTests {
         #expect(Self.font(storage, at: 3)?.fontDescriptor.symbolicTraits.contains(.bold) != true)
     }
 
+    @Test func codeContextHoldsWithStylingOff() {
+        let styler = ComposerMarkdownStyler(baseFont: .systemFont(ofSize: 13), isEnabled: false)
+        let text = "```\ncode\n```" as NSString
+        #expect(styler.isInsideCodeBlock(5, in: text))
+        #expect(!styler.isInsideCodeBlock(text.length, in: "plain" as NSString))
+        #expect(styler.blocks(.bold, selection: NSRange(location: 5, length: 2), in: text))
+        #expect(!styler.blocks(.bold, selection: NSRange(location: 0, length: 0), in: "plain" as NSString))
+    }
+
     @Test func typingRestylesOnlyTheParagraph() {
         let styler = Self.makeStyler()
         let storage = NSTextStorage(string: "first **a**\nsecond line\nthird")

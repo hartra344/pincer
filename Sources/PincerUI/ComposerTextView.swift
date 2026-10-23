@@ -208,7 +208,7 @@ final class ComposerNSTextView: NSTextView {
             return
         }
         let selection = self.selectedRange()
-        if self.styler?.index?.isInsideCodeBlock(selection.location) == true || self.hasMarkedText() {
+        if self.styler?.isInsideCodeBlock(selection.location, in: self.string as NSString) == true || self.hasMarkedText() {
             super.paste(sender)
             return
         }
@@ -847,7 +847,7 @@ final class ComposerUITextView: UITextView {
             return
         }
         let selection = self.selectedRange
-        if self.styler?.index?.isInsideCodeBlock(selection.location) == true || self.markedTextRange != nil {
+        if self.styler?.isInsideCodeBlock(selection.location, in: self.text as NSString) == true || self.markedTextRange != nil {
             super.paste(sender)
             return
         }
