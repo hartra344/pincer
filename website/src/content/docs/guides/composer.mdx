@@ -25,6 +25,45 @@ The message box keeps the selected chat's name if its session row is briefly mis
 
 If you're offline, or a message can't be sent, it stays in the chat marked **Queued** or **Failed — Retry**. See [Offline sending & retry](../offline-outbox/).
 
+## Formatting with Markdown
+
+The message box is plain Markdown, and your message is sent exactly as you typed it. Pincer styles it as you go: bold looks bold, code is monospaced, headings are bold, and links take the accent color. The Markdown marks (`**`, `_`, `` ` ``, `#`, list bullets and so on) stay in the text, dimmed. Nothing is hidden, so what you see is what's sent. Inside a code block, no other styling applies.
+
+| Action | Keys |
+| --- | --- |
+| **Bold** | <kbd>⌘</kbd> <kbd>B</kbd> |
+| *Italic* | <kbd>⌘</kbd> <kbd>I</kbd> |
+| `Code` | <kbd>⌘</kbd> <kbd>E</kbd> |
+| ~~Strikethrough~~ | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>X</kbd> |
+| Link (with text selected) | <kbd>⌘</kbd> <kbd>K</kbd> |
+| Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> |
+| Indent or outdent a list item | <kbd>Tab</kbd> / <kbd>⇧</kbd> <kbd>Tab</kbd> |
+
+The style shortcuts wrap your selection in its marks, or remove them if they're already there. With nothing selected, they insert an empty pair and put the cursor between them. <kbd>⌘</kbd> <kbd>K</kbd> turns the selected text into `[text](url)` and selects `url` so you can paste a link. Press it again inside a link to unwrap it. With no text selected, <kbd>⌘</kbd> <kbd>K</kbd> still opens the [command palette](../command-palette-and-navigation/); use **Link** in the Format menu to insert a link without a selection. <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> adds or removes `- ` on every selected line. These shortcuts work on a Mac, and on iPad with a hardware keyboard.
+
+### Lists and code blocks
+
+- A new line on a list item continues the list with the same indent and marker. Numbers count up (`3.` becomes `4.`), and task items continue as `- [ ] `. Quotes (`> `) continue too. Use <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> for the new line; <kbd>Return</kbd> still sends. On the on-screen keyboard, <kbd>Return</kbd> does it.
+- A new line on an empty item removes the marker and ends the list.
+- <kbd>Tab</kbd> indents the list item the cursor is on, and <kbd>⇧</kbd> <kbd>Tab</kbd> outdents it. Anywhere else, <kbd>Tab</kbd> behaves as before, including while suggestions are showing.
+- Typing <code>```</code> on its own line adds the closing fence below it and leaves the cursor after the opening one, so you can type a language and press <kbd>⇧</kbd> <kbd>Return</kbd>.
+
+### The Format menu and formatting bar
+
+On a Mac, right-click the message box and choose **Format**. On iPhone and iPad, select text and choose **Format** in the edit menu. It lists bold, italic, code, strikethrough, link and bulleted list. On iPhone and iPad you can also show a formatting bar above the keyboard; it's off by default.
+
+### Pasting
+
+When you paste from another app, such as a web page or a document, bold, italic, links, headings, lists, quotes and code come across as Markdown. Plain text is pasted as is. To paste without any conversion, choose **Paste and Match Style** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd>). Pasting an image or file still adds an attachment. Copying from the message box on iPhone and iPad copies plain Markdown.
+
+### Settings
+
+In **Settings → General**, **Style Markdown while typing** turns the live styling off, and your text is shown plain. The shortcuts and list editing keep working. On iPhone and iPad, **Show formatting bar** adds the bar above the keyboard.
+
+{/* TODO: confirm the exact Settings location and labels once the ui-coder's settings page lands. */}
+
+Styling skips text you're still composing with an input method, such as Japanese, and catches up when you confirm it. You can try all of this in the built-in demo: the **Release notes** chat has a message written in Markdown.
+
 ## Location context
 
 In **Settings → Privacy → Location**, turn on **Share location context with the agent**. It starts off. With permission, Pincer requests a one-time location while the app is active and sends a recent fix as agent context. The context is separate from your message text. Pincer keeps the coordinates supplied by the device and reports the provider's horizontal accuracy; system privacy settings may reduce precision.
