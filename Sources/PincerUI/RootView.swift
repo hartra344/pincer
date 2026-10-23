@@ -719,6 +719,7 @@ struct SettingsForm: View {
                     Text("Off by default. Reactions may not interoperate across channels or Gateways.", bundle: .module)
                 }
             }
+            ComposerFormattingSettingsSection()
         case .webImages:
             SwiftUI.Section(L("Web Content")) {
                 Toggle(isOn: self.$loadWebImages) {
