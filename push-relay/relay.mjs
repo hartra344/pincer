@@ -167,6 +167,9 @@ function reply(res, status, body) {
   res.end(text);
 }
 
+/** Bundle ids allowed by default: iOS ships as `chat.pincer.mac` since 1.1 (universal purchase); `chat.pincer.ios` keeps earlier installs' subscriptions working. */
+export const DEFAULT_TOPICS = Object.freeze(['chat.pincer.mac', 'chat.pincer.ios']);
+
 /**
  * @param {object} options
  * @param {string} options.secret        Seals registration ids; keep it stable (≥ 32 chars).
@@ -179,7 +182,7 @@ function reply(res, status, body) {
  */
 export function createRelay(options) {
   if (!options?.secret || options.secret.length < 32) throw new Error('RELAY_SECRET must be at least 32 characters');
-  const topics = options.topics?.length ? options.topics : ['chat.pincer.ios'];
+  const topics = options.topics?.length ? options.topics : [...DEFAULT_TOPICS];
   const apns = createApnsClient({
     origins: { ...APNS_ORIGINS, ...options.origins },
     providerToken: createProviderToken(options),

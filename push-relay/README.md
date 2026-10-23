@@ -28,7 +28,7 @@ At [developer.apple.com → Keys](https://developer.apple.com/account/resources/
 | Key Name | `Pincer Push Relay` |
 | Apple Push Notifications service (APNs) | ✅ → **Configure** |
 | ↳ Environment | **Sandbox & Production** (debug builds use sandbox, TestFlight and App Store use production) |
-| ↳ Key restriction | **Team Scoped (All Topics)**, or Topic Specific with `chat.pincer.ios` |
+| ↳ Key restriction | **Team Scoped (All Topics)**, which covers both `chat.pincer.mac` (the iOS app since 1.1) and `chat.pincer.ios` (earlier builds) |
 
 Click **Continue**, then **Register**, then **Download**. You can download `AuthKey_XXXXXXXXXX.p8` **only once**, so keep a copy somewhere safe. Also note the:
 - **Key ID**: the `XXXXXXXXXX` in the file name, also shown on the key's page;
@@ -89,7 +89,7 @@ The status next to each gateway in Settings → Notifications:
 | Relay must be https:// | The URL isn't `https://` (plain `http://` only works for `localhost`). |
 | Gateway has no Web Push | This Gateway doesn't implement `push.web.subscribe`. Update OpenClaw. |
 | Not connected / Push off | Pincer subscribes each time it connects. Open the gateway, or check that notifications are on. |
-| Push relay refused registration (unknown app) | `APNS_TOPICS` doesn't include the app's bundle id (`chat.pincer.ios`). |
+| Push relay refused registration (unknown app) | `APNS_TOPICS` doesn't include the app's bundle id (`chat.pincer.mac` since 1.1, `chat.pincer.ios` before). |
 | Another error | Usually the phone can't reach the relay. Open `https://…:8443/healthz` in Safari on the phone; it should show `{"ok":true}`. |
 
 Logs: `~/Library/Logs/pincer-push-relay.log` on macOS, or `journalctl --user -u pincer-push-relay` on Linux. The relay logs one line per push (`push 201`, or the APNs error reason):
@@ -118,7 +118,7 @@ On Linux, run `sudo loginctl enable-linger $USER` so the relay keeps running whi
 | `RELAY_SECRET` | At least 32 characters. Changing it invalidates every registration, and devices re-register on their next connect. |
 | `APNS_KEY_ID`, `APNS_TEAM_ID` | Identify the APNs key. |
 | `APNS_KEY_FILE` / `APNS_KEY` | The `.p8`, as a path (relative to this folder) or inline PEM. |
-| `APNS_TOPICS` | Allowed bundle ids, comma-separated. The default is `chat.pincer.ios`. |
+| `APNS_TOPICS` | Allowed bundle ids, comma-separated. The default is `chat.pincer.mac,chat.pincer.ios`: the iOS app ships as `chat.pincer.mac` since 1.1, and keeping `chat.pincer.ios` lets earlier installs keep receiving pushes. |
 | `HOST`, `PORT` | Listen address. The default is `127.0.0.1:8787`. |
 | `APNS_PRODUCTION_ORIGIN`, `APNS_SANDBOX_ORIGIN` | Override the APNs hosts (for tests). |
 

@@ -5,7 +5,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { apnsHeaders, base64urlJSON, createProviderToken, createRelay, idKey, loadEnvFile, openId, sealId } from './relay.mjs';
+import { DEFAULT_TOPICS, apnsHeaders, base64urlJSON, createProviderToken, createRelay, idKey, loadEnvFile, openId, sealId } from './relay.mjs';
 
 const SECRET = 'test-secret-that-is-at-least-32-characters';
 const TOKEN = 'ab'.repeat(32);
@@ -95,6 +95,20 @@ test('register validates the token, environment and app', async () => {
   assert.match(ok.json.id, /^[A-Za-z0-9_-]+$/);
 });
 
+test('default topics accept the universal-purchase iOS app and legacy chat.pincer.ios installs', async () => {
+  assert.deepEqual([...DEFAULT_TOPICS], ['chat.pincer.mac', 'chat.pincer.ios']);
+  for (const topic of DEFAULT_TOPICS) {
+    const { status, json } = await register({ token: TOKEN, environment: 'production', topic });
+    assert.equal(status, 200, topic);
+    assert.equal(openId(SECRET, json.id).topic, topic);
+  }
+  // A subscription sealed by a pre-1.1 build still forwards with its own topic.
+  const legacy = sealId(SECRET, TOKEN, 'production', 'chat.pincer.ios');
+  assert.equal(await push(legacy), 201);
+  assert.equal(requests.at(-1).headers['apns-topic'], 'chat.pincer.ios');
+  assert.equal((await register({ token: TOKEN, environment: 'production', topic: 'chat.pincer.mac.dev-x' })).status, 400);
+});
+
 test('push forwards the encrypted body to APNs with mapped headers', async () => {
   const { json } = await register({ token: TOKEN, environment: 'production' });
   const body = webPushBody(240);
@@ -102,7 +116,7 @@ test('push forwards the encrypted body to APNs with mapped headers', async () =>
   assert.equal(requests.length, 1);
   const [{ headers, body: payload }] = requests;
   assert.equal(headers[':path'], `/3/device/${TOKEN}`);
-  assert.equal(headers['apns-topic'], 'chat.pincer.ios');
+  assert.equal(headers['apns-topic'], 'chat.pincer.mac');
   assert.equal(headers['apns-push-type'], 'alert');
   assert.equal(headers['apns-priority'], '10');
   assert.equal(headers['apns-collapse-id'], 'abcDEF_-123');

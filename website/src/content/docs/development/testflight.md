@@ -26,15 +26,21 @@ For a known CI flake only, a manual run can bypass the gate with `-f skip_ci_gat
 
 Signing uses manual App Store profiles through `project.appstore.yml`, which is only included when `PINCER_APP_STORE_SIGNING=YES`. `scripts/testflight.sh ios|macos` does the work and also runs locally. Use `UPLOAD=0` to export without uploading.
 
+## One App Store record for both platforms
+
+The iOS app ships as the iOS platform of the Mac app's App Store Connect record (universal purchase), so both use the bundle ID `chat.pincer.mac`, the Share extensions `chat.pincer.mac.share`, and the iOS notification service `chat.pincer.mac.notifications`. iOS builds before 1.1 used `chat.pincer.ios`. Provisioning profile names are unique per team, so the iOS profiles for the new IDs are the `Pincer_iOS_Universal_*` ones below.
+
+The App Group (`group.chat.pincer`) and the shared Keychain group (`<TeamID>.chat.pincer.shared`) didn't change, so the new install reads the gateways, secrets and device identity the old `chat.pincer.ios` build saved. Per-app preferences, drafts, the offline outbox and the push relay URL stay with the old app. [Install Pincer](../../getting-started/install/) tells testers what to expect.
+
 ## Required secrets
 
 | Secret | Contents |
 | --- | --- |
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` | App Store Connect API key (the `.p8` is base64) |
 | `DISTRIBUTION_P12`, `MAC_INSTALLER_P12`, `P12_PASSWORD` | Apple Distribution and Mac Installer Distribution certificates (base64 `.p12`) |
-| `IOS_PROFILE`, `MACOS_PROFILE` | Base64 `Pincer_iOS_AppStore_CI` / `Pincer_macOS_AppStore_CI` provisioning profiles. The iOS app ID needs the Push Notifications capability. |
-| `IOS_NOTIFICATIONS_PROFILE` | Base64 `Pincer_iOS_Notifications_AppStore_CI` profile for the `chat.pincer.ios.notifications` notification service extension |
-| `IOS_SHARE_PROFILE`, `MACOS_SHARE_PROFILE` | Base64 `Pincer_iOS_Share_AppStore_CI` / `Pincer_macOS_Share_AppStore_CI` profiles for the Share extensions (`chat.pincer.ios.share`, `chat.pincer.mac.share`) |
+| `IOS_PROFILE`, `MACOS_PROFILE` | Base64 `Pincer_iOS_Universal_AppStore_CI` / `Pincer_macOS_AppStore_CI` provisioning profiles. The `chat.pincer.mac` App ID needs the Push Notifications capability. |
+| `IOS_NOTIFICATIONS_PROFILE` | Base64 `Pincer_iOS_Universal_Notifications_AppStore_CI` profile for the `chat.pincer.mac.notifications` notification service extension |
+| `IOS_SHARE_PROFILE`, `MACOS_SHARE_PROFILE` | Base64 `Pincer_iOS_Universal_Share_AppStore_CI` / `Pincer_macOS_Share_AppStore_CI` profiles for the Share extensions (both `chat.pincer.mac.share`) |
 
 The iOS app and Share extension profiles need the App Groups capability with `group.chat.pincer`. macOS uses the team-prefixed group `<TeamID>.chat.pincer`, which needs no portal setup. The shared Keychain group `<TeamID>.chat.pincer.shared` is covered by the default keychain entitlement.
 

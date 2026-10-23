@@ -88,6 +88,7 @@ enum Suites {
             Section("Transcript cache single manifest decode") { await runTranscriptCacheDecodeChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
+            Section("Universal purchase identity (#1065)") { runUniversalPurchaseChecks() },
             Section("Development suffix validator") { await runDevSuffixValidatorChecks() },
             Section("Release privacy resources") { await runReleasePrivacyChecks() },
             Section("Mac bundle location purpose") { await runBundleLocationPurposeChecks() },
