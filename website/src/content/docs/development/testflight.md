@@ -22,6 +22,12 @@ PR-only or older-commit checks do not authorize an upload. Wait for the main
 checks to finish and rerun TestFlight if this gate fails.
 For a known CI flake only, a manual run can bypass the gate with `-f skip_ci_gate=true` (tag pushes are always gated).
 
+## Runner and Xcode
+
+The upload jobs run on GitHub's `xcode-27` runner (macOS 27, arm64; its image Readme is `images/macos/xcode-27-arm64-Readme.md` in [actions/runner-images](https://github.com/actions/runner-images)). They build with a pinned **Xcode 27.1** (the iOS 27.1 SDK, which iPhone Duo support needs), set by `XCODE_VERSION` at the top of the workflow. The image also ships beta Xcodes, and App Store Connect rejects builds made with a beta, so the workflow never picks "newest". If `/Applications/Xcode_<XCODE_VERSION>.app` is missing, the job fails and lists the installed Xcodes. The log prints `xcodebuild -version` and `xcodebuild -showsdks`.
+
+To bump Xcode, check the runner image Readme for a released (non-beta) version, change `XCODE_VERSION`, and change `runs-on` too if the new Xcode lives on a different runner label.
+
 ## Signing
 
 Signing uses manual App Store profiles through `project.appstore.yml`, which is only included when `PINCER_APP_STORE_SIGNING=YES`. `scripts/testflight.sh ios|macos` does the work and also runs locally. Use `UPLOAD=0` to export without uploading.

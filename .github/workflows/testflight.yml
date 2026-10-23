@@ -24,6 +24,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Pinned release Xcode on the xcode-27 runner. Never a beta: App Store Connect rejects beta-Xcode builds.
+  XCODE_VERSION: "27.1"
+
 jobs:
   checks:
     name: Validate release commit
@@ -46,7 +50,7 @@ jobs:
   upload:
     name: ${{ matrix.platform }}
     needs: checks
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -56,11 +60,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Select newest Xcode
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
         run: |
-          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          XCODE="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE is not installed on this runner. Installed:"
+            ls -d /Applications/Xcode_*.app || true
+            exit 1
+          fi
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          xcodebuild -showsdks
 
       - name: Install XcodeGen
         run: brew install xcodegen
