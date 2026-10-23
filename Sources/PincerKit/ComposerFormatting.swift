@@ -273,6 +273,10 @@ public enum ComposerFormatting {
             if !isBlank(text.character(at: k)) { restEmpty = false; break }
             k += 1
         }
+        if restEmpty, sel.length == 0, p.isList, columns(text, p.quoteEnd, p.markerStart) > 0 {
+            let edits = shiftEdits(text, [lr], outdent: true)
+            if !edits.isEmpty { return compose(edits, text, NSRange(location: p.markerEnd, length: 0)) }
+        }
         if restEmpty, sel.length == 0 {
             let from = (p.isList && p.isQuote) ? p.quoteEnd : p.lineStart
             return ComposerEdit(
@@ -307,29 +311,91 @@ public enum ComposerFormatting {
         guard first.isList else { return nil }
         guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location) else { return nil }
 
+        let edits = shiftEdits(text, lines, outdent: outdent)
+        guard !edits.isEmpty else {
+            return ComposerEdit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel)
+        }
+        return compose(edits, text, sel)
+    }
+
+    private static func columns(_ text: NSString, _ from: Int, _ to: Int) -> Int {
+        var n = 0
+        var i = from
+        while i < to { n += text.character(at: i) == 9 ? 4 : 1; i += 1 }
+        return n
+    }
+
+    private static func markerText(_ kind: ListKind) -> String {
+        switch kind {
+        case let .bullet(c): "\(c)"
+        case let .ordered(n, d): "\(n)\(d)"
+        case .none: ""
+        }
+    }
+
+    /// Indent/outdent edits (indent change + marker adoption) for list lines, top to bottom.
+    private static func shiftEdits(_ text: NSString, _ lines: [NSRange], outdent: Bool) -> [PartialEdit] {
         var edits: [PartialEdit] = []
+        var moved: [Int: (level: Int, kind: ListKind)] = [:]
         for line in lines {
             let p = parsePrefix(text, line)
             guard p.isList else { continue }
+            let level = columns(text, p.quoteEnd, p.markerStart)
             var width = 2
             if case .ordered = p.kind { width = 3 }
+            var newLevel = level + width
             if outdent {
                 var k = 0
                 let start = p.quoteEnd
                 if start < p.markerStart, text.character(at: start) == 9 {
                     k = 1
+                    newLevel = level - 4
                 } else {
                     while k < width, start + k < p.markerStart, text.character(at: start + k) == 32 { k += 1 }
+                    newLevel = level - k
                 }
-                if k > 0 { edits.append(PartialEdit(loc: start, removeLen: k, insert: "")) }
+                guard k > 0 else { continue }
+                edits.append(PartialEdit(loc: start, removeLen: k, insert: ""))
             } else {
                 edits.append(PartialEdit(loc: p.quoteEnd, removeLen: 0, insert: String(repeating: " ", count: width)))
             }
+            newLevel = max(0, newLevel)
+
+            var newKind = p.kind
+            var sibling: ListKind?
+            var pos = p.lineStart
+            let quoteLen = p.quoteEnd - p.lineStart
+            scan: while pos > 0 {
+                let lr = text.lineRange(for: NSRange(location: pos - 1, length: 0))
+                pos = lr.location
+                let q = parsePrefix(text, lr)
+                guard q.isList, q.quoteEnd - q.lineStart == quoteLen else { break scan }
+                let info = moved[q.lineStart] ?? (columns(text, q.quoteEnd, q.markerStart), q.kind)
+                if info.level > newLevel { continue }
+                if info.level == newLevel { sibling = info.kind }
+                break scan
+            }
+            switch (sibling, p.kind) {
+            case let (.bullet(c)?, _): newKind = .bullet(c)
+            case let (.ordered(n, d)?, _): newKind = .ordered(n + 1, d)
+            case let (nil, .ordered(_, d)): newKind = .ordered(1, d)
+            default: break
+            }
+            moved[p.lineStart] = (newLevel, newKind)
+            let old = text.substring(with: NSRange(location: p.markerStart, length: markerLength(text, p)))
+            let new = markerText(newKind)
+            if old != new {
+                edits.append(PartialEdit(loc: p.markerStart, removeLen: (old as NSString).length, insert: new))
+            }
         }
-        guard !edits.isEmpty else {
-            return ComposerEdit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel)
-        }
-        return compose(edits, text, sel)
+        return edits
+    }
+
+    private static func markerLength(_ text: NSString, _ p: LinePrefix) -> Int {
+        guard case .ordered = p.kind else { return 1 }
+        var k = p.markerStart
+        while k < p.lineEnd, text.character(at: k) >= 48, text.character(at: k) <= 57 { k += 1 }
+        return k + 1 - p.markerStart
     }
 
     // MARK: Fence auto-close
