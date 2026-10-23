@@ -3,12 +3,10 @@ import PincerKit
 #if os(macOS)
 import AppKit
 typealias MarkdownFont = NSFont
-typealias MarkdownColor = NSColor
 typealias MarkdownEditActions = NSTextStorageEditActions
 #else
 import UIKit
 typealias MarkdownFont = UIFont
-typealias MarkdownColor = UIColor
 typealias MarkdownEditActions = NSTextStorage.EditActions
 #endif
 
@@ -129,6 +127,7 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
         }
     }
 
+    // periphery:ignore - used only by the iOS Dynamic Type path
     func setBaseFont(_ font: MarkdownFont, storage: NSTextStorage) {
         guard font != self.fonts.base else { return }
         self.fonts = MarkdownFontSet(base: font)

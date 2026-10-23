@@ -21,6 +21,7 @@ enum ComposerFormatAction: CaseIterable {
         }
     }
 
+    // periphery:ignore - used only by the iOS formatting bar and menu
     var symbolName: String {
         switch self {
         case .bold: "bold"

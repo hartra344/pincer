@@ -260,7 +260,6 @@ private struct HTMLMarkdownConverter {
     // MARK: Tags
 
     private static let skipTags: Set<String> = ["script", "style", "head", "title", "template", "noscript"]
-    private static let voidTags: Set<String> = ["br", "hr", "img", "meta", "link", "input", "wbr", "col"]
 
     private mutating func handleOpen(_ name: String, _ attrs: [String: String], selfClosing: Bool) {
         if skipName != nil {
