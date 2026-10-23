@@ -39,7 +39,7 @@ The message box is plain Markdown, and your message is sent exactly as you typed
 | Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> |
 | Indent or outdent a list item | <kbd>Tab</kbd> / <kbd>⇧</kbd> <kbd>Tab</kbd> |
 
-The style shortcuts wrap your selection in its marks, or remove them if they're already there. With nothing selected, they insert an empty pair and put the cursor between them. <kbd>⌘</kbd> <kbd>K</kbd> turns the selected text into `[text](url)` and selects `url` so you can paste a link. Press it again inside a link to unwrap it. With no text selected, <kbd>⌘</kbd> <kbd>K</kbd> still opens the [command palette](../command-palette-and-navigation/); use **Link** in the Format menu to insert a link without a selection. <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> adds or removes `- ` on every selected line. These shortcuts work on a Mac, and on iPad with a hardware keyboard.
+The style shortcuts wrap your selection in its marks, or remove them if they're already there. A selection that spans several lines is wrapped line by line. With nothing selected, they insert an empty pair and put the cursor between them. <kbd>⌘</kbd> <kbd>K</kbd> turns the selected text into `[text](url)` and selects `url` so you can paste a link. Press it again inside a link to unwrap it. With no text selected, <kbd>⌘</kbd> <kbd>K</kbd> still opens the [command palette](../command-palette-and-navigation/); use **Link** in the Format menu to insert `[](url)` without a selection. <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> adds or removes `- ` on every selected line. These shortcuts work on a Mac, and on iPad with a hardware keyboard.
 
 ### Lists and code blocks
 
@@ -54,13 +54,11 @@ On a Mac, right-click the message box and choose **Format**. On iPhone and iPad,
 
 ### Pasting
 
-When you paste from another app, such as a web page or a document, bold, italic, links, headings, lists, quotes and code come across as Markdown. Plain text is pasted as is. To paste without any conversion, choose **Paste and Match Style** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd>). Pasting an image or file still adds an attachment. Copying from the message box on iPhone and iPad copies plain Markdown.
+When you paste from another app, such as a web page or a document, bold, italic, links, headings, lists, quotes and code come across as Markdown. Plain text is pasted as is. To paste without any conversion, choose **Paste and Match Style** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd>) on a Mac. Pasting an image or file still adds an attachment. Copying from the message box on iPhone and iPad copies plain Markdown.
 
 ### Settings
 
-In **Settings → General**, **Style Markdown while typing** turns the live styling off, and your text is shown plain. The shortcuts and list editing keep working. On iPhone and iPad, **Show formatting bar** adds the bar above the keyboard.
-
-{/* TODO: confirm the exact Settings location and labels once the ui-coder's settings page lands. */}
+In **Settings → Chats**, under **Composer**, turn off **Style Markdown as you type** to show your text plain. The shortcuts and list editing keep working. On iPhone and iPad, **Show formatting bar** adds the bar above the keyboard.
 
 Styling skips text you're still composing with an input method, such as Japanese, and catches up when you confirm it. You can try all of this in the built-in demo: the **Release notes** chat has a message written in Markdown.
 
