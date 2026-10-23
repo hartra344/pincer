@@ -10,7 +10,7 @@ import Testing
 @Suite("Composer Markdown styler")
 struct ComposerMarkdownStylerTests {
     static func makeStyler() -> ComposerMarkdownStyler {
-        ComposerMarkdownStyler()
+        ComposerMarkdownStyler(baseFont: .systemFont(ofSize: 13))
     }
 
     static func font(_ storage: NSTextStorage, at location: Int) -> NSFont? {
@@ -22,7 +22,7 @@ struct ComposerMarkdownStylerTests {
     }
 
     static func restyleAll(_ styler: ComposerMarkdownStyler, _ storage: NSTextStorage) {
-        _ = styler.restyle(storage, editedRange: NSRange(location: 0, length: storage.length), changeInLength: storage.length)
+        styler.restyleAllNow(storage)
     }
 
     @Test func appliesFontsAndDimmedMarkers() {
