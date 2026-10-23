@@ -70,6 +70,22 @@ func runComposerMarkdownChecks() {
     check(newline("- a\n- ")?.hasSuffix("- a\n") == true, "an empty item ends the list")
     let indented = apply(ComposerFormatting.indent(in: "- a" as NSString, selection: NSRange(location: 3, length: 0), outdent: false), to: "- a")
     check(indented?.text == "  - a", "indent adds two spaces to a bullet")
+    func marked(_ text: String, outdent: Bool? = nil) -> String? {
+        let t = text as NSString
+        let edit = outdent.map { ComposerFormatting.indent(in: t, selection: NSRange(location: t.length, length: 0), outdent: $0) }
+            ?? ComposerFormatting.newline(in: t, selection: NSRange(location: t.length, length: 0))
+        return edit.flatMap { apply($0, to: text)?.text }
+    }
+    check(marked("1. a\n2. b\n3. c", outdent: false) == "1. a\n2. b\n   1. c", "Tab on an ordered item restarts the sublist at 1")
+    check(marked("1. a\n   1. b\n   2. c", outdent: true) == "1. a\n   1. b\n2. c", "Shift-Tab renumbers against the parent level")
+    check(marked("1. a\n   1. b\n2. c", outdent: false) == "1. a\n   1. b\n   2. c", "Tab adopts the previous sibling's number")
+    check(marked("1. a\n   1. b\n   2. ") == "1. a\n   1. b\n2. ", "Enter on an empty nested numbered item outdents it")
+    check(marked("- a\n  - b\n  - ") == "- a\n  - b\n- ", "Enter on an empty nested bullet outdents it")
+    check(marked("1. a\n2. ") == "1. a\n", "Enter on an empty top-level item still exits the list")
+    check(marked("* a\n* b\n* ") == "* a\n* b\n", "Enter on an empty * item exits without leaving a literal *")
+    check(ComposerReturnKey.resolve(source: .hardware, hasMarkedText: false, shift: false, option: true, command: false,
+                                    supportsSendAndOpen: false, canSubmit: true) == .newline,
+          "Option-Return (insertNewlineIgnoringFieldEditor:) takes the list-aware newline path")
     check(ComposerFormatting.indent(in: "hello" as NSString, selection: NSRange(location: 0, length: 0), outdent: false) == nil,
           "indent falls through off list lines")
 

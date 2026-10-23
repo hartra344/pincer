@@ -47,8 +47,8 @@ The style shortcuts wrap your selection in its marks, or remove them if they're 
 ### Lists and code blocks
 
 - A new line on a list item continues the list with the same indent and marker. Numbers count up (`3.` becomes `4.`), and task items continue as `- [ ] `. Quotes (`> `) continue too. Use <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> for the new line; <kbd>Return</kbd> still sends. On the on-screen keyboard, <kbd>Return</kbd> does it.
-- A new line on an empty item removes the marker and ends the list.
-- <kbd>Tab</kbd> indents the list item the cursor is on, and <kbd>⇧</kbd> <kbd>Tab</kbd> outdents it. On a list item, <kbd>Tab</kbd> indents instead of moving focus. <kbd>⇧</kbd> <kbd>Tab</kbd> on a top-level item does nothing. Anywhere else, <kbd>Tab</kbd> behaves as before, including while suggestions are showing. Numbered lists continue as you type, but they aren't renumbered when you delete an item.
+- A new line on an empty item ends it. On a nested item, it moves the item out one level and continues the list there (`2.` after `1.`). On a top-level item, it removes the marker and ends the list.
+- <kbd>Tab</kbd> indents the list item the cursor is on, and <kbd>⇧</kbd> <kbd>Tab</kbd> outdents it. The item takes the marker of the list it joins: a numbered item indented under `3.` starts a new sublist at `1.`, and one outdented after `2.` becomes `3.`. On a list item, <kbd>Tab</kbd> indents instead of moving focus. <kbd>⇧</kbd> <kbd>Tab</kbd> on a top-level item does nothing. Anywhere else, <kbd>Tab</kbd> behaves as before, including while suggestions are showing. Numbered lists continue as you type, but the items after one you move or delete aren't renumbered.
 - Typing <code>```</code> on its own line adds the closing fence below it and leaves the cursor after the opening one, so you can type a language and press <kbd>Return</kbd> to start the code.
 
 ### The Format menu and formatting bar

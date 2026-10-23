@@ -187,6 +187,8 @@ final class ComposerHeightCache {
 #if os(macOS)
 final class ComposerNSTextView: NSTextView {
     var onMedia: (([PastedMedia]) -> Void)?
+    /// The modifiers of the key press being handled; tests replace it, since they can't set `NSApp.currentEvent`.
+    var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSApp.currentEvent?.modifierFlags ?? [] }
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
     /// Where the user just typed a backtick, so the fence auto-close can look at the line after the change lands.
@@ -552,7 +554,7 @@ extension PlatformComposerTextView: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            let modifierFlags = NSApp.currentEvent?.modifierFlags ?? []
+            let modifierFlags = (textView as? ComposerNSTextView)?.currentModifierFlags() ?? NSApp.currentEvent?.modifierFlags ?? []
             let isForwardTab = selector == #selector(NSResponder.insertTab(_:))
             let isBackwardTab = selector == #selector(NSResponder.insertBacktab(_:))
             if isForwardTab || isBackwardTab {
@@ -601,10 +603,13 @@ extension PlatformComposerTextView: NSViewRepresentable {
             {
                 return true
             }
-            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            // ⌥↩ (and ⇧⌥↩) arrive as insertNewlineIgnoringFieldEditor:, so route them like ⇧↩ through the list logic.
+            let ignoringFieldEditor = selector == #selector(NSTextView.insertNewlineIgnoringFieldEditor(_:))
+            guard selector == #selector(NSResponder.insertNewline(_:)) || ignoringFieldEditor else { return false }
             switch ComposerReturnKey.resolve(
                 source: .hardware, hasMarkedText: textView.hasMarkedText(),
-                shift: modifierFlags.contains(.shift), option: modifierFlags.contains(.option), command: modifierFlags.contains(.command),
+                shift: modifierFlags.contains(.shift), option: modifierFlags.contains(.option) || ignoringFieldEditor,
+                command: modifierFlags.contains(.command),
                 supportsSendAndOpen: self.parent.onCommandSubmit != nil, canSubmit: self.parent.canSubmit)
             {
             case .system: return false
