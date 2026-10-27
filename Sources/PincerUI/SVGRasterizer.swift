@@ -27,10 +27,11 @@ public struct SVGRasterizer: SVGRasterizing {
 
     /// Renders the SVG as large as fits in `bounds` (in pixels), keeping its aspect ratio.
     public static func rasterize(_ data: Data, fitting bounds: CGSize) async -> CGImage? {
-        await self.rasterize(data, fitting: bounds, webStepTimeout: .seconds(20))
+        await self.rasterize(data, fitting: bounds, webStepTimeout: .seconds(45))
     }
 
-    /// `webStepTimeout` caps each WebKit step on iOS (the load, then the snapshot).
+    /// `webStepTimeout` caps each WebKit step on iOS (the load, then the snapshot). It only catches a hang:
+    /// a cold web content process on a loaded CI simulator took about 20 s to load the first page.
     static func rasterize(_ data: Data, fitting bounds: CGSize, webStepTimeout: Duration) async -> CGImage? {
         guard let intrinsic = SVGSource.intrinsicSize(data), bounds.width >= 1, bounds.height >= 1 else { return nil }
         let pixels = SVGSource.pixelSize(for: intrinsic, fitting: bounds)
@@ -71,6 +72,9 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     /// WebKit never answered a step, or its web content process died. A loaded simulator once left
     /// a render pending for over nine minutes; now the step gives up and a fresh web view tries again.
     private var stalled = false
+    /// Shared so every render after the first reuses a warm web content process; a fresh data store per
+    /// render cold-started a new process each time.
+    private static let dataStore = WKWebsiteDataStore.nonPersistent()
 
     static func snapshot(svg: Data, size: CGSize, pixels: CGSize, stepTimeout: Duration) async -> CGImage? {
         for _ in 0..<2 {
@@ -82,7 +86,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
 
     private static func render(svg: Data, size: CGSize, pixels: CGSize, stepTimeout: Duration) async -> (CGImage?, stalled: Bool) {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = self.dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.suppressesIncrementalRendering = true
         let view = WKWebView(frame: CGRect(origin: .zero, size: size), configuration: configuration)

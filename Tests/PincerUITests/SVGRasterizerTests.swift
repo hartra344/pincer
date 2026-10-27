@@ -4,7 +4,9 @@ import Testing
 @testable import PincerKit
 @testable import PincerUI
 
-@MainActor
+/// Serialized: on iOS the renders share one web content process, and parallel tests cold-starting
+/// WebKit at once on a freshly booted simulator made every render slow.
+@MainActor @Suite(.serialized)
 struct SVGRasterizerTests {
     private let svg = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><rect width="400" height="200" fill="red"/></svg>"#.utf8)
 

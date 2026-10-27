@@ -36,6 +36,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       ios_shards: ${{ steps.filter.outputs.ios_shards }}
+      app_ui: ${{ steps.filter.outputs.app_ui }}
     steps:
       - name: Anything besides docs?
         id: filter
@@ -84,6 +85,11 @@ jobs:
           fi
           echo "ios_shards=$shards" >> "$GITHUB_OUTPUT"
           echo "iOS simulator shards: $shards"
+          # The app UI test job is also slow, so pull requests run it only when it or its harness changed.
+          app_ui='^Tests/PincerAppUITests/|^project\.yml$|^scripts/(ci-|test_xcode_dev_suffix)|^\.github/workflows/tests\.yml$'
+          if [ "$EVENT" != pull_request ] || ! $listed || grep -qE "$app_ui" <<<"$files"; then app=true; else app=false; fi
+          echo "app_ui=$app" >> "$GITHUB_OUTPUT"
+          echo "iOS app UI tests: $app"
 
   mock-gateway:
     name: Mock gateway selftest
@@ -242,12 +248,12 @@ jobs:
           xcodebuild test-without-building             -scheme PincerUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-ios             $(scripts/ci-ios-shard.sh '${{ matrix.shard }}')             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
   # Drives the real app on the simulator: the Browser sheet must leave the compact chat header untouched (#1026).
-  # It runs on main and manual runs; pull requests rely on the faster transcript shards and still
-  # get this XCUITest before TestFlight because main must be green.
+  # It runs on main and manual runs, and on pull requests that change it or its harness; other pull
+  # requests rely on the faster transcript shards and still get it before TestFlight because main must be green.
   ios-app-tests:
     name: iOS app UI tests
     needs: changes
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && needs.changes.outputs.app_ui != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     steps:
