@@ -30,6 +30,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case .reminders: (try? await EKEventStore().requestFullAccessToReminders()) ?? false
         case .contacts: (try? await CNContactStore().requestAccess(for: .contacts)) ?? false
         case .motion: await MotionAccess.request()
+        case .health: await HealthAccess.request()
         }
     }
 
@@ -43,6 +44,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case "contacts.search": await self.contactsSearch(invoke)
         case "motion.activity": await self.motionActivity(invoke)
         case "motion.pedometer": await self.motionPedometer(invoke)
+        case HealthSummary.command: await HealthAccess.summary(invoke)
         default: .failure(code: "INVALID_REQUEST", message: "INVALID_REQUEST: unknown command")
         }
     }
@@ -55,6 +57,8 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case .reminders: EKEventStore.authorizationStatus(for: .reminder) == .fullAccess
         case .contacts: Self.contactsGranted
         case .motion: MotionAccess.isAuthorized()
+        // Never reported (`reportsPermission`): HealthKit hides read denial.
+        case .health: HealthAccess.isAvailable
         }
     }
 

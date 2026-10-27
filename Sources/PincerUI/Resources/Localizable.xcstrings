@@ -2243,6 +2243,16 @@
         }
       }
     },
+    "Apple Health summaries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Health summaries"
+          }
+        }
+      }
+    },
     "Applies to all %@ chats": {
       "localizations": {
         "en": {
@@ -8089,6 +8099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Health"
+          }
+        }
+      }
+    },
+    "Health data isn't available on this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health data isn't available on this device"
           }
         }
       }
@@ -15973,6 +15993,16 @@
         }
       }
     },
+    "Share Apple Health summaries?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share Apple Health summaries?"
+          }
+        }
+      }
+    },
     "Share data from this device": {
       "localizations": {
         "en": {
@@ -17753,6 +17783,16 @@
         }
       }
     },
+    "The Gateway also needs health.summary in gateway.nodes.commands.allow.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway also needs health.summary in gateway.nodes.commands.allow."
+          }
+        }
+      }
+    },
     "The Gateway audio couldn't be played.": {
       "localizations": {
         "en": {
@@ -19473,6 +19513,16 @@
         }
       }
     },
+    "Today's steps, sleep, resting heart rate and workouts, as totals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's steps, sleep, resting heart rate and workouts, as totals"
+          }
+        }
+      }
+    },
     "Toggle Sidebar": {
       "localizations": {
         "en": {
@@ -20639,6 +20689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "What's New"
+          }
+        }
+      }
+    },
+    "When an agent asks, Pincer adds up today's steps, sleep, resting heart rate and workouts on this device and sends only those totals to this Gateway. They reach the Gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background and never writes to it. The Gateway owner must also allow health.summary.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When an agent asks, Pincer adds up today's steps, sleep, resting heart rate and workouts on this device and sends only those totals to this Gateway. They reach the Gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background and never writes to it. The Gateway owner must also allow health.summary."
           }
         }
       }

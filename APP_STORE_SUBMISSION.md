@@ -84,8 +84,11 @@ to attach to a message. Location sharing is optional.
 
 App Review note (device mode): it is off by default and nothing is requested
 at launch. Each OS permission prompt (Location When In Use, Calendars, Contacts,
-Reminders, Motion & Fitness) appears only when the user checks the matching
-capability. Declining leaves that capability off. Reviewers can try it with the
+Reminders, Motion & Fitness, and on iPhone Apple Health) appears only when the
+user checks the matching capability. Declining leaves that capability off. Apple
+Health is read-only (today's steps, sleep, resting heart rate and workouts as
+totals), shows its own disclosure first, and is read only when the user's Gateway
+asks; the Mac app has no HealthKit entitlement. Reviewers can try it with the
 built-in demo (Gateway Settings > This Device) without a gateway. Background audio is
 for Read Aloud; background refresh and remote notifications refresh gateway state.
 The Mac app is sandboxed with outgoing network and user-selected file access.

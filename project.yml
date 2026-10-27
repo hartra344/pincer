@@ -105,6 +105,7 @@ targets:
         INFOPLIST_KEY_NSContactsUsageDescription: "Let this Gateway search your contacts by name, only when you turn on device mode for it."
         INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Let this Gateway read your reminders, only when you turn on device mode for it."
         INFOPLIST_KEY_NSMotionUsageDescription: "Let this Gateway read your activity and step counts, only when you turn on device mode for it."
+        INFOPLIST_KEY_NSHealthShareUsageDescription: "Let this Gateway's agents ask for today's step count, sleep, resting heart rate and workouts as totals, only when you turn on Apple Health summaries in device mode. Pincer never writes Health data."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
         TARGETED_DEVICE_FAMILY: "1,2"
   # Drives the real app on a simulator for regressions the hosted UIKit tests can't reach (#1026).
