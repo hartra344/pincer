@@ -3,17 +3,23 @@ import Foundation
 /// What a Gateway's agents may ask this device for once the user opts into device mode.
 public enum DeviceCapability: String, CaseIterable, Codable, Sendable, Identifiable {
     case location, device, calendar, contacts, reminders, motion
+    /// Apple Health summaries: today's aggregates computed on the device (upstream `health`).
+    case health
 
     public var id: String { self.rawValue }
 
-    /// Whether this device can ever answer it; Motion & fitness is iPhone/iPad only.
+    /// Whether this device can ever answer it; Motion & fitness and Apple Health are iPhone/iPad only.
     public var isSupported: Bool {
         #if os(macOS)
-        self != .motion
+        self != .motion && self != .health
         #else
         true
         #endif
     }
+
+    /// Whether the node connect reports an OS permission for it. HealthKit hides read denial, and
+    /// upstream's iOS node reports no `health` permission either.
+    public var reportsPermission: Bool { self != .health }
 
     /// The only commands this capability ever declares.
     public var commands: [String] {
@@ -24,6 +30,7 @@ public enum DeviceCapability: String, CaseIterable, Codable, Sendable, Identifia
         case .contacts: ["contacts.search"]
         case .reminders: ["reminders.list"]
         case .motion: ["motion.activity", "motion.pedometer"]
+        case .health: [HealthSummary.command]
         }
     }
 }
@@ -37,17 +44,23 @@ public enum DeviceModePolicy {
         "sms.", "health.", "photos.", "watch.",
     ]
     private static let forbiddenExact: Set<String> = ["device.apps", "chat.push"]
+    /// The one read-only aggregate in an otherwise forbidden family: no raw Health samples, no writes.
+    private static let permittedExact: Set<String> = [HealthSummary.command]
 
     /// Whether `command` is in a family Pincer never declares (camera, screen, system, files, writes…).
     public static func isForbidden(_ command: String) -> Bool {
         let name = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if self.permittedExact.contains(name) { return false }
         if self.forbiddenExact.contains(name) || name.hasSuffix(".add") { return true }
         return self.forbiddenPrefixes.contains { name.hasPrefix($0) }
     }
 
     /// Sorted commands for the supported `caps`, filtered through the allowlist and denylist.
-    public static func declaredCommands(for caps: Set<DeviceCapability>) -> [String] {
-        Set(caps.filter(\.isSupported).flatMap(\.commands))
+    /// `supported` defaults to this platform; checks on a Mac pass iPhone-only capabilities to a fake handler.
+    public static func declaredCommands(
+        for caps: Set<DeviceCapability>, supported: (DeviceCapability) -> Bool = { $0.isSupported }) -> [String]
+    {
+        Set(caps.filter(supported).flatMap(\.commands))
             .filter { !self.isForbidden($0) && self.allowedCommands.contains($0) }
             .sorted()
     }
@@ -69,7 +82,7 @@ public struct DeviceModeSettings: Codable, Equatable, Sendable {
         guard let data = defaults.data(forKey: self.key(gatewayId)),
               let settings = try? JSONDecoder().decode(DeviceModeSettings.self, from: data)
         else { return DeviceModeSettings() }
-        return settings.sanitized
+        return settings.sanitized()
     }
 
     public func save(gatewayId: UUID, defaults: UserDefaults) {
@@ -79,14 +92,18 @@ public struct DeviceModeSettings: Codable, Equatable, Sendable {
     }
 
     /// Without capabilities this device can't answer.
-    var sanitized: DeviceModeSettings {
+    func sanitized(_ supported: (DeviceCapability) -> Bool = { $0.isSupported }) -> DeviceModeSettings {
         var copy = self
-        copy.capabilities = self.capabilities.filter(\.isSupported)
+        copy.capabilities = self.capabilities.filter(supported)
         return copy
     }
 
     /// Nothing while device mode is off.
-    public var declaredCommands: [String] { self.enabled ? DeviceModePolicy.declaredCommands(for: self.capabilities) : [] }
+    public var declaredCommands: [String] { self.declaredCommands() }
+
+    public func declaredCommands(supported: (DeviceCapability) -> Bool = { $0.isSupported }) -> [String] {
+        self.enabled ? DeviceModePolicy.declaredCommands(for: self.capabilities, supported: supported) : []
+    }
 }
 
 public enum DeviceNodeResult: Sendable, Equatable {

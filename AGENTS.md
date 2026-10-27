@@ -4,7 +4,7 @@ Guidance for coding agents (Copilot, Claude, Codex, …) working in this repo. R
 
 ## What Pincer is
 
-Pincer is a native macOS and iOS SwiftUI client for the [OpenClaw](https://github.com/openclaw/openclaw) Gateway. It is a **client** (the `operator` role of the Gateway WebSocket protocol) by default. An opt-in, per-Gateway **device mode** adds a second connection in the `node` role that declares only the capabilities the user checks (location, device info and status, calendar events, contacts search, reminders list, motion), all read-only, and can never run commands. It never declares camera, screen, shell/`system.run`, files, browser proxy, computer use, installed apps or photos, and it never bundles or launches a Gateway.
+Pincer is a native macOS and iOS SwiftUI client for the [OpenClaw](https://github.com/openclaw/openclaw) Gateway. It is a **client** (the `operator` role of the Gateway WebSocket protocol) by default. An opt-in, per-Gateway **device mode** adds a second connection in the `node` role that declares only the capabilities the user checks (location, device info and status, calendar events, contacts search, reminders list, motion, and on iOS only Apple Health summaries (`health.summary`, iOS only)), all read-only, and can never run commands. It never declares camera, screen, shell/`system.run`, files, browser proxy, computer use, installed apps or photos (and no raw Health samples or writes), and it never bundles or launches a Gateway.
 
 The upstream source of truth is [openclaw/openclaw](https://github.com/openclaw/openclaw). Verify every gateway method, param and event shape there before using it, in the app, the demo gateway and the mock gateway alike. **Never invent methods or fields.**
 

@@ -7,6 +7,7 @@ struct DeviceModePage: View {
     @Environment(GatewayStore.self) private var gateway
     @State private var denied: Set<DeviceCapability> = []
     @State private var requesting: Set<DeviceCapability> = []
+    @State private var healthDisclosure = false
 
     private var controller: DeviceNodeController { self.gateway.deviceNode }
 
@@ -57,6 +58,17 @@ struct DeviceModePage: View {
             }
         }
         .navigationTitle(L("This Device"))
+        .alert(L("Share Apple Health summaries?"), isPresented: self.$healthDisclosure) {
+            Button(L("Continue")) { self.requestAndEnable(.health) }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: {
+            Text(Self.healthDisclosureText)
+        }
+    }
+
+    /// Shown before Apple's Health sheet, matching upstream OpenClaw's disclosure.
+    static var healthDisclosureText: String {
+        L("When an agent asks, Pincer adds up today's steps, sleep, resting heart rate and workouts on this device and sends only those totals to this Gateway. They reach the Gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background and never writes to it. The Gateway owner must also allow health.summary.")
     }
 
     private func row(_ cap: DeviceCapability, settings: DeviceModeSettings) -> some View {
@@ -71,9 +83,13 @@ struct DeviceModePage: View {
             }
             .disabled(self.requesting.contains(cap))
             if self.denied.contains(cap) {
-                Text("Allow access in System Settings", bundle: .module)
+                Text(cap == .health ? L("Health data isn't available on this device") : L("Allow access in System Settings"))
                     .font(.caption)
                     .foregroundStyle(.orange)
+            } else if cap == .health, settings.capabilities.contains(.health) {
+                Text("The Gateway also needs health.summary in gateway.nodes.commands.allow.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -91,6 +107,14 @@ struct DeviceModePage: View {
             self.update { $0.capabilities.remove(cap) }
             return
         }
+        if cap == .health {
+            self.healthDisclosure = true
+            return
+        }
+        self.requestAndEnable(cap)
+    }
+
+    private func requestAndEnable(_ cap: DeviceCapability) {
         guard let handler = DeviceNodeController.platformHandler else {
             self.update { $0.capabilities.insert(cap) }
             return
@@ -108,7 +132,7 @@ struct DeviceModePage: View {
         }
     }
 
-    /// Only what this platform can answer (Motion & fitness is iOS-only).
+    /// Only what this platform can answer (Motion & fitness and Apple Health are iOS-only).
     static var supported: [DeviceCapability] { DeviceCapability.allCases.filter(\.isSupported) }
 
     static func title(_ cap: DeviceCapability) -> String {
@@ -119,6 +143,7 @@ struct DeviceModePage: View {
         case .contacts: L("Contacts")
         case .reminders: L("Reminders")
         case .motion: L("Motion & fitness")
+        case .health: L("Apple Health summaries")
         }
     }
 
@@ -130,6 +155,7 @@ struct DeviceModePage: View {
         case .contacts: L("Search contacts by name")
         case .reminders: L("Read your reminders")
         case .motion: L("Activity and step counts")
+        case .health: L("Today's steps, sleep, resting heart rate and workouts, as totals")
         }
     }
 

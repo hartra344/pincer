@@ -27,6 +27,8 @@ public final class DeviceNodeController {
     public private(set) var lastInvoke: (command: String, ok: Bool, at: Date)?
     /// Tests and checks inject a fake; otherwise `platformHandler` answers.
     @ObservationIgnored public var handler: (any DeviceNodeHandler)?
+    /// What this device can answer. Checks on a Mac widen it to exercise iPhone-only capabilities.
+    @ObservationIgnored package var supports: @Sendable (DeviceCapability) -> Bool = { $0.isSupported }
 
     @ObservationIgnored private let profile: GatewayProfile
     @ObservationIgnored private let identity: DeviceIdentity
@@ -62,14 +64,14 @@ public final class DeviceNodeController {
     /// The node id the Gateway knows this device by.
     private var ownNodeId: String { self.profile.isDemo ? DemoGateway.deviceId : self.identity.deviceId }
 
-    private var declared: [String] { self.settings.declaredCommands }
+    private var declared: [String] { self.settings.declaredCommands(supported: self.supports) }
 
     // MARK: Lifecycle
 
     /// Persists `new` and starts, restarts or stops the node connection to match.
     public func update(_ new: DeviceModeSettings) async {
         let old = self.settings
-        let new = new.sanitized
+        let new = new.sanitized(self.supports)
         self.settings = new
         new.save(gatewayId: self.profile.id, defaults: self.defaults)
         if !new.enabled {
@@ -156,11 +158,11 @@ public final class DeviceNodeController {
             self.status = .off
             return
         }
-        let caps = self.settings.capabilities.filter(\.isSupported)
+        let caps = self.settings.capabilities.filter(self.supports)
         self.invokes = InvokeTracker()
         let invokes = self.invokes
         let handler = self.handler ?? Self.platformHandler
-        let permissions = await handler?.permissions(for: caps) ?? [:]
+        let permissions = await handler?.permissions(for: caps.filter(\.reportsPermission)) ?? [:]
         guard generation == self.generation, self.running else { return }
         let surface = GatewayConnection.Surface.node(
             caps: DeviceCapability.allCases.filter { caps.contains($0) }.map(\.rawValue),

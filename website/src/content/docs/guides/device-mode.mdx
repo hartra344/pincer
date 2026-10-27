@@ -1,6 +1,6 @@
 ---
 title: Device Mode
-description: Optionally let a Gateway's agents ask this device for location, device status, calendar, contacts, reminders and motion data, read-only.
+description: Optionally let a Gateway's agents ask this device for location, device status, calendar, contacts, reminders, motion data and (on iPhone and iPad) Apple Health summaries, read-only.
 ---
 
 Pincer is a client by default. **Device mode** is an opt-in setting that also lets the agents on a gateway ask *this device* for a few pieces of read-only data you choose. It's **off by default, per gateway**, and it can never run commands on your device.
@@ -21,12 +21,67 @@ Pincer then opens a second connection to the gateway in the `node` role. It decl
 | Contacts | `contacts.search` | Contacts |
 | Reminders | `reminders.list` | Reminders |
 | Motion & fitness | `motion.activity`, `motion.pedometer` | Motion & Fitness |
+| Apple Health summaries (iPhone and iPad only) | `health.summary` | Health (read) |
 
-All of them only read. `device.info` reports the model, OS and app version and locale. `device.status` reports battery, thermal and network state, and deliberately not storage or uptime, for privacy.
+All of them only read. Apple Health summaries are unchecked by default and need extra setup; see [below](#apple-health-summaries). `device.info` reports the model, OS and app version and locale. `device.status` reports battery, thermal and network state, and deliberately not storage or uptime, for privacy.
 
 ## What Pincer never declares
 
-Pincer never declares camera, screen recording, shell or `system.run`, notifications (`system.notify`), files, a browser, computer use, installed apps, photos, SMS or health data, and no command that adds or writes anything. The code refuses to connect if a command outside the table above would be declared.
+Pincer never declares camera, screen recording, shell or `system.run`, notifications (`system.notify`), files, a browser, computer use, installed apps, photos or SMS, and no command that adds or writes anything. Pincer never reads raw Health samples and never writes Health data. The only Health data it can share is the opt-in `health.summary` aggregate. The code refuses to connect if a command outside the table above would be declared.
+
+## Apple Health summaries
+
+On iPhone and iPad, an agent can ask for a summary of today's Health data. It isn't offered on a Mac. It's off until you check it.
+
+When you check **Apple Health summaries**, Pincer first shows a disclosure. Pincer computes today's totals on this device and sends only those totals to this gateway when an agent asks. They reach the AI provider and may stay in chat history. Pincer never reads Health data in the background and never writes it. Choose **Continue** to open Apple's Health permission sheet. Access is read-only: steps, sleep, resting heart rate and workouts. If Health data isn't available on the device, the row stays off and the page says so.
+
+### Allow the command on the gateway
+
+`health.summary` is privacy-heavy, so it's never in the gateway's default allowlist. The gateway owner must add it to `gateway.nodes.commands.allow` in `openclaw.json`, keeping any entries already there:
+
+```json5
+{
+  gateway: {
+    nodes: {
+      commands: { allow: ["health.summary"] },
+    },
+  },
+}
+```
+
+An entry in `gateway.nodes.commands.deny` wins over the allow list. Declaring the command changes the node's command surface, so the gateway asks you to approve again:
+
+```bash
+openclaw nodes pending
+openclaw nodes approve <requestId>
+```
+
+### What it returns
+
+Only `{"period":"today"}` is accepted. Anything else fails with `INVALID_REQUEST: period must be today`. The summary covers local midnight to the request time.
+
+| Field | Meaning |
+| --- | --- |
+| `period` | Always `today` |
+| `startISO` | Local start of day |
+| `endISO` | Request time |
+| `timeZoneIdentifier` | This device's time zone |
+| `stepCount` | Rounded cumulative steps |
+| `sleepDurationMinutes` | Asleep time, clipped to today. Sleep stages and overlapping sources are merged, so no minute counts twice |
+| `restingHeartRateBpm` | Average resting heart rate, one decimal |
+| `workoutCount` | Workouts that started today |
+| `workoutDurationMinutes` | Total duration of those workouts |
+
+The metric fields are optional. Pincer leaves one out when HealthKit returns nothing for it.
+
+### Privacy
+
+- Totals are computed on this device. Raw samples never leave it.
+- Pincer reads Health only when `health.summary` is invoked. There's no background ingestion, and nothing is written.
+- Apple deliberately doesn't tell apps whether read access was denied. A missing metric can mean denied access, no data, or a data type that isn't available.
+- The summary is for personal context. It isn't medical advice.
+
+To stop sharing, uncheck **Apple Health summaries**. Pincer then stops declaring `health.summary`. You can also remove it from `gateway.nodes.commands.allow` to close the gateway side.
 
 ## Pairing and approval
 
@@ -47,6 +102,7 @@ Turning device mode off disconnects the node connection and asks the gateway to 
 ## Platform notes
 
 - **Motion** is iPhone-only and isn't offered on a Mac at all.
+- **Apple Health summaries** are iPhone and iPad only and aren't offered on a Mac.
 - Location is a one-shot reading while the app is open, never continuous tracking.
 
 ## How agents use it
@@ -57,7 +113,11 @@ Agents reach the device through OpenClaw's `nodes` tool, and you can try the sam
 openclaw nodes location get --node <name>
 ```
 
-See OpenClaw's [location command](https://docs.openclaw.ai/nodes/location-command) docs for parameters.
+See OpenClaw's [location command](https://docs.openclaw.ai/nodes/location-command) docs for parameters. For Apple Health:
+
+```bash
+openclaw nodes invoke --node <name> --command health.summary --params '{"period":"today"}' --json
+```
 
 ## In the demo
 

@@ -30,7 +30,8 @@ struct DeviceModePolicyTests {
         #expect(DeviceCapability.contacts.commands == ["contacts.search"])
         #expect(DeviceCapability.reminders.commands == ["reminders.list"])
         #expect(DeviceCapability.motion.commands == ["motion.activity", "motion.pedometer"])
-        #expect(Set(DeviceCapability.allCases.map(\.rawValue)) == ["location", "device", "calendar", "contacts", "reminders", "motion"])
+        #expect(DeviceCapability.health.commands == ["health.summary"])
+        #expect(Set(DeviceCapability.allCases.map(\.rawValue)) == ["location", "device", "calendar", "contacts", "reminders", "motion", "health"])
         #expect(DeviceModePolicy.allowedCommands.count == DeviceCapability.allCases.flatMap(\.commands).count)
     }
 
@@ -214,7 +215,7 @@ struct DeviceModeSurfaceTests {
     static let upstreamIOS = [
         "location.get", "device.info", "device.status", "device.apps", "contacts.search", "contacts.add", "calendar.events",
         "calendar.add", "reminders.list", "reminders.add", "photos.latest", "motion.activity", "motion.pedometer",
-        "camera.snap", "system.notify", "chat.push", "watch.status",
+        "health.summary", "camera.snap", "system.notify", "chat.push", "watch.status",
     ]
 
     @Test func writeCommandsAreNeverDeclaredEvenThoughUpstreamDoes() {
@@ -242,11 +243,28 @@ struct DeviceModeSurfaceTests {
         #expect(!settings.declaredCommands.contains("contacts.add"))
     }
 
+    @Test func healthSummaryIsTheOnlyPermittedHealthCommand() {
+        #expect(!DeviceModePolicy.isForbidden("health.summary") && !DeviceModePolicy.isForbidden(" Health.Summary "))
+        #expect(DeviceModePolicy.allowedCommands.contains("health.summary"))
+        for command in ["health.read", "health.samples", "health.write", "health.summary.add", "health.summaryx"] {
+            #expect(DeviceModePolicy.isForbidden(command), "\(command)")
+        }
+        #expect(DeviceModePolicy.declaredCommands(for: [.health], supported: { _ in true }) == ["health.summary"])
+        #expect(DeviceModeSettings().capabilities == [.location], "Apple Health is off by default")
+        #expect(!DeviceCapability.health.reportsPermission && DeviceCapability.allCases.filter { !$0.reportsPermission } == [.health])
+        #expect((try? GatewayConnection.validate(.node(caps: ["health"], commands: ["health.summary"], permissions: [:]))) != nil)
+    }
+
     @Test func unsupportedCapabilityIsNeverDeclared() {
         #if os(macOS)
+        #expect(!DeviceCapability.health.isSupported)
+        #expect(DeviceModePolicy.declaredCommands(for: [.health]) == [])
+        #expect(DeviceModeSettings(enabled: true, capabilities: [.health, .location]).declaredCommands == ["location.get"])
         #expect(!DeviceCapability.motion.isSupported)
         #expect(DeviceModePolicy.declaredCommands(for: [.motion]) == [])
         #expect(DeviceModeSettings(enabled: true, capabilities: [.motion, .location]).declaredCommands == ["location.get"])
+        #else
+        #expect(DeviceCapability.health.isSupported)
         #endif
         #expect(DeviceCapability.location.isSupported)
     }

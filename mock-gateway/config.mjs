@@ -27,7 +27,13 @@ const clone = (value) => structuredClone(value);
 export function createConfigState() {
   return {
     config: {
-      gateway: { port: 18789, bind: 'tailnet', auth: { mode: 'token', token: 'dev-token' } },
+      gateway: {
+        port: 18789,
+        bind: 'tailnet',
+        auth: { mode: 'token', token: 'dev-token' },
+        // health.summary is privacy-heavy: upstream only makes it invocable when explicitly allowed.
+        nodes: { commands: { allow: ['health.summary'] } },
+      },
       agents: { defaults: { model: 'anthropic/claude-sonnet-4-5', thinkingDefault: 'low', timeoutSeconds: 600 } },
       channels: {
         discord: { enabled: true, token: 'discord-bot-secret', dmPolicy: 'pairing' },
@@ -109,6 +115,15 @@ function buildSchema(state) {
         properties: {
           port: { type: 'integer', minimum: 1, maximum: 65535 },
           bind: { anyOf: [{ const: 'loopback' }, { const: 'lan' }, { const: 'tailnet' }, { const: 'auto' }] },
+          nodes: {
+            type: 'object',
+            properties: {
+              commands: {
+                type: 'object',
+                properties: { allow: { type: 'array', items: { type: 'string' } }, deny: { type: 'array', items: { type: 'string' } } },
+              },
+            },
+          },
           auth: {
             type: 'object',
             properties: {

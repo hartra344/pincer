@@ -17,11 +17,20 @@ final class CheckNodeHandler: DeviceNodeHandler, @unchecked Sendable {
 
     func handle(_ invoke: DeviceNodeInvoke) async -> DeviceNodeResult {
         self.lock.withLock { self.commands.append(invoke.command) }
+        if invoke.command == HealthSummary.command {
+            if case let .failure(failure) = HealthSummary.params(invoke.paramsJSON) { return failure.result }
+            return HealthSummary.result(checkHealthPayload)
+        }
         return .ok(payloadJSON: "{\"lat\":1.5,\"lon\":2.5,\"accuracyMeters\":5,\"timestamp\":\"2026-01-01T00:00:00Z\",\"isPrecise\":true}")
     }
 }
 
 private let supported = DeviceCapability.allCases.filter(\.isSupported)
+
+/// What the iOS HealthKit reader would answer; checks run on a Mac, where Apple Health is unsupported.
+let checkHealthPayload = HealthSummary.Payload(
+    period: .today, startISO: "2026-10-27T04:00:00Z", endISO: "2026-10-27T19:30:00Z", timeZoneIdentifier: "America/New_York",
+    stepCount: 8432, sleepDurationMinutes: 412, restingHeartRateBpm: 58.4, workoutCount: 1, workoutDurationMinutes: 42)
 
 // MARK: Offline
 
@@ -32,8 +41,10 @@ func runDeviceModeOfflineChecks() {
     let allowed = Set(supported.flatMap(\.commands))
     check(DeviceCapability.location.commands == ["location.get"] && DeviceCapability.device.commands == ["device.info", "device.status"]
           && DeviceCapability.calendar.commands == ["calendar.events"] && DeviceCapability.contacts.commands == ["contacts.search"]
-          && DeviceCapability.reminders.commands == ["reminders.list"] && DeviceCapability.motion.commands == ["motion.activity", "motion.pedometer"],
+          && DeviceCapability.reminders.commands == ["reminders.list"] && DeviceCapability.motion.commands == ["motion.activity", "motion.pedometer"]
+          && DeviceCapability.health.commands == ["health.summary"],
           "capabilities map to exactly their commands")
+    runHealthSummaryOfflineChecks()
     let forbidden = ["camera.snap", "camera.clip", "screen.record", "system.run", "system.notify", "device.apps", "photos.latest",
                      "contacts.add", "calendar.add", "reminders.add", "sms.send", "health.read", "browser.proxy", "computer.click",
                      "files.read", "talk.ptt.start", "canvas.present", "chat.push", "watch.notify"]
@@ -133,6 +144,58 @@ func runDemoDeviceModeChecks() async {
     check(gone?["ok"]?.bool == false, "no invoke is answered after disabling")
     // The demo's operator holds no operator.admin: no node.pair.remove, a hint instead.
     check(gateway.deviceNode.removalHint != nil, "without Full Management, turning off explains how to remove the node role")
+
+    // Apple Health (iPhone only): the demo gateway answers health.summary through the handler, with no health permission.
+    gateway.deviceNode.supports = { _ in true }
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .health]))
+    let healthActive = await waitFor("health node active", { gateway.deviceNode.status == .active })
+    var healthCommands: [String] = []
+    for _ in 0..<50 {
+        healthCommands = DeviceRecords.strings(await selfNode()?["commands"])
+        if healthCommands == ["health.summary", "location.get"] { break }
+        try? await Task.sleep(for: .milliseconds(100))
+    }
+    check(healthActive && healthCommands == ["health.summary", "location.get"], "Apple Health declares only health.summary (\(healthCommands))")
+    let summary = await gateway.demoInvokeNode(command: "health.summary", paramsJSON: #"{"period":"today"}"#)
+    check(summary?["ok"]?.bool == true && summary?["payload"]?["stepCount"]?.int == 8432
+          && summary?["payload"]?["restingHeartRateBpm"]?.double == 58.4 && summary?["payload"]?["period"]?.string == "today",
+          "health.summary {period: today} round trip")
+    let week = await gateway.demoInvokeNode(command: "health.summary", paramsJSON: #"{"period":"week"}"#)
+    check(week?["ok"]?.bool == false && week?["error"]?["message"]?.string == "INVALID_REQUEST: period must be today",
+          "health.summary rejects any period but today")
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: false, capabilities: [.location, .health]))
+}
+
+@MainActor
+func runHealthSummaryOfflineChecks() {
+    check(DeviceModePolicy.allowedCommands.contains("health.summary") && !DeviceModePolicy.isForbidden("health.summary")
+          && ["health.read", "health.samples", "health.write", "health.summaryx"].allSatisfy(DeviceModePolicy.isForbidden),
+          "health.summary is the only permitted health command")
+    check(!DeviceCapability.health.isSupported && DeviceModePolicy.declaredCommands(for: [.health]).isEmpty
+          && DeviceModePolicy.declaredCommands(for: [.health], supported: { _ in true }) == ["health.summary"],
+          "Apple Health is never declared on a Mac")
+    check(!DeviceModeSettings().capabilities.contains(.health) && !DeviceCapability.health.reportsPermission,
+          "Apple Health is off by default and reports no permission key")
+    check(HealthSummary.params(#"{"period":"today"}"#) == .success(.init(period: .today))
+          && [nil, "{}", #"{"period":"week"}"#].allSatisfy { HealthSummary.params($0) == .failure(DeviceNodeFailure(
+              code: "INVALID_REQUEST", message: "INVALID_REQUEST: period must be today")) },
+          "health.summary params require period today")
+    let midnight = Date(timeIntervalSince1970: 1_793_059_200)
+    let range = DateInterval(start: midnight, duration: 12 * 3600)
+    let sleep = [DateInterval(start: midnight.addingTimeInterval(-7200), end: midnight.addingTimeInterval(6.5 * 3600)),
+                 DateInterval(start: midnight.addingTimeInterval(5 * 3600), end: midnight.addingTimeInterval(7 * 3600))]
+    check(abs((HealthSummary.mergedDuration(sleep, clippedTo: range) ?? 0) - 7 * 3600) < 0.001
+          && HealthSummary.mergedDuration([], clippedTo: range) == nil, "sleep merges overlaps once and clips to today")
+    let payload = HealthSummary.payload(
+        HealthSummary.Raw(steps: 8431.6, asleep: sleep, restingHeartRate: 58.437, workoutDurations: []),
+        period: .today, range: range, timeZone: .gmt)
+    check(payload.stepCount == 8432 && payload.sleepDurationMinutes == 420 && payload.restingHeartRateBpm == 58.4
+          && payload.workoutCount == nil && payload.workoutDurationMinutes == nil, "health.summary rounds like upstream and omits no workouts")
+    if case let .ok(json) = HealthSummary.result(payload) {
+        check(!json.contains("workout") && !json.contains("null"), "missing metrics are omitted, not null")
+    } else {
+        check(false, "health.summary payload encodes")
+    }
 }
 
 // MARK: Live
@@ -149,6 +212,7 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
     gateway.notifier = nil
     let handler = CheckNodeHandler()
     gateway.deviceNode.handler = handler
+    gateway.deviceNode.supports = { _ in true }
     gateway.start()
     defer { gateway.stop(); profile.forgetCredentials() }
     guard await waitFor("device mode live connects", { gateway.state.isConnected && gateway.hello != nil }),
@@ -162,12 +226,12 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
         let result = try? await gateway.connection.request("node.list", [:])
         return result?["nodes"]?.array?.first { $0["nodeId"]?.text == nodeId }
     }
-    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device]))
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device, .health]))
     let liveActive = await waitFor("live node active", timeout: 30, { gateway.deviceNode.status == .active })
     check(liveActive, "node connects (pairing approved) and becomes active (\(gateway.deviceNode.status))")
     check(profile.nodeDeviceToken?.isEmpty == false && profile.nodeDeviceToken != profile.deviceToken, "a separate node token is stored")
     let node = await selfNode()
-    check(node?["connected"]?.bool == true && Set(DeviceRecords.strings(node?["commands"])) == ["location.get", "device.info", "device.status"],
+    check(node?["connected"]?.bool == true && Set(DeviceRecords.strings(node?["commands"])) == ["location.get", "device.info", "device.status", "health.summary"],
           "node.list shows the declared commands")
     check(!DeviceRecords.strings(node?["commands"]).contains { DeviceModePolicy.isForbidden($0) }, "no forbidden command is listed")
 
@@ -178,13 +242,22 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
     check(result?["ok"]?.bool == true && (result?["payload"]?["lat"]?.double == 1.5 || result?["payloadJSON"]?.string?.contains("1.5") == true),
           "operator node.invoke location.get round trip")
     check(handler.handled == ["location.get"], "the handler saw only location.get")
+    // The mock seeds gateway.nodes.commands.allow: ["health.summary"], as upstream requires.
+    let health = try? await gateway.connection.request("node.invoke", [
+        "nodeId": .string(nodeId), "command": "health.summary", "params": ["period": "today"],
+        "timeoutMs": 5000, "idempotencyKey": .string(UUID().uuidString),
+    ], timeout: 15)
+    let healthPayload = health?["payload"] ?? health?["payloadJSON"]?.string.flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+    check(health?["ok"]?.bool == true && healthPayload?["stepCount"]?.int == 8432 && healthPayload?["period"]?.string == "today",
+          "operator node.invoke health.summary round trip")
+    check(handler.handled == ["location.get", "health.summary"], "the handler saw health.summary")
     var refused = false
     do {
         let reply = try await gateway.connection.request("node.invoke", [
             "nodeId": .string(nodeId), "command": "contacts.add", "timeoutMs": 3000, "idempotencyKey": .string(UUID().uuidString)])
         refused = reply["ok"]?.bool == false
     } catch { refused = true }
-    check(refused && handler.handled == ["location.get"], "an undeclared command is rejected and never reaches the handler")
+    check(refused && handler.handled == ["location.get", "health.summary"], "an undeclared command is rejected and never reaches the handler")
 
     await gateway.deviceNode.update(DeviceModeSettings(enabled: false, capabilities: [.location, .device]))
     check(gateway.deviceNode.status == .off, "disabling → off")

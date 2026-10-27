@@ -11,6 +11,11 @@
 	<array>
 		<string>$(PINCER_APP_GROUP)</string>
 	</array>
+	<!-- Device mode's opt-in Apple Health summaries (health.summary): read-only, iOS only. Never add this to macOS. -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)chat.pincer.shared$(PINCER_DEV_SUFFIX)</string>

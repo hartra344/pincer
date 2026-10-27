@@ -9,7 +9,7 @@ export async function run() {
   const sockets = [];
   try {
     const url = `ws://127.0.0.1:${server.address().port}`;
-    const scopes = [...BASE_SCOPES, 'operator.pairing'];
+    const scopes = [...BASE_SCOPES, 'operator.pairing', 'operator.admin'];
     const device = makeDevice();
     const track = (client) => (sockets.push(client.ws), client);
     const surface = (commands) => ({ caps: ['location'], commands, permissions: { location: true } });
@@ -118,6 +118,35 @@ export async function run() {
     const calReq = await node.waitEvent('node.invoke.request');
     await node.call('node.invoke.result', { id: calReq.id, nodeId: device.id, ok: true, payloadJSON: '{"events":[]}' });
     assert.deepEqual((await calendar).payload.payload, { events: [] });
+
+    // health.summary is opt-in via gateway.nodes.commands.allow (seeded); deny overrides allow.
+    {
+      const healthPending = operator.waitEvent('node.pair.requested');
+      node.ws.close();
+      await delay(50);
+      node = track(await connectClient(url, device, nodeToken, true, [], surface(['location.get', 'device.info', 'calendar.events', 'health.summary'])));
+      node.emitter.on('*', (event) => nodeEvents.push(event));
+      const healthReq = await healthPending;
+      assert.ok(healthReq.commands.includes('health.summary'), 'seeded allow lets health.summary be declared');
+      await operator.send('node.pair.approve', { requestId: healthReq.requestId });
+      listed = (await operator.send('node.list', {})).nodes.find((n) => n.nodeId === device.id);
+      assert.ok(listed.commands.includes('health.summary'));
+      const health = operator.call('node.invoke', invokeParams('health.summary', { params: { period: 'today' } }));
+      const healthInvoke = await node.waitEvent('node.invoke.request');
+      assert.equal(healthInvoke.command, 'health.summary');
+      assert.equal(healthInvoke.paramsJSON, '{"period":"today"}');
+      const summary = { period: 'today', startISO: '2026-10-27T04:00:00Z', endISO: '2026-10-27T19:30:00Z', timeZoneIdentifier: 'America/New_York', stepCount: 8432, sleepDurationMinutes: 412, restingHeartRateBpm: 58.4, workoutCount: 1, workoutDurationMinutes: 42 };
+      await node.call('node.invoke.result', { id: healthInvoke.id, nodeId: device.id, ok: true, payloadJSON: JSON.stringify(summary) });
+      assert.deepEqual((await health).payload.payload, summary);
+
+      // deny overrides allow, both for invoke and for what a node may declare.
+      const cfg = await operator.send('config.get', {});
+      const patched = await operator.call('config.patch', { raw: JSON.stringify({ gateway: { nodes: { commands: { deny: ['health.summary'] } } } }), baseHash: cfg.hash });
+      assert.equal(patched.ok, true, JSON.stringify(patched));
+      const blocked = await operator.call('node.invoke', invokeParams('health.summary', { params: { period: 'today' } }));
+      assert.equal(blocked.error.code, 'INVALID_REQUEST');
+      assert.equal(blocked.error.message, 'command not allowlisted');
+    }
 
     // node.pair.remove drops the node role, closes node sockets and keeps the operator session.
     const nodeClosed = new Promise((resolve) => node.ws.once('close', resolve));

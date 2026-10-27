@@ -35,9 +35,20 @@ export function isNodeConn(conn) {
   return conn.role === 'node';
 }
 
-export function filterDeclaredCommands(commands) {
+/// Upstream resolveNodeCommandAllowlist: platform defaults plus `gateway.nodes.commands.allow`,
+/// minus `gateway.nodes.commands.deny` (deny wins).
+export function nodeCommandAllowlist(state) {
+  const policy = state?.configState?.config?.gateway?.nodes?.commands ?? {};
+  const names = (value) => (Array.isArray(value) ? value.filter((c) => typeof c === 'string').map((c) => c.trim()).filter(Boolean) : []);
+  const allow = new Set([...PLATFORM_ALLOWLIST, ...names(policy.allow)]);
+  for (const blocked of names(policy.deny)) allow.delete(blocked);
+  return allow;
+}
+
+export function filterDeclaredCommands(commands, state) {
   const list = Array.isArray(commands) ? commands : [];
-  return [...new Set(list.filter((c) => typeof c === 'string' && PLATFORM_ALLOWLIST.has(c)))].sort();
+  const allowlist = nodeCommandAllowlist(state);
+  return [...new Set(list.filter((c) => typeof c === 'string' && allowlist.has(c)))].sort();
 }
 
 function pendingNodes(state) {
@@ -76,7 +87,7 @@ function pendingView(request) {
 export function attachNode(state, conn, params, broadcast) {
   const device = state.pairedDevices.get(conn.deviceId);
   const client = params.client ?? {};
-  const declared = filterDeclaredCommands(params.commands);
+  const declared = filterDeclaredCommands(params.commands, state);
   const caps = Array.isArray(params.caps) ? params.caps.filter((c) => typeof c === 'string') : [];
   const permissions = params.permissions && typeof params.permissions === 'object' && !Array.isArray(params.permissions) ? { ...params.permissions } : {};
   for (const other of nodeConnections(state, conn.deviceId)) other.ws.close(1008, 'node replaced');
@@ -234,7 +245,7 @@ function invokeNode(state, conn, id, params, invalid) {
   // upstream isNodeCommandAllowed: allowlist first, then "declared"
   let reason;
   if (!command) reason = 'command required';
-  else if (!PLATFORM_ALLOWLIST.has(command)) reason = 'command not allowlisted';
+  else if (!nodeCommandAllowlist(state).has(command)) reason = 'command not allowlisted';
   else if (commands.length === 0) reason = 'node did not declare commands';
   else if (!commands.includes(command)) reason = 'command not declared by node';
   if (reason) return sendErr(conn, id, 'INVALID_REQUEST', reason, { reason, command });
