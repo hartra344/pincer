@@ -3,7 +3,7 @@ title: Privacy Policy
 description: What Pincer stores, where information goes, and the choices you control.
 ---
 
-Effective date: October 7, 2026.
+Effective date: October 27, 2026.
 
 Pincer is a free, open-source app for Mac, iPhone and iPad, maintained by
 [hartra344](https://github.com/hartra344/pincer). **There is no developer-provided
@@ -79,6 +79,15 @@ gateway must be managed on that gateway and, where applicable, with its provider
   The Pincer developer receives none of it, and your gateway and its providers
   may retain it under their own settings. Turning device mode off disconnects
   the node.
+- **Apple Health (iPhone and iPad, off by default):** if you check **Apple Health
+  summaries** in device mode, Pincer reads, with your permission in Apple's Health
+  sheet, today's totals only: steps, sleep minutes, average resting heart rate,
+  and workout count and minutes. It computes these on your device and sends
+  them to your own gateway only when one of its agents asks. Individual samples,
+  sources and clinical records never leave the device. Pincer only reads Health
+  data. It never writes Health data and never collects it in the background.
+  The summary can reach your gateway's AI provider and remain in chat history.
+  Turn the capability off in Pincer or revoke access in the Health app.
 - **Notifications:** while the app is open, notifications may include previews.
   Optional background push uses a relay you configure and Apple's APNs service.
   The relay routes encrypted payloads; gateway content is encrypted to device
