@@ -218,15 +218,18 @@ public actor GatewayConnection {
     }
 
     /// Force an immediate reconnect (e.g. app returned to foreground on iOS).
-    public func reconnectNow() {
+    public func reconnectNow() async {
         guard self.shouldRun else { return }
         if self.demo != nil, self.hello != nil { return }
-        // A suspended iOS app's socket can still report `.running` while it's dead; missed
-        // heartbeats mean requests would hang until the watchdog notices, so reconnect now.
-        if let hello = self.hello, self.task?.state == .running,
-           !self.isStale(limit: Self.staleLimit(tickIntervalMs: hello.tickIntervalMs), generation: self.generation)
-        {
-            return
+        if let hello = self.hello, let task = self.task, task.state == .running {
+            guard self.isStale(limit: Self.staleLimit(tickIntervalMs: hello.tickIntervalMs), generation: self.generation) else {
+                return
+            }
+            // A suspended iOS app's socket can still report `.running` while it's dead, but it may
+            // also be fine with the missed ticks still buffered (#1074): keep it if it answers a ping.
+            if await self.socketIsAlive(task) { return }
+            guard self.shouldRun else { return }
+            if self.task !== task, self.hello != nil { return }
         }
         // Don't restart a handshake that's still in flight (e.g. the scene turning active right
         // after launch); only one that has been hanging long enough to look dead.
@@ -291,6 +294,13 @@ public actor GatewayConnection {
     func demoHistoryRequestCount(for key: String) async -> Int {
         await self.demo?.historyRequestCounts[key] ?? 0
     }
+
+#if DEBUG
+    /// Makes the socket look like it missed its heartbeats, as it does right after an iOS suspension.
+    package func simulateMissedHeartbeats() {
+        self.lastFrameAt = .distantPast
+    }
+#endif
 
     /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
     var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
@@ -640,11 +650,40 @@ public actor GatewayConnection {
         self.watchdogTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
-                guard let self else { return }
-                if await self.isStale(limit: limit, generation: generation) {
-                    await self.teardown(reason: "no heartbeat from Gateway")
-                    return
-                }
+                guard let self, await self.watchdogCheck(limit: limit, generation: generation) else { return }
+            }
+        }
+    }
+
+    /// Returns false once the watchdog should stop. A quiet socket is pinged before it's dropped: after
+    /// an iOS suspension or a Mac's sleep or App Nap the ticks may only be waiting to be read (#1074).
+    private func watchdogCheck(limit: TimeInterval, generation: Int) async -> Bool {
+        guard generation == self.generation else { return false }
+        guard self.isStale(limit: limit, generation: generation) else { return true }
+        if let task = self.task, task.state == .running, await self.socketIsAlive(task) { return true }
+        guard generation == self.generation else { return false }
+        self.teardown(reason: "no heartbeat from Gateway")
+        return false
+    }
+
+    static let pingTimeout: TimeInterval = 3
+
+    /// Whether `task` answers a WebSocket ping; on success it counts as a fresh frame.
+    private func socketIsAlive(_ task: URLSessionWebSocketTask) async -> Bool {
+        let generation = self.generation
+        guard await Self.answersPing(task, timeout: Self.pingTimeout) else { return false }
+        if generation == self.generation { self.lastFrameAt = Date() }
+        return true
+    }
+
+    private static func answersPing(_ task: URLSessionWebSocketTask, timeout: TimeInterval) async -> Bool {
+        let probe = PingProbe()
+        return await withCheckedContinuation { continuation in
+            probe.arm(continuation)
+            task.sendPing { error in probe.finish(error == nil) }
+            Task {
+                try? await Task.sleep(for: .seconds(timeout))
+                probe.finish(false)
             }
         }
     }

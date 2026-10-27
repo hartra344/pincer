@@ -219,9 +219,17 @@ public final class GatewayStore: Identifiable {
         }
     }
     /// Whether iOS has put the app in the background (not merely `.inactive`, which every permission
-    /// prompt or Control Center pull causes). Device mode pauses its node connection only then.
+    /// prompt or Control Center pull causes). Both connections stay open while the app has background
+    /// time (#1074); returning to the foreground resumes a node connection paused since.
     public var appIsInBackground = false {
-        didSet { self.deviceNode.setForeground(!self.appIsInBackground) }
+        didSet { if !self.appIsInBackground { self.deviceNode.setForeground(true) } }
+    }
+
+    /// iOS's background time ran out and the app is about to be suspended: device mode pauses its node
+    /// connection, so agents get "node not connected" instead of a request nobody answers.
+    func backgroundTimeExpired() {
+        guard self.appIsInBackground else { return }
+        self.deviceNode.setForeground(false)
     }
     /// Most chats one prefetch run fetches, so a big account isn't paged through all at once.
     static let prefetchBudget = 40

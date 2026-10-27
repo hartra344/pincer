@@ -84,10 +84,15 @@ public final class AppModel {
     @ObservationIgnored var windowRefCounts: [ChatWindowRef: Int] = [:]
     @ObservationIgnored var legacyWindowRefCounts: [ChatWindowRef: Int] = [:]
     @ObservationIgnored var ownedChatWindows: [UUID: OwnedChatWindow] = [:]
-    /// Set on iOS when the scene goes to `.background`; device mode pauses its node connection then.
+    /// Set on iOS when the scene goes to `.background`. Connections stay open on background time
+    /// (`connectionGrace`); device mode pauses its node connection only once that runs out (#1074).
     public var appIsInBackground = false {
-        didSet { self.gateways.forEach { $0.appIsInBackground = self.appIsInBackground } }
+        didSet {
+            self.gateways.forEach { $0.appIsInBackground = self.appIsInBackground }
+            if self.appIsInBackground { self.connectionGrace.enterBackground() } else { self.connectionGrace.enterForeground() }
+        }
     }
+    public let connectionGrace = BackgroundConnectionGrace()
     /// False until a scene reports `.active`, so a background launch doesn't prefetch.
     public var appIsActive = false {
         didSet {
@@ -192,6 +197,7 @@ public final class AppModel {
             await self?.respondToApproval(gatewayId: gatewayId, approvalId: approvalId, decision: decision) ?? .unknownGateway
         }
         self.firstRun.app = self
+        self.connectionGrace.onExpire = { [weak self] in self?.gateways.forEach { $0.backgroundTimeExpired() } }
         self.notifier.gatewayLookup = { [weak self] id in self?.gateways.first { $0.id == id } }
         self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
         self.notifier.isConnected = { [weak self] id in
@@ -344,6 +350,7 @@ public final class AppModel {
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
         store.appIsInBackground = self.appIsInBackground
+        if self.connectionGrace.expired { store.backgroundTimeExpired() }
         store.wireBookmarkSync()
         self.gateways.append(store)
         self.installRouteCandidateObserver(for: store)
@@ -420,6 +427,7 @@ public final class AppModel {
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
         store.appIsInBackground = self.appIsInBackground
+        if self.connectionGrace.expired { store.backgroundTimeExpired() }
         store.outboxRoot = old.outboxRoot
         self.gateways[index] = store
         self.installRouteCandidateObserver(for: store)

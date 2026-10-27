@@ -4,7 +4,7 @@ import Foundation
 // Opt-in device mode (#1030): the policy and settings offline, then the demo and a (mock) Gateway
 // end to end. Pincer is an operator by default; the node surface only ever declares allowlisted commands.
 
-private final class CheckNodeHandler: DeviceNodeHandler, @unchecked Sendable {
+final class CheckNodeHandler: DeviceNodeHandler, @unchecked Sendable {
     private let lock = NSLock()
     private var commands: [String] = []
     var handled: [String] { self.lock.withLock { self.commands } }

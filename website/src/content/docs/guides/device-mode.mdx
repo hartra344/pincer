@@ -38,7 +38,7 @@ If you change the checked capabilities, or turn on an OS permission later, Pince
 
 ## Only while Pincer is open
 
-Pincer answers requests only while it's connected to the gateway, which on iPhone and iPad means while the app is open: the node connection pauses while Pincer is in the background, so agents get "node not connected" right away. On a Mac it answers while Pincer is running, even with no window open. There's no background wake yet. This is planned in [#1031](https://github.com/hartra344/pincer/issues/1031).
+Pincer answers requests only while it's connected to the gateway, which on iPhone and iPad means while the app is open: the node connection stays open for the short background time iOS gives Pincer (usually around 30 seconds), then pauses, and agents get "node not connected" right away. On a Mac it answers while Pincer is running, even with no window open. There's no background wake yet. This is planned in [#1031](https://github.com/hartra344/pincer/issues/1031).
 
 ## Turning it off
 
