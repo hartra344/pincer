@@ -33,6 +33,16 @@ struct SVGRasterizerTests {
         task.cancel()
         #expect(await task.value == nil)
     }
+
+    /// A WebKit step that never answers gives up (twice, with a fresh web view) instead of hanging the render.
+    @Test func aStalledWebKitStepGivesUp() async {
+        let started = ContinuousClock.now
+        let image = await SVGRasterizer.rasterize(self.svg, fitting: CGSize(width: 1200, height: 600), webStepTimeout: .zero)
+        #expect(image == nil)
+        #expect(ContinuousClock.now - started < .seconds(30))
+        let recovered = await SVGRasterizer.rasterize(self.svg, fitting: CGSize(width: 1200, height: 600))
+        #expect(Self.centerPixelIsRed(recovered), "a later render still works")
+    }
     #endif
 
     private static func centerPixelIsRed(_ image: CGImage?) -> Bool {

@@ -64,6 +64,11 @@ def tail(path: pathlib.Path, limit: int = MAX_DIAGNOSTIC_BYTES) -> str:
         return stream.read(limit).decode("utf-8", errors="replace")
 
 
+# Only catches hangs: the validator runs ~100 times while CI boots a simulator, so a single
+# invocation can take several seconds on a loaded runner (a 5s cap failed main run 40031339114).
+HANG_TIMEOUT = 60
+
+
 def run_bounded(
     command: list[str],
     *,
@@ -113,7 +118,7 @@ def run_shared_validator(suffix: str, scratch: pathlib.Path, label: str) -> tupl
         cwd=REPO,
         env=validator_environment(suffix),
         output_directory=scratch,
-        timeout=5,
+        timeout=HANG_TIMEOUT,
         label=label,
     )
 
@@ -206,7 +211,7 @@ class GeneratedProjectTests(unittest.TestCase):
             cwd=REPO,
             env=env,
             output_directory=cls.scratch,
-            timeout=15,
+            timeout=HANG_TIMEOUT,
             label="plutil",
         )
         if result != 0:
@@ -278,7 +283,7 @@ class GeneratedProjectTests(unittest.TestCase):
                 cwd=REPO,
                 env=environment,
                 output_directory=self.scratch,
-                timeout=5,
+                timeout=HANG_TIMEOUT,
                 label=f"phase-{target_name}-{case_label}-{index}",
             )
             if return_code != 0:

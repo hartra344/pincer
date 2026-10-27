@@ -46,9 +46,16 @@ enum PerfBudget {
     }
 }
 
-/// Polls `condition` on the main actor until it holds or `timeout` passes.
+/// Same as `waitDeadline` in Tests/PincerKitTests/Support.swift: a wait ends once its condition
+/// holds, so the deadline only bounds a failure, and a starved shared runner needs the headroom.
+func waitDeadline(_ timeout: Duration) -> Duration {
+    max(timeout * PerfBudget.sharedCPUFactor, .seconds(30))
+}
+
+/// Polls `condition` on the main actor until it holds or `timeout` (scaled by `waitDeadline`) passes.
 @MainActor
 func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {
+    let timeout = waitDeadline(timeout)
     #if DEBUG
     return await uiTestEventually(timeout: timeout, condition)
     #else

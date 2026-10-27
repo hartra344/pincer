@@ -165,12 +165,16 @@ jobs:
 
       # Every shard uses the same products. Checkout gives every file a new mtime, so file hashing
       # keeps a restored build incremental.
+      - name: Hash the sources
+        id: sources
+        run: scripts/ci-cache-key.sh Package.swift Package.resolved Sources Tests >> "$GITHUB_OUTPUT"
+
       - name: Restore the build cache
         id: cache
         uses: actions/cache/restore@v4
         with:
           path: .build/xcode-ios
-          key: xcode-ios-tests-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          key: xcode-ios-tests-${{ steps.xcode.outputs.version }}-${{ steps.sources.outputs.key }}
           restore-keys: xcode-ios-tests-${{ steps.xcode.outputs.version }}-
 
       # Pincer-Package would also build the macOS-only PincerChecks and PincerMacDev for iOS.
@@ -268,12 +272,16 @@ jobs:
           unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
 
+      - name: Hash the sources
+        id: sources
+        run: scripts/ci-cache-key.sh Package.swift Package.resolved project.yml Sources Apps Tests/PincerAppUITests >> "$GITHUB_OUTPUT"
+
       - name: Restore the build cache
         id: cache
         uses: actions/cache/restore@v4
         with:
           path: .build/xcode-app-uitests
-          key: xcode-app-uitests-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'project.yml', 'Sources/**', 'Apps/**', 'Tests/PincerAppUITests/**') }}
+          key: xcode-app-uitests-${{ steps.xcode.outputs.version }}-${{ steps.sources.outputs.key }}
           restore-keys: xcode-app-uitests-${{ steps.xcode.outputs.version }}-
 
       - name: Build the app and its UI tests
@@ -293,7 +301,16 @@ jobs:
         run: |
           set -o pipefail
           xcrun simctl bootstatus '${{ steps.sim.outputs.udid }}' -b > /dev/null
-          xcodebuild test-without-building             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          xcodebuild test-without-building             -project Pincer.xcodeproj             -scheme PincerAppUITests-iOS             -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}'             -derivedDataPath .build/xcode-app-uitests             -resultBundlePath "$RUNNER_TEMP/PincerAppUITests.xcresult"             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
+      # The test attaches header screenshots; keep them when it fails.
+      - name: Upload the UI test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-uitests-xcresult
+          path: ${{ runner.temp }}/PincerAppUITests.xcresult
+          retention-days: 7
 
   # The unit tests and the PincerChecks modes run on separate runners, each building only what it runs.
   swift-shards:
@@ -334,12 +351,16 @@ jobs:
       # Checkout gives every file a new mtime, so file hashing keeps the restored build incremental.
       # Each shard builds a different set of products, so each keeps its own cache; the last key is
       # the cache from before the shards, which built everything.
+      - name: Hash the sources
+        id: sources
+        run: scripts/ci-cache-key.sh Package.swift Package.resolved Sources Tests >> "$GITHUB_OUTPUT"
+
       - name: Restore the build cache
         id: cache
         uses: actions/cache/restore@v4
         with:
           path: .build
-          key: swiftpm-${{ matrix.shard }}-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          key: swiftpm-${{ matrix.shard }}-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ steps.sources.outputs.key }}
           restore-keys: |
             swiftpm-${{ matrix.shard }}-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
             swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
@@ -463,12 +484,16 @@ jobs:
           path: ${{ runner.temp }}/periphery
           key: periphery-${{ steps.xcode.outputs.periphery }}-${{ runner.os }}
 
+      - name: Hash the sources
+        id: sources
+        run: scripts/ci-cache-key.sh Package.swift Package.resolved Sources Tests >> "$GITHUB_OUTPUT"
+
       - name: Restore the build cache
         id: cache
         uses: actions/cache/restore@v4
         with:
           path: .build
-          key: swiftpm-lint-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          key: swiftpm-lint-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ steps.sources.outputs.key }}
           restore-keys: swiftpm-lint-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
 
       - name: Build with the index store

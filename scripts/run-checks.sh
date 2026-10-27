@@ -42,6 +42,8 @@ stop_progress() {
 cleanup() {
     stop_progress
     for pid in ${mocks[@]+"${mocks[@]}"}; do kill "$pid" 2>/dev/null; done
+    # Reap them too: a mock still shutting down after we exit races whoever cleans up its log directory.
+    for pid in ${mocks[@]+"${mocks[@]}"}; do wait "$pid" 2>/dev/null; done
 }
 trap cleanup EXIT
 

@@ -17,7 +17,7 @@ import tempfile
 import time
 
 FAKE = r'''#!/usr/bin/env python3
-import os, signal, sys
+import os, signal, sys, time
 from pathlib import Path
 root = Path(os.environ["CHECKS_FIXTURE_ROOT"])
 name = Path(sys.argv[0]).name
@@ -44,6 +44,8 @@ if name == "node":
     port = os.environ["PORT"]
     (root / "mocks" / (port + ".pid")).write_text(str(os.getpid()))
     def stop(*_):
+        # A real mock takes a moment to shut down; the runner must reap it before it exits.
+        time.sleep(0.3)
         (root / "mocks" / (port + ".stopped")).touch()
         sys.exit(0)
     signal.signal(signal.SIGTERM, stop)
@@ -240,7 +242,12 @@ def execute_shard(shard, lean=False):
                 if line.startswith("Logs:"): break
                 if line.split(): lanes.append(line.split()[0])
         calls = root / "swift-test-calls"
-        return done.returncode, text, lanes, len(list((root / "mocks").glob("*.pid"))), len(calls.read_text().split()) if calls.exists() else 0
+        mocks = len(list((root / "mocks").glob("*.pid")))
+        # The runner reaps its mocks before exiting: one still shutting down would write into a removed directory.
+        if len(list((root / "mocks").glob("*.stopped"))) != mocks:
+            text += "\nrunner exited before its mocks stopped"
+            return 1, text, lanes, mocks, 0
+        return done.returncode, text, lanes, mocks, len(calls.read_text().split()) if calls.exists() else 0
 
 
 def shard_controls():

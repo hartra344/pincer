@@ -272,8 +272,8 @@ private actor FakePortalGateway {
 }
 
 private func portalEventually(_ timeout: Double = 3, _ condition: @MainActor () async -> Bool) async -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
+    let deadline = ContinuousClock.now + waitDeadline(.seconds(timeout))
+    while ContinuousClock.now < deadline {
         if await condition() { return true }
         try? await Task.sleep(for: .milliseconds(10))
     }

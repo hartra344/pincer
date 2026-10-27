@@ -160,7 +160,9 @@ struct BrowserStreamResilienceTests {
         #expect(BrowserPanelModel.retrySteps.map { $0 * 2 } == [2, 4, 8, 16, 30])
         #expect(BrowserPanelModel.retrySteps.map { $0 * 2 }.reduce(0, +) == 60)
         let harness = BrowserModelHarness()
-        let model = harness.model(retryDelay: .milliseconds(50))
+        // A long delay keeps the model parked in .reconnecting while a starved main actor looks: with a
+        // short one the retry restarts the stream (.loading) before the poll gets a turn.
+        let model = harness.model(retryDelay: .seconds(60))
         model.setVisible(true, pixelSize: size)
         #expect(await eventually { harness.latestSource != nil })
         harness.latestSource?.close(1006)

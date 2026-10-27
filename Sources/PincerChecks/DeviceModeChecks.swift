@@ -107,6 +107,7 @@ func runDemoDeviceModeChecks() async {
     await gateway.deviceNode.update(DeviceModeSettings(enabled: true))
     let nodeActive = await waitFor("device node active", { gateway.deviceNode.status == .active })
     check(nodeActive, "enabling → active (\(gateway.deviceNode.status))")
+    await checkSupersededApprovalReplyIsDropped(gateway.deviceNode)
     var node = await selfNode()
     check(node?["connected"]?.bool == true && DeviceRecords.strings(node?["commands"]) == ["location.get"],
           "node.list shows this device with its declared commands")
@@ -267,4 +268,34 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
     let after = await selfNode()
     check(after == nil || after?["connected"]?.bool != true, "the node is gone from node.list")
     check(profile.deviceToken?.isEmpty == false, "the operator token is untouched")
+}
+
+/// A refresh replaced while its `node.list` was in flight drops the reply, so a stale "approved"
+/// can't put a parked node back to Active. Leaves the node active again.
+@MainActor
+private func checkSupersededApprovalReplyIsDropped(_ node: DeviceNodeController) async {
+    var calls = 0, released = false, staleAnswered = false
+    node.approvalQueryOverride = {
+        calls += 1
+        guard calls == 1 else { return .pending(requestId: "req-9") }
+        while !released { try? await Task.sleep(for: .milliseconds(5)) }
+        staleAnswered = true
+        return .approved
+    }
+    let event = { (name: String) in
+        node.handleOperatorEvent(GatewayEvent(name: name, payload: ["nodeId": .string(DemoGateway.deviceId)], seq: nil))
+    }
+    event("node.pair.requested")
+    _ = await waitFor("first approval query", { calls == 1 })
+    event("node.pair.requested")
+    let parked = await waitFor("parked", { node.status == .awaitingApproval(requestId: "req-9") })
+    released = true
+    _ = await waitFor("stale reply", { staleAnswered })
+    try? await Task.sleep(for: .milliseconds(100))
+    check(parked && node.status == .awaitingApproval(requestId: "req-9"),
+          "a superseded node.list reply never puts a parked node back to Active (\(node.status))")
+    node.approvalQueryOverride = nil
+    event("node.pair.resolved")
+    let activeAgain = await waitFor("active again", { node.status == .active })
+    check(activeAgain, "the real node.list approves the node again")
 }
