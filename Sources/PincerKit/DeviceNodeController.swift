@@ -36,6 +36,12 @@ public final class DeviceNodeController {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var running = false
     @ObservationIgnored private var foreground = true
+    /// iOS only: a Mac keeps answering while Pincer runs. Tests and checks turn it on elsewhere.
+    #if os(iOS)
+    @ObservationIgnored package var followsAppLifecycle = true
+    #else
+    @ObservationIgnored package var followsAppLifecycle = false
+    #endif
     @ObservationIgnored private var operatorScopes: Set<String> = []
     @ObservationIgnored private var lastPresenceRefresh = Date.distantPast
     @ObservationIgnored private var invokes = InvokeTracker()
@@ -92,10 +98,10 @@ public final class DeviceNodeController {
         self.surfaceTask = Task { await self.restartNode() }
     }
 
-    /// iOS closes the node socket in the background (nothing can answer then) and reopens it on return.
+    /// iOS closes the node socket once its background time runs out (nothing can answer then) and
+    /// reopens it on return. Backgrounding alone keeps it open (#1074).
     func setForeground(_ active: Bool) {
-        #if os(iOS)
-        guard active != self.foreground else { return }
+        guard self.followsAppLifecycle, active != self.foreground else { return }
         self.foreground = active
         guard self.running, self.settings.enabled else { return }
         if active {
@@ -109,7 +115,6 @@ public final class DeviceNodeController {
             self.status = .paused
             if let connection { Task { await connection.stop() } }
         }
-        #endif
     }
 
     func stop() {
