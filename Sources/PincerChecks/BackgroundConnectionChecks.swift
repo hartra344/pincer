@@ -23,8 +23,9 @@ func runBackgroundConnectionOfflineChecks() {
     grace.enterBackground()
     expire?()
     check(expiries == 1 && grace.expired && !grace.isHeld, "running out of time reports expiry")
+    check(ended == 2, "running out of time ends the background task")
     grace.enterForeground()
-    check(!grace.expired && ended == 1, "returning after expiry clears it without ending twice")
+    check(!grace.expired && ended == 2, "returning after expiry clears it without ending twice")
     expire?()
     check(expiries == 1, "a late expiry after returning is ignored")
 }

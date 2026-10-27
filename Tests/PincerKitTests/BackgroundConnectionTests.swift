@@ -48,10 +48,11 @@ struct BackgroundConnectionGraceTests {
         grace.enterBackground()
         time.runOut()
         #expect(expiries == 1 && grace.expired && !grace.isHeld)
+        #expect(time.ended == 1, "expiry ends the task itself: its end closure may be the task's only owner")
         grace.enterBackground()
         #expect(time.begun.count == 1, "no new background time is asked for until the app came back")
         grace.enterForeground()
-        #expect(!grace.expired && time.ended == 0, "the system already ended the expired task")
+        #expect(!grace.expired && time.ended == 1, "returning doesn't end the expired task again")
     }
 
     @Test func lateExpiryAfterReturnIsIgnored() {

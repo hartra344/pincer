@@ -33,9 +33,13 @@ public final class BackgroundConnectionGrace {
         let token = self.token
         self.end = self.begin(Self.activityName) { [weak self] in
             guard let self, self.token == token else { return }
+            // Hold the end closure until after onExpire: it may be the only owner of the
+            // platform's background task, which iOS needs ended before it suspends the app.
+            let end = self.end
             self.end = nil
             self.expired = true
             self.onExpire()
+            end?()
         }
     }
 
