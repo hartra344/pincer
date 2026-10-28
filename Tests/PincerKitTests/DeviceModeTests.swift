@@ -311,7 +311,11 @@ struct DeviceNodeControllerDemoTests {
         #expect(await eventually(timeout: .seconds(5)) { store.deviceNode.status == .active })
 
         // Commands not yet a superset of the declared set → still awaiting (no pending id).
+        // The new capabilities restart the node, and the demo auto-approves its row when the new socket
+        // attaches. That attach can land after `update` returns, so wait for it before parking the row:
+        // otherwise it overwrites the park and the node shows Active (CI, PR #1082).
         await store.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device]))
+        #expect(await eventually(timeout: .seconds(10)) { store.deviceNode.status == .active })
         await demo.testSetSelfNode(pendingRequestId: nil, commands: ["location.get"])
         store.deviceNode.handleOperatorEvent(GatewayEvent(name: "node.pair.requested", payload: ["nodeId": .string(DemoGateway.deviceId)], seq: nil))
         #expect(await eventually(timeout: .seconds(5)) { store.deviceNode.status == .awaitingApproval(requestId: nil) })
@@ -319,6 +323,27 @@ struct DeviceNodeControllerDemoTests {
         let before = store.deviceNode.status
         store.deviceNode.handleOperatorEvent(GatewayEvent(name: "node.pair.resolved", payload: ["nodeId": "someone-else"], seq: nil))
         #expect(store.deviceNode.status == before)
+    }
+
+    /// The interleaving `approvalComesFromNodeList` has to wait out: a node (re)attach auto-approves the
+    /// demo's self-node row, so an attach that lands after the row was parked undoes the park.
+    @Test func aLateNodeAttachReapprovesAParkedSelfNode() async throws {
+        let (store, scratch) = self.store()
+        defer { store.stop(); scratch.remove() }
+        store.start()
+        #expect(await eventually(timeout: .seconds(10)) { store.state.isConnected })
+        await store.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device]))
+        #expect(await eventually(timeout: .seconds(10)) { store.deviceNode.status == .active })
+        let demo = try #require(store.connection.demo)
+        let declared = DeviceModeSettings(enabled: true, capabilities: [.location, .device]).declaredCommands
+
+        await demo.testSetSelfNode(pendingRequestId: nil, commands: ["location.get"])
+        store.deviceNode.handleOperatorEvent(GatewayEvent(name: "node.pair.requested", payload: ["nodeId": .string(DemoGateway.deviceId)], seq: nil))
+        #expect(await eventually(timeout: .seconds(5)) { store.deviceNode.status == .awaitingApproval(requestId: nil) })
+
+        _ = await demo.attachNode(deviceId: DemoGateway.deviceId, caps: ["location", "device"], commands: declared, sink: { _ in })
+        store.deviceNode.handleOperatorEvent(GatewayEvent(name: "node.pair.requested", payload: ["nodeId": .string(DemoGateway.deviceId)], seq: nil))
+        #expect(await eventually(timeout: .seconds(5)) { store.deviceNode.status == .active })
     }
 
     /// A refresh replaced while its `node.list` was in flight must drop the reply: applying it put a
