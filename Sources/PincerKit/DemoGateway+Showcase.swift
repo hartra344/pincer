@@ -501,6 +501,9 @@ extension DemoGateway {
             age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
                           "totalTokens": 192_000, "inputTokens": 192_000],
             messages: Self.seedTripTranscript())
+        add(Self.recoveryKey, agent: "main", title: Self.recoveryTitle, preview: Self.recoveryPreview,
+            age: 25 * 60_000, ["label": .string(Self.recoveryTitle), "category": "Personal"],
+            messages: Self.seedRecoveryTranscript())
         add("agent:research:main", agent: "research", title: "Main", preview: "Research queue is clear.", age: 90_000,
             ["isMain": true], messages: [
                 said("assistant", "Scout is ready to dig into papers, repos, and docs.", ago: 14 * day),

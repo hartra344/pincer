@@ -121,6 +121,13 @@ struct HealthSummaryTests {
         #expect(project.components(separatedBy: "NSHealthUpdateUsageDescription").count == 2, "App Store requires the update string")
         let access = try String(contentsOf: root.appending(path: "Sources/PincerUI/DeviceHealthAccess.swift"), encoding: .utf8)
         #expect(access.contains("toShare: []"), "read-only: no write types requested")
+        // #1084: all Health data still excludes clinical records, documents, routes, ECG voltages and heartbeat series.
+        #expect(!ios.contains("health-records"), "no Clinical Health Records entitlement")
+        #expect(!project.contains("NSHealthClinicalHealthRecordsShareUsageDescription"))
+        for forbidden in ["clinicalType", "HKDocumentType", "requestPerObjectReadAuthorization", "HKWorkoutRouteQuery",
+                          "HKElectrocardiogramQuery", "HKHeartbeatSeriesQuery"] {
+            #expect(!access.contains(forbidden), "\(forbidden)")
+        }
     }
 }
 

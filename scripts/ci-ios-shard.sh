@@ -12,7 +12,7 @@ case "${1:-}" in
     TranscriptListControllerTests TranscriptMeasureQueueTests TranscriptLayoutCacheTests
     TranscriptWidthFreezeTests TranscriptFindTrimTests TranscriptNavigationTests
     TranscriptAccessibilityActionTests ScrollToBottomTests StreamingRenderingTests
-    InlineMathOffMainTests ComposerSynchronousSizingUIKitTests) ;;
+    InlineMathOffMainTests ComposerSynchronousSizingUIKitTests HealthQueryCatalogTests) ;;
   svg) suites=(SVGRasterizerTests) ;;
   *) echo "usage: $0 hosted|lists|svg" >&2; exit 2 ;;
 esac

@@ -79,15 +79,30 @@ gateway must be managed on that gateway and, where applicable, with its provider
   The Pincer developer receives none of it, and your gateway and its providers
   may retain it under their own settings. Turning device mode off disconnects
   the node.
-- **Apple Health (iPhone and iPad, off by default):** if you check **Apple Health
-  summaries** in device mode, Pincer reads, with your permission in Apple's Health
-  sheet, today's totals only: steps, sleep minutes, average resting heart rate,
-  and workout count and minutes. It computes these on your device and sends
-  them to your own gateway only when one of its agents asks. Individual samples,
-  sources and clinical records never leave the device. Pincer only reads Health
-  data. It never writes Health data and never collects it in the background.
-  The summary can reach your gateway's AI provider and remain in chat history.
-  Turn the capability off in Pincer or revoke access in the Health app.
+- **Apple Health summaries (iPhone and iPad, off by default):** if you check
+  **Apple Health summaries** in device mode, Pincer reads, with your permission
+  in Apple's Health sheet, today's totals only: steps, sleep minutes, average
+  resting heart rate, and workout count and minutes. It computes these on your
+  device and sends them to your own gateway only when one of its agents asks.
+  Summaries send only totals. Pincer only reads Health data. It never writes
+  Health data and never collects it in the background. The summary can reach
+  your gateway's AI provider and remain in chat history. Turn the capability
+  off in Pincer or revoke access in the Health app.
+- **All Apple Health data (iPhone and iPad, off by default):** if you check
+  **All Apple Health data** in device mode, Pincer reads, with your permission
+  in Apple's Health sheet, the Health data an agent asks for: individual
+  readings and trends, including heart rate and heart rate variability (HRV),
+  sleep, activity and workouts, body measurements, nutrition, cycle tracking
+  and reproductive health, sexual activity, mood and mental-health
+  questionnaires, hearing and ECG results, each with the name of the source app
+  or device. It is sent only to your own gateway, only when one of its agents
+  asks, and can reach your gateway's AI provider and remain in chat history. It
+  never covers clinical records, medications, vision prescriptions,
+  characteristics (such as date of birth or blood type) or workout routes.
+  Pincer never writes Health data, never collects it in the background and
+  never stores it in iCloud. The Pincer developer never receives it, and it is
+  never used for advertising or data mining. Turn the capability off in Pincer
+  or revoke access in the Health app.
 - **Notifications:** while the app is open, notifications may include previews.
   Optional background push uses a relay you configure and Apple's APNs service.
   The relay routes encrypted payloads; gateway content is encrypted to device

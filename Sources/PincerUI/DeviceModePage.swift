@@ -8,6 +8,7 @@ struct DeviceModePage: View {
     @State private var denied: Set<DeviceCapability> = []
     @State private var requesting: Set<DeviceCapability> = []
     @State private var healthDisclosure = false
+    @State private var healthDataDisclosure = false
 
     private var controller: DeviceNodeController { self.gateway.deviceNode }
 
@@ -64,11 +65,22 @@ struct DeviceModePage: View {
         } message: {
             Text(Self.healthDisclosureText)
         }
+        .alert(L("Share all Apple Health data?"), isPresented: self.$healthDataDisclosure) {
+            Button(L("Continue")) { self.requestAndEnable(.healthData) }
+            Button(L("Cancel"), role: .cancel) {}
+        } message: {
+            Text(Self.healthDataDisclosureText)
+        }
     }
 
     /// Shown before Apple's Health sheet, matching upstream OpenClaw's disclosure.
     static var healthDisclosureText: String {
         L("When an agent asks, Pincer adds up today's steps, sleep, resting heart rate and workouts on this device and sends only those totals to this Gateway. They reach the Gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background and never writes to it. The Gateway owner must also allow health.summary.")
+    }
+
+    /// Shown before Apple's Health sheet for `pincer.health.query`; names what leaves the device and where.
+    static var healthDataDisclosureText: String {
+        L("When an agent on this Gateway asks, Pincer reads the Apple Health data it asks for, such as heart rate and HRV, sleep stages, workouts, nutrition, cycle tracking, sexual activity, mood and ECG results, and sends the individual readings to this Gateway. They reach the Gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background, never writes to it, and never reads clinical records or workout routes. The Gateway owner must also allow pincer.health.query.")
     }
 
     private func row(_ cap: DeviceCapability, settings: DeviceModeSettings) -> some View {
@@ -83,11 +95,16 @@ struct DeviceModePage: View {
             }
             .disabled(self.requesting.contains(cap))
             if self.denied.contains(cap) {
-                Text(cap == .health ? L("Health data isn't available on this device") : L("Allow access in System Settings"))
+                Text(cap == .health || cap == .healthData
+                    ? L("Health data isn't available on this device") : L("Allow access in System Settings"))
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else if cap == .health, settings.capabilities.contains(.health) {
                 Text("The Gateway also needs health.summary in gateway.nodes.commands.allow.", bundle: .module)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if cap == .healthData, settings.capabilities.contains(.healthData) {
+                Text("The Gateway also needs pincer.health.query in gateway.nodes.commands.allow.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -109,6 +126,10 @@ struct DeviceModePage: View {
         }
         if cap == .health {
             self.healthDisclosure = true
+            return
+        }
+        if cap == .healthData {
+            self.healthDataDisclosure = true
             return
         }
         self.requestAndEnable(cap)
@@ -144,6 +165,7 @@ struct DeviceModePage: View {
         case .reminders: L("Reminders")
         case .motion: L("Motion & fitness")
         case .health: L("Apple Health summaries")
+        case .healthData: L("All Apple Health data")
         }
     }
 
@@ -156,6 +178,7 @@ struct DeviceModePage: View {
         case .reminders: L("Read your reminders")
         case .motion: L("Activity and step counts")
         case .health: L("Today's steps, sleep, resting heart rate and workouts, as totals")
+        case .healthData: L("Individual readings and trends, like HRV, sleep stages and workouts, when an agent asks")
         }
     }
 

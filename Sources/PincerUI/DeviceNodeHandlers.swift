@@ -31,6 +31,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case .contacts: (try? await CNContactStore().requestAccess(for: .contacts)) ?? false
         case .motion: await MotionAccess.request()
         case .health: await HealthAccess.request()
+        case .healthData: await HealthQueryAccess.request()
         }
     }
 
@@ -45,6 +46,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case "motion.activity": await self.motionActivity(invoke)
         case "motion.pedometer": await self.motionPedometer(invoke)
         case HealthSummary.command: await HealthAccess.summary(invoke)
+        case HealthQuery.command: await HealthQueryAccess.query(invoke)
         default: .failure(code: "INVALID_REQUEST", message: "INVALID_REQUEST: unknown command")
         }
     }
@@ -59,6 +61,7 @@ struct PlatformDeviceNodeHandler: DeviceNodeHandler {
         case .motion: MotionAccess.isAuthorized()
         // Never reported (`reportsPermission`): HealthKit hides read denial.
         case .health: HealthAccess.isAvailable
+        case .healthData: HealthQueryAccess.isAvailable
         }
     }
 
