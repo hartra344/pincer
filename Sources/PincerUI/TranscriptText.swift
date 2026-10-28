@@ -147,6 +147,21 @@ enum TranscriptText {
 
     static func resetMeasureStats() { self.measureStats = (0, 0) }
 
+    /// Main-thread TextKit passes over strings containing a watched marker. `measureStats` counts every
+    /// suite running in parallel, so a test that awaits between readings counts only its own text here.
+    private(set) static var markedMainLayouts: [String: Int] = [:]
+
+    static func watchMainLayouts(containing marker: String) { self.markedMainLayouts[marker] = 0 }
+    static func stopWatchingMainLayouts(containing marker: String) { self.markedMainLayouts[marker] = nil }
+
+    private static func countMainLayout(_ string: NSAttributedString) {
+        self.measureStats.mainLayouts += 1
+        guard !self.markedMainLayouts.isEmpty else { return }
+        for marker in self.markedMainLayouts.keys where string.string.contains(marker) {
+            self.markedMainLayouts[marker, default: 0] += 1
+        }
+    }
+
     /// Width the text of a quote block wraps at inside a content column of `width`.
     nonisolated static func quoteWidth(for width: CGFloat) -> CGFloat { max(width - 11, 20) }
 
@@ -530,7 +545,7 @@ enum TranscriptText {
             }
             key = memoKey
         }
-        self.measureStats.mainLayouts += 1
+        self.countMainLayout(string)
         let size = self.measurer.size(string, width: width, exact: exact)
         if let key { self.heightMemo.set((string, size), for: key) }
         return size
@@ -549,7 +564,7 @@ enum TranscriptText {
             }
             key = memoKey
         }
-        self.measureStats.mainLayouts += 1
+        self.countMainLayout(string)
         let width = self.measurer.naturalWidth(string)
         if let key { self.heightMemo.set((string, CGSize(width: width, height: 0)), for: key) }
         return width
