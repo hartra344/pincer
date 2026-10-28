@@ -117,7 +117,10 @@ struct HealthSummaryTests {
         }
         let project = try String(contentsOf: root.appending(path: "project.yml"), encoding: .utf8)
         #expect(project.components(separatedBy: "NSHealthShareUsageDescription").count == 2, "one usage string, iOS only")
-        #expect(!project.contains("NSHealthUpdateUsageDescription"), "read-only: no write usage string")
+        // App Store validation rejects HealthKit apps without an update string, so it exists, but nothing asks to write.
+        #expect(project.components(separatedBy: "NSHealthUpdateUsageDescription").count == 2, "App Store requires the update string")
+        let access = try String(contentsOf: root.appending(path: "Sources/PincerUI/DeviceHealthAccess.swift"), encoding: .utf8)
+        #expect(access.contains("toShare: []"), "read-only: no write types requested")
     }
 }
 
