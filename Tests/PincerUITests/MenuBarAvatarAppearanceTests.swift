@@ -7,7 +7,7 @@ import Testing
 
 /// #516: the menu's still pet must use the presentation's scheme even when Pincer's app theme is fixed.
 @MainActor
-@Suite("Menu bar avatar appearance", .serialized)
+@Suite("Menu bar avatar appearance", .serialized, .changesSharedAppearance)
 struct MenuBarAvatarAppearanceTests {
     private func png(_ image: NSImage?) -> Data? {
         guard let cgImage = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }

@@ -11,7 +11,7 @@ import SwiftUI
 ///
 /// Run: `swift test --filter PanelSlideProbe`
 @MainActor
-@Suite("PanelSlideProbe", .serialized)
+@Suite("PanelSlideProbe", .serialized, .readsSharedAppearance)
 struct PanelSlideProbe {
     static let frames = 20
     static let wide: CGFloat = 900
@@ -36,6 +36,10 @@ struct PanelSlideProbe {
         var frameCPUAvg = 0.0
         var settleCPU = 0.0
         var anchorDrift = 0.0
+        /// Bottom-anchored toggles only: whether the coordinator still had the `.bottom` anchor and the
+        /// gap left to the bottom once settled, so a failure says which of the two went wrong.
+        var anchoredAtBottom = true
+        var finalBottomGap = 0.0
         var staleVisibleRows = 0
         var visibleRows = 0
         var finalWidth: CGFloat = 0
@@ -251,16 +255,18 @@ struct PanelSlideProbe {
             result.anchorDrift = abs(offset - anchor.offset)
         } else {
             result.anchorDrift = abs(bottomGap(host) - gap0)
+            result.anchoredAtBottom = host.coordinator.controller.isAnchoredAtBottom
+            result.finalBottomGap = bottomGap(host)
         }
         return result
     }
 
     static func table(_ label: String, _ toggles: [Toggle]) {
         func f(_ v: Double) -> String { String(format: "%.1f", v) }
-        var lines = ["| toggle | builds in frames | builds at thaw | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows | mid-slide thaws | offloaded frames/after |",
-                     "|---|---|---|---|---|---|---|---|---|---|---|"]
+        var lines = ["| toggle | builds in frames | builds at thaw | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows | mid-slide thaws | offloaded frames/after | pinned/gap |",
+                     "|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for t in toggles {
-            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) | \(t.midSlideThaws) | \(t.offloadedDuringFrames)/\(t.offloadedAtThaw) |")
+            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) | \(t.midSlideThaws) | \(t.offloadedDuringFrames)/\(t.offloadedAtThaw) | \(t.anchoredAtBottom)/\(f(t.finalBottomGap)) |")
         }
         print("\nPanelSlideProbe \(label) (20k rows, \(Int(wide))<->\(Int(narrow)), \(frames) frames @ 8 ms)\n" + lines.joined(separator: "\n"))
     }
@@ -278,11 +284,26 @@ struct PanelSlideProbe {
             // real move, not rounding (the clip keeps fractional offsets, no backing-pixel snapping).
             #expect(t.anchorDrift <= 1 + 1e-6, "\(t.name): anchor moved \(t.anchorDrift) pt")
             #expect(t.staleVisibleRows == 0, "\(t.name): visible rows not at the final clip width")
+            #expect(t.anchoredAtBottom, "\(t.name): the reader lost the bottom anchor")
+            #expect(abs(t.finalBottomGap) <= 1, "\(t.name): \(t.finalBottomGap) pt short of the bottom")
         }
     }
 
+    /// `makeHost` only spins the run loop for a capped time, so on a loaded runner the prefetch can still
+    /// be changing row heights when a bottom-anchored toggle starts. Its drift is measured from the gap
+    /// captured before the slide, so an unsettled fixture turns leftover height fixes into "drift"
+    /// (main fd1d86b0: 177 pt with the fixture at -1 pt instead of 0). Settle and prove the pin first.
+    static func makePinnedHost() async -> Host {
+        let host = await makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        await waitQuiet(host)
+        await waitAnchorStable(host, row: nil)
+        #expect(host.coordinator.controller.isAnchoredAtBottom, "fixture starts bottom-anchored")
+        #expect(abs(bottomGap(host)) <= 1, "fixture starts pinned to the bottom (gap \(bottomGap(host)) pt)")
+        return host
+    }
+
     @Test func bottomAnchored() async {
-        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        let host = await Self.makePinnedHost()
         let open = await Self.toggle(host, name: "sidebar open \(Int(Self.wide))->\(Int(Self.narrow))", to: Self.narrow, mid: false)
         let close = await Self.toggle(host, name: "sidebar close \(Int(Self.narrow))->\(Int(Self.wide))", to: Self.wide, mid: false)
         Self.table("bottom-anchored", [open, close])
@@ -310,7 +331,7 @@ struct PanelSlideProbe {
     }
 
     @Test func workspacePanelBottomAnchored() async {
-        let host = await Self.makeHost(rows: TranscriptPrefetchProbe.rows(count: TranscriptPrefetchProbe.rowCount))
+        let host = await Self.makePinnedHost()
         let name = "workspace"
         let open = await Self.toggle(host, name: "\(name) open \(Int(Self.wide))->\(Int(Self.workspaceNarrow))", to: Self.workspaceNarrow, mid: false)
         let close = await Self.toggle(host, name: "\(name) close \(Int(Self.workspaceNarrow))->\(Int(Self.wide))", to: Self.wide, mid: false)

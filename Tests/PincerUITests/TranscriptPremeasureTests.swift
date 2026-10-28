@@ -439,17 +439,23 @@ struct TranscriptPremeasureHostedTests {
     @Test func workerMeasuresOffMainWithoutMainTextKit() async {
         // `TranscriptPremeasurer.measure` asserts `.notOnQueue(.main)` in DEBUG, and only it bumps `offMainLayouts`.
         let off = TranscriptPremeasurer.offMainLayouts.withLock { $0 }
-        TranscriptText.resetMeasureStats()
-        let source = "Worker **only** text. " + String(repeating: "word ", count: 60)
+        // `measureStats` is process-wide and other suites lay out text on main while this test awaits
+        // the worker (CI once saw 1 layout here), so count only main layouts of this job's own text.
+        let marker = "workerjob\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        TranscriptText.watchMainLayouts(containing: marker)
+        defer { TranscriptText.stopWatchingMainLayouts(containing: marker) }
+        let source = "Worker **only** text \(marker). " + String(repeating: "word ", count: 60)
         let key = PremeasureKey(source: source, tone: .primary, styleGeneration: TranscriptStyle.generation, dark: false)
         let job = PremeasureJob(rowId: "w", bodies: [key], contentWidth: 500, epoch: 0)
         let env = TextBuildEnvironment.current(dark: false)
         let rows = await withCheckedContinuation { continuation in
             TranscriptPremeasurer.shared.submit([job], env: env, epoch: TranscriptPremeasureEpoch()) { continuation.resume(returning: $0) }
+            // Stands in for a parallel suite laying out its own text on main while the worker runs.
+            _ = TranscriptText.size(TranscriptText.plain("another suite's row", font: .systemFont(ofSize: 13), color: .black), width: 300)
         }
         #expect(rows.first?.bodies.isEmpty == false)
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > off)
-        #expect(TranscriptText.measureStats.mainLayouts == 0)
+        #expect(TranscriptText.markedMainLayouts[marker] == 0)
     }
 
     @Test func pagingOlderRowsAndTrimmingWhileJobsAreInFlightLeavesNothingInFlight() async {

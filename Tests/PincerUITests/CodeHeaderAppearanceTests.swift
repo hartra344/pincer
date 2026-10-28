@@ -8,7 +8,7 @@ import Testing
 /// #264: an unchanged Copy title used to keep its child view's old theme pixels. Appearance
 /// invalidation must reach the independently drawn header buttons on a reused code card.
 @MainActor
-@Suite("Code header appearance", .serialized)
+@Suite("Code header appearance", .serialized, .changesSharedAppearance)
 struct CodeHeaderAppearanceTests {
     @Test func unchangedCodeHeaderRedrawsButtonsWithoutResettingCopiedState() throws {
         let scratch = ScratchDefaults()

@@ -107,13 +107,26 @@ struct BackgroundRefreshJobTests {
         ClosedAppDelivery.set(.backgroundRefresh, defaults)
         defaults.set(true, forKey: "pincer.notifications")
         let profiles = (0..<3).map { GatewayProfile(name: "Down \($0)", url: "wss://down\($0).example", authMode: .token) }
+        // The budget's timer, not the wall clock: a real 0.3 s sleep took 6.5 s on a starved CI runner
+        // (PR #1082) while other suites held the main actor, which says nothing about the budget logic.
+        let budgets = RequestedBudgets()
         let refresh = BackgroundRefresh(
             profiles: { profiles }, connector: HangingConnector(),
             cursors: BackgroundRefreshCursorStore(defaults: defaults), defaults: defaults,
-            post: { _ in }, setBadge: { _ in })
-        let clock = ContinuousClock(), start = clock.now
+            post: { _ in }, setBadge: { _ in },
+            timer: { budgets.append($0) })
         let report = await refresh.run(budget: 0.3)
-        #expect(clock.now - start < .seconds(3))
+        #expect(budgets.values.count == profiles.count, "each gateway gets its own bound")
+        #expect(budgets.values.allSatisfy { $0 > 0 && $0 <= 0.3 }, "no gateway is given more than the budget")
         #expect(Set(report.aborted) == Set(profiles.map(\.id)) && report.badge == nil)
+    }
+
+    final class RequestedBudgets: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seconds: [TimeInterval] = []
+
+        var values: [TimeInterval] { self.lock.withLock { self.seconds } }
+
+        func append(_ value: TimeInterval) { self.lock.withLock { self.seconds.append(value) } }
     }
 }

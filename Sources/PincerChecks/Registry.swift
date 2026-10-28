@@ -230,6 +230,7 @@ enum Suites {
             Section("Symbol cache budgets") { runSymbolCacheChecks() },
             Section("Transcript premeasure budgets") { runTranscriptPremeasureChecks() },
             Section("Transcript measure work") { await runTranscriptMeasureWorkChecks() },
+            Section("Transcript marked layouts") { runTranscriptMarkedLayoutChecks() },
             Section("Premeasure metadata admission") { runPremeasureMetadataChecks() },
             Section("Tool diff line number boundary") { await runToolDiffLineNumberBoundaryChecks(); await runToolDiffCursorExhaustionChecks() },
             Section("Quick Look long extension") { await runFilePreviewLongExtensionChecks(); await runFilePreviewExtensionPolicyChecks() },
