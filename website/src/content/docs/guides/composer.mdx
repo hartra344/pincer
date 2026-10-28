@@ -168,14 +168,14 @@ With **Full Management** and no instructions, Pincer asks the gateway to compact
 
 ## Thinking level
 
-Next to the model picker in the chat header, the thinking-level picker (the brain icon) shows how hard the agent thinks before it replies, and changes it for this chat. Only new messages use the new level. The choices are the levels the chat's model offers, as the gateway reports them, such as **Off**, **Low**, **Medium**, **High** and **Ultra**.
+Next to the model picker in the chat header, the thinking-level picker (the brain icon) shows how hard the agent thinks before it replies, and changes it for this chat. Only new messages use the new level. The choices are the levels the chat's model offers, as the gateway reports them, such as **Off**, **Low**, **Medium**, **High**, **Extra High** and **Ultra**. Pincer uses the gateway's own names for the levels when it sends them.
 
 - **Default** follows the level the chat inherits from its agent or the gateway, shown in brackets, such as **Default (Medium)**. Hover over the picker to see "Thinking level: Medium (inherited default)".
 - **High** and above (**Extra High**, **Max**, **Ultra**) are marked with an orange warning triangle, in the menu and in the header, because they can make replies much slower and cost more. A chat left on **Ultra** shows the warning until you change it. **Adaptive** lets the model decide and isn't marked.
-- If the gateway doesn't report the model's thinking levels, the picker says so and you can still use `/think` instead.
+- The picker is greyed out while the gateway is disconnected, for an agent's home chat that has no messages yet, and when the gateway doesn't report the model's thinking levels. Hover over it (or listen to its VoiceOver hint) to see why; in the last case, use `/think` instead.
 - The level is saved on the gateway with the session, not on this device, so it applies to the chat wherever you open it, and a change made with `/think` shows up in the picker too.
 
-On a compact iPhone layout, the picker is under **Thinking Level** in the chat options menu, next to **Model**. In [the demo](../../getting-started/try-the-demo/), Scout's **Paper digest** chat is left on **Ultra**, and Forge's chat inherits **High**.
+On a compact iPhone layout, the picker is in the chat options menu, next to **Model**, titled with the current level, such as **Thinking Level: Ultra**. When the chat runs at High or above, the chat options button turns into an orange warning triangle, so a slow, costly level is visible without opening the menu, and VoiceOver reads it as, for example, "Ultra thinking, may be slower and cost more". In [the demo](../../getting-started/try-the-demo/), Scout's **Paper digest** chat is left on **Ultra**, and Forge's chat inherits **High**.
 
 ## Slash commands
 

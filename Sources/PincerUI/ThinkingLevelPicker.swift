@@ -9,15 +9,27 @@ struct ThinkingLevelPicker: View {
     @Environment(GatewayStore.self) private var gateway
 
     private var menu: ThinkingLevelMenu { ThinkingLevelMenu(row: self.row) }
-    private var isDisabled: Bool { !self.gateway.state.isConnected || self.row.isPlaceholder }
+    /// Why the picker can't be used right now; nil when it can.
+    enum Unavailable: Equatable {
+        case disconnected, placeholder, unsupported
+    }
+
+    static func unavailable(isConnected: Bool, row: SessionRow, menu: ThinkingLevelMenu) -> Unavailable? {
+        if !isConnected { return .disconnected }
+        if row.isPlaceholder { return .placeholder }
+        // With no levels reported "Default" isn't callable either, so the whole picker is off.
+        if !menu.reportsLevels { return .unsupported }
+        return nil
+    }
 
     var body: some View {
         let menu = self.menu
+        let unavailable = Self.unavailable(isConnected: self.gateway.state.isConnected, row: self.row, menu: menu)
         Menu {
             self.content(menu)
         } label: {
             Label {
-                Text(self.showsActionTitle ? L("Thinking Level") : (menu.currentLabel ?? L("Thinking")))
+                Text(self.title(menu))
             } icon: {
                 Image(systemName: menu.currentIsExpensive ? "exclamationmark.triangle.fill" : "brain.head.profile")
             }
@@ -27,10 +39,32 @@ struct ThinkingLevelPicker: View {
         .tint(menu.currentIsExpensive ? .orange : nil)
         .menuIndicator(.visible)
         .fixedSize()
-        .disabled(self.isDisabled)
-        .help(Self.summary(menu))
+        .disabled(unavailable != nil)
+        .help(Self.summary(menu, unavailable: unavailable))
         .accessibilityLabel(L("Thinking Level"))
         .accessibilityValue(Self.accessibilityValue(menu))
+        .accessibilityHint(unavailable.map(Self.reason) ?? "")
+    }
+
+    private func title(_ menu: ThinkingLevelMenu) -> String {
+        if self.showsActionTitle {
+            return menu.currentLabel.map { L("Thinking Level: \($0)") } ?? L("Thinking Level")
+        }
+        return menu.currentLabel ?? L("Thinking")
+    }
+
+    static func reason(_ unavailable: Unavailable) -> String {
+        switch unavailable {
+        case .disconnected: L("Connect to the Gateway to change the thinking level.")
+        case .placeholder: L("Send a message first to change this chat's thinking level.")
+        case .unsupported: L("This Gateway did not report thinking levels; use /think instead.")
+        }
+    }
+
+    private static func summary(_ menu: ThinkingLevelMenu, unavailable: Unavailable?) -> String {
+        let base = self.summary(menu)
+        guard let unavailable else { return base }
+        return menu.currentLabel == nil ? self.reason(unavailable) : base + "\n" + self.reason(unavailable)
     }
 
     private static func summary(_ menu: ThinkingLevelMenu) -> String {
@@ -55,9 +89,6 @@ struct ThinkingLevelPicker: View {
             if menu.followsDefault { Label(title, systemImage: "checkmark") } else { Text(title) }
         }
         Divider()
-        if !menu.reportsLevels {
-            Text(L("This Gateway did not report thinking levels; use /think instead."))
-        }
         ForEach(menu.items) { item in
             Button {
                 self.select(item.id)

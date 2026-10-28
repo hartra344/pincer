@@ -501,6 +501,16 @@
         }
       }
     },
+    "%@ thinking, may be slower and cost more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ thinking, may be slower and cost more"
+          }
+        }
+      }
+    },
     "%@ token": {
       "localizations": {
         "en": {
@@ -1649,6 +1659,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Activity not captured — only live runs are recorded"
+          }
+        }
+      }
+    },
+    "Adaptive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adaptive"
           }
         }
       }
@@ -4389,6 +4409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to run commands"
+          }
+        }
+      }
+    },
+    "Connect to the Gateway to change the thinking level.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the Gateway to change the thinking level."
           }
         }
       }
@@ -7153,6 +7183,16 @@
         }
       }
     },
+    "Extra High": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extra High"
+          }
+        }
+      }
+    },
     "Extract mode": {
       "localizations": {
         "en": {
@@ -8359,6 +8399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide tools"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High"
           }
         }
       }
@@ -9653,6 +9703,16 @@
         }
       }
     },
+    "Low": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low"
+          }
+        }
+      }
+    },
     "Low Power Mode is on, so iOS won't check until it's off.": {
       "localizations": {
         "en": {
@@ -9843,12 +9903,32 @@
         }
       }
     },
+    "Max": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max"
+          }
+        }
+      }
+    },
     "May be slower and cost more": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "May be slower and cost more"
+          }
+        }
+      }
+    },
+    "Medium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medium"
           }
         }
       }
@@ -15723,6 +15803,16 @@
         }
       }
     },
+    "Send a message first to change this chat's thinking level.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send a message first to change this chat's thinking level."
+          }
+        }
+      }
+    },
     "Send now": {
       "localizations": {
         "en": {
@@ -18603,6 +18693,16 @@
         }
       }
     },
+    "Thinking Level: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking Level: %@"
+          }
+        }
+      }
+    },
     "Thinking Steps": {
       "localizations": {
         "en": {
@@ -20059,6 +20159,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "URL, data URI or workspace path"
+          }
+        }
+      }
+    },
+    "Ultra": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultra"
           }
         }
       }

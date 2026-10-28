@@ -170,6 +170,9 @@ struct ChatSessionMenu: View {
 
     var body: some View {
         if let row {
+            // On compact iPhone the thinking picker lives in this menu, so a slow, costly level
+            // shows on its button at a glance (#1086).
+            let thinkingWarning = self.compactActions ? ThinkingLevel.expensiveWarning(for: row) : nil
             Menu {
                 if self.compactActions {
                     ModelPicker(row: row, showsActionTitle: true)
@@ -229,8 +232,15 @@ struct ChatSessionMenu: View {
                     }
                 }
             } label: {
-                Label(L("Chat Options"), systemImage: Theme.moreSymbol)
+                if thinkingWarning != nil {
+                    Label(L("Chat Options"), systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                } else {
+                    Label(L("Chat Options"), systemImage: Theme.moreSymbol)
+                }
             }
+            .tint(thinkingWarning != nil ? .orange : nil)
+            .accessibilityValue(thinkingWarning ?? "")
         }
     }
 }

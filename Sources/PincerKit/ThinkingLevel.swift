@@ -12,13 +12,41 @@ public enum ThinkingLevel {
         return self.expensiveLevels.contains(id)
     }
 
-    /// The label for a level id: the Gateway's own label when it lists the level, else the id capitalized.
+    /// The label for a level id: the Gateway's own label when it lists the level with one that
+    /// differs from the id, else Pincer's label for a known level, else the id capitalized.
     public static func label(for id: String, in choices: [SlashCommandChoice]?) -> String {
-        let normalized = id.lowercased()
-        if let choice = choices?.first(where: { $0.value.lowercased() == normalized }), choice.label != choice.value {
+        let normalized = id.trimmingCharacters(in: .whitespaces).lowercased()
+        if let choice = choices?.first(where: { $0.value.lowercased() == normalized }),
+           !choice.label.isEmpty, choice.label.lowercased() != choice.value.lowercased() {
             return choice.label
         }
-        return id.prefix(1).uppercased() + id.dropFirst()
+        return self.canonicalLabel(for: normalized) ?? (id.prefix(1).uppercased() + id.dropFirst())
+    }
+
+    /// Pincer's label for one of OpenClaw's level ids; nil for an id it doesn't know.
+    public static func canonicalLabel(for id: String) -> String? {
+        switch id.lowercased() {
+        case "off": L("Off")
+        case "minimal": L("Minimal")
+        case "low": L("Low")
+        case "medium": L("Medium")
+        case "high": L("High")
+        case "xhigh": L("Extra High")
+        case "adaptive": L("Adaptive")
+        case "max": L("Max")
+        case "ultra": L("Ultra")
+        default: nil
+        }
+    }
+}
+
+extension ThinkingLevel {
+    /// "Ultra thinking, may be slower and cost more" when the row's effective level is a slow,
+    /// costly one, else nil. Cheap: reads the row only. The compact Chat Options button uses it.
+    public static func expensiveWarning(for row: SessionRow) -> String? {
+        guard let level = row.effectiveThinkingLevel, self.isExpensive(level) else { return nil }
+        let label = self.label(for: level, in: row.thinkingLevelChoices)
+        return L("\(label) thinking, may be slower and cost more")
     }
 }
 
@@ -76,7 +104,7 @@ public struct ThinkingLevelMenu: Equatable, Sendable {
         self.currentLabel = current.map { ThinkingLevel.label(for: $0, in: choices) }
         self.currentIsExpensive = ThinkingLevel.isExpensive(current)
         var items = choices.map { choice in
-            Item(id: choice.value, label: choice.label, isExpensive: ThinkingLevel.isExpensive(choice.value),
+            Item(id: choice.value, label: ThinkingLevel.label(for: choice.value, in: choices), isExpensive: ThinkingLevel.isExpensive(choice.value),
                  isSelected: override.map { $0.lowercased() == choice.value.lowercased() } ?? false, isEnabled: true)
         }
         if let override, !items.contains(where: \.isSelected) {
