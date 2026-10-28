@@ -27,12 +27,16 @@ public struct SVGRasterizer: SVGRasterizing {
 
     /// Renders the SVG as large as fits in `bounds` (in pixels), keeping its aspect ratio.
     public static func rasterize(_ data: Data, fitting bounds: CGSize) async -> CGImage? {
-        await self.rasterize(data, fitting: bounds, webStepTimeout: .seconds(45))
+        await self.rasterize(data, fitting: bounds, webLaunchTimeout: .seconds(180), webStepTimeout: .seconds(45))
     }
 
-    /// `webStepTimeout` caps each WebKit step on iOS (the load, then the snapshot). It only catches a hang:
-    /// a cold web content process on a loaded CI simulator took about 20 s to load the first page.
-    static func rasterize(_ data: Data, fitting bounds: CGSize, webStepTimeout: Duration) async -> CGImage? {
+    /// On iOS, `webLaunchTimeout` caps the wait for the web content process to commit the page. A cold
+    /// launch on a loaded CI simulator took 20 to over 90 s, and WebKit reports a failed launch itself.
+    /// After the commit, `webStepTimeout` caps each remaining step (finishing the load, the snapshot),
+    /// which only a hang exceeds.
+    static func rasterize(
+        _ data: Data, fitting bounds: CGSize, webLaunchTimeout: Duration, webStepTimeout: Duration) async -> CGImage?
+    {
         guard let intrinsic = SVGSource.intrinsicSize(data), bounds.width >= 1, bounds.height >= 1 else { return nil }
         let pixels = SVGSource.pixelSize(for: intrinsic, fitting: bounds)
         #if os(macOS)
@@ -43,7 +47,8 @@ public struct SVGRasterizer: SVGRasterizing {
             return Self.redraw(cgImage, size: pixels)
         }.value
         #else
-        return await WebSnapshotter.snapshot(svg: data, size: intrinsic, pixels: pixels, stepTimeout: webStepTimeout)
+        return await WebSnapshotter.snapshot(
+            svg: data, size: intrinsic, pixels: pixels, launchTimeout: webLaunchTimeout, stepTimeout: webStepTimeout)
         #endif
     }
 
@@ -68,6 +73,9 @@ public struct SVGRasterizer: SVGRasterizing {
 @MainActor
 private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     private var continuation: CheckedContinuation<Bool, Never>?
+    /// When the current step's watchdog gives up; the commit moves it from the launch budget to the step budget.
+    private var deadline = ContinuousClock.now
+    private var stepTimeout = Duration.zero
     private var image: CGImage?
     /// WebKit never answered a step, or its web content process died. A loaded simulator once left
     /// a render pending for over nine minutes; now the step gives up and a fresh web view tries again.
@@ -76,15 +84,21 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     /// render cold-started a new process each time.
     private static let dataStore = WKWebsiteDataStore.nonPersistent()
 
-    static func snapshot(svg: Data, size: CGSize, pixels: CGSize, stepTimeout: Duration) async -> CGImage? {
+    static func snapshot(
+        svg: Data, size: CGSize, pixels: CGSize, launchTimeout: Duration, stepTimeout: Duration) async -> CGImage?
+    {
         for _ in 0..<2 {
-            let (image, stalled) = await self.render(svg: svg, size: size, pixels: pixels, stepTimeout: stepTimeout)
+            let (image, stalled) = await self.render(
+                svg: svg, size: size, pixels: pixels, launchTimeout: launchTimeout, stepTimeout: stepTimeout)
             if image != nil || !stalled || Task.isCancelled { return image }
         }
         return nil
     }
 
-    private static func render(svg: Data, size: CGSize, pixels: CGSize, stepTimeout: Duration) async -> (CGImage?, stalled: Bool) {
+    private static func render(
+        svg: Data, size: CGSize, pixels: CGSize, launchTimeout: Duration, stepTimeout: Duration) async
+        -> (CGImage?, stalled: Bool)
+    {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = self.dataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -102,6 +116,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
         defer { view.removeFromSuperview() }
 
         let delegate = WebSnapshotter()
+        delegate.stepTimeout = stepTimeout
         view.navigationDelegate = delegate
         let html = """
         <!doctype html><html><head><meta name="viewport" content="width=\(Int(size.width)), initial-scale=1">
@@ -111,7 +126,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
         <body><img src="data:image/svg+xml;base64,\(svg.base64EncodedString())"></body></html>
         """
         // A row scrolled away cancels its render: stop WebKit instead of finishing the load and snapshot.
-        let loaded = await delegate.step(timeout: stepTimeout, stop: { view.stopLoading() }) {
+        let loaded = await delegate.step(timeout: launchTimeout, stop: { view.stopLoading() }) {
             view.loadHTMLString(html, baseURL: nil)
         }
         guard loaded, !Task.isCancelled else { return (nil, delegate.stalled) }
@@ -131,8 +146,13 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
 
     /// Runs `start` and waits for `finish`, giving up (and calling `stop`) on cancellation or after `timeout`.
     private func step(timeout: Duration, stop: @escaping @MainActor @Sendable () -> Void, _ start: () -> Void) async -> Bool {
+        self.deadline = .now + timeout
         let watchdog = Task { [weak self] in
-            try? await Task.sleep(for: timeout)
+            while let deadline = self?.deadline, ContinuousClock.now < deadline {
+                // Wakes at least every second: the commit can pull the deadline in.
+                try? await Task.sleep(until: min(deadline, .now + .seconds(1)))
+                if Task.isCancelled { return }
+            }
             guard !Task.isCancelled, let self, self.continuation != nil else { return }
             self.stalled = true
             stop()
@@ -156,6 +176,11 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     fileprivate func finish(_ loaded: Bool) {
         self.continuation?.resume(returning: loaded)
         self.continuation = nil
+    }
+
+    /// The web content process is up and has the page: from here on, only a hang is slow.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        self.deadline = .now + self.stepTimeout
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { self.finish(true) }

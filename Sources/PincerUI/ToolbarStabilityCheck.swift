@@ -47,7 +47,14 @@ import SwiftUI
         }
 
         gateway.selectedKey = keys[0]
-        try? await Task.sleep(for: .seconds(1.5))
+        // Wait for the toolbar to finish its first population: on a slow CI runner an item still
+        // arrived after a fixed 1.5 s and was blamed on the first switch.
+        for _ in 0..<20 {
+            self.added = 0
+            self.removed = 0
+            try? await Task.sleep(for: .seconds(1.5))
+            if self.added + self.removed == 0 { break }
+        }
         var failures = 0
         for index in 1...switches {
             let before = self.itemIds(window)
