@@ -64,8 +64,8 @@ final class ControlsGateway: Sendable {
 
 @MainActor
 private func controlsEventually(_ timeout: Double = 5, _ condition: () -> Bool) async -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
+    let deadline = ContinuousClock.now + waitDeadline(.seconds(timeout))
+    while ContinuousClock.now < deadline {
         if condition() { return true }
         try? await Task.sleep(for: .milliseconds(10))
     }

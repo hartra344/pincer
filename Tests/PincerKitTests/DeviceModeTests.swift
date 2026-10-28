@@ -321,6 +321,38 @@ struct DeviceNodeControllerDemoTests {
         #expect(store.deviceNode.status == before)
     }
 
+    /// A refresh replaced while its `node.list` was in flight must drop the reply: applying it put a
+    /// parked node back to Active (flaked `approvalComesFromNodeList` when a presence refresh raced
+    /// the `node.pair.requested` one).
+    @Test func aSupersededNodeListReplyIsIgnored() async throws {
+        let (store, scratch) = self.store()
+        defer { store.stop(); scratch.remove() }
+        store.start()
+        #expect(await eventually(timeout: .seconds(10)) { store.state.isConnected })
+        await store.deviceNode.update(DeviceModeSettings(enabled: true))
+        #expect(await eventually(timeout: .seconds(10)) { store.deviceNode.status == .active })
+
+        let held = Gate()
+        var calls = 0, staleAnswered = false
+        store.deviceNode.approvalQueryOverride = {
+            calls += 1
+            guard calls == 1 else { return .pending(requestId: "req-9") }
+            await held.wait()
+            staleAnswered = true
+            return .approved
+        }
+        let requested = GatewayEvent(name: "node.pair.requested", payload: ["nodeId": .string(DemoGateway.deviceId)], seq: nil)
+        store.deviceNode.handleOperatorEvent(requested)
+        #expect(await eventually { calls == 1 })
+        store.deviceNode.handleOperatorEvent(requested)
+        #expect(await eventually { store.deviceNode.status == .awaitingApproval(requestId: "req-9") })
+        await held.open()
+        #expect(await eventually { staleAnswered })
+        for _ in 0..<20 { await Task.yield() }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(store.deviceNode.status == .awaitingApproval(requestId: "req-9"), "the superseded reply is dropped")
+    }
+
     @Test func disableWithoutAdminSetsHintAndKeepsNodeToken() async throws {
         let (store, scratch) = self.store()
         defer { store.stop(); store.profile.forgetCredentials(); scratch.remove() }

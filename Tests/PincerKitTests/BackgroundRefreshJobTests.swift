@@ -24,7 +24,7 @@ struct BackgroundRefreshJobTests {
 
     @MainActor
     static func eventually(timeout: Duration = .seconds(3), _ condition: @MainActor () -> Bool) async -> Bool {
-        let clock = ContinuousClock(), end = clock.now + timeout
+        let clock = ContinuousClock(), end = clock.now + waitDeadline(timeout)
         while clock.now < end {
             if condition() { return true }
             try? await Task.sleep(for: .milliseconds(10))

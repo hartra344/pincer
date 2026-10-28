@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import PincerKit
 
@@ -59,10 +60,24 @@ struct SessionFilesFinalTests {
     @Test func midFlightTriggerReloadsOnceMore() async {
         let gateway = FilesGateway()
         gateway.listReply.withLock { $0 = Fixtures.json(FilesFixtures.listJSON) }
-        let model = gateway.model()
+        // Holds the first list in flight. A trigger that lands before the load has even asked is
+        // answered by that load, so a bare `Task.yield()` let a busy runner see a single list.
+        let held = Gate()
+        let firstList = Mutex(true)
+        let model = SessionFilesModel(
+            sessionKey: "agent:main:main", agentId: nil,
+            request: { method, params in
+                let reply = try await gateway.request(method, params)
+                if method == "sessions.files.list", firstList.withLock({ first in defer { first = false }; return first }) {
+                    await held.wait()
+                }
+                return reply
+            },
+            debounce: .milliseconds(20))
         async let first: Void = model.refresh()
-        await Task.yield()
+        #expect(await eventually { gateway.count("sessions.files.list") == 1 })
         async let second: Void = model.refresh()
+        await held.open()
         _ = await (first, second)
         #expect(gateway.count("sessions.files.list") >= 2)
     }

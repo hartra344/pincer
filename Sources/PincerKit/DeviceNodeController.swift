@@ -48,6 +48,8 @@ public final class DeviceNodeController {
     @ObservationIgnored private var lastPresenceRefresh = Date.distantPast
     @ObservationIgnored private var invokes = InvokeTracker()
     @ObservationIgnored private var approvalTask: Task<Void, Never>?
+    /// Tests and checks answer `node.list` themselves to order the replies.
+    @ObservationIgnored var approvalQueryOverride: (@MainActor () async -> Approval)?
     @ObservationIgnored private var surfaceTask: Task<Void, Never>?
 
     init(profile: GatewayProfile, identity: DeviceIdentity, operatorConnection: GatewayConnection,
@@ -294,7 +296,11 @@ public final class DeviceNodeController {
         let generation = self.generation
         self.approvalTask = Task { [weak self] in
             while let self, !Task.isCancelled, generation == self.generation {
-                switch await self.queryApproval() {
+                let approval = await self.queryApproval()
+                // A newer refresh (or a stop) replaced this one while `node.list` was in flight, so
+                // this reply is stale: applying it could put a parked node back to Active.
+                guard !Task.isCancelled, generation == self.generation else { return }
+                switch approval {
                 case .approved:
                     self.status = .active
                     return
@@ -310,6 +316,7 @@ public final class DeviceNodeController {
 
     /// `node.list` needs only operator.read; the self node carries `pendingRequestId` while parked.
     private func queryApproval() async -> Approval {
+        if let override = self.approvalQueryOverride { return await override() }
         let outcome: Result<JSONValue, Error>
         do {
             outcome = .success(try await self.operatorConnection.request("node.list", [:], timeout: 10))

@@ -25,19 +25,27 @@ final class BrowserSheetHeaderUITests: XCTestCase {
         XCTAssertTrue(options.waitForExistence(timeout: 20), "chat options button did not appear")
         attachHeader(app, named: "header before")
 
-        options.tap()
-        let browserItem = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH 'Show Browser'"))
-            .firstMatch
-        XCTAssertTrue(browserItem.waitForExistence(timeout: 10), "Show Browser menu item did not appear")
-        browserItem.tap()
-
+        // A loaded CI runner once took over 10s to show the sheet: the menu item existed while the menu
+        // was still animating in, so the tap was dropped. Tap only once it's hittable, and reopen the
+        // menu if it closed without presenting the sheet.
         let done = app.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 10), "Browser sheet did not open")
+        for attempt in 1...2 where !done.exists {
+            XCTAssertTrue(waitForHittable(options, timeout: 30), "chat options button is not hittable")
+            options.tap()
+            let browserItem = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "label BEGINSWITH 'Show Browser'"))
+                .firstMatch
+            XCTAssertTrue(waitForHittable(browserItem, timeout: 30), "Show Browser menu item did not appear")
+            browserItem.tap()
+            if done.waitForExistence(timeout: 30) { break }
+            XCTAssertLessThan(attempt, 2, "Browser sheet did not open")
+            attachHeader(app, named: "sheet missing after attempt \(attempt)")
+        }
+        XCTAssertTrue(done.exists, "Browser sheet did not open")
         done.tap()
 
         let sheetGone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: done)
-        wait(for: [sheetGone], timeout: 10)
+        wait(for: [sheetGone], timeout: 30)
         XCTAssertTrue(options.waitForExistence(timeout: 20), "chat options button did not return after closing Browser sheet")
 
         // The stale title can take a moment to show, so give it a few seconds before asserting its absence.
@@ -45,6 +53,11 @@ final class BrowserSheetHeaderUITests: XCTestCase {
         let appeared = browserTitle.waitForExistence(timeout: 3)
         attachHeader(app, named: "header after")
         XCTAssertFalse(appeared, "a stuck \"Browser\" title is in the nav bar")
+    }
+
+    private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let hittable = expectation(for: NSPredicate(format: "exists == true AND hittable == true"), evaluatedWith: element)
+        return XCTWaiter().wait(for: [hittable], timeout: timeout) == .completed
     }
 
     /// Kept only for diagnosis: the screenshots are attached to the result and never compared.

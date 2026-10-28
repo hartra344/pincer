@@ -4,7 +4,9 @@ import Testing
 @testable import PincerKit
 @testable import PincerUI
 
-@MainActor
+/// Serialized: on iOS the renders share one web content process, and parallel tests cold-starting
+/// WebKit at once on a freshly booted simulator made every render slow.
+@MainActor @Suite(.serialized)
 struct SVGRasterizerTests {
     private let svg = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><rect width="400" height="200" fill="red"/></svg>"#.utf8)
 
@@ -32,6 +34,27 @@ struct SVGRasterizerTests {
         await Task.yield()
         task.cancel()
         #expect(await task.value == nil)
+    }
+
+    /// A web content process that never commits the page gives up (twice, with a fresh web view)
+    /// instead of hanging the render.
+    @Test func aStalledLaunchGivesUp() async {
+        let started = ContinuousClock.now
+        let image = await SVGRasterizer.rasterize(
+            self.svg, fitting: CGSize(width: 1200, height: 600), webLaunchTimeout: .zero, webStepTimeout: .seconds(45))
+        #expect(image == nil)
+        #expect(ContinuousClock.now - started < .seconds(30))
+        let recovered = await SVGRasterizer.rasterize(self.svg, fitting: CGSize(width: 1200, height: 600))
+        #expect(Self.centerPixelIsRed(recovered), "a later render still works")
+    }
+
+    /// A step that hangs after the commit (here the load's finish and snapshot get no time at all) gives up too.
+    @Test func aStalledStepAfterTheCommitGivesUp() async {
+        let started = ContinuousClock.now
+        let image = await SVGRasterizer.rasterize(
+            self.svg, fitting: CGSize(width: 1200, height: 600), webLaunchTimeout: .seconds(180), webStepTimeout: .zero)
+        #expect(image == nil)
+        #expect(ContinuousClock.now - started < .seconds(30))
     }
     #endif
 

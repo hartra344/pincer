@@ -87,8 +87,8 @@ final class BrowserModelHarness: Sendable {
 
 @MainActor
 private func browserEventually(_ timeout: Double = 5, _ condition: () -> Bool) async -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
+    let deadline = ContinuousClock.now + waitDeadline(.seconds(timeout))
+    while ContinuousClock.now < deadline {
         if condition() { return true }
         try? await Task.sleep(for: .milliseconds(10))
     }
@@ -150,12 +150,12 @@ struct BrowserPanelModelTests {
         model.stop()
     }
 
-    @Test func requestsAtMostTheCappedSize() async {
+    @Test func requestsAtMostTheCappedSize() async throws {
         let harness = BrowserModelHarness()
         let model = harness.model()
         model.setVisible(true, pixelSize: CGSize(width: 5000, height: 4000))
         #expect(await browserEventually { harness.latestSource != nil })
-        let ticket = harness.latestSource!.ticket
+        let ticket = try #require(harness.latestSource).ticket
         #expect(ticket.maxWidth <= 1600 && ticket.maxHeight <= 1200)
         model.stop()
     }
@@ -227,24 +227,24 @@ struct BrowserPanelModelTests {
         #expect(harness.sources.withLock { $0.isEmpty })
     }
 
-    @Test func hidingStopsTheStream() async {
+    @Test func hidingStopsTheStream() async throws {
         let harness = BrowserModelHarness()
         let model = harness.model()
         model.setVisible(true, pixelSize: size)
         #expect(await browserEventually { harness.latestSource != nil })
-        let source = harness.latestSource!
+        let source = try #require(harness.latestSource)
         model.setVisible(false, pixelSize: size)
         #expect(await browserEventually { source.terminated })
         #expect(model.status == .idle)
     }
 
-    @Test func streamSurvivesUntilTheLastViewerLeaves() async {
+    @Test func streamSurvivesUntilTheLastViewerLeaves() async throws {
         let harness = BrowserModelHarness()
         let model = harness.model()
         model.setVisible(true, pixelSize: size, viewer: "a")
         model.setVisible(true, pixelSize: size, viewer: "b")
         #expect(await browserEventually { harness.latestSource != nil })
-        let source = harness.latestSource!
+        let source = try #require(harness.latestSource)
         model.setVisible(false, pixelSize: size, viewer: "a")
         try? await Task.sleep(for: .milliseconds(80))
         #expect(!source.terminated, "one window closing leaves the other streaming")

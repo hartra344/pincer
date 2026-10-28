@@ -87,11 +87,20 @@ enum PerfBudget {
     }
 }
 
-/// Polls `condition` on the main actor until it holds or `timeout` passes. The short sleep is
-/// only the poll interval; the wait ends as soon as the condition is true.
+/// The deadline for a poll-until-true wait. A wait ends as soon as its condition holds, so the
+/// deadline only bounds a failure. `swift test --parallel` runs thousands of tests in one process,
+/// and on a 3-core CI runner a main-actor test can be starved for many seconds: a deadline that
+/// fits a quiet machine flakes there. So every wait gets the same shared-CPU headroom as
+/// `PerfBudget`, and at least 30s.
+func waitDeadline(_ timeout: Duration) -> Duration {
+    max(timeout * PerfBudget.sharedCPUFactor, .seconds(30))
+}
+
+/// Polls `condition` on the main actor until it holds or `timeout` (scaled by `waitDeadline`)
+/// passes. The short sleep is only the poll interval; the wait ends as soon as the condition is true.
 @MainActor
 func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now + timeout
+    let deadline = ContinuousClock.now + waitDeadline(timeout)
     while !condition() {
         // One last look after the deadline: a starved main actor may run the awaited work late.
         if ContinuousClock.now >= deadline {
