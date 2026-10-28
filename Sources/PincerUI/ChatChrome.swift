@@ -139,7 +139,12 @@ private struct ChatModelItem: View {
     let row: SessionRow?
 
     var body: some View {
-        if let row { ModelPicker(row: row) }
+        if let row {
+            HStack(spacing: Theme.Spacing.sm) {
+                ModelPicker(row: row)
+                ThinkingLevelPicker(row: row)
+            }
+        }
     }
 }
 
@@ -168,6 +173,7 @@ struct ChatSessionMenu: View {
             Menu {
                 if self.compactActions {
                     ModelPicker(row: row, showsActionTitle: true)
+                    ThinkingLevelPicker(row: row, showsActionTitle: true)
                     BranchHeaderChipView(chat: self.gateway.chat(for: row.key), showsTitle: true)
                     Divider()
                 }

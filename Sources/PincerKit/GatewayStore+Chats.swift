@@ -170,4 +170,25 @@ extension GatewayStore {
     public func setModel(_ key: String, to ref: String?) async {
         await self.patch(key, ["model": ref.map(JSONValue.string) ?? .null])
     }
+
+    /// Sets the thinking level new messages in a session use; `nil` goes back to the inherited
+    /// default (`thinkingLevel: null`). The row updates at once; if the Gateway rejects the change and
+    /// it's still the latest pick for the session, the row goes back to its previous level.
+    public func setThinkingLevel(_ key: String, to level: String?) async {
+        guard let row = self.sessions[key] else { return }
+        let previous = row.thinkingLevel
+        let request = (self.thinkingLevelRequests[key] ?? 0) + 1
+        self.thinkingLevelRequests[key] = request
+        self.setSession(row.settingThinkingLevel(level), for: key)
+        do {
+            _ = try await self.connection.request("sessions.patch", [
+                "key": .string(key),
+                "thinkingLevel": level.map(JSONValue.string) ?? .null,
+            ])
+        } catch {
+            self.lastError = error.localizedDescription
+            guard self.thinkingLevelRequests[key] == request, let current = self.sessions[key] else { return }
+            self.setSession(current.settingThinkingLevel(previous), for: key)
+        }
+    }
 }

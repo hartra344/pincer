@@ -44,7 +44,7 @@ const READ_METHODS = new Set(['sessions.preview', 'sessions.describe', 'sessions
 const ADMIN_METHODS = new Set(['sessions.branches.switch', 'sessions.rewind']);
 const DELETE_WRITE_FIELDS = new Set(['key', 'agentId', 'deleteTranscript', 'expectedSessionId', 'archivedOnly']);
 /** Fields sessions.patch / patchMany accept at operator.write in the mock (SESSIONS_PATCH_WRITE_SCOPE_MUTATIONS). */
-export const PATCH_WRITE_FIELDS = new Set(['label', 'autoLabel', 'icon', 'color', 'category', 'pinned', 'archived', 'unread', 'model']);
+export const PATCH_WRITE_FIELDS = new Set(['label', 'autoLabel', 'icon', 'color', 'category', 'pinned', 'archived', 'unread', 'model', 'thinkingLevel']);
 const PATCH_MANY_MAX_TARGETS = 100;
 const PREVIEW_MAX_KEYS = 64;
 const PREVIEW_MAX_CHARS_CAP = 800;
@@ -628,7 +628,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
     }
     case 'sessions.patchMany': {
       const patch = params.patch;
-      const unsupported = Object.keys(patch).find((field) => !PATCH_WRITE_FIELDS.has(field) || field === 'model' || field === 'autoLabel' || field === 'icon');
+      const unsupported = Object.keys(patch).find((field) => !PATCH_WRITE_FIELDS.has(field) || field === 'model' || field === 'thinkingLevel' || field === 'autoLabel' || field === 'icon');
       if (unsupported) return invalid(`invalid sessions.patchMany params: at /patch: unexpected property '${unsupported}'`);
       const outcomes = params.targets.map((target) => {
         const key = target.key.trim();

@@ -41,6 +41,7 @@ const SECTIONS = [
   'mcp',
   'first-run',
   'sessions',
+  'thinking-level',
   'message-subscriptions',
   'large-media',
   'sessions-files',

@@ -265,8 +265,15 @@ extension DemoGateway {
             "archived": false, "updatedAt": at, "lastActivityAt": at, "status": "idle", "hasActiveRun": false,
             "activeRunIds": [], "model": .string(Self.defaultModel.model),
             "modelProvider": .string(Self.defaultModel.provider), "modelOverrideSource": nil,
+            "thinkingLevels": Self.thinkingLevels, "thinkingDefault": "medium",
         ]
     }
+
+    /// The thinking levels the demo's models offer, as the Gateway projects them on session rows.
+    static let thinkingLevels: JSONValue = .array([
+        ("off", "Off"), ("minimal", "Minimal"), ("low", "Low"), ("medium", "Medium"), ("high", "High"),
+        ("xhigh", "Extra High"), ("adaptive", "Adaptive"), ("max", "Max"), ("ultra", "Ultra"),
+    ].map { ["id": .string($0.0), "label": .string($0.1)] })
 
     static func seed() -> (sessions: [String: Row], transcripts: [String: [JSONValue]]) {
         var sessions: [String: Row] = [:]
@@ -521,7 +528,8 @@ extension DemoGateway {
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
             preview: "Three papers summarized.", age: 120_000,
-            ["label": "Paper digest", "category": "Reading", "unread": true, "pinned": true,
+            // Left on Ultra, so the header's thinking-level picker shows its slow-and-costly warning.
+            ["label": "Paper digest", "category": "Reading", "unread": true, "pinned": true, "thinkingLevel": "ultra",
              "totalTokens": 96_000, "inputTokens": 94_000, "outputTokens": 2_000],
             messages: [
                 said("user", "What's new in speculative decoding?", ago: 5 * day),
@@ -562,7 +570,8 @@ extension DemoGateway {
         add(Self.toolCardsKey, agent: "main", title: Self.toolCardsTitle, preview: Self.toolCardsPreview, age: 3 * 60_000,
             messages: Self.seedToolCardsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
-            ["isMain": true, "unread": true], messages: [
+            // The coder agent defaults to High thinking; the chat inherits it.
+            ["isMain": true, "unread": true, "thinkingDefault": "high"], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
                 said("user", "The login test is flaky on CI again.", ago: 10 * day),
                 said("assistant", """

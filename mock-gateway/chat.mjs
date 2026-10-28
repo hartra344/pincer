@@ -491,7 +491,7 @@ function dispatch(state, conn, msg) {
         totalMessages: transcript.length,
         hasMore: start > 0,
         ...(start > 0 ? { nextOffset: offset + (end - start) } : {}),
-        thinkingLevel: 'medium',
+        thinkingLevel: row.thinkingLevel ?? row.thinkingDefault ?? 'medium',
         sessionInfo: { hasActiveRun: row.hasActiveRun, activeRunIds: [...row.activeRunIds] },
         ...(activeRun ? { inFlightRun: { runId: activeRun.runId, text: activeRun.text } } : {}),
       });

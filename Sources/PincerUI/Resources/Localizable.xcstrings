@@ -31,6 +31,26 @@
         }
       }
     },
+    "%@ (inherited default)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (inherited default)"
+          }
+        }
+      }
+    },
+    "%@ (slower, costs more)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (slower, costs more)"
+          }
+        }
+      }
+    },
     "%@ + %lld more": {
       "localizations": {
         "en": {
@@ -3739,6 +3759,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose shared or per-requester."
+          }
+        }
+      }
+    },
+    "Choose the thinking level for new messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the thinking level for new messages"
           }
         }
       }
@@ -9809,6 +9839,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Math source"
+          }
+        }
+      }
+    },
+    "May be slower and cost more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May be slower and cost more"
           }
         }
       }
@@ -18553,6 +18593,16 @@
         }
       }
     },
+    "Thinking Level": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking Level"
+          }
+        }
+      }
+    },
     "Thinking Steps": {
       "localizations": {
         "en": {
@@ -18569,6 +18619,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Thinking isn’t being saved for this chat."
+          }
+        }
+      }
+    },
+    "Thinking level: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking level: %@"
+          }
+        }
+      }
+    },
+    "Thinking level: %@ (inherited default)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking level: %@ (inherited default)"
           }
         }
       }
@@ -18759,6 +18829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't speak replies. Update it to use a Gateway voice."
+          }
+        }
+      }
+    },
+    "This Gateway did not report thinking levels; use /think instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway did not report thinking levels; use /think instead."
           }
         }
       }
