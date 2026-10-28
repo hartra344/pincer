@@ -11,7 +11,7 @@ import SwiftUI
 ///
 /// Run: `swift test --filter PanelSlideProbe`
 @MainActor
-@Suite("PanelSlideProbe", .serialized)
+@Suite("PanelSlideProbe", .serialized, .readsSharedAppearance)
 struct PanelSlideProbe {
     static let frames = 20
     static let wide: CGFloat = 900

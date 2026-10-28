@@ -60,7 +60,7 @@ enum ProbeMeter {
 
 #if os(macOS)
 @MainActor
-@Suite("TranscriptPrefetchProbe", .serialized)
+@Suite("TranscriptPrefetchProbe", .serialized, .readsSharedAppearance)
 struct TranscriptPrefetchProbe {
     static let key = "agent:probe:main"
     static let rowCount = 20_000

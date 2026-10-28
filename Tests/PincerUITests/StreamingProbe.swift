@@ -23,7 +23,7 @@ enum ProbeShim {
 }
 
 @MainActor
-@Suite("StreamingProbe", .serialized)
+@Suite("StreamingProbe", .serialized, .readsSharedAppearance)
 struct StreamingProbe {
     static let key = "agent:probe:main"
 
