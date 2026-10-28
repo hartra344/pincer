@@ -1,6 +1,6 @@
 ---
 title: Device Mode
-description: Optionally let a Gateway's agents ask this device for location, device status, calendar, contacts, reminders, motion data and (on iPhone and iPad) Apple Health summaries, read-only.
+description: Optionally let a Gateway's agents ask this device for location, device status, calendar, contacts, reminders, motion data and (on iPhone and iPad) Apple Health summaries or all Apple Health data, read-only.
 ---
 
 Pincer is a client by default. **Device mode** is an opt-in setting that also lets the agents on a gateway ask *this device* for a few pieces of read-only data you choose. It's **off by default, per gateway**, and it can never run commands on your device.
@@ -22,12 +22,13 @@ Pincer then opens a second connection to the gateway in the `node` role. It decl
 | Reminders | `reminders.list` | Reminders |
 | Motion & fitness | `motion.activity`, `motion.pedometer` | Motion & Fitness |
 | Apple Health summaries (iPhone and iPad only) | `health.summary` | Health (read) |
+| All Apple Health data (iPhone and iPad only) | `pincer.health.query` | Health (read) |
 
-All of them only read. Apple Health summaries are unchecked by default and need extra setup; see [below](#apple-health-summaries). `device.info` reports the model, OS and app version and locale. `device.status` reports battery, thermal and network state, and deliberately not storage or uptime, for privacy.
+All of them only read. Apple Health summaries and All Apple Health data are unchecked by default and need extra setup; see [Apple Health summaries](#apple-health-summaries) and [All Apple Health data](#all-apple-health-data). `device.info` reports the model, OS and app version and locale. `device.status` reports battery, thermal and network state, and deliberately not storage or uptime, for privacy.
 
 ## What Pincer never declares
 
-Pincer never declares camera, screen recording, shell or `system.run`, notifications (`system.notify`), files, a browser, computer use, installed apps, photos or SMS, and no command that adds or writes anything. Pincer never reads raw Health samples and never writes Health data. The only Health data it can share is the opt-in `health.summary` aggregate. The code refuses to connect if a command outside the table above would be declared.
+Pincer never declares camera, screen recording, shell or `system.run`, notifications (`system.notify`), files, a browser, computer use, installed apps, photos or SMS, and no command that adds or writes anything. Pincer never writes Health data and never reads clinical records, Health documents, medications, vision prescriptions, characteristics or workout routes. Individual Health readings leave the device only through the opt-in `pincer.health.query`. The code refuses to connect if a command outside the table above would be declared.
 
 ## Apple Health summaries
 
@@ -83,6 +84,200 @@ The metric fields are optional. Pincer leaves one out when HealthKit returns not
 
 To stop sharing, uncheck **Apple Health summaries**. Pincer then stops declaring `health.summary`. You can also remove it from `gateway.nodes.commands.allow` to close the gateway side.
 
+## All Apple Health data
+
+On iPhone and iPad, an agent can also read individual Health readings and trends: heart rate and HRV, sleep stages, workouts, activity, body measurements, nutrition, cycle tracking, mood, hearing and ECG results, and more. It isn't offered on a Mac. It's off until you check it, and it's separate from [Apple Health summaries](#apple-health-summaries): you can turn on either or both.
+
+:::caution[Pincer-only command]
+`pincer.health.query` is a Pincer-only command, not part of OpenClaw. The gateway forwards it only when you allow it.
+:::
+
+### Turning it on
+
+When you check **All Apple Health data**, Pincer first shows a disclosure: when an agent on this gateway asks, Pincer reads the Health data it asks for and sends the individual readings to this gateway. They reach the gateway's AI provider and may stay in chat history. Pincer never reads Health data in the background, never writes to it, and never reads clinical records or workout routes. Choose **Continue** to open Apple's Health permission sheet, where you can choose **Turn On All** or pick the types you want to share.
+
+### Allow the command on the gateway
+
+Add the allow entry **before** you check the box, keeping any entries already there:
+
+```json5
+{ gateway: { nodes: { commands: { allow: ["health.summary", "pincer.health.query"] } } } }
+```
+
+If you checked the box first, the gateway dropped the command from the node's surface. Uncheck and recheck **All Apple Health data** so Pincer declares it again. An entry in `gateway.nodes.commands.deny` wins over the allow list. Declaring the command changes the node's command surface, so approve it on the gateway:
+
+```bash
+openclaw nodes pending
+openclaw nodes approve <requestId>
+```
+
+### Parameters
+
+`params` must be a JSON object. Unknown keys are rejected, which catches typos like `from` and `to`.
+
+| Key | Type | Default | Rules |
+| --- | --- | --- | --- |
+| `mode` | string | `"samples"` | `types`, `samples` or `statistics` |
+| `type` | string | none, required unless `mode` is `types` | A friendly name like `heartRateVariabilitySDNN` (case-insensitive) or the full HealthKit identifier, like `HKQuantityTypeIdentifierHeartRateVariabilitySDNN` |
+| `startISO` | string | `endISO` minus 7 days | ISO 8601 date-time (`Z` or an offset, fractional seconds allowed), or a date `YYYY-MM-DD` meaning local midnight at the start of that day |
+| `endISO` | string | now | Same formats. A date means the **end** of that local day, so `"2026-10-20"` to `"2026-10-27"` includes the 27th |
+| `interval` | string | `"day"` | Statistics only: `hour`, `day`, `week`, `month` or `total` (one bucket for the whole range) |
+| `limit` | integer | `100` | Samples only, 1 to 1000 |
+| `sort` | string | `"desc"` | Samples only: `desc` (newest first) or `asc`. Statistics are always ascending |
+
+The start must be before the end, and a range can span at most 1827 days (5 years). Statistics return at most 500 buckets, anchored in this device's calendar and time zone: `hour` on the hour, `day` at local midnight, `week` at the start of the locale's week and `month` on the 1st. Giving `interval`, `limit` or `sort` in a mode that doesn't use them is an error.
+
+Friendly names are the HealthKit identifier's Swift name: `heartRateVariabilitySDNN`, `heartRate`, `restingHeartRate`, `vo2Max`, `stepCount`, `sleepAnalysis`, `mindfulSession`, `menstrualFlow`, `bloodPressure`, `food` and so on. The other kinds are `workout`, `electrocardiogram`, `audiogram`, `stateOfMind`, `gad7`, `phq9` and `activitySummary`. Call `{"mode":"types"}` for the full list on this device.
+
+Units are fixed per type, and there's no `unit` parameter. Percentages are reported 0 to 100. Values of 1 or more are rounded to 2 decimals, smaller values to 4 significant digits, and durations are minutes to 1 decimal.
+
+The same rules as a JSON Schema:
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": { "enum": ["types", "samples", "statistics"], "default": "samples" },
+    "type": { "type": "string" },
+    "startISO": { "type": "string" },
+    "endISO": { "type": "string" },
+    "interval": { "enum": ["hour", "day", "week", "month", "total"], "default": "day" },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 },
+    "sort": { "enum": ["desc", "asc"], "default": "desc" }
+  }
+}
+```
+
+### Errors
+
+| Code | Message |
+| --- | --- |
+| `INVALID_REQUEST` | `INVALID_REQUEST: params must be a JSON object` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: unknown parameter "<key>"; allowed: mode, type, startISO, endISO, interval, limit, sort` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: mode must be types, samples or statistics` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: type is required; call with {"mode":"types"} to list types` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: unknown type "<type>"; call with {"mode":"types"} to list types` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: <type> is never shared (clinical records, documents, medications, vision prescriptions, characteristics, workout routes and heartbeat series are excluded)` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: startISO must be an ISO 8601 date or date-time` (or `endISO`) |
+| `INVALID_REQUEST` | `INVALID_REQUEST: startISO must be before endISO` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: the range can be at most 1827 days` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: interval must be hour, day, week, month or total` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: limit must be an integer from 1 to 1000` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: sort must be desc or asc` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: <param> only applies to <mode>` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: statistics supports quantity and category types; use samples for <type>` |
+| `INVALID_REQUEST` | `INVALID_REQUEST: <n> buckets is more than 500; use a larger interval or a shorter range` |
+| `UNAVAILABLE` | `HEALTH_UNAVAILABLE: Health data isn't available on this device` |
+| `UNAVAILABLE` | `HEALTH_UNAVAILABLE: <type> needs a newer iOS version` |
+| `UNAVAILABLE` | `HEALTH_UNAVAILABLE: Pincer hasn't asked for access to <type> yet; on the device, turn All Apple Health data off and on in Gateway Settings › This Device` |
+| `UNAVAILABLE` | `HEALTH_UNAVAILABLE: too much data for category statistics; shorten the range` |
+| `UNAVAILABLE` | `HEALTH_TIMEOUT: the query took too long; shorten the range or use statistics` |
+| `UNAVAILABLE` | `UNAVAILABLE: request cancelled` |
+| `UNAVAILABLE` | `HEALTH_UNAVAILABLE: could not read Health data` |
+
+A query has until the request's `timeoutMs` minus half a second (14.5 seconds by default). For big queries, pass a longer `--invoke-timeout`.
+
+### What it returns
+
+Samples and statistics share these top-level fields: `mode`, `type`, `kind`, `startISO` and `endISO` (the resolved range) and `timeZoneIdentifier`. Every timestamp has this device's local offset, like `2026-10-27T23:14:00-04:00`. Optional fields are left out, never `null`. Each row names its `source`, like "Apple Watch" or "Oura", so an agent can tell duplicate sources apart. There are no bundle IDs, device details, UUIDs or metadata, except `userEntered: true` for readings entered by hand and `foodName` for food.
+
+`types` lists the types available on this device, then what's never shared:
+
+```json
+{ "mode": "types",
+  "usage": "pincer.health.query params: {\"type\":\"heartRateVariabilitySDNN\",\"mode\":\"samples|statistics\",\"startISO\":\"2026-10-21\",\"endISO\":\"2026-10-28\",\"interval\":\"day\",\"limit\":100,\"sort\":\"desc\"}",
+  "types": [
+    { "name": "heartRateVariabilitySDNN", "kind": "quantity", "unit": "ms", "aggregation": "discrete" },
+    { "name": "stepCount", "kind": "quantity", "unit": "count", "aggregation": "cumulative" },
+    { "name": "sleepAnalysis", "kind": "category", "values": ["inBed","asleepUnspecified","awake","asleepCore","asleepDeep","asleepREM"] },
+    { "name": "mindfulSession", "kind": "category" },
+    { "name": "bloodPressure", "kind": "correlation", "unit": "mmHg" },
+    { "name": "workout", "kind": "workout" } ],
+  "excluded": ["clinicalRecords","documents","medications","visionPrescriptions","characteristics","workoutRoutes","heartbeatSeries"] }
+```
+
+`samples` returns individual readings, newest first by default. `hasMore` says whether there were more than `limit`. To page, query again with `endISO` (for `desc`) or `startISO` (for `asc`) set to the last returned `start`.
+
+```json
+{ "mode":"samples","type":"heartRateVariabilitySDNN","kind":"quantity","unit":"ms",
+  "startISO":"2026-10-21T12:00:00-04:00","endISO":"2026-10-28T12:00:00-04:00","timeZoneIdentifier":"America/New_York",
+  "sort":"desc","limit":100,"count":2,"hasMore":false,
+  "samples":[ {"start":"2026-10-28T06:41:12-04:00","value":44.12,"source":"Apple Watch"},
+              {"start":"2026-10-27T23:02:40-04:00","end":"2026-10-27T23:03:41-04:00","value":38.9,"source":"Apple Watch"} ] }
+```
+
+Rows depend on the kind:
+
+- **Quantity:** `start`, `end` (left out when it equals `start`), `value`, `source`.
+- **Category:** `start`, `end`, `durationMinutes`, `value` and `valueName` (like `asleepDeep` for sleep), `source`. Types without named values, like `mindfulSession`, leave out `value` and `valueName`.
+- **Correlation:** `bloodPressure` rows have `systolic` and `diastolic` in `mmHg`. `food` rows have `foodName` and `nutrients`, a list of `{type, value, unit}`.
+- **Workout:** `activityType` (like `running`), `durationMinutes`, `activeEnergyKcal`, `distanceMeters`, `averageHeartRateBpm` and `maxHeartRateBpm`. No route, events, laps or metadata.
+- **Electrocardiogram:** `classification`, `averageHeartRateBpm`, `symptomsStatus`, `samplingFrequencyHz` and `voltageMeasurementCount`. Never the voltages.
+- **Audiogram:** `points`, a list of `{frequencyHz, leftEarDBHL, rightEarDBHL}`.
+- **State of mind:** `kind`, `valence` (−1 to 1), `valenceClassification`, `labels` and `associations`.
+- **GAD-7 and PHQ-9:** `score` and `risk`. No individual answers.
+- **Activity summary:** one row per day with `date`, `activeEnergyKcal`, `exerciseMinutes` and `standHours`, and their goals.
+
+`statistics` works for quantity and category types and returns ascending buckets. Empty buckets are left out.
+
+```json
+{ "mode":"statistics","type":"heartRateVariabilitySDNN","kind":"quantity","unit":"ms","aggregation":"discrete",
+  "interval":"day","startISO":"2026-10-21T12:00:00-04:00","endISO":"2026-10-28T12:00:00-04:00","timeZoneIdentifier":"America/New_York",
+  "buckets":[ {"start":"2026-10-21T00:00:00-04:00","end":"2026-10-22T00:00:00-04:00","average":42.3,"min":28.1,"max":61.0} ] }
+```
+
+Cumulative types like `stepCount` get a `sum`, and others get `average`, `min` and `max`. Apple Health removes duplicate sources. Category buckets have a `count` and `minutesByValue`, like `{"asleepCore":212.5,"asleepDeep":48.0}`, or `minutes` for types without named values. A sample counts in the bucket where it ends, so a night belongs to the morning you wake up, as in the Health app.
+
+### What's never shared
+
+| Excluded | Why |
+| --- | --- |
+| Clinical records | Medical records stay in the Health app |
+| Health documents (CDA) | Clinical documents |
+| Medications | Clinical drug lists |
+| Vision prescriptions | Need a separate per-prescription permission |
+| Characteristics (date of birth, biological sex, blood type, skin type, wheelchair use, move mode) | Identity details, not readings. An agent can ask you |
+| Workout routes | A GPS trail reveals your home and work |
+| Heartbeat series and ECG voltages | Raw beat and waveform data. HRV covers heart rate variability |
+
+### Examples
+
+```bash
+openclaw nodes invoke --node <name> --command pincer.health.query --params '{"mode":"types"}' --json
+# HRV, daily average for the last 7 days
+openclaw nodes invoke --node <name> --command pincer.health.query --params '{"mode":"statistics","type":"heartRateVariabilitySDNN","interval":"day"}' --json
+# Last night's sleep stages
+openclaw nodes invoke --node <name> --command pincer.health.query --params '{"type":"sleepAnalysis","startISO":"2026-10-27T18:00:00-04:00","endISO":"2026-10-28T12:00:00-04:00","sort":"asc","limit":200}' --json
+# Sleep per night, by stage, for the last 30 days
+openclaw nodes invoke --node <name> --command pincer.health.query --params '{"mode":"statistics","type":"sleepAnalysis","interval":"day","startISO":"2026-09-28"}' --json
+# Workouts this month (allow more time for big queries)
+openclaw nodes invoke --node <name> --command pincer.health.query --params '{"type":"workout","startISO":"2026-10-01"}' --invoke-timeout 30000 --json
+```
+
+An agent uses the `nodes` tool:
+
+```json
+{"action":"invoke","node":"<name>","invokeCommand":"pincer.health.query","invokeParamsJson":"{\"mode\":\"statistics\",\"type\":\"heartRateVariabilitySDNN\"}"}
+```
+
+### Teach your agent
+
+Agents don't know about `pincer.health.query` on their own. Add a line like this to your agent's workspace instructions, for example `TOOLS.md`:
+
+```md
+To read Apple Health, call the nodes tool with action invoke, invokeCommand pincer.health.query; start with {"mode":"types"}.
+```
+
+### Privacy
+
+- Individual readings leave the device only when an agent asks for them, and only to this gateway. They reach its AI provider and may stay in chat history.
+- Pincer reads nothing in the background and never writes Health data.
+- Apple deliberately doesn't tell apps whether read access was denied. An empty result can mean denied access, no data, or a type this device doesn't support.
+- The data is for personal context. It isn't medical advice.
+
+To stop sharing, uncheck **All Apple Health data**, and you can also remove `pincer.health.query` from `gateway.nodes.commands.allow`. To revoke Apple's permission, use the Health app (Pincer can't revoke it for you).
+
 ## Pairing and approval
 
 The first time you turn it on, the gateway treats the node role like any other device pairing and asks you to approve it. On a remote gateway this can take two approvals: first this device's node role, then the list of data it may answer. Pincer shows **Approve this device on the Gateway (pairing)** until you approve the request on the gateway or from **Operator Devices** on another paired device. See [Operator Devices & Nodes](../devices/).
@@ -102,7 +297,7 @@ Turning device mode off disconnects the node connection and asks the gateway to 
 ## Platform notes
 
 - **Motion** is iPhone-only and isn't offered on a Mac at all.
-- **Apple Health summaries** are iPhone and iPad only and aren't offered on a Mac.
+- **Apple Health summaries** and **All Apple Health data** are iPhone and iPad only and aren't offered on a Mac.
 - Location is a one-shot reading while the app is open, never continuous tracking.
 
 ## How agents use it
@@ -119,6 +314,8 @@ See OpenClaw's [location command](https://docs.openclaw.ai/nodes/location-comman
 openclaw nodes invoke --node <name> --command health.summary --params '{"period":"today"}' --json
 ```
 
+For all Apple Health data, see the [examples above](#examples).
+
 ## In the demo
 
-In the [demo](../../getting-started/try-the-demo/), turning on **This Device** connects to the built-in simulated gateway and shows as **Active** straight away. Nothing leaves your device.
+In the [demo](../../getting-started/try-the-demo/), turning on **This Device** connects to the built-in simulated gateway and shows as **Active** straight away. Nothing leaves your device. On iPhone and iPad, checking **All Apple Health data** adds `pincer.health.query` to the demo node. The **Recovery check-in** chat shows an agent reading HRV and last night's sleep with sample data.

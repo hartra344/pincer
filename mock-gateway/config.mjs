@@ -32,7 +32,8 @@ export function createConfigState() {
         bind: 'tailnet',
         auth: { mode: 'token', token: 'dev-token' },
         // health.summary is privacy-heavy: upstream only makes it invocable when explicitly allowed.
-        nodes: { commands: { allow: ['health.summary'] } },
+        // pincer.health.query (#1084) is Pincer-only, so it is never a platform default either.
+        nodes: { commands: { allow: ['health.summary', 'pincer.health.query'] } },
       },
       agents: { defaults: { model: 'anthropic/claude-sonnet-4-5', thinkingDefault: 'low', timeoutSeconds: 600 } },
       channels: {

@@ -71,9 +71,11 @@ expose local camera, screen or shell execution. An optional, per-gateway
 "device mode" (Gateway Settings > This Device) is off by default. If the user
 turns it on, Pincer also connects to that same gateway as a node and declares only
 the read-only data the user checks: location, device info and status (battery,
-thermal, network), calendar events, contacts search, reminders and motion
-(iPhone only). It never declares camera, screen, shell, files, photos or any
-command that writes data. The data goes only to the user's own gateway, and only
+thermal, network), calendar events, contacts search, reminders, motion
+(iPhone only) and Apple Health (iPhone/iPad): two separate opt-ins, daily
+totals (`health.summary`) and full read-only Health data on request
+(`pincer.health.query`). It never declares camera, screen, shell, files, photos
+or any command that writes data, and never reads clinical records. The data goes only to the user's own gateway, and only
 while Pincer is open and connected.
 Remote management controls operate on that user-selected gateway. No additional
 executable app code is downloaded to enable them.
@@ -86,9 +88,11 @@ App Review note (device mode): it is off by default and nothing is requested
 at launch. Each OS permission prompt (Location When In Use, Calendars, Contacts,
 Reminders, Motion & Fitness, and on iPhone Apple Health) appears only when the
 user checks the matching capability. Declining leaves that capability off. Apple
-Health is read-only (today's steps, sleep, resting heart rate and workouts as
-totals), shows its own disclosure first, and is read only when the user's Gateway
-asks; the Mac app has no HealthKit entitlement. Reviewers can try it with the
+Health (iPhone/iPad) has two separate opt-ins, both off by default: daily totals
+(`health.summary`) and full read-only Health data on request
+(`pincer.health.query`). Each shows its own disclosure naming the Gateway's AI
+provider before Apple's sheet, and Health is read only when the user's Gateway
+asks; no writes, no clinical records. The Mac app has no HealthKit entitlement. Reviewers can try it with the
 built-in demo (Gateway Settings > This Device) without a gateway. Background audio is
 for Read Aloud; background refresh and remote notifications refresh gateway state.
 The Mac app is sandboxed with outgoing network and user-selected file access.

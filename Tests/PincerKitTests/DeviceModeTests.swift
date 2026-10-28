@@ -31,7 +31,9 @@ struct DeviceModePolicyTests {
         #expect(DeviceCapability.reminders.commands == ["reminders.list"])
         #expect(DeviceCapability.motion.commands == ["motion.activity", "motion.pedometer"])
         #expect(DeviceCapability.health.commands == ["health.summary"])
-        #expect(Set(DeviceCapability.allCases.map(\.rawValue)) == ["location", "device", "calendar", "contacts", "reminders", "motion", "health"])
+        #expect(DeviceCapability.healthData.commands == ["pincer.health.query"])
+        #expect(Set(DeviceCapability.allCases.map(\.rawValue))
+            == ["location", "device", "calendar", "contacts", "reminders", "motion", "health", "healthData"])
         #expect(DeviceModePolicy.allowedCommands.count == DeviceCapability.allCases.flatMap(\.commands).count)
     }
 
@@ -225,7 +227,9 @@ struct DeviceModeSurfaceTests {
             #expect(!declared.contains(command), "\(command)")
             #expect(DeviceModePolicy.isForbidden(command))
         }
-        #expect(declared.isSubset(of: Set(Self.upstreamIOS)))
+        // `pincer.health.query` is the one Pincer-only command (#1084); everything else mirrors upstream.
+        #expect(declared.filter { !$0.hasPrefix("pincer.") }.isSubset(of: Set(Self.upstreamIOS)))
+        #expect(declared.filter { $0.hasPrefix("pincer.") }.isSubset(of: ["pincer.health.query"]))
         let surviving = Self.upstreamIOS.filter { DeviceModePolicy.allowedCommands.contains($0) && !DeviceModePolicy.isForbidden($0) }
         #expect(declared.isSubset(of: Set(surviving)))
         #expect(!declared.contains { $0.hasSuffix(".add") })
@@ -251,8 +255,29 @@ struct DeviceModeSurfaceTests {
         }
         #expect(DeviceModePolicy.declaredCommands(for: [.health], supported: { _ in true }) == ["health.summary"])
         #expect(DeviceModeSettings().capabilities == [.location], "Apple Health is off by default")
-        #expect(!DeviceCapability.health.reportsPermission && DeviceCapability.allCases.filter { !$0.reportsPermission } == [.health])
+        #expect(!DeviceCapability.health.reportsPermission
+            && DeviceCapability.allCases.filter { !$0.reportsPermission } == [.health, .healthData])
         #expect((try? GatewayConnection.validate(.node(caps: ["health"], commands: ["health.summary"], permissions: [:]))) != nil)
+    }
+
+    @Test func pincerHealthQueryIsTheOnlyPermittedPincerCommand() {
+        for command in ["pincer.health.query", " Pincer.Health.Query "] {
+            #expect(!DeviceModePolicy.isForbidden(command), "\(command)")
+        }
+        #expect(DeviceModePolicy.allowedCommands.contains("pincer.health.query"))
+        for command in ["pincer.health.write", "pincer.health.queryx", "pincer.system.run", "pincer.files.read", "pincer.health",
+                        "health.query", "health.samples"] {
+            #expect(DeviceModePolicy.isForbidden(command), "\(command)")
+        }
+        let all: (DeviceCapability) -> Bool = { _ in true }
+        #expect(DeviceModePolicy.declaredCommands(for: [.location, .healthData], supported: all)
+            == ["location.get", "pincer.health.query"])
+        #expect(DeviceModePolicy.declaredCommands(for: [.location, .health, .healthData], supported: all)
+            == ["health.summary", "location.get", "pincer.health.query"])
+        #expect(!DeviceModeSettings().capabilities.contains(.healthData), "all Health data is off by default")
+        #expect(!DeviceCapability.healthData.reportsPermission)
+        #expect((try? GatewayConnection.validate(
+            .node(caps: ["healthData"], commands: ["pincer.health.query"], permissions: [:]))) != nil)
     }
 
     @Test func unsupportedCapabilityIsNeverDeclared() {
@@ -260,11 +285,13 @@ struct DeviceModeSurfaceTests {
         #expect(!DeviceCapability.health.isSupported)
         #expect(DeviceModePolicy.declaredCommands(for: [.health]) == [])
         #expect(DeviceModeSettings(enabled: true, capabilities: [.health, .location]).declaredCommands == ["location.get"])
+        #expect(!DeviceCapability.healthData.isSupported)
+        #expect(DeviceModeSettings(enabled: true, capabilities: [.healthData, .location]).declaredCommands == ["location.get"])
         #expect(!DeviceCapability.motion.isSupported)
         #expect(DeviceModePolicy.declaredCommands(for: [.motion]) == [])
         #expect(DeviceModeSettings(enabled: true, capabilities: [.motion, .location]).declaredCommands == ["location.get"])
         #else
-        #expect(DeviceCapability.health.isSupported)
+        #expect(DeviceCapability.health.isSupported && DeviceCapability.healthData.isSupported)
         #endif
         #expect(DeviceCapability.location.isSupported)
     }

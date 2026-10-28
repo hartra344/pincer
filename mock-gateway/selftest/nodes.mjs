@@ -119,18 +119,40 @@ export async function run() {
     await node.call('node.invoke.result', { id: calReq.id, nodeId: device.id, ok: true, payloadJSON: '{"events":[]}' });
     assert.deepEqual((await calendar).payload.payload, { events: [] });
 
-    // health.summary is opt-in via gateway.nodes.commands.allow (seeded); deny overrides allow.
+    // health.summary and the Pincer-only pincer.health.query (#1084) are opt-in via
+    // gateway.nodes.commands.allow (seeded); deny overrides allow.
     {
+      const fullSurface = surface(['location.get', 'device.info', 'calendar.events', 'health.summary', 'pincer.health.query']);
+      // Without the allow entry, a freshly connected node's declared surface drops pincer.health.query.
+      let cfg = await operator.send('config.get', {});
+      const unallowed = await operator.call('config.patch', { raw: JSON.stringify({ gateway: { nodes: { commands: { allow: ['health.summary'] } } } }), baseHash: cfg.hash });
+      assert.equal(unallowed.ok, true, JSON.stringify(unallowed));
+      const summaryOnly = operator.waitEvent('node.pair.requested');
+      node.ws.close();
+      await delay(50);
+      node = track(await connectClient(url, device, nodeToken, true, [], fullSurface));
+      node.emitter.on('*', (event) => nodeEvents.push(event));
+      const summaryReq = await summaryOnly;
+      assert.ok(summaryReq.commands.includes('health.summary'));
+      assert.ok(!summaryReq.commands.includes('pincer.health.query'), 'pincer.health.query needs the allow entry');
+      assert.equal((await operator.call('node.invoke', invokeParams('pincer.health.query', { params: {} }))).error.message, 'command not allowlisted');
+      await operator.send('node.pair.reject', { requestId: summaryReq.requestId });
+      cfg = await operator.send('config.get', {});
+      const reallowed = await operator.call('config.patch', { raw: JSON.stringify({ gateway: { nodes: { commands: { allow: ['health.summary', 'pincer.health.query'] } } } }), baseHash: cfg.hash });
+      assert.equal(reallowed.ok, true, JSON.stringify(reallowed));
+
       const healthPending = operator.waitEvent('node.pair.requested');
       node.ws.close();
       await delay(50);
-      node = track(await connectClient(url, device, nodeToken, true, [], surface(['location.get', 'device.info', 'calendar.events', 'health.summary'])));
+      node = track(await connectClient(url, device, nodeToken, true, [], fullSurface));
       node.emitter.on('*', (event) => nodeEvents.push(event));
       const healthReq = await healthPending;
       assert.ok(healthReq.commands.includes('health.summary'), 'seeded allow lets health.summary be declared');
+      assert.ok(healthReq.commands.includes('pincer.health.query'), 'seeded allow lets pincer.health.query be declared');
       await operator.send('node.pair.approve', { requestId: healthReq.requestId });
       listed = (await operator.send('node.list', {})).nodes.find((n) => n.nodeId === device.id);
       assert.ok(listed.commands.includes('health.summary'));
+      assert.ok(listed.commands.includes('pincer.health.query'));
       const health = operator.call('node.invoke', invokeParams('health.summary', { params: { period: 'today' } }));
       const healthInvoke = await node.waitEvent('node.invoke.request');
       assert.equal(healthInvoke.command, 'health.summary');
@@ -139,13 +161,32 @@ export async function run() {
       await node.call('node.invoke.result', { id: healthInvoke.id, nodeId: device.id, ok: true, payloadJSON: JSON.stringify(summary) });
       assert.deepEqual((await health).payload.payload, summary);
 
+      // pincer.health.query round-trips params and payload (the HRV statistics fixture, HealthQuery.Fixture).
+      const queryParams = { mode: 'statistics', type: 'heartRateVariabilitySDNN', interval: 'day' };
+      const query = operator.call('node.invoke', invokeParams('pincer.health.query', { params: queryParams }));
+      const queryInvoke = await node.waitEvent('node.invoke.request');
+      assert.equal(queryInvoke.command, 'pincer.health.query');
+      assert.deepEqual(JSON.parse(queryInvoke.paramsJSON), queryParams);
+      const hrv = {
+        mode: 'statistics', type: 'heartRateVariabilitySDNN', identifier: 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN', kind: 'quantity',
+        unit: 'ms', interval: 'day', aggregation: 'discrete', startISO: '2026-10-21T00:00:00-04:00', endISO: '2026-10-28T12:00:00-04:00',
+        timeZoneIdentifier: 'America/New_York',
+        buckets: [42.3, 45.1, 39.8, 51.2, 48.6, 35.9, 44.1].map((average, day) => ({
+          startISO: `2026-10-${21 + day}T00:00:00-04:00`, endISO: `2026-10-${22 + day}T00:00:00-04:00`, average, minimum: average - 9, maximum: average + 14,
+        })),
+      };
+      await node.call('node.invoke.result', { id: queryInvoke.id, nodeId: device.id, ok: true, payloadJSON: JSON.stringify(hrv) });
+      assert.deepEqual((await query).payload.payload, hrv);
+
       // deny overrides allow, both for invoke and for what a node may declare.
-      const cfg = await operator.send('config.get', {});
-      const patched = await operator.call('config.patch', { raw: JSON.stringify({ gateway: { nodes: { commands: { deny: ['health.summary'] } } } }), baseHash: cfg.hash });
+      cfg = await operator.send('config.get', {});
+      const patched = await operator.call('config.patch', { raw: JSON.stringify({ gateway: { nodes: { commands: { deny: ['health.summary', 'pincer.health.query'] } } } }), baseHash: cfg.hash });
       assert.equal(patched.ok, true, JSON.stringify(patched));
-      const blocked = await operator.call('node.invoke', invokeParams('health.summary', { params: { period: 'today' } }));
-      assert.equal(blocked.error.code, 'INVALID_REQUEST');
-      assert.equal(blocked.error.message, 'command not allowlisted');
+      for (const command of ['health.summary', 'pincer.health.query']) {
+        const blocked = await operator.call('node.invoke', invokeParams(command, { params: {} }));
+        assert.equal(blocked.error.code, 'INVALID_REQUEST');
+        assert.equal(blocked.error.message, 'command not allowlisted', command);
+      }
     }
 
     // node.pair.remove drops the node role, closes node sockets and keeps the operator session.

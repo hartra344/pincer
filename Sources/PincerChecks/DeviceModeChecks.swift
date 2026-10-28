@@ -21,6 +21,12 @@ final class CheckNodeHandler: DeviceNodeHandler, @unchecked Sendable {
             if case let .failure(failure) = HealthSummary.params(invoke.paramsJSON) { return failure.result }
             return HealthSummary.result(checkHealthPayload)
         }
+        if invoke.command == HealthQuery.command {
+            switch HealthQuery.request(invoke.paramsJSON, now: Date(), calendar: .current) {
+            case let .failure(failure): return failure.result
+            case let .success(request): return HealthQuery.Fixture.result(request, now: Date(), calendar: .current)
+            }
+        }
         return .ok(payloadJSON: "{\"lat\":1.5,\"lon\":2.5,\"accuracyMeters\":5,\"timestamp\":\"2026-01-01T00:00:00Z\",\"isPrecise\":true}")
     }
 }
@@ -42,9 +48,11 @@ func runDeviceModeOfflineChecks() {
     check(DeviceCapability.location.commands == ["location.get"] && DeviceCapability.device.commands == ["device.info", "device.status"]
           && DeviceCapability.calendar.commands == ["calendar.events"] && DeviceCapability.contacts.commands == ["contacts.search"]
           && DeviceCapability.reminders.commands == ["reminders.list"] && DeviceCapability.motion.commands == ["motion.activity", "motion.pedometer"]
-          && DeviceCapability.health.commands == ["health.summary"],
+          && DeviceCapability.health.commands == ["health.summary"]
+          && DeviceCapability.healthData.commands == ["pincer.health.query"],
           "capabilities map to exactly their commands")
     runHealthSummaryOfflineChecks()
+    runHealthQueryOfflineChecks()
     let forbidden = ["camera.snap", "camera.clip", "screen.record", "system.run", "system.notify", "device.apps", "photos.latest",
                      "contacts.add", "calendar.add", "reminders.add", "sms.send", "health.read", "browser.proxy", "computer.click",
                      "files.read", "talk.ptt.start", "canvas.present", "chat.push", "watch.notify"]
@@ -165,6 +173,77 @@ func runDemoDeviceModeChecks() async {
     check(week?["ok"]?.bool == false && week?["error"]?["message"]?.string == "INVALID_REQUEST: period must be today",
           "health.summary rejects any period but today")
     await gateway.deviceNode.update(DeviceModeSettings(enabled: false, capabilities: [.location, .health]))
+
+    // All Apple Health data (#1084): pincer.health.query through the same handler, beside health.summary.
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .health, .healthData]))
+    let queryActive = await waitFor("health query node active", { gateway.deviceNode.status == .active })
+    let wanted = ["health.summary", "location.get", "pincer.health.query"]
+    var queryCommands: [String] = []
+    for _ in 0..<50 {
+        queryCommands = DeviceRecords.strings(await selfNode()?["commands"])
+        if queryCommands == wanted { break }
+        try? await Task.sleep(for: .milliseconds(100))
+    }
+    check(queryActive && queryCommands == wanted, "All Apple Health data declares pincer.health.query (\(queryCommands))")
+    let hrv = await gateway.demoInvokeNode(
+        command: "pincer.health.query", paramsJSON: #"{"mode":"statistics","type":"heartRateVariabilitySDNN","interval":"day"}"#)
+    check(hrv?["ok"]?.bool == true && hrv?["payload"]?["type"]?.string == "heartRateVariabilitySDNN"
+          && hrv?["payload"]?["buckets"]?.array?.compactMap { $0["average"]?.double } == HealthQuery.Fixture.hrvAverages,
+          "pincer.health.query HRV statistics round trip")
+    let types = await gateway.demoInvokeNode(command: "pincer.health.query", paramsJSON: #"{"mode":"types"}"#)
+    check(types?["ok"]?.bool == true && (types?["payload"]?["types"]?.array?.count ?? 0) > 100
+          && types?["payload"]?["excluded"]?.array?.contains("workoutRoutes") == true, "pincer.health.query lists types")
+    let typo = await gateway.demoInvokeNode(command: "pincer.health.query", paramsJSON: #"{"type":"stepCount","from":"2026-10-01"}"#)
+    check(typo?["ok"]?.bool == false
+          && typo?["error"]?["message"]?.string?.hasPrefix(#"INVALID_REQUEST: unknown parameter "from""#) == true,
+          "pincer.health.query rejects unknown params")
+    let route = await gateway.demoInvokeNode(command: "pincer.health.query", paramsJSON: #"{"type":"workoutRoute"}"#)
+    check(route?["error"]?["message"]?.string?.contains("workoutRoute is never shared") == true, "workout routes are never shared")
+    let recovery = await waitFor("recovery chat") { gateway.sessions[DemoGateway.recoveryKey] != nil }
+    check(recovery, "the demo seeds the Recovery check-in chat")
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: false, capabilities: [.location, .health, .healthData]))
+}
+
+@MainActor
+func runHealthQueryOfflineChecks() {
+    check(DeviceModePolicy.allowedCommands.contains("pincer.health.query") && !DeviceModePolicy.isForbidden("pincer.health.query")
+          && ["pincer.health.write", "pincer.health.query.raw", "pincer.system.run", "health.query"].allSatisfy(DeviceModePolicy.isForbidden),
+          "pincer.health.query is the only permitted pincer.* command")
+    check(!DeviceCapability.healthData.isSupported && DeviceModePolicy.declaredCommands(for: [.healthData]).isEmpty
+          && DeviceModePolicy.declaredCommands(for: [.location, .healthData], supported: { _ in true }) == ["location.get", "pincer.health.query"]
+          && DeviceModePolicy.declaredCommands(for: [.location, .health, .healthData], supported: { _ in true })
+          == ["health.summary", "location.get", "pincer.health.query"],
+          "All Apple Health data is iOS only and declares only pincer.health.query")
+    check(!DeviceModeSettings().capabilities.contains(.healthData) && !DeviceCapability.healthData.reportsPermission,
+          "All Apple Health data is off by default and reports no permission key")
+    let now = Date(timeIntervalSince1970: 1_793_203_200)
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    func message(_ json: String?) -> String? {
+        if case let .failure(failure) = HealthQuery.request(json, now: now, calendar: calendar) { return failure.message }
+        return nil
+    }
+    check(message(nil) == #"INVALID_REQUEST: type is required; call with {"mode":"types"} to list types"#
+          && message(#"{"type":"hrv"}"#) == #"INVALID_REQUEST: unknown type "hrv"; call with {"mode":"types"} to list types"#
+          && message(#"{"type":"stepCount","to":"x"}"#)
+          == #"INVALID_REQUEST: unknown parameter "to"; allowed: mode, type, startISO, endISO, interval, limit, sort"#
+          && message(#"{"mode":"statistics","type":"workout"}"#)
+          == "INVALID_REQUEST: statistics supports quantity and category types; use samples for workout"
+          && message(#"{"type":"stepCount","limit":1001}"#) == "INVALID_REQUEST: limit must be an integer from 1 to 1000",
+          "pincer.health.query params are validated with the documented errors")
+    if case let .success(request) = HealthQuery.request(#"{"type":"stepCount","startISO":"2026-10-20","endISO":"2026-10-27"}"#,
+                                                        now: now, calendar: calendar) {
+        let stamp = HealthQuery.Stamp(timeZone: calendar.timeZone)
+        check(stamp.string(request.range.start) == "2026-10-20T00:00:00-04:00"
+              && stamp.string(request.range.end) == "2026-10-28T00:00:00-04:00",
+              "date-only ranges cover whole local days")
+    } else {
+        check(false, "date-only range parses")
+    }
+    check(HealthQuery.resolve("HKQuantityTypeIdentifierHeartRateVariabilitySDNN") == HealthQuery.resolve("heartratevariabilitysdnn")
+          && HealthQuery.resolve("workoutRoute") == .neverShared && HealthQuery.resolve("HKClinicalTypeIdentifierLabResultRecord") == .neverShared,
+          "types resolve by friendly name or identifier; excluded types are never shared")
+    check(HealthQuery.round(44.1234) == 44.12 && HealthQuery.round(0.000_123_456) == 0.000_123_5, "Health values round as documented")
 }
 
 @MainActor
@@ -227,12 +306,12 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
         let result = try? await gateway.connection.request("node.list", [:])
         return result?["nodes"]?.array?.first { $0["nodeId"]?.text == nodeId }
     }
-    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device, .health]))
+    await gateway.deviceNode.update(DeviceModeSettings(enabled: true, capabilities: [.location, .device, .health, .healthData]))
     let liveActive = await waitFor("live node active", timeout: 30, { gateway.deviceNode.status == .active })
     check(liveActive, "node connects (pairing approved) and becomes active (\(gateway.deviceNode.status))")
     check(profile.nodeDeviceToken?.isEmpty == false && profile.nodeDeviceToken != profile.deviceToken, "a separate node token is stored")
     let node = await selfNode()
-    check(node?["connected"]?.bool == true && Set(DeviceRecords.strings(node?["commands"])) == ["location.get", "device.info", "device.status", "health.summary"],
+    check(node?["connected"]?.bool == true && Set(DeviceRecords.strings(node?["commands"])) == ["location.get", "device.info", "device.status", "health.summary", "pincer.health.query"],
           "node.list shows the declared commands")
     check(!DeviceRecords.strings(node?["commands"]).contains { DeviceModePolicy.isForbidden($0) }, "no forbidden command is listed")
 
@@ -243,7 +322,7 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
     check(result?["ok"]?.bool == true && (result?["payload"]?["lat"]?.double == 1.5 || result?["payloadJSON"]?.string?.contains("1.5") == true),
           "operator node.invoke location.get round trip")
     check(handler.handled == ["location.get"], "the handler saw only location.get")
-    // The mock seeds gateway.nodes.commands.allow: ["health.summary"], as upstream requires.
+    // The mock seeds gateway.nodes.commands.allow: ["health.summary", "pincer.health.query"], as upstream requires.
     let health = try? await gateway.connection.request("node.invoke", [
         "nodeId": .string(nodeId), "command": "health.summary", "params": ["period": "today"],
         "timeoutMs": 5000, "idempotencyKey": .string(UUID().uuidString),
@@ -252,13 +331,24 @@ func runLiveDeviceModeChecks(url: String, token: String) async {
     check(health?["ok"]?.bool == true && healthPayload?["stepCount"]?.int == 8432 && healthPayload?["period"]?.string == "today",
           "operator node.invoke health.summary round trip")
     check(handler.handled == ["location.get", "health.summary"], "the handler saw health.summary")
+    // ...and "pincer.health.query" (#1084), which the Gateway forwards only because it's allowed.
+    let query = try? await gateway.connection.request("node.invoke", [
+        "nodeId": .string(nodeId), "command": "pincer.health.query",
+        "params": ["mode": "statistics", "type": "heartRateVariabilitySDNN", "interval": "day"],
+        "timeoutMs": 5000, "idempotencyKey": .string(UUID().uuidString),
+    ], timeout: 15)
+    let queryPayload = query?["payload"] ?? query?["payloadJSON"]?.string.flatMap { try? JSONDecoder().decode(JSONValue.self, from: Data($0.utf8)) }
+    check(query?["ok"]?.bool == true && queryPayload?["type"]?.string == "heartRateVariabilitySDNN"
+          && queryPayload?["buckets"]?.array?.compactMap { $0["average"]?.double } == HealthQuery.Fixture.hrvAverages,
+          "operator node.invoke pincer.health.query round trip")
+    check(handler.handled == ["location.get", "health.summary", "pincer.health.query"], "the handler saw pincer.health.query")
     var refused = false
     do {
         let reply = try await gateway.connection.request("node.invoke", [
             "nodeId": .string(nodeId), "command": "contacts.add", "timeoutMs": 3000, "idempotencyKey": .string(UUID().uuidString)])
         refused = reply["ok"]?.bool == false
     } catch { refused = true }
-    check(refused && handler.handled == ["location.get", "health.summary"], "an undeclared command is rejected and never reaches the handler")
+    check(refused && handler.handled == ["location.get", "health.summary", "pincer.health.query"], "an undeclared command is rejected and never reaches the handler")
 
     await gateway.deviceNode.update(DeviceModeSettings(enabled: false, capabilities: [.location, .device]))
     check(gateway.deviceNode.status == .off, "disabling → off")

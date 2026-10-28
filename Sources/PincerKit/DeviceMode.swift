@@ -5,13 +5,15 @@ public enum DeviceCapability: String, CaseIterable, Codable, Sendable, Identifia
     case location, device, calendar, contacts, reminders, motion
     /// Apple Health summaries: today's aggregates computed on the device (upstream `health`).
     case health
+    /// Read-only Apple Health queries on request (Pincer-only `pincer.health.query`, #1084).
+    case healthData
 
     public var id: String { self.rawValue }
 
     /// Whether this device can ever answer it; Motion & fitness and Apple Health are iPhone/iPad only.
     public var isSupported: Bool {
         #if os(macOS)
-        self != .motion && self != .health
+        self != .motion && self != .health && self != .healthData
         #else
         true
         #endif
@@ -19,7 +21,7 @@ public enum DeviceCapability: String, CaseIterable, Codable, Sendable, Identifia
 
     /// Whether the node connect reports an OS permission for it. HealthKit hides read denial, and
     /// upstream's iOS node reports no `health` permission either.
-    public var reportsPermission: Bool { self != .health }
+    public var reportsPermission: Bool { self != .health && self != .healthData }
 
     /// The only commands this capability ever declares.
     public var commands: [String] {
@@ -31,6 +33,7 @@ public enum DeviceCapability: String, CaseIterable, Codable, Sendable, Identifia
         case .reminders: ["reminders.list"]
         case .motion: ["motion.activity", "motion.pedometer"]
         case .health: [HealthSummary.command]
+        case .healthData: [HealthQuery.command]
         }
     }
 }
@@ -41,11 +44,11 @@ public enum DeviceModePolicy {
 
     private static let forbiddenPrefixes = [
         "camera.", "screen.", "system.", "browser.", "computer.", "files.", "file.", "talk.", "canvas.",
-        "sms.", "health.", "photos.", "watch.",
+        "sms.", "health.", "photos.", "watch.", "pincer.",
     ]
     private static let forbiddenExact: Set<String> = ["device.apps", "chat.push"]
-    /// The one read-only aggregate in an otherwise forbidden family: no raw Health samples, no writes.
-    private static let permittedExact: Set<String> = [HealthSummary.command]
+    /// The two read-only Health commands in otherwise forbidden families: no Health writes, no other `pincer.*`.
+    private static let permittedExact: Set<String> = [HealthSummary.command, HealthQuery.command]
 
     /// Whether `command` is in a family Pincer never declares (camera, screen, system, files, writes…).
     public static func isForbidden(_ command: String) -> Bool {

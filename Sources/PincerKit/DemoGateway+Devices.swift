@@ -23,7 +23,7 @@ extension DemoGateway {
 
     private static let studioScopes = ["operator.read", "operator.write", "operator.approvals", "operator.pairing"]
 
-    private static var selfName: String {
+    static var selfName: String {
         GatewayConnection.platform == "ios" ? "Alex’s iPhone" : "Alex’s MacBook Pro"
     }
 
