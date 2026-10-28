@@ -394,6 +394,30 @@ struct HealthQueryTests {
         let types = try self.object(HealthQuery.Fixture.result(try self.ok(#"{"mode":"types"}"#), now: Self.now, calendar: Self.newYork))
         #expect((types["types"] as? [Any])?.count == HealthQuery.catalog.count)
     }
+
+    @Test func enumNamesMatchHealthKitRawValues() {
+        #expect(HealthQuery.stateOfMindKind(1) == "momentaryEmotion" && HealthQuery.stateOfMindKind(2) == "dailyMood")
+        #expect(HealthQuery.valenceClassification(1) == "veryUnpleasant" && HealthQuery.valenceClassification(7) == "veryPleasant")
+        #expect(HealthQuery.stateOfMindLabel(1) == "amazed" && HealthQuery.stateOfMindLabel(38) == "satisfied")
+        #expect(HealthQuery.stateOfMindAssociation(1) == "community" && HealthQuery.stateOfMindAssociation(18) == "weather")
+        #expect(HealthQuery.gad7Risk(1) == "noneToMinimal" && HealthQuery.gad7Risk(4) == "severe")
+        #expect(HealthQuery.phq9Risk(4) == "moderatelySevere" && HealthQuery.phq9Risk(5) == "severe")
+        #expect(HealthQuery.phq9Risk(0) == "unknown(0)" && HealthQuery.stateOfMindKind(9) == "unknown(9)")
+    }
+
+    @Test func deadlineLeavesHeadroomUnderTheInvokeTimeout() {
+        #expect(HealthQuery.deadline(timeoutMs: nil) == 14.5)
+        #expect(HealthQuery.deadline(timeoutMs: 30000) == 29.5)
+        #expect(HealthQuery.deadline(timeoutMs: 100) == 0.5)
+    }
+
+    @Test func statisticsIntervalsStepByOneUnit() {
+        #expect(HealthQuery.intervalComponents(.hour) == DateComponents(hour: 1))
+        #expect(HealthQuery.intervalComponents(.day) == DateComponents(day: 1))
+        #expect(HealthQuery.intervalComponents(.total) == DateComponents(day: 1))
+        #expect(HealthQuery.intervalComponents(.week) == DateComponents(weekOfYear: 1))
+        #expect(HealthQuery.intervalComponents(.month) == DateComponents(month: 1))
+    }
 }
 
 @MainActor

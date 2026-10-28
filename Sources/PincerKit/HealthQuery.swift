@@ -12,6 +12,7 @@ public enum HealthQuery {
     public static let maxBuckets = 500
     public static let maxLimit = 1000
     public static let defaultLimit = 100
+    // periphery:ignore - read only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public static let maxCategorySamples = 20000
     /// `openclaw nodes invoke --invoke-timeout` defaults to 15 s.
     public static let defaultTimeoutMs = 15000
@@ -541,6 +542,7 @@ public enum HealthQuery {
         }
 
         public func string(_ date: Date) -> String { self.formatter.string(from: date) }
+        // periphery:ignore - used only by the iOS HealthKit runner (activity summaries)
         public func date(_ date: Date) -> String { self.day.string(from: date) }
     }
 
@@ -749,6 +751,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct BloodPressureRow: Codable, Sendable, Equatable {
         public var start: String
         public var end: String?
@@ -765,6 +768,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct Nutrient: Codable, Sendable, Equatable {
         public var type: String
         public var value: Double
@@ -777,6 +781,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct FoodRow: Codable, Sendable, Equatable {
         public var start: String
         public var end: String?
@@ -821,6 +826,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct ElectrocardiogramRow: Codable, Sendable, Equatable {
         public var start: String
         public var end: String
@@ -846,6 +852,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct AudiogramPoint: Codable, Sendable, Equatable {
         public var frequencyHz: Double
         public var leftEarDBHL: Double?
@@ -858,6 +865,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct AudiogramRow: Codable, Sendable, Equatable {
         public var start: String
         public var points: [AudiogramPoint]
@@ -870,6 +878,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct StateOfMindRow: Codable, Sendable, Equatable {
         public var start: String
         public var kind: String
@@ -893,6 +902,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct AssessmentRow: Codable, Sendable, Equatable {
         public var start: String
         public var score: Int
@@ -907,6 +917,7 @@ public enum HealthQuery {
         }
     }
 
+    // periphery:ignore - built only by the iOS HealthKit runner (DeviceHealthAccess.swift)
     public struct ActivitySummaryRow: Codable, Sendable, Equatable {
         public var date: String
         public var activeEnergyKcal: Double?
