@@ -106,6 +106,8 @@ targets:
         INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Let this Gateway read your reminders, only when you turn on device mode for it."
         INFOPLIST_KEY_NSMotionUsageDescription: "Let this Gateway read your activity and step counts, only when you turn on device mode for it."
         INFOPLIST_KEY_NSHealthShareUsageDescription: "Let this Gateway's agents ask for today's step count, sleep, resting heart rate and workouts as totals, only when you turn on Apple Health summaries in device mode. Pincer never writes Health data."
+        # Required by App Store validation for any HealthKit app, even read-only ones; Pincer requests no write types.
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: "Pincer only reads Apple Health summaries and never writes or changes Health data."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
         TARGETED_DEVICE_FAMILY: "1,2"
   # Drives the real app on a simulator for regressions the hosted UIKit tests can't reach (#1026).
