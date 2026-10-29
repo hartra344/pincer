@@ -44,6 +44,7 @@ Each chat reads its title, then whether it's pinned or unread, then its preview.
 - Send reads as **Send**, or **Queue a follow-up** while a run is going, and **Stop** stops it.
 - The [context meter](../composer/) reads as "Context window" with how full it is. Activate it for the details and **Compact Now**.
 - The model picker reads as "Model" with the current model.
+- The thinking-level picker reads as "Thinking Level" with the current level, "(inherited default)" when the chat follows its default, and "May be slower and cost more" for High and above. When it can't be used, its hint says why. On a compact iPhone layout, the **Chat Options** button adds "Ultra thinking, may be slower and cost more" (with the chat's level) for High and above.
 - Slash command suggestions are a list of buttons, with the highlighted one marked as selected.
 
 ### Session manager

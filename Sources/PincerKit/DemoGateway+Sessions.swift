@@ -46,6 +46,7 @@ extension DemoGateway {
                 "createdAt": .number((messages.first?["timestamp"]?.double ?? activity) - minute),
                 "status": "done", "hasActiveRun": false, "activeRunIds": [],
                 "model": "claude-opus-4-8", "modelProvider": "anthropic", "modelOverrideSource": .null,
+                "thinkingLevels": Self.thinkingLevels, "thinkingDefault": "medium",
             ]
             row.merge(extra) { _, new in new }
             sessions[key] = row

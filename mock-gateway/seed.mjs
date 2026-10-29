@@ -18,7 +18,7 @@ import { seededFileEditCalls } from './file-edits.mjs';
 import { seededToolCards, TOOL_CARDS_KEY, TOOL_CARDS_PREVIEW, TOOL_CARDS_TITLE } from './tool-cards.mjs';
 import { seedForwardedMessages } from './forwarded.mjs';
 import { seedReactions } from './reactions.mjs';
-import { DEFAULT_MODEL, imageBlock, makeMessage, nowMs, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, THINKING_LEVELS, imageBlock, makeMessage, nowMs, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
 
 export function makePng() {
   const width = 320;
@@ -66,6 +66,9 @@ export function makeSessionRow(key, props, base = nowMs()) {
     model: DEFAULT_MODEL.model,
     modelProvider: DEFAULT_MODEL.provider,
     modelOverrideSource: null,
+    thinkingLevels: THINKING_LEVELS.map((level) => ({ ...level })),
+    thinkingDefault: props.thinkingDefault ?? DEFAULT_THINKING_LEVEL,
+    ...(props.thinkingLevel !== undefined ? { thinkingLevel: props.thinkingLevel } : {}),
     // Context snapshot and the latest run's usage, as the Gateway's session rows carry them.
     ...(props.totalTokens !== undefined
       ? { totalTokens: props.totalTokens, totalTokensFresh: true, inputTokens: props.totalTokens, outputTokens: 800 }
@@ -158,6 +161,8 @@ export function createSeedState() {
     lastMessagePreview: 'Three papers summarized.',
     totalTokens: 96_000,
     contextTokens: 200_000,
+    // Left on Ultra, so clients can show their slow-and-costly warning.
+    thinkingLevel: 'ultra',
   });
   row('agent:research:subagent:abc', {
     agentId: 'research',

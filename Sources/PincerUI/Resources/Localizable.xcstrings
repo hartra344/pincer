@@ -31,6 +31,26 @@
         }
       }
     },
+    "%@ (inherited default)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (inherited default)"
+          }
+        }
+      }
+    },
+    "%@ (slower, costs more)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (slower, costs more)"
+          }
+        }
+      }
+    },
     "%@ + %lld more": {
       "localizations": {
         "en": {
@@ -477,6 +497,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ theme"
+          }
+        }
+      }
+    },
+    "%@ thinking, may be slower and cost more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ thinking, may be slower and cost more"
           }
         }
       }
@@ -1629,6 +1659,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Activity not captured — only live runs are recorded"
+          }
+        }
+      }
+    },
+    "Adaptive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adaptive"
           }
         }
       }
@@ -3743,6 +3783,16 @@
         }
       }
     },
+    "Choose the thinking level for new messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose the thinking level for new messages"
+          }
+        }
+      }
+    },
     "ClawHub hasn't scanned this skill's source.": {
       "localizations": {
         "en": {
@@ -4359,6 +4409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to run commands"
+          }
+        }
+      }
+    },
+    "Connect to the Gateway to change the thinking level.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the Gateway to change the thinking level."
           }
         }
       }
@@ -7123,6 +7183,16 @@
         }
       }
     },
+    "Extra High": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extra High"
+          }
+        }
+      }
+    },
     "Extract mode": {
       "localizations": {
         "en": {
@@ -8329,6 +8399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide tools"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High"
           }
         }
       }
@@ -9623,6 +9703,16 @@
         }
       }
     },
+    "Low": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low"
+          }
+        }
+      }
+    },
     "Low Power Mode is on, so iOS won't check until it's off.": {
       "localizations": {
         "en": {
@@ -9809,6 +9899,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Math source"
+          }
+        }
+      }
+    },
+    "Max": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max"
+          }
+        }
+      }
+    },
+    "May be slower and cost more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "May be slower and cost more"
+          }
+        }
+      }
+    },
+    "Medium": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medium"
           }
         }
       }
@@ -15683,6 +15803,16 @@
         }
       }
     },
+    "Send a message first to change this chat's thinking level.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send a message first to change this chat's thinking level."
+          }
+        }
+      }
+    },
     "Send now": {
       "localizations": {
         "en": {
@@ -18553,6 +18683,26 @@
         }
       }
     },
+    "Thinking Level": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking Level"
+          }
+        }
+      }
+    },
+    "Thinking Level: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking Level: %@"
+          }
+        }
+      }
+    },
     "Thinking Steps": {
       "localizations": {
         "en": {
@@ -18569,6 +18719,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Thinking isn’t being saved for this chat."
+          }
+        }
+      }
+    },
+    "Thinking level: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking level: %@"
+          }
+        }
+      }
+    },
+    "Thinking level: %@ (inherited default)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking level: %@ (inherited default)"
           }
         }
       }
@@ -18759,6 +18929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't speak replies. Update it to use a Gateway voice."
+          }
+        }
+      }
+    },
+    "This Gateway did not report thinking levels; use /think instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway did not report thinking levels; use /think instead."
           }
         }
       }
@@ -19979,6 +20159,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "URL, data URI or workspace path"
+          }
+        }
+      }
+    },
+    "Ultra": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ultra"
           }
         }
       }

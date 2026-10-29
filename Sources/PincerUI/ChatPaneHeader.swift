@@ -119,6 +119,8 @@ struct ChatPaneHeader: View {
             if let row {
                 ModelPicker(row: row)
                     .controlSize(.small)
+                ThinkingLevelPicker(row: row)
+                    .controlSize(.small)
             }
             if let actions {
                 RunsToolbarButton(isPresented: actions.showRuns, isCompact: false, sessionKey: self.key, isFocused: self.isFocused) { self.focus() }

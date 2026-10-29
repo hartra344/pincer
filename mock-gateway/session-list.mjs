@@ -3,7 +3,7 @@ import { applyArchived, archiveProtectionError } from './sessions.mjs';
 import { isSpawnedBy } from './subagents.mjs';
 import { MODEL_CATALOG, sessionDefaults } from './catalog.mjs';
 import { abortMatchingRuns } from './chat.mjs';
-import { DEFAULT_MODEL, broadcast, clone, makeMessage, nowMs, sendErr, sendRes, shortId, textBlock } from './util.mjs';
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, THINKING_LEVELS, broadcast, clone, makeMessage, nowMs, sendErr, sendRes, shortId, textBlock } from './util.mjs';
 
 // `archived`: false/absent lists active rows, true only archived ones, "all" both (sessions.list).
 export function sortedSessions(state, archived = false) {
@@ -182,6 +182,19 @@ function dispatch(state, conn, msg) {
           Object.assign(row, { model: choice.id, modelProvider: choice.provider, modelOverrideSource: 'user' });
         }
       }
+      if (Object.hasOwn(params, 'thinkingLevel')) {
+        // Like the Gateway: null clears the override so the row inherits `thinkingDefault` again.
+        if (params.thinkingLevel === null) {
+          delete row.thinkingLevel;
+        } else {
+          const level = typeof params.thinkingLevel === 'string' ? params.thinkingLevel.trim().toLowerCase() : '';
+          const offered = row.thinkingLevels ?? THINKING_LEVELS;
+          if (!offered.some((choice) => choice.id === level)) {
+            return sendErr(conn, id, 'INVALID_REQUEST', `invalid thinkingLevel: ${params.thinkingLevel}`);
+          }
+          row.thinkingLevel = level;
+        }
+      }
       if (Object.hasOwn(params, 'label')) row.derivedTitle = params.label ?? (row.isMain ? 'Main' : row.derivedTitle);
       if (Object.hasOwn(params, 'category')) registerGroup(state, params.category);
       updateSessionRow(row, { lastActivityAt: nowMs() });
@@ -216,6 +229,8 @@ function dispatch(state, conn, msg) {
         spawnedBy: params.parentSessionKey,
         hasActiveRun: false,
         activeRunIds: [],
+        thinkingLevels: THINKING_LEVELS.map((level) => ({ ...level })),
+        thinkingDefault: DEFAULT_THINKING_LEVEL,
       };
       state.sessions.set(key, row);
       registerGroup(state, params.category);

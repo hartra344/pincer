@@ -63,6 +63,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var visibleChatsByViewer: [String: String] = [:]
     /// Keys with a `sessions.patch unread=false` in flight, so a burst of row changes sends one.
     @ObservationIgnored var markingRead: Set<String> = []
+    /// The latest `setThinkingLevel` request per session; a failed older one doesn't roll back a newer pick.
+    @ObservationIgnored var thinkingLevelRequests: [String: Int] = [:]
     /// Visible keys that changed while their patch was in flight; checked again once it lands.
     @ObservationIgnored var recheckRead: Set<String> = []
     /// Runs whose reply was already checked for unread, so a repeated `final` sends at most one patch (#426).

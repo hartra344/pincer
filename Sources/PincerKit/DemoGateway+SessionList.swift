@@ -117,7 +117,7 @@ extension DemoGateway {
             "messages": .array(transcript[start..<end].map(ChatWorkContext.projectForDisplay)),
             "totalMessages": JSONValue(transcript.count),
             "hasMore": .bool(start > 0),
-            "thinkingLevel": "medium",
+            "thinkingLevel": row["thinkingLevel"] ?? row["thinkingDefault"] ?? "medium",
             "sessionInfo": ["hasActiveRun": row["hasActiveRun"] ?? false, "activeRunIds": row["activeRunIds"] ?? []],
         ]
         if start > 0 { result["nextOffset"] = JSONValue(offset + end - start) }
@@ -164,6 +164,18 @@ extension DemoGateway {
                 row["model"] = .string(parts[1])
                 row["modelProvider"] = .string(parts[0])
                 row["modelOverrideSource"] = "user"
+            }
+        }
+        if let level = params["thinkingLevel"] {
+            // Like the Gateway: null clears the override (the row inherits its default again); a level
+            // must be one the session's model offers.
+            if level.isNull {
+                row.removeValue(forKey: "thinkingLevel")
+            } else {
+                guard let id = level.string?.lowercased(), !id.isEmpty,
+                      row["thinkingLevels"]?.array?.contains(where: { $0["id"]?.string == id }) ?? true
+                else { throw GatewayError.invalidRequest("invalid thinkingLevel") }
+                row["thinkingLevel"] = .string(id)
             }
         }
         if let label = params["label"] {

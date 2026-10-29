@@ -306,7 +306,7 @@ public actor GatewayConnection {
     var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
 
 #if DEBUG
-    /// Owned diagnostics can hold delivery after the real Demo handler has computed its result.
+    /// Owned diagnostics can hold delivery after the real Demo handler has computed its result or error.
     private var demoResponseDelivery: (@Sendable (String) async -> Void)?
     package func setDemoResponseDelivery(_ delivery: (@Sendable (String) async -> Void)?) {
         self.demoResponseDelivery = delivery
@@ -316,11 +316,15 @@ public actor GatewayConnection {
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
         if let demo = self.demo {
             guard self.hello != nil else { throw GatewayError.notConnected }
-            let result = try await demo.handle(method, params)
 #if DEBUG
+            // Errors are held too, so a test can order a failing reply after a newer request.
+            let outcome: Result<JSONValue, any Error>
+            do { outcome = .success(try await demo.handle(method, params)) } catch { outcome = .failure(error) }
             if let delivery = self.demoResponseDelivery { await delivery(method) }
+            return try outcome.get()
+#else
+            return try await demo.handle(method, params)
 #endif
-            return result
         }
         guard self.hello != nil, let task = self.task else { throw GatewayError.notConnected }
         guard DebugLog.enabled, !DebugLog.quietMethods.contains(method) else {

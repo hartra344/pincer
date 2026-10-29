@@ -38,6 +38,13 @@ export function imageBlock(artifactId, alt = 'Mock chart') {
 }
 
 export const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-opus-4-8' };
+// The thinking levels the default model offers, as the Gateway projects them on session rows
+// (`thinkingLevels`), and the level a session inherits without an override (`thinkingDefault`).
+export const THINKING_LEVELS = [
+  ['off', 'Off'], ['minimal', 'Minimal'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'],
+  ['xhigh', 'Extra High'], ['adaptive', 'Adaptive'], ['max', 'Max'], ['ultra', 'Ultra'],
+].map(([id, label]) => ({ id, label }));
+export const DEFAULT_THINKING_LEVEL = 'medium';
 
 export const DEFAULT_CONTEXT_TOKENS = 128_000;
 
