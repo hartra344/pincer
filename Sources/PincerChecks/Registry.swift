@@ -58,6 +58,7 @@ enum Suites {
         Section("Effective tools agent validation") { await runDemoEffectiveAgentValidationOfflineChecks(); await runDemoEffectiveAgentCompatibilityChecks() },
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Settings notice") { checkSettingsNotice() },
+            Section("Thinking level picker") { runThinkingLevelChecks() },
             Section("Check gate") { await checkCheckGate(); await checkMethodDeliveryGate(); await checkRawConnectionSupport(); await checkStartStoreSupport() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Shared utilities") { await runSharedUtilityChecks() },
@@ -362,6 +363,7 @@ enum Suites {
     /// The built-in demo, second half.
     static var demoExtras: [Section] {
         var sections: [Section] = [
+        Section("Thinking level picker (demo, #1086)") { await runDemoThinkingLevelChecks() },
         Section("Browser panel (demo, #974)") { await runDemoBrowserChecks() },
         Section("Browser controls (demo, #974)") { await runDemoBrowserControlsChecks() },
         Section("Session files (demo, #974)") { await runDemoSessionFilesChecks() },
@@ -546,6 +548,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Thinking level picker (live, #1086)") { url, token in await runLiveThinkingLevelChecks(url: url, token: token) },
         LiveSection("Skill enabled validation (live)") { url, token in await runLiveSkillEnabledValidationChecks(url: url, token: token) },
         LiveSection("Tools catalog agent validation (live)") { url, token in await runLiveToolsCatalogAgentValidationChecks(url: url, token: token) },
         LiveSection("Effective tools agent validation (live)") { url, token in await runLiveToolsEffectiveAgentValidationChecks(url: url, token: token) },
