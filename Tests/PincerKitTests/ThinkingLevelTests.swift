@@ -117,7 +117,8 @@ struct ThinkingLevelStoreTests {
         var entered = false, released = false
         var waiter: CheckedContinuation<Void, Never>?
         func hold(_ method: String) async {
-            guard method == "sessions.patch", !released else { return }
+            // Only the first patch is held; later ones answer straight away.
+            guard method == "sessions.patch", !released, !entered else { return }
             entered = true
             await withCheckedContinuation { continuation in
                 if released { continuation.resume() } else { waiter = continuation }
@@ -179,12 +180,21 @@ struct ThinkingLevelStoreTests {
     @Test func staleFailureKeepsTheNewerPick() async throws {
         let (gateway, scratch) = try await connected()
         defer { gateway.stop(); scratch.remove() }
+        let delivery = Delivery()
+        await gateway.connection.setDemoResponseDelivery { await delivery.hold($0) }
+        // Hold the stale pick's (failing) reply until the newer pick has finished.
         let stale = Task { await gateway.setThinkingLevel(Self.main, to: "galaxy-brain") }
-        // The main actor is FIFO: once the stale pick has applied, its failure can only resume after this job.
-        while gateway.thinkingLevelRequests[Self.main] != 1 { await Task.yield() }
+        let admission = ContinuousClock.now.advanced(by: .seconds(15))
+        while !(await delivery.entered) {
+            if ContinuousClock.now >= admission { await delivery.release(); _ = await stale.value; Issue.record("patch never sent"); return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
         try #require(gateway.sessions[Self.main]?.thinkingLevel == "galaxy-brain")
         await gateway.setThinkingLevel(Self.main, to: "high")
+        #expect(gateway.sessions[Self.main]?.thinkingLevel == "high")
+        await delivery.release()
         await stale.value
+        await gateway.connection.setDemoResponseDelivery(nil)
         #expect(gateway.lastError?.isEmpty == false, "the stale pick still reports its error")
         #expect(gateway.sessions[Self.main]?.thinkingLevel == "high", "the stale failure doesn't undo the newer pick")
         await gateway.refreshSessions()
