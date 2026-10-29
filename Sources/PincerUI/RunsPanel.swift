@@ -189,23 +189,7 @@ struct RunsToolbarButton: View {
                 Label {
                     Text(L("Runs"))
                 } icon: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "point.3.connected.trianglepath.dotted")
-                            .frame(width: 18, height: 18)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        if running > 0 {
-                            Text(running > 99 ? "99+" : "\(running)")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(Color.white)
-                                .padding(.horizontal, running > 9 ? 3 : 0)
-                                .frame(minWidth: 16, minHeight: 16)
-                                .background(Color.red, in: Capsule())
-                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
-                                .accessibilityHidden(true)
-                        }
-                    }
-                    .frame(width: 28, height: 28)
+                    RunsToolbarIcon(running: running)
                 }
                     .foregroundStyle(running > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .symbolEffect(.pulse, isActive: running > 0)
