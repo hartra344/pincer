@@ -21,8 +21,12 @@ struct ModelPicker: View {
         Menu {
             self.content
         } label: {
-            Label(self.showsActionTitle ? L("Model") : (self.currentRef.map(ModelRef.shortName) ?? "Model"), systemImage: "cpu")
-                .labelStyle(.titleAndIcon)
+            if self.showsActionTitle {
+                Label(L("Model"), systemImage: "cpu")
+                    .labelStyle(.titleAndIcon)
+            } else {
+                ModelPickerLabel(title: self.currentRef.map(ModelRef.shortName) ?? L("Model"))
+            }
         }
         .menuIndicator(.visible)
         .fixedSize()

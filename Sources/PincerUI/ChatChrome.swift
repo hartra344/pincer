@@ -102,8 +102,11 @@ struct ChatChrome: ViewModifier {
                 #if os(macOS)
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
                 #else
-                if !self.showsCompactIdentity {
-                    ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
+                // Separate items (ChatToolbarLayout), so the glass group spaces them natively (#1088).
+                // The plain style keeps SwiftUI drawing each picker's title: a bare Menu becomes an icon-only bar button.
+                if !split && !self.showsCompactIdentity, let row = self.row {
+                    ToolbarItem(placement: .primaryAction) { ModelPicker(row: row).menuStyle(.button).buttonStyle(.plain) }
+                    ToolbarItem(placement: .primaryAction) { ThinkingLevelPicker(row: row).menuStyle(.button).buttonStyle(.plain) }
                 }
                 #endif
                 ToolbarItem(placement: .primaryAction) {
@@ -135,6 +138,7 @@ struct ChatChrome: ViewModifier {
     }
 }
 
+#if os(macOS)
 private struct ChatModelItem: View {
     let row: SessionRow?
 
@@ -147,6 +151,7 @@ private struct ChatModelItem: View {
         }
     }
 }
+#endif
 
 /// The chat's options. In the window toolbar it acts on the focused chat; in a split view header,
 /// on that side's chat, through its `handles`.

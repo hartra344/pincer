@@ -59,6 +59,7 @@ enum Suites {
             Section("Skill enabled validation") { await runDemoSkillEnabledValidationOfflineChecks(); await runDemoSkillEnabledCompatibilityChecks() },
             Section("Settings notice") { checkSettingsNotice() },
             Section("Thinking level picker") { runThinkingLevelChecks() },
+            Section("Chat toolbar layout") { runChatToolbarLayoutChecks() },
             Section("Check gate") { await checkCheckGate(); await checkMethodDeliveryGate(); await checkRawConnectionSupport(); await checkStartStoreSupport() },
             Section("Payload & identity") { runIdentityChecks() },
             Section("Shared utilities") { await runSharedUtilityChecks() },
