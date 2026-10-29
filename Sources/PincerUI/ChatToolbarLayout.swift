@@ -8,11 +8,6 @@ enum ChatToolbarLayout {
     /// tag and the accessibility value.
     static let modelLabelMaxWidth: CGFloat = 180
     static let modelLabelTruncation: Text.TruncationMode = .middle
-
-    /// On iPad the model and thinking pickers are separate toolbar items, so the glass group spaces
-    /// them like its other controls and can fold either one into its overflow on its own. The macOS
-    /// window toolbar keeps them in one stable item (#262).
-    static func separatesModelAndThinkingItems(isMac: Bool) -> Bool { !isMac }
 }
 
 /// The model picker's header label: a bounded title that truncates instead of crowding the header (#1088).

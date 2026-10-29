@@ -10,8 +10,6 @@ func runChatToolbarLayoutChecks() {
     check(ChatToolbarLayout.modelLabelMaxWidth > 0 && ChatToolbarLayout.modelLabelMaxWidth <= 240,
           "the model picker's title has a bounded width (\(ChatToolbarLayout.modelLabelMaxWidth)pt)")
     check(ChatToolbarLayout.modelLabelTruncation == .middle, "a long model name truncates in the middle")
-    check(ChatToolbarLayout.separatesModelAndThinkingItems(isMac: false), "on iPad the model and thinking pickers are separate toolbar items")
-    check(!ChatToolbarLayout.separatesModelAndThinkingItems(isMac: true), "the macOS toolbar keeps them in one stable item (#262)")
     check(RunsToolbarIcon.layout(isMac: false) == .centeredGlyphOverlayBadge, "on iPad the Runs glyph is centred with the badge as an overlay")
     check(RunsToolbarIcon.layout(isMac: true) == .reservedBadgeSquare, "the macOS Runs icon keeps its square")
     check(RunsToolbarIcon.badgeAlignment == .topTrailing && RunsToolbarIcon.badgeOffset.width > 0 && RunsToolbarIcon.badgeOffset.height < 0,

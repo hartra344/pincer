@@ -15,11 +15,6 @@ struct ChatToolbarLayoutTests {
         #expect(ChatToolbarLayout.modelLabelTruncation == .middle)
     }
 
-    @Test func iPadSeparatesModelAndThinkingItems() {
-        #expect(ChatToolbarLayout.separatesModelAndThinkingItems(isMac: false))
-        #expect(!ChatToolbarLayout.separatesModelAndThinkingItems(isMac: true))
-    }
-
     @Test func runsIconCentresItsGlyphAndOverlaysTheBadge() {
         #expect(RunsToolbarIcon.layout(isMac: false) == .centeredGlyphOverlayBadge)
         #expect(RunsToolbarIcon.layout(isMac: true) == .reservedBadgeSquare)
