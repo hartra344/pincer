@@ -28,25 +28,30 @@ struct ModelPickerLabel: View {
 }
 
 /// The Runs button's icon: the glyph centred like every other toolbar icon, with the running-helper
-/// count as a badge drawn over its top-trailing corner (#1088).
+/// count as a badge in the square's top-trailing corner (#1088).
 struct RunsToolbarIcon: View {
     let running: Int
     var layout: Layout = Self.layout(isMac: Self.isMac)
 
     enum Layout: Equatable {
-        /// The glyph alone sizes the item, so the toolbar centres it like Browser and Chat Options;
-        /// the badge is an overlay that takes no space.
-        case centeredGlyphOverlayBadge
-        /// A 28pt square with room for the badge, for the macOS toolbar, which clips an item to its frame.
-        case reservedBadgeSquare
+        /// iOS: the glyph centred in the square, so the glass group spaces it like Browser and Chat
+        /// Options. The badge stays inside the square's height: the bar clips an item to its frame.
+        case centeredGlyph
+        /// macOS: the glyph in the bottom-leading corner, leaving the badge its own corner.
+        case bottomLeadingGlyph
     }
 
-    static func layout(isMac: Bool) -> Layout { isMac ? .reservedBadgeSquare : .centeredGlyphOverlayBadge }
+    static func layout(isMac: Bool) -> Layout { isMac ? .bottomLeadingGlyph : .centeredGlyph }
 
     static let glyph = "point.3.connected.trianglepath.dotted"
+    /// The icon's square, the same with or without a badge, so the toolbar never re-lays out when helpers start.
+    static let side: CGFloat = 28
+    static let glyphSide: CGFloat = 18
+    static let badgeSide: CGFloat = 16
     static let badgeAlignment: Alignment = .topTrailing
-    /// How far the overlaid badge sits past the glyph's top-trailing corner.
-    static let badgeOffset = CGSize(width: 8, height: -7)
+    /// How far the badge reaches past the square's trailing edge on iOS, into the bar item's own
+    /// padding (about 5pt). Never past its top: the item is exactly as tall as the square.
+    static let badgeOverhang: CGFloat = 3
 
     static func badgeText(running: Int) -> String? {
         guard running > 0 else { return nil }
@@ -54,21 +59,14 @@ struct RunsToolbarIcon: View {
     }
 
     var body: some View {
-        switch self.layout {
-        case .reservedBadgeSquare:
-            ZStack(alignment: Self.badgeAlignment) {
-                Image(systemName: Self.glyph)
-                    .frame(width: 18, height: 18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                self.badge
-            }
-            .frame(width: 28, height: 28)
-        case .centeredGlyphOverlayBadge:
+        ZStack(alignment: Self.badgeAlignment) {
             Image(systemName: Self.glyph)
-                .overlay(alignment: Self.badgeAlignment) {
-                    self.badge.offset(Self.badgeOffset)
-                }
+                .frame(width: Self.glyphSide, height: Self.glyphSide)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: self.layout == .centeredGlyph ? .center : .bottomLeading)
+            self.badge.offset(x: self.layout == .centeredGlyph ? Self.badgeOverhang : 0)
         }
+        .frame(width: Self.side, height: Self.side)
     }
 
     static var isMac: Bool {
@@ -86,7 +84,7 @@ struct RunsToolbarIcon: View {
                 .monospacedDigit()
                 .foregroundStyle(Color.white)
                 .padding(.horizontal, self.running > 9 ? 3 : 0)
-                .frame(minWidth: 16, minHeight: 16)
+                .frame(minWidth: Self.badgeSide, minHeight: Self.badgeSide)
                 .background(Color.red, in: Capsule())
                 .overlay(Capsule().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
                 .fixedSize()

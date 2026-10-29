@@ -15,10 +15,13 @@ struct ChatToolbarLayoutTests {
         #expect(ChatToolbarLayout.modelLabelTruncation == .middle)
     }
 
-    @Test func runsIconCentresItsGlyphAndOverlaysTheBadge() {
-        #expect(RunsToolbarIcon.layout(isMac: false) == .centeredGlyphOverlayBadge)
-        #expect(RunsToolbarIcon.layout(isMac: true) == .reservedBadgeSquare)
+    @Test func runsIconCentresItsGlyphAndKeepsTheBadgeUnclipped() {
+        #expect(RunsToolbarIcon.layout(isMac: false) == .centeredGlyph)
+        #expect(RunsToolbarIcon.layout(isMac: true) == .bottomLeadingGlyph)
         #expect(RunsToolbarIcon.badgeAlignment == .topTrailing)
+        // The bar clips an item to its frame: the badge may only reach into the item's ~5pt side padding.
+        #expect(RunsToolbarIcon.badgeSide <= RunsToolbarIcon.side)
+        #expect(RunsToolbarIcon.badgeOverhang >= 0 && RunsToolbarIcon.badgeOverhang < 5)
         #expect(RunsToolbarIcon.badgeText(running: 0) == nil)
         #expect(RunsToolbarIcon.badgeText(running: 1) == "1")
         #expect(RunsToolbarIcon.badgeText(running: 99) == "99")
@@ -32,10 +35,11 @@ struct ChatToolbarLayoutTests {
         return host.fittingSize
     }
 
-    @Test func overlaidBadgeTakesNoSpace() {
-        let glyph = self.size(Image(systemName: RunsToolbarIcon.glyph))
-        #expect(self.size(RunsToolbarIcon(running: 0, layout: .centeredGlyphOverlayBadge)) == glyph)
-        #expect(self.size(RunsToolbarIcon(running: 42, layout: .centeredGlyphOverlayBadge)) == glyph)
+    @Test func badgeTakesNoSpace() {
+        let square = CGSize(width: RunsToolbarIcon.side, height: RunsToolbarIcon.side)
+        #expect(self.size(RunsToolbarIcon(running: 0, layout: .centeredGlyph)) == square)
+        #expect(self.size(RunsToolbarIcon(running: 42, layout: .centeredGlyph)) == square)
+        #expect(self.size(RunsToolbarIcon(running: 120, layout: .centeredGlyph)) == square)
     }
 
     @Test func longModelNameLabelStaysBounded() {
