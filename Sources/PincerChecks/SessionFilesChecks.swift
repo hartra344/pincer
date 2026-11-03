@@ -237,9 +237,21 @@ func runDemoSessionFilesChecks() async {
     let files = gateway.filesModel(for: key)
     check(files.isAvailable && files.hasAdmin && files.canEdit, "demo files: the tab is available and editable in the demo")
     await files.refresh()
-    let sfOK5 = await waitFor("demo files listing", timeout: 10, { files.snapshot.counts.changed >= 3 && files.snapshot.counts.artifacts == 2 })
+    let sfOK5 = await waitFor("demo files listing", timeout: 10, { files.snapshot.counts.changed >= 3 && files.snapshot.counts.read >= 1 })
     check(sfOK5,
-          "demo files: changed, read and artifact groups arrive (\(files.snapshot.counts))")
+          "demo files: changed and read groups arrive (\(files.snapshot.counts))")
+    // Artifacts are the session's own file and image blocks, so each one downloads.
+    let mainFiles = gateway.filesModel(for: "agent:main:main")
+    await mainFiles.refresh()
+    _ = await waitFor("demo main artifacts", timeout: 10) { mainFiles.snapshot.artifacts.count >= 2 }
+    let artifactTitles = Set(mainFiles.snapshot.artifacts.map(\.title))
+    check(artifactTitles == ["Disk usage chart", "disk-report.sh"],
+          "demo files: artifacts come from the transcript's file and image blocks (\(artifactTitles))")
+    if let script = mainFiles.snapshot.artifacts.first(where: { $0.title == "disk-report.sh" }) {
+        let data = await gateway.files.data(for: SessionAsset(artifact: script).fileRef, sessionKey: "agent:main:main")
+        check(data.map { String(decoding: $0, as: UTF8.self).contains("df -h") } == true,
+              "demo files: an artifact row's file downloads")
+    }
     check(files.snapshot.changed.contains { $0.path == "itinerary.md" } && files.snapshot.changed.contains { $0.missing },
           "demo files: changed files lead and a deleted file shows (\(files.snapshot.changed.map(\.path)))")
     check(files.snapshot.tree.contains { $0.entry.isDirectory && $0.entry.path == "docs" }, "demo files: the project tree has folders")

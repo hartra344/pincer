@@ -300,6 +300,12 @@ public final class AppModel {
     }
 
     /// Opens a chat with Find in Chat showing `query`, `match` (if given) selected.
+    /// Scrolls a chat that's already on screen to a message, without changing any window's selection
+    /// (the Assets panel's Show in Chat).
+    public func jump(to messageId: String, in target: Notifier.Target) {
+        self.messageJump = MessageJump(target: target, messageId: messageId)
+    }
+
     public func open(_ target: Notifier.Target, find query: String, match: TranscriptSearch.Match?) {
         self.findRequest = FindRequest(target: target, query: query, match: match)
         self.open(target)

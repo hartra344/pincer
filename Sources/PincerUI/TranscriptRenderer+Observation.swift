@@ -198,7 +198,7 @@ extension TranscriptRenderer {
         for entry in self.context.chat?.entries ?? [] {
             switch entry {
             case let .user(item) where item.transcriptId == messageId: return entry.id
-            case let .assistant(turn) where turn.textIds.contains(messageId): return entry.id
+            case let .assistant(turn) where turn.textIds.contains(messageId) || turn.messageIds.contains(messageId): return entry.id
             default: continue
             }
         }

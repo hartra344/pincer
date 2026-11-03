@@ -191,13 +191,24 @@ extension DemoGateway {
                 "file": self.fileJSON(item, includeContent: true)]
     }
 
+    /// The session's file and image blocks, as upstream's `artifacts.list` finds them (honouring
+    /// `messageRole: "assistant"`). The demo keeps each block's own artifact id, so `artifacts.download` serves it.
     private func demoArtifacts(_ params: JSONValue) -> JSONValue {
-        let key = params["sessionKey"]?.string ?? ""
-        return ["artifacts": [
-            ["id": "demo-artifact-map", "type": "image", "title": "Kyoto route map", "mimeType": "image/png",
-             "sizeBytes": 68, "sessionKey": .string(key), "download": ["mode": "bytes"]],
-            ["id": "demo-artifact-itinerary", "type": "file", "title": "itinerary.pdf", "mimeType": "application/pdf",
-             "sizeBytes": 18_240, "sessionKey": .string(key), "download": ["mode": "bytes"]],
-        ]]
+        let key = (try? self.knownSession(params["sessionKey"])) ?? params["sessionKey"]?.string ?? ""
+        let assistantOnly = params["messageRole"]?.string == "assistant"
+        var rows: [JSONValue] = []
+        for (index, message) in (self.transcripts[key] ?? []).enumerated() {
+            if assistantOnly, message["role"]?.string != "assistant" { continue }
+            for block in message["content"]?.array ?? [] {
+                guard let type = block["type"]?.string, type == "image" || type == "file",
+                      let id = block["artifactId"]?.string, let artifact = self.artifacts[id] else { continue }
+                let title = block["fileName"]?.string ?? block["alt"]?.string ?? id
+                rows.append(["id": .string(id), "type": .string(type), "title": .string(title),
+                             "mimeType": .string(artifact.mimeType), "sizeBytes": JSONValue(artifact.data.count),
+                             "sessionKey": .string(key), "messageSeq": JSONValue(index + 1),
+                             "download": ["mode": "bytes"]])
+            }
+        }
+        return ["artifacts": .array(rows)]
     }
 }

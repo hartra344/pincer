@@ -5213,6 +5213,16 @@
         }
       }
     },
+    "Couldn't Get File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Get File"
+          }
+        }
+      }
+    },
     "Couldn't Load Automations": {
       "localizations": {
         "en": {
@@ -7973,6 +7983,16 @@
         }
       }
     },
+    "Generated Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generated Files"
+          }
+        }
+      }
+    },
     "Get Started": {
       "localizations": {
         "en": {
@@ -8313,6 +8333,26 @@
         }
       }
     },
+    "Hide Generated Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Generated Files"
+          }
+        }
+      }
+    },
+    "Hide Generated Files (⌥⌘A)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Generated Files (⌥⌘A)"
+          }
+        }
+      }
+    },
     "Hide Others": {
       "localizations": {
         "en": {
@@ -8539,6 +8579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Image unavailable"
+          }
+        }
+      }
+    },
+    "Images": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Images"
           }
         }
       }
@@ -11603,6 +11653,16 @@
         }
       }
     },
+    "Older message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Older message"
+          }
+        }
+      }
+    },
     "On Windows": {
       "localizations": {
         "en": {
@@ -12319,6 +12379,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "PDF"
+          }
+        }
+      }
+    },
+    "PDFs, images and other files the agent sends in this chat show up here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDFs, images and other files the agent sends in this chat show up here."
           }
         }
       }
@@ -15393,6 +15463,16 @@
         }
       }
     },
+    "Save…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save…"
+          }
+        }
+      }
+    },
     "Say hello to %@": {
       "localizations": {
         "en": {
@@ -16363,6 +16443,26 @@
         }
       }
     },
+    "Show Generated Files": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Generated Files"
+          }
+        }
+      }
+    },
+    "Show Generated Files (⌥⌘A)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Generated Files (⌥⌘A)"
+          }
+        }
+      }
+    },
     "Show Less": {
       "localizations": {
         "en": {
@@ -16589,6 +16689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show in Channel Status"
+          }
+        }
+      }
+    },
+    "Show in Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show in Chat"
           }
         }
       }
@@ -22270,6 +22380,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "wss://home.tailnet-name.ts.net"
+          }
+        }
+      }
+    },
+    "“%@” couldn't be downloaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” couldn't be downloaded."
           }
         }
       }

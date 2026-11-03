@@ -70,6 +70,7 @@ export default defineConfig({
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/export-and-bookmarks' },
+						{ slug: 'guides/generated-files' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/edit-regenerate-branch' },
 						{ slug: 'guides/tool-calls' },

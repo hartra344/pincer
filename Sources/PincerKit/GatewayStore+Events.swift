@@ -36,6 +36,7 @@ extension GatewayStore {
             self.chats[key]?.handleChat(payload)
             if let state = payload["state"]?.string, state == "final" || state == "error" || state == "aborted" {
                 self.filesModelCache[key]?.runEnded()
+                self.assetsModelCache[key]?.runEnded()
             }
             if payload["state"]?.string == "final" {
                 self.notifyReply(sessionKey: key, runId: payload["runId"]?.text, snapshot: payload["message"])

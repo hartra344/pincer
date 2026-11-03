@@ -157,7 +157,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // Edit
     case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
-    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, showBrowser, showPortals, focusAddress, reloadPincer
+    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, showBrowser, showPortals, showAssets, focusAddress, reloadPincer
     // Go
     case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
@@ -185,7 +185,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks, .saveFile: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
-        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .showPortals, .focusAddress, .reloadPincer: .view
+        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .showBrowser, .showPortals, .showAssets, .focusAddress, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
         case .stopRun, .gatewaySettings, .nextGateway, .previousGateway: .chat
         }
@@ -215,6 +215,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .showRuns: L("Show Runs")
         case .showBrowser: L("Show Browser")
         case .showPortals: L("Show Portals")
+        case .showAssets: L("Show Generated Files")
         case .focusAddress: L("Focus Address")
         case .reloadPincer: L("Reload Pincer")
         case .commandPalette: L("Command Palette…")
@@ -251,6 +252,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .showRuns: KeyCombo("r", [.option, .command])
         case .showBrowser: KeyCombo("b", [.option, .command])
         case .showPortals: KeyCombo("p", [.option, .command])
+        case .showAssets: KeyCombo("a", [.option, .command])
         case .focusAddress: KeyCombo("l", [.command])
         case .reloadPincer: KeyCombo("r", [.command])
         case .commandPalette: KeyCombo("k", [.command])

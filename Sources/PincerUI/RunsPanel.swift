@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What the chat's single inspector slot shows. Opening one panel closes the other.
 enum ChatInspectorPanel: Hashable {
-    case runs, workspace, portals
+    case runs, workspace, portals, assets
 }
 
 extension Binding where Value == ChatInspectorPanel? {
@@ -80,6 +80,9 @@ struct ChatInspectorChrome: ViewModifier {
                 ToolbarItem(placement: .primaryAction) {
                     if self.showsToolbarButton { PortalsToolbarButton(isPresented: self.guarded.isShowing(.portals), isCompact: self.isCompact) }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    if self.showsToolbarButton { AssetsToolbarButton(isPresented: self.guarded.isShowing(.assets), isCompact: self.isCompact) }
+                }
                 #else
                 if self.showsToolbarButton {
                     ToolbarItem(placement: .primaryAction) {
@@ -90,6 +93,11 @@ struct ChatInspectorChrome: ViewModifier {
                     }
                     ToolbarItem(placement: .primaryAction) {
                         PortalsToolbarButton(isPresented: self.guarded.isShowing(.portals), isCompact: self.isCompact)
+                    }
+                    if !self.isCompact || self.panel == .assets {
+                        ToolbarItem(placement: .primaryAction) {
+                            AssetsToolbarButton(isPresented: self.guarded.isShowing(.assets), isCompact: self.isCompact)
+                        }
                     }
                 }
                 #endif
@@ -106,6 +114,9 @@ struct ChatInspectorChrome: ViewModifier {
                     case .portals:
                         PortalsPanel(cache: self.portalCache)
                             .inspectorColumnWidth(min: 360, ideal: 560, max: 1000)
+                    case .assets:
+                        AssetsPanel()
+                            .inspectorColumnWidth(min: 300, ideal: 360, max: 520)
                     default:
                         RunsPanel()
                             .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
@@ -119,6 +130,7 @@ struct ChatInspectorChrome: ViewModifier {
                         case .workspace: WorkspacePanel(drafts: self.drafts)
                         case .portals: PortalsPanel(cache: self.portalCache)
                         case .runs: RunsPanel()
+                        case .assets: AssetsPanel()
                         }
                     }
                     .onPreferenceChange(WorkspaceTitlePreference.self) { self.workspaceTitle = $0 }
@@ -130,7 +142,7 @@ struct ChatInspectorChrome: ViewModifier {
                         SheetDoneToolbarItem { self.guarded.wrappedValue = nil }
                     }
                 }
-                .presentationDetents(self.current == .runs ? [.medium, .large] : [.large])
+                .presentationDetents(self.current == .runs || self.current == .assets ? [.medium, .large] : [.large])
                 // Pulling down inside a portal page scrolls it; Done closes the sheet.
                 .presentationContentInteraction(self.current == .runs ? .automatic : .scrolls)
                 .interactiveDismissDisabled(self.drafts.isDirty(for: self.filesKey))
