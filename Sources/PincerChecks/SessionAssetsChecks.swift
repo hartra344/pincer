@@ -32,14 +32,12 @@ func runSessionAssetsOfflineChecks() async {
 func runDemoSessionAssetsChecks() async {
     let (defaults, suite) = scratchDefaults()
     defer { defaults.removePersistentDomain(forName: suite) }
-    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
-    gateway.cacheRoot = nil
-    gateway.outboxRoot = nil
-    gateway.notifier = nil
+    let (gateway, up) = await startStore(.demo(), waiting: "assets Demo connection", timeout: 25, reconnect: true,
+                                         defaults: defaults,
+                                         prepare: { $0.cacheRoot = nil; $0.outboxRoot = nil; $0.notifier = nil },
+                                         until: { $0.state.isConnected && $0.bootstrapped })
     defer { gateway.stop() }
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    guard await waitFor("assets Demo connection", timeout: 25, { gateway.state.isConnected && gateway.bootstrapped }) else {
+    guard up else {
         check(false, "assets demo connects")
         return
     }
