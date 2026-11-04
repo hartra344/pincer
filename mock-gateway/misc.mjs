@@ -1,5 +1,6 @@
 import { recordExecResolution } from './approvals.mjs';
 import { recordAllowAlways } from './exec-approvals.mjs';
+import { seededArtifactBytes } from './sessions-files.mjs';
 import { broadcast, canonicalJson, clone, nowMs, sendErr, sendRes } from './util.mjs';
 
 export const MISC_METHODS = new Set(['artifacts.download', 'users.prefs.get', 'users.prefs.set', 'exec.approval.list', 'exec.approval.resolve']);
@@ -14,7 +15,7 @@ function dispatch(state, conn, msg) {
   const { id, method, params = {} } = msg;
   switch (method) {
     case 'artifacts.download': {
-      const artifact = state.artifacts.get(params.artifactId);
+      const artifact = state.artifacts.get(params.artifactId) ?? seededArtifactBytes(state, params.artifactId);
       if (!artifact) return sendErr(conn, id, 'NOT_FOUND', 'artifact not found');
       sendRes(conn, id, {
         artifactId: params.artifactId,

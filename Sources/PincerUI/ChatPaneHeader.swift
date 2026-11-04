@@ -40,6 +40,7 @@ struct ChatChromeActions {
     var showRuns: Binding<Bool>
     var showWorkspace: Binding<Bool>
     var showPortals: Binding<Bool> = .constant(false)
+    var showAssets: Binding<Bool> = .constant(false)
     var toolsInspector: Binding<ChatToolsInspection?>
 
     /// Shows a page the agent's browser touched in the workspace panel. The hook for the transcript's
@@ -129,7 +130,9 @@ struct ChatPaneHeader: View {
                     .labelStyle(.iconOnly)
                 PortalsToolbarButton(isPresented: actions.showPortals, isCompact: false, sessionKey: self.key, isFocused: self.isFocused) { self.focus() }
                     .labelStyle(.iconOnly)
-                ChatSessionMenu(showRuns: actions.showRuns, showWorkspace: actions.showWorkspace, showPortals: actions.showPortals, toolsInspector: actions.toolsInspector, row: row, handles: self.handles) {
+                AssetsToolbarButton(isPresented: actions.showAssets, isCompact: false, isFocused: self.isFocused) { self.focus() }
+                    .labelStyle(.iconOnly)
+                ChatSessionMenu(showRuns: actions.showRuns, showWorkspace: actions.showWorkspace, showPortals: actions.showPortals, showAssets: actions.showAssets, toolsInspector: actions.toolsInspector, row: row, handles: self.handles) {
                     self.focus()
                 }
                 .labelStyle(.iconOnly)

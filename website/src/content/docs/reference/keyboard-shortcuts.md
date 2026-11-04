@@ -40,6 +40,7 @@ Quick Capture's shortcut works from any app, so it's set separately in **Setting
 | Split Right / Close Split View (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>&#92;</kbd> |
 | Show Runs | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
 | Show Browser | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>B</kbd> |
+| [Show Generated Files](../../guides/generated-files/) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>A</kbd> |
 | [Export Chat…](../../guides/export-and-bookmarks/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd> |
 | Quick Capture, from any app (macOS) | <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> |
 

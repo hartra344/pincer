@@ -309,6 +309,8 @@ public final class GatewayStore: Identifiable {
         })
     @ObservationIgnored var filesModelCache: [String: SessionFilesModel] = [:]
     @ObservationIgnored var filesModelOrder: [String] = []
+    @ObservationIgnored var assetsModelCache: [String: SessionAssetsModel] = [:]
+    @ObservationIgnored var assetsModelOrder: [String] = []
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(

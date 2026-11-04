@@ -152,6 +152,7 @@ extension GatewayStore {
         self.browserPanel.handleReconnect()
         self.portals.handleReconnect()
         self.resetFilesModels()
+        self.resetAssetsModels()
         self.devices.handleReconnect()
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()

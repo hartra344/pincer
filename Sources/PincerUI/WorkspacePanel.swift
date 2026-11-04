@@ -75,6 +75,7 @@ struct WorkspaceTitlePreference: PreferenceKey {
         case .workspace: workspaceTitle ?? L("Browser")
         case .portals: L("Portals")
         case .runs: L("Runs")
+        case .assets: L("Generated Files")
         }
     }
 }
