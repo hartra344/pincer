@@ -212,7 +212,7 @@ public enum ComposerFormatting {
               || (lower.hasPrefix("mailto:") && url.count > 7) else { return nil }
         let selected = text.substring(with: sel)
         guard !selected.contains(where: { $0.isNewline }) else { return nil }
-        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location) else { return nil }
+        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location, in: text) else { return nil }
         let line = text.lineRange(for: NSRange(location: sel.location, length: 0))
         let lineText = text.substring(with: line)
         for span in ComposerMarkdown.tokenize(lineText) where span.kind == .inlineCode || span.kind == .link {
@@ -228,44 +228,215 @@ public enum ComposerFormatting {
             selection: NSRange(location: sel.location + (replacement as NSString).length, length: 0))
     }
 
-    // MARK: Lists
+    // MARK: Lists, quotes and headings
 
-    /// Toggles `- ` on every line the selection touches.
+    /// Bulleted list: removes the bullets when every touched line has one, else adds `- ` (numbers become bullets).
     public static func toggleList(in text: NSString, selection: NSRange) -> ComposerEdit {
+        self.toggleList(ordered: false, in: text, selection: selection)
+    }
+
+    /// Numbered list: removes the numbers when every touched line has one, else numbers the lines (bullets become
+    /// numbers), continuing a numbered list just above.
+    public static func toggleNumberedList(in text: NSString, selection: NSRange) -> ComposerEdit {
+        self.toggleList(ordered: true, in: text, selection: selection)
+    }
+
+    private static func toggleList(ordered: Bool, in text: NSString, selection: NSRange) -> ComposerEdit {
         let sel = clamp(selection, text)
-        let lines = touchedLines(text, sel)
-        let prefixes = lines.map { parsePrefix(text, $0) }
-        let nonBlank = zip(lines, prefixes).filter { !isBlankLine(text, $0.1) }
-        let allList = !nonBlank.isEmpty && nonBlank.allSatisfy { $0.1.isList }
+        let prefixes = touchedLines(text, sel).map { parsePrefix(text, $0) }
+        let nonBlank = prefixes.filter { !isBlankLine(text, $0) }
+        func matches(_ p: LinePrefix) -> Bool {
+            switch p.kind {
+            case .ordered: ordered
+            case .bullet: !ordered
+            case .none: false
+            }
+        }
         var edits: [PartialEdit] = []
-        if allList {
-            for (_, p) in nonBlank {
+        if !nonBlank.isEmpty, nonBlank.allSatisfy(matches) {
+            for p in nonBlank {
                 edits.append(PartialEdit(loc: p.markerStart, removeLen: p.markerEnd - p.markerStart, insert: ""))
             }
         } else {
-            let targets = nonBlank.isEmpty ? Array(zip(lines, prefixes)) : nonBlank
-            for (_, p) in targets where !p.isList {
-                let point = p.isQuote ? p.quoteEnd : p.indentEnd
-                edits.append(PartialEdit(loc: point, removeLen: 0, insert: "- "))
+            let marker = ordered ? "1." : "-"
+            for p in nonBlank.isEmpty ? prefixes : nonBlank where !matches(p) {
+                if p.isList {
+                    edits.append(PartialEdit(loc: p.markerStart, removeLen: markerLength(text, p), insert: marker))
+                } else {
+                    edits.append(PartialEdit(loc: p.isQuote ? p.quoteEnd : p.indentEnd, removeLen: 0, insert: marker + " "))
+                }
             }
         }
+        return self.finish(edits, text, sel)
+    }
+
+    /// Removes one `>` level when every touched line is quoted, else quotes the unquoted lines (blank lines
+    /// between them too, so the quote stays one block).
+    public static func toggleQuote(in text: NSString, selection: NSRange) -> ComposerEdit {
+        let sel = clamp(selection, text)
+        let prefixes = touchedLines(text, sel).map { parsePrefix(text, $0) }
+        let nonBlank = prefixes.filter { !isBlankLine(text, $0) }
+        var edits: [PartialEdit] = []
+        if !nonBlank.isEmpty, nonBlank.allSatisfy(\.isQuote) {
+            for p in prefixes where p.isQuote {
+                var end = p.indentEnd + 1
+                if end < p.lineEnd, text.character(at: end) == 32 { end += 1 }
+                edits.append(PartialEdit(loc: p.indentEnd, removeLen: end - p.indentEnd, insert: ""))
+            }
+        } else {
+            for p in prefixes where !p.isQuote {
+                let blankInside = prefixes.count > 1 && isBlankLine(text, p)
+                edits.append(PartialEdit(loc: p.lineStart, removeLen: 0, insert: blankInside ? ">" : "> "))
+            }
+        }
+        return self.finish(edits, text, sel)
+    }
+
+    /// Removes the heading hashes when every touched line is a heading, else makes the lines `## ` headings.
+    public static func toggleHeading(in text: NSString, selection: NSRange) -> ComposerEdit {
+        let sel = clamp(selection, text)
+        let prefixes = touchedLines(text, sel).map { parsePrefix(text, $0) }
+        let nonBlank = prefixes.filter { !isBlankLine(text, $0) }
+        func textStart(_ p: LinePrefix) -> Int { p.isList ? p.markerEnd : (p.isQuote ? p.quoteEnd : p.indentEnd) }
+        func hashes(_ p: LinePrefix) -> NSRange? {
+            var start = textStart(p)
+            while start < p.lineEnd, isBlank(text.character(at: start)) { start += 1 }
+            var h = start
+            while h < p.lineEnd, h - start < 7, text.character(at: h) == 35 { h += 1 }
+            guard h > start, h - start <= 6, h == p.lineEnd || isBlank(text.character(at: h)) else { return nil }
+            return NSRange(location: start, length: (h < p.lineEnd ? h + 1 : h) - start)
+        }
+        var edits: [PartialEdit] = []
+        if !nonBlank.isEmpty, nonBlank.allSatisfy({ hashes($0) != nil }) {
+            for p in nonBlank {
+                if let r = hashes(p) { edits.append(PartialEdit(loc: r.location, removeLen: r.length, insert: "")) }
+            }
+        } else {
+            for p in nonBlank.isEmpty ? prefixes : nonBlank where hashes(p) == nil {
+                edits.append(PartialEdit(loc: textStart(p), removeLen: 0, insert: "## "))
+            }
+        }
+        return self.finish(edits, text, sel)
+    }
+
+    /// Composes `edits` (a no-op edit keeping the selection when empty) and renumbers the lists they touch.
+    private static func finish(_ edits: [PartialEdit], _ text: NSString, _ sel: NSRange) -> ComposerEdit {
         guard !edits.isEmpty else {
             return ComposerEdit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel)
         }
-        return compose(edits, text, sel)
+        return self.renumbering(compose(edits, text, sel), in: text)
+    }
+
+    // MARK: Renumbering
+
+    /// Renumbers the numbered lists around `range` so each level counts up from its first item (whose number is
+    /// kept). A list here is a run of list lines and indented continuation lines; a blank line, plain line or
+    /// change of quote depth ends it. nil when nothing changes or the range is inside code.
+    public static func renumber(in text: NSString, around range: NSRange, selection: NSRange) -> ComposerEdit? {
+        let length = text.length
+        guard length > 0 else { return nil }
+        let r = clamp(range, text)
+        func inList(_ line: NSRange) -> Bool {
+            let p = parsePrefix(text, line)
+            return p.isList || (p.indentEnd > p.lineStart && p.indentEnd < p.lineEnd)
+        }
+        var start = text.lineRange(for: NSRange(location: r.location, length: 0)).location
+        while start > 0 {
+            let previous = text.lineRange(for: NSRange(location: start - 1, length: 0))
+            guard inList(previous) else { break }
+            start = previous.location
+        }
+        var end = NSMaxRange(text.lineRange(for: NSRange(location: NSMaxRange(r), length: 0)))
+        while end < length {
+            let next = text.lineRange(for: NSRange(location: end, length: 0))
+            guard inList(next) else { break }
+            end = NSMaxRange(next)
+        }
+        var hasNumbers = false
+        var scan = start
+        while scan < end, !hasNumbers {
+            let line = text.lineRange(for: NSRange(location: scan, length: 0))
+            scan = NSMaxRange(line)
+            if case .ordered = parsePrefix(text, line).kind { hasNumbers = true }
+        }
+        guard hasNumbers else { return nil }
+        let index = ComposerMarkdownIndex(text: text)
+        guard !index.isInsideCodeBlock(start) else { return nil }
+
+        var edits: [PartialEdit] = []
+        // Open levels, outermost first: indent column and the last item's kind.
+        var levels: [(column: Int, kind: ListKind)] = []
+        var quoteDepth = -1
+        var pos = start
+        while pos < end {
+            let line = text.lineRange(for: NSRange(location: pos, length: 0))
+            pos = NSMaxRange(line)
+            let p = parsePrefix(text, line)
+            if index.isInsideCodeBlock(line.location) || !(p.isList || (p.indentEnd > p.lineStart && p.indentEnd < p.lineEnd)) {
+                levels.removeAll()
+                continue
+            }
+            let depth = p.quoteEnd - p.lineStart
+            if depth != quoteDepth {
+                levels.removeAll()
+                quoteDepth = depth
+            }
+            guard p.isList else { continue }
+            let column = columns(text, p.quoteEnd, p.markerStart)
+            while let last = levels.last, last.column > column { levels.removeLast() }
+            var kind = p.kind
+            if let last = levels.last, last.column == column {
+                if case let .ordered(n, d) = last.kind, case let .ordered(current, delim) = p.kind, delim == d, current != n + 1 {
+                    let digits = markerLength(text, p) - 1
+                    edits.append(PartialEdit(loc: p.markerStart, removeLen: digits, insert: "\(n + 1)"))
+                    kind = .ordered(n + 1, d)
+                }
+                levels[levels.count - 1].kind = kind
+            } else {
+                levels.append((column, kind))
+            }
+        }
+        guard !edits.isEmpty else { return nil }
+        return compose(edits, text, clamp(selection, text))
+    }
+
+    /// `edit` followed by `renumber` around what it changed, merged into one edit (one undo step).
+    static func renumbering(_ edit: ComposerEdit, in text: NSString) -> ComposerEdit {
+        let after = text.replacingCharacters(in: edit.range, with: edit.replacement) as NSString
+        let inserted = (edit.replacement as NSString).length
+        guard let fix = renumber(in: after, around: NSRange(location: edit.range.location, length: inserted), selection: edit.selection)
+        else { return edit }
+        let delta = inserted - edit.range.length
+        func back(_ q: Int) -> Int {
+            if q <= edit.range.location { return q }
+            return q >= edit.range.location + inserted ? q - delta : NSMaxRange(edit.range)
+        }
+        let start = min(edit.range.location, back(fix.range.location))
+        let oldEnd = max(NSMaxRange(edit.range), back(NSMaxRange(fix.range)))
+        let final = after.replacingCharacters(in: fix.range, with: fix.replacement) as NSString
+        let newEnd = oldEnd + final.length - text.length
+        return ComposerEdit(
+            range: NSRange(location: start, length: oldEnd - start),
+            replacement: final.substring(with: NSRange(location: start, length: newEnd - start)),
+            selection: fix.selection)
     }
 
     // MARK: Smart newline
 
-    /// Continues a list item or quote. nil → not on a list/quote line: caller inserts a plain newline.
+    /// Continues a list item or quote (renumbering the items after it). nil → not on a list/quote line: caller
+    /// inserts a plain newline.
     public static func newline(in text: NSString, selection: NSRange) -> ComposerEdit? {
+        self.newlineEdit(in: text, selection: selection).map { self.renumbering($0, in: text) }
+    }
+
+    private static func newlineEdit(in text: NSString, selection: NSRange) -> ComposerEdit? {
         let sel = clamp(selection, text)
         let lr = text.lineRange(for: NSRange(location: sel.location, length: 0))
         let p = parsePrefix(text, lr)
         guard p.isList || p.isQuote, NSMaxRange(sel) <= p.lineEnd else { return nil }
         let prefixEnd = p.isList ? p.markerEnd : p.quoteEnd
         guard sel.location >= prefixEnd else { return nil }
-        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location) else { return nil }
+        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location, in: text) else { return nil }
 
         var restEmpty = true
         var k = prefixEnd
@@ -309,13 +480,9 @@ public enum ComposerFormatting {
         guard let firstLine = lines.first else { return nil }
         let first = parsePrefix(text, firstLine)
         guard first.isList else { return nil }
-        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location) else { return nil }
+        guard !ComposerMarkdownIndex(text: text).isInsideCodeBlock(sel.location, in: text) else { return nil }
 
-        let edits = shiftEdits(text, lines, outdent: outdent)
-        guard !edits.isEmpty else {
-            return ComposerEdit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel)
-        }
-        return compose(edits, text, sel)
+        return self.finish(shiftEdits(text, lines, outdent: outdent), text, sel)
     }
 
     private static func columns(_ text: NSString, _ from: Int, _ to: Int) -> Int {
@@ -400,9 +567,11 @@ public enum ComposerFormatting {
 
     // MARK: Fence auto-close
 
-    /// Call after the user typed `typed` at `location` (already in `text`). nil → nothing to do.
+    /// Call after the user typed a backtick or tilde at `location` (already in `text`). nil → nothing to do.
     public static func autoCloseFence(in text: NSString, typedAt location: Int) -> ComposerEdit? {
-        guard location >= 0, location < text.length, text.character(at: location) == 96 else { return nil }
+        guard location >= 0, location < text.length else { return nil }
+        let marker = text.character(at: location)
+        guard marker == 96 || marker == 126 else { return nil }
         let lr = text.lineRange(for: NSRange(location: location, length: 0))
         var lineEnd = NSMaxRange(lr)
         while lineEnd > lr.location, isBreak(text.character(at: lineEnd - 1)) { lineEnd -= 1 }
@@ -410,15 +579,15 @@ public enum ComposerFormatting {
         var i = lr.location
         while i < lineEnd, text.character(at: i) == 32 { i += 1 }
         guard i - lr.location <= 3, lineEnd - i == 3 else { return nil }
-        for k in i..<lineEnd where text.character(at: k) != 96 { return nil }
+        for k in i..<lineEnd where text.character(at: k) != marker { return nil }
 
         let index = ComposerMarkdownIndex(text: text)
-        // An odd number of earlier fences means this line closes a block; a later fence means it already pairs.
+        // This line must open a block (an even number of fences before it) with nothing after it to pair with.
         let before = index.fences.filter { $0.location < lr.location }.count
         let after = index.fences.filter { $0.location > lr.location }.count
         guard before & 1 == 0, after == 0 else { return nil }
         let indent = text.substring(with: NSRange(location: lr.location, length: i - lr.location))
-        let insert = "\n" + indent + "```"
+        let insert = "\n" + indent + String(repeating: Character(UnicodeScalar(marker)!), count: 3)
         return ComposerEdit(
             range: NSRange(location: lineEnd, length: 0), replacement: insert,
             selection: NSRange(location: lineEnd, length: 0))
@@ -575,5 +744,29 @@ public enum ComposerFormatting {
             range: NSRange(location: first, length: last.loc + last.removeLen - first),
             replacement: replacement,
             selection: NSRange(location: start, length: max(0, end - start)))
+    }
+}
+
+/// Follow-up edits once the user's own change has landed in the text view: fence auto-close and list renumbering.
+/// Each is its own undo step.
+public enum ComposerTextFixups {
+    /// Where to renumber after replacing `range` with `replacement`, when that adds or removes a line break.
+    public static func renumberRange(in text: NSString, replacing range: NSRange, with replacement: String) -> NSRange? {
+        let location = min(max(range.location, 0), text.length)
+        let upper = min(max(NSMaxRange(range), location), text.length)
+        var breaks = replacement.utf16.contains { mdIsLineBreak($0) }
+        var k = location
+        while !breaks, k < upper {
+            breaks = mdIsLineBreak(text.character(at: k))
+            k += 1
+        }
+        return breaks ? NSRange(location: location, length: (replacement as NSString).length) : nil
+    }
+
+    /// The fix-up for the change that just landed, if any.
+    public static func edit(in text: NSString, typedFenceAt fence: Int?, renumber: NSRange?, selection: NSRange) -> ComposerEdit? {
+        if let fence, let edit = ComposerFormatting.autoCloseFence(in: text, typedAt: fence) { return edit }
+        guard let renumber else { return nil }
+        return ComposerFormatting.renumber(in: text, around: renumber, selection: selection)
     }
 }

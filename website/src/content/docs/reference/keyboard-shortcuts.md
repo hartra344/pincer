@@ -17,7 +17,7 @@ Open **Settings → Keyboard Shortcuts**: on a Mac it's a tab of **Pincer → Se
 
 Changes apply straight away to the menus, buttons, command palette and tips, in every window. New demo replies also show your current Command Palette and Find in Chat shortcuts. Clearing either shortcut leaves action guidance without advertising the old keys.
 
-If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> and <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats), can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>&#92;</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
+If another Pincer command already uses the keys, Pincer asks before moving the shortcut to the new command; the other command is left without one. Shortcuts macOS or the standard menus need, such as <kbd>⌘</kbd> <kbd>Q</kbd>, <kbd>⌘</kbd> <kbd>C</kbd>, <kbd>⌘</kbd> <kbd>,</kbd>, <kbd>⌘</kbd> <kbd>Space</kbd> <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> (pinned chats) and the composer's formatting keys (below) can't be used. For keys other apps commonly take system-wide, such as <kbd>⌘</kbd> <kbd>&#92;</kbd> (1Password) or <kbd>⌃</kbd> <kbd>↑</kbd> (Mission Control), and for your Quick Capture shortcut, Pincer warns you first. A warning triangle marks two commands that share a shortcut.
 
 **Edit Last Message**, **Regenerate Last Reply**, **Bookmarks…**, **Swap Chats**, **Add Gateway…**, **Next Gateway** and **Previous Gateway** (under Chat and Gateway) have no shortcut by default; give them one here. <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>9</kbd> open pinned chats, so they can't switch gateways.
 
@@ -106,7 +106,10 @@ With keyboard focus in the sidebar, **Up** and **Down** move through chats and s
 | Bold, italic, code | <kbd>⌘</kbd> <kbd>B</kbd>, <kbd>⌘</kbd> <kbd>I</kbd>, <kbd>⌘</kbd> <kbd>E</kbd> |
 | Strikethrough | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>X</kbd> |
 | Link, with text selected | <kbd>⌘</kbd> <kbd>K</kbd> |
-| Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> |
+| Bulleted list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>7</kbd> or <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>8</kbd> |
+| Numbered list | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>9</kbd> |
+| Quote | <kbd>⌘</kbd> <kbd>'</kbd> |
+| Heading | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>H</kbd> |
 | Indent or outdent a list item | <kbd>Tab</kbd> / <kbd>⇧</kbd> <kbd>Tab</kbd> |
 | Paste and Match Style | <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>V</kbd> |
 
@@ -116,7 +119,7 @@ The formatting shortcuts are in [Formatting with Markdown](../../guides/composer
 
 Dictation is in the [composer guide](../../guides/composer/#dictation). It works on iPad with a hardware keyboard, and toggles the pane you're using in split view.
 
-On macOS, **Reply to Last Message** is also in the **Edit** menu. See [Replying to a message](../../guides/composer/#replying-to-a-message).
+On macOS, **Reply to Last Message** is also in the **Edit** menu, and the formatting commands are in the **Format** menu. See [Replying to a message](../../guides/composer/#replying-to-a-message).
 
 ## Quick Capture (macOS)
 

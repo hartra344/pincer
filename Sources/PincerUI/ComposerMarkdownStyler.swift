@@ -265,7 +265,7 @@ final class ComposerMarkdownStyler: NSObject, NSTextStorageDelegate {
     }
 
     func isInsideCodeBlock(_ location: Int, in text: NSString) -> Bool {
-        self.freshIndex(for: text).isInsideCodeBlock(location)
+        self.freshIndex(for: text).isInsideCodeBlock(location, in: text)
     }
 
     /// Whether a format command would only mangle the Markdown at `selection`: inside a code block, a code span

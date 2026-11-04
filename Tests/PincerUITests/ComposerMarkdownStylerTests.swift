@@ -70,6 +70,49 @@ struct ComposerMarkdownStylerTests {
         #expect(!styler.blocks(.bold, selection: NSRange(location: 0, length: 0), in: "plain" as NSString))
     }
 
+    /// #1069: `~~~` fences and indented code count as code for format commands and paste.
+    @Test func tildeAndIndentedCodeBlockFormatting() {
+        let styler = Self.makeStyler()
+        let tilde = "~~~\ncode\n~~~" as NSString
+        let indented = "para\n\n    code" as NSString
+        for text in [tilde, indented] {
+            let code = text.range(of: "code").location
+            #expect(styler.isInsideCodeBlock(code, in: text))
+            for action in [ComposerFormatAction.quote, .numberedList, .heading, .bulletList] {
+                #expect(styler.blocks(action, selection: NSRange(location: code, length: 0), in: text))
+            }
+        }
+        #expect(!styler.blocks(.quote, selection: NSRange(location: 0, length: 0), in: indented))
+    }
+
+    /// #1069: every format shortcut except ⌘K (the Command Palette's) is reserved, so it can't be given to a command.
+    @Test func formatShortcutsAreReserved() {
+        let reserved = Set(ReservedShortcuts.blocked.map(\.combo))
+        for action in ComposerFormatAction.allCases where action != .link {
+            #expect(reserved.contains(action.shortcut), "\(action)")
+        }
+        for alias in ComposerFormatAction.aliases { #expect(reserved.contains(alias.combo)) }
+        #expect(ComposerFormatAction.action(for: KeyCombo("8", [.shift, .command])) == .bulletList)
+        #expect(ComposerFormatAction.action(for: KeyCombo("9", [.shift, .command])) == .numberedList)
+    }
+
+    /// #1069: the composer maps key events to format actions by key code, so ⇧⌘8 (typed as "*") is a bulleted list.
+    @Test func keyEventsMapToFormatActions() {
+        func event(_ keyCode: UInt16, _ chars: String, _ flags: NSEvent.ModifierFlags) -> NSEvent? {
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil,
+                characters: chars, charactersIgnoringModifiers: chars, isARepeat: false, keyCode: keyCode)
+        }
+        let cases: [(UInt16, String, NSEvent.ModifierFlags, ComposerFormatAction?)] = [
+            (11, "b", .command, .bold), (26, "&", [.shift, .command], .bulletList), (28, "*", [.shift, .command], .bulletList),
+            (25, "(", [.shift, .command], .numberedList), (39, "'", .command, .quote), (4, "H", [.shift, .command], .heading),
+            (4, "h", .command, nil), (26, "7", .command, nil),
+        ]
+        for (code, chars, flags, expected) in cases {
+            #expect(event(code, chars, flags).flatMap(ComposerNSTextView.formatAction(for:)) == expected, "key \(code)")
+        }
+    }
+
     @Test func typingRestylesOnlyTheParagraph() {
         let styler = Self.makeStyler()
         let storage = NSTextStorage(string: "first **a**\nsecond line\nthird")

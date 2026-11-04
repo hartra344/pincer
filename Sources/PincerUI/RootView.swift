@@ -41,6 +41,7 @@ public struct PincerScene: Scene {
             ChatWindowCommands(app: self.app)
             ExportChatCommands()
             ReadAloudCommands()
+            ComposerFormatCommands()
             CommandGroup(after: .newItem) {
                 Button(L("Add Gateway…")) {
                     self.app.firstRun.present()

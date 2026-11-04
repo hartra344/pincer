@@ -141,7 +141,7 @@ struct ComposerFormattingTests {
         #expect(Self.list("[a\nb\nc]") == "- a\n- b\n- c")
         #expect(Self.list("[- a\n- b\n- c]") == "a\nb\nc")
         #expect(Self.list("a\n[b\nc]\nd") == "a\n- b\n- c\nd")
-        #expect(Self.list("[1. a\n2. b]") == "a\nb")
+        #expect(Self.list("[1. a\n2. b]") == "- a\n- b")
         #expect(Self.list("[a\n- b]") == "- a\n- b")
         #expect(Self.list("|x") == "- x")
     }

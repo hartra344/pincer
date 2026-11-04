@@ -341,6 +341,16 @@ public enum ReservedShortcuts {
             Entry(combo: combo("v", [.command]), owner: L("Paste")),
             Entry(combo: combo("a", [.command]), owner: L("Select All")),
             Entry(combo: combo("/", [.shift, .command]), owner: L("Help")),
+            // Composer formatting (⌘K, Link, stays the Command Palette's default when nothing is selected)
+            Entry(combo: combo("b", [.command]), owner: L("Bold in the composer")),
+            Entry(combo: combo("i", [.command]), owner: L("Italic in the composer")),
+            Entry(combo: combo("x", [.shift, .command]), owner: L("Strikethrough in the composer")),
+            Entry(combo: combo("e", [.command]), owner: L("Code in the composer")),
+            Entry(combo: combo("7", [.shift, .command]), owner: L("Bulleted List in the composer")),
+            Entry(combo: combo("8", [.shift, .command]), owner: L("Bulleted List in the composer")),
+            Entry(combo: combo("9", [.shift, .command]), owner: L("Numbered List in the composer")),
+            Entry(combo: combo("'", [.command]), owner: L("Quote in the composer")),
+            Entry(combo: combo("h", [.shift, .command]), owner: L("Heading in the composer")),
         ]
         #if os(macOS)
         entries.append(Entry(combo: ShortcutCommand.toggleSidebarCombo, owner: L("Show Sidebar")))
