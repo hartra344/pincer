@@ -203,6 +203,22 @@ final class ComposerNSTextView: NSTextView {
         super.didChangeText()
     }
 
+    /// Set by the coordinator: the SwiftUI binding must follow IME composition, because
+    /// marked-text updates (and commits from some IMEs) never run `didChangeText`, and
+    /// `updateNSView` would otherwise reset the field with a stale value mid-composition.
+    var onIMETextChanged: (() -> Void)?
+
+    override func setMarkedText(_ markedString: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        super.setMarkedText(markedString, selectedRange: selectedRange, replacementRange: replacementRange)
+        self.changeVersion += 1
+        self.onIMETextChanged?()
+    }
+
+    override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        super.insertText(insertString, replacementRange: replacementRange)
+        self.onIMETextChanged?()
+    }
+
     override func paste(_ sender: Any?) {
         let items = MediaPasteboard.items(from: .general)
         guard items.isEmpty else {
@@ -462,9 +478,13 @@ extension PlatformComposerTextView: NSViewRepresentable {
         if context.coordinator.takeFocusRequest() {
             DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
         }
-        let edit = context.coordinator.pendingEdit(viewText: textView.string)
-        if let text = edit.text { textView.string = text }
-        if let selection = edit.selection { textView.setSelectedRange(selection) }
+        // While IME marked text is live, the view owns the text: resetting text or selection
+        // from the (stale) binding here tears the composition down on every render.
+        if !textView.hasMarkedText() {
+            let edit = context.coordinator.pendingEdit(viewText: textView.string)
+            if let text = edit.text { textView.string = text }
+            if let selection = edit.selection { textView.setSelectedRange(selection) }
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
@@ -503,6 +523,10 @@ extension PlatformComposerTextView: NSViewRepresentable {
             styler.restyleAll(storage)
             self.styler = styler
             textView.styler = styler
+            textView.onIMETextChanged = { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                self.parent.text = textView.string
+            }
             self.textView = textView
             self.observers.add(NotificationCenter.default.addObserver(
                 forName: UserDefaults.didChangeNotification, object: nil, queue: .main
@@ -845,6 +869,19 @@ final class ComposerUITextView: UITextView {
 
     weak var styler: ComposerMarkdownStyler?
 
+    /// Set by the coordinator: the SwiftUI binding must follow IME composition (see the macOS twin).
+    var onIMETextChanged: (() -> Void)?
+
+    override func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
+        super.setMarkedText(markedText, selectedRange: selectedRange)
+        self.onIMETextChanged?()
+    }
+
+    override func insertText(_ text: Any, replacementRange: NSRange) {
+        super.insertText(text, replacementRange: replacementRange)
+        self.onIMETextChanged?()
+    }
+
     override func paste(_ sender: Any?) {
         let items = MediaPasteboard.items(from: .general)
         guard items.isEmpty else {
@@ -958,9 +995,13 @@ extension PlatformComposerTextView: UIViewRepresentable {
         if context.coordinator.takeFocusRequest() {
             DispatchQueue.main.async { textView.becomeFirstResponder() }
         }
-        let edit = context.coordinator.pendingEdit(viewText: textView.text)
-        if let text = edit.text { textView.text = text }
-        if let selection = edit.selection { textView.selectedRange = selection }
+        // While IME marked text is live, the view owns the text: resetting text or selection
+        // from the (stale) binding here tears the composition down on every render.
+        if textView.markedTextRange == nil {
+            let edit = context.coordinator.pendingEdit(viewText: textView.text)
+            if let text = edit.text { textView.text = text }
+            if let selection = edit.selection { textView.selectedRange = selection }
+        }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ComposerUITextView, context: Context) -> CGSize? {
@@ -993,6 +1034,10 @@ extension PlatformComposerTextView: UIViewRepresentable {
             styler.restyleAll(textView.textStorage)
             self.styler = styler
             self.textView = textView
+            textView.onIMETextChanged = { [weak self] in
+                guard let self, let textView = self.textView else { return }
+                self.parent.text = textView.text
+            }
             textView.setShowsFormatBar(settings.showsFormatBar)
             self.observers.add(NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.syncSettings() }
