@@ -128,13 +128,25 @@ function seedArtifacts() {
     image: { url: png(size, color) },
     role: 'assistant',
   });
+  const notes = '# Release notes\n\n- Faster host checks\n- Uptime chart in the status report\n';
+  const hosts = 'host,role\nweb-1,frontend\ndb-1,database\n';
   return [
-    { id: 'artifact_file_notes', type: 'file', title: 'release-notes.md', mimeType: 'text/markdown', sizeBytes: 1842, sessionKey: SEEDED_FILES_SESSION, runId: 'run-files-1', messageSeq: 2, source: 'session-transcript', download: { mode: 'bytes' }, role: 'assistant' },
+    { id: 'artifact_file_notes', type: 'file', title: 'release-notes.md', mimeType: 'text/markdown', sizeBytes: Buffer.byteLength(notes), sessionKey: SEEDED_FILES_SESSION, runId: 'run-files-1', messageSeq: 2, source: 'session-transcript', download: { mode: 'bytes' }, role: 'assistant', content: notes },
     image(1, 'uptime-chart.png', 48, [32, 110, 200], 3),
-    { id: 'artifact_file_upload', type: 'file', title: 'hosts.csv', mimeType: 'text/csv', sizeBytes: 612, sessionKey: SEEDED_FILES_SESSION, messageSeq: 1, source: 'session-transcript', download: { mode: 'bytes' }, role: 'user' },
+    { id: 'artifact_file_upload', type: 'file', title: 'hosts.csv', mimeType: 'text/csv', sizeBytes: Buffer.byteLength(hosts), sessionKey: SEEDED_FILES_SESSION, messageSeq: 1, source: 'session-transcript', download: { mode: 'bytes' }, role: 'user', content: hosts },
     image(2, 'status-grid.png', 40, [200, 90, 60], 5),
     image(3, 'host-map.png', 56, [60, 170, 110], 7),
   ];
+}
+
+/** Bytes for a seeded `artifacts.list` entry, so `artifacts.download` can serve what the list shows. */
+export function seededArtifactBytes(state, artifactId) {
+  const artifact = filesState(state).artifacts.find((a) => a.id === artifactId);
+  if (!artifact) return undefined;
+  if (artifact.content !== undefined) return { mimeType: artifact.mimeType, data: Buffer.from(artifact.content) };
+  const url = artifact.image?.url ?? '';
+  const comma = url.indexOf(',');
+  return comma < 0 ? undefined : { mimeType: artifact.mimeType, data: Buffer.from(url.slice(comma + 1), 'base64') };
 }
 
 function filesState(state) {
@@ -437,7 +449,7 @@ function handleArtifactsList(state, conn, id, params, { sendRes, fail }) {
   }
   let items = fs.artifacts.filter((a) => a.sessionKey === sessionKey && (!params.runId || a.runId === params.runId));
   if (params.messageRole) items = items.filter((a) => a.role === params.messageRole);
-  const strip = ({ role, image, ...summary }) => (params.type === 'image' ? { ...summary, ...(image ? { image } : {}) } : summary);
+  const strip = ({ role, image, content, ...summary }) => (params.type === 'image' ? { ...summary, ...(image ? { image } : {}) } : summary);
   if (params.type !== 'image') {
     sendRes(conn, id, { artifacts: items.map(strip) });
     return true;

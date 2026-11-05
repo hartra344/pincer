@@ -135,7 +135,15 @@ export async function run() {
       assert.equal(a.source, 'session-transcript');
       assert.equal(a.image, undefined);
       assert.ok(['bytes', 'url', 'unsupported'].includes(a.download.mode));
+      assert.equal(a.content, undefined);
+      // Every listed artifact downloads, with as many bytes as the list said.
+      const got = await reader.send('artifacts.download', { artifactId: a.id });
+      assert.equal(Buffer.from(got.data, 'base64').length, a.sizeBytes, a.id);
     }
+    const assistant = (await reader.send('artifacts.list', { sessionKey: KEY, messageRole: 'assistant' })).artifacts;
+    assert.ok(assistant.length > 0 && assistant.length < all.length && !assistant.some((a) => a.title === 'hosts.csv'));
+    const notes = await reader.send('artifacts.download', { artifactId: 'artifact_file_notes' });
+    assert.match(Buffer.from(notes.data, 'base64').toString(), /^# Release notes/);
     const page1 = (await reader.send('artifacts.list', { sessionKey: KEY, type: 'image', limit: 2 }));
     assert.equal(page1.artifacts.length, 2);
     assert.ok(page1.nextCursor);

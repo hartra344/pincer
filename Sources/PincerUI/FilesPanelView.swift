@@ -46,6 +46,8 @@ struct FilesPanelView: View {
     let state: FilesSession
     @State private var viewerID = UUID()
     @State private var searchText = ""
+    @State private var artifactActions = AssetFileActions()
+    @Environment(GatewayStore.self) private var gateway
     @SceneStorage("pincer.files.collapsedGroups") private var collapsedRaw = ""
 
     struct OpenFile {
@@ -73,6 +75,7 @@ struct FilesPanelView: View {
             self.model.setVisible(true, viewer: self.viewerID)
         }
         .onDisappear { self.model.setVisible(false, viewer: self.viewerID) }
+        .modifier(AssetFileActionsPresenter(actions: self.artifactActions))
     }
 
     @ViewBuilder private var list: some View {
@@ -132,8 +135,20 @@ struct FilesPanelView: View {
             self.header(.artifacts, title: L("Artifacts"), count: snapshot.artifacts.count)
             if !self.collapsed.contains(FileGroup.artifacts.rawValue) {
                 ForEach(snapshot.artifacts) { artifact in
+                    let asset = SessionAsset(artifact: artifact)
+                    let key = self.model.sessionKey
                     FileRow(name: artifact.title, detail: artifact.mimeType ?? artifact.type, size: artifact.sizeBytes,
-                            deleted: false, badge: nil, isDirectory: false, action: nil)
+                            deleted: false, badge: nil, isDirectory: false,
+                            isLoading: self.artifactActions.busy == asset.id) {
+                        self.artifactActions.open(asset, gateway: self.gateway, sessionKey: key)
+                    }
+                    .contextMenu {
+                        Button(L("Open"), systemImage: "eye") { self.artifactActions.open(asset, gateway: self.gateway, sessionKey: key) }
+                        Button(L("Save…"), systemImage: "square.and.arrow.down") {
+                            self.artifactActions.save(asset, gateway: self.gateway, sessionKey: key)
+                        }
+                    }
+                    .accessibilityAction(named: L("Save…")) { self.artifactActions.save(asset, gateway: self.gateway, sessionKey: key) }
                 }
                 if snapshot.artifactsOmittedOversized {
                     Text("Some large artifacts aren't listed.", bundle: .module)

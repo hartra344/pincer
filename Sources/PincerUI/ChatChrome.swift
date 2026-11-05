@@ -64,7 +64,7 @@ struct ChatChrome: ViewModifier {
         content
             .environment(\.showsChatSplit, split)
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$panel.isShowing(.runs), showWorkspace: self.$panel.isShowing(.workspace), showPortals: self.$panel.isShowing(.portals),
-                                                                     toolsInspector: self.$toolsInspector))
+                                                                     showAssets: self.$panel.isShowing(.assets), toolsInspector: self.$toolsInspector))
             .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
             .navigationTitle(self.showsCompactIdentity ? "" : ChatWindowTitle.title(
@@ -110,7 +110,7 @@ struct ChatChrome: ViewModifier {
                 }
                 #endif
                 ToolbarItem(placement: .primaryAction) {
-                    ChatSessionMenu(showRuns: self.$panel.isShowing(.runs), showWorkspace: self.$panel.isShowing(.workspace), showPortals: self.$panel.isShowing(.portals), toolsInspector: self.$toolsInspector, row: split ? nil : self.row, compactActions: self.showsCompactIdentity)
+                    ChatSessionMenu(showRuns: self.$panel.isShowing(.runs), showWorkspace: self.$panel.isShowing(.workspace), showPortals: self.$panel.isShowing(.portals), showAssets: self.$panel.isShowing(.assets), toolsInspector: self.$toolsInspector, row: split ? nil : self.row, compactActions: self.showsCompactIdentity)
                 }
             }
             .sheet(item: self.$toolsInspector) { inspection in
@@ -159,6 +159,7 @@ struct ChatSessionMenu: View {
     @Binding var showRuns: Bool
     @Binding var showWorkspace: Bool
     @Binding var showPortals: Bool
+    @Binding var showAssets: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var focusedFind
@@ -208,6 +209,10 @@ struct ChatSessionMenu: View {
                     self.willAct()
                     self.showPortals = $0
                 }), sessionKey: row.key)
+                ShowAssetsButton(isPresented: Binding(get: { self.showAssets }, set: {
+                    self.willAct()
+                    self.showAssets = $0
+                }))
                 Divider()
                 Button(L("Reload"), systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: row.key).load(force: true) }

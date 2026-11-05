@@ -250,6 +250,8 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     public var textModelNames: [String?] = []
     /// Transcript id of the message each entry of `text` came from, for replies and reactions.
     public var textIds: [String?] = []
+    /// Transcript ids of every assistant message in the turn, including ones with only files or images.
+    public var messageIds: [String] = []
     public var images: [ImageRef] = []
     public var files: [FileRef] = []
     public var timestamp: Date?
@@ -314,6 +316,7 @@ public enum TranscriptBuilder {
                     turn.model = model
                     turn.provider = item.provider
                 }
+                if let id = item.transcriptId { turn.messageIds.append(id) }
                 var message: [String] = []
                 for block in item.blocks {
                     switch block {
