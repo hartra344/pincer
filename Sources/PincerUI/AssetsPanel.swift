@@ -98,6 +98,7 @@ struct AssetsPanel: View {
                 .id(key)
         } else {
             ContentUnavailableView(L("No chat selected"), systemImage: "bubble.left.and.bubble.right")
+                .panelFill()
         }
     }
 
@@ -130,6 +131,7 @@ private struct AssetsList: View {
                     description: Text(self.model.assets.isEmpty
                         ? "PDFs, images and other files the agent sends in this chat show up here."
                         : "Try a different search.", bundle: .module))
+                .panelFill()
             } else {
                 List(self.model.shown) { asset in
                     AssetRow(asset: asset, sessionKey: self.model.sessionKey, isBusy: self.actions.busy == asset.id,
@@ -140,6 +142,7 @@ private struct AssetsList: View {
                 .listStyle(.plain)
             }
         }
+        .panelFill(alignment: .top)
         .modifier(AssetFileActionsPresenter(actions: self.actions))
         .onAppear { self.model.setVisible(true, viewer: self.viewerID) }
         .onDisappear { self.model.setVisible(false, viewer: self.viewerID) }
