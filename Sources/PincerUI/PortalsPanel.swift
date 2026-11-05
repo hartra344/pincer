@@ -55,8 +55,10 @@ struct PortalsPanel: View {
                 } description: {
                     Text("Portals this agent opens show here.", bundle: .module)
                 }
+                .panelFill()
             }
         }
+        .panelFill(alignment: .top)
         .task {
             try? await Task.sleep(for: WorkspacePanel.slideSettleDelay)
             self.settled = true

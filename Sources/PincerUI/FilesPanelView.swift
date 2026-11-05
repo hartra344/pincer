@@ -93,11 +93,13 @@ struct FilesPanelView: View {
                 } actions: {
                     Button(L("Try Again")) { Task { await self.model.refresh() } }
                 }
+                .panelFill()
             } else if snapshot.isEmpty {
                 ContentUnavailableView(
                     self.searchText.isEmpty ? L("No files yet") : L("No matching files"),
                     systemImage: "doc.text.magnifyingglass",
                     description: Text(self.searchText.isEmpty ? "Files the agent changes or reads in this chat show up here." : "Try a different search.", bundle: .module))
+                .panelFill()
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -113,6 +115,7 @@ struct FilesPanelView: View {
                 }
             }
         }
+        .panelFill(alignment: .top)
     }
 
     // MARK: Groups

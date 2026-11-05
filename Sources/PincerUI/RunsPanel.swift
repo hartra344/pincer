@@ -284,8 +284,10 @@ struct RunsPanel: View {
                 }
             } else {
                 ContentUnavailableView(L("No chat selected"), systemImage: "bubble.left.and.bubble.right")
+                    .panelFill()
             }
         }
+        .panelFill(alignment: .top)
         .onChange(of: self.windowKey ?? self.gateway.focusedKey) { self.focusedSession = nil }
     }
 }

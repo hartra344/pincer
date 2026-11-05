@@ -41,6 +41,7 @@ struct WorkspacePanel: View {
                     FilesPanelView(model: filesModel, state: self.drafts.session(for: filesModel.sessionKey)).id(filesModel.sessionKey)
                 } else {
                     ContentUnavailableView(L("Select a chat to see its files"), systemImage: "doc.text.magnifyingglass")
+                        .panelFill()
                 }
             } else {
                 BrowserPanelView(model: model, newTab: self.$newTab)
@@ -196,5 +197,13 @@ struct ShowBrowserButton: View {
         Button(self.isPresented ? L("Hide Browser") : L("Show Browser"), systemImage: "globe") {
             self.isPresented.toggle()
         }
+    }
+}
+
+extension View {
+    /// Fills the panel's remaining space so a short state (an empty message) can't pull the header above it
+    /// down to the middle of the panel.
+    func panelFill(alignment: Alignment = .center) -> some View {
+        self.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
     }
 }
