@@ -191,8 +191,11 @@ final class ComposerNSTextView: NSTextView {
     var currentModifierFlags: () -> NSEvent.ModifierFlags = { NSApp.currentEvent?.modifierFlags ?? [] }
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
-    /// Where the user just typed a backtick, so the fence auto-close can look at the line after the change lands.
-    var typedBacktickLocation: Int?
+    /// Where the user just typed a backtick or tilde, so the fence auto-close can look at the line after the change lands.
+    var typedFenceLocation: Int?
+    /// What the user just changed when it added or removed a line break, so numbered lists can be renumbered after it lands.
+    var pendingRenumber: NSRange?
+    private(set) var isApplyingEdit = false
 
     /// Bumped on every change, so an async paste can tell the text moved under it.
     private(set) var changeVersion = 0
@@ -272,6 +275,8 @@ final class ComposerNSTextView: NSTextView {
             self.setSelectedRange(edit.selection)
             return
         }
+        self.isApplyingEdit = true
+        defer { self.isApplyingEdit = false }
         guard self.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
         self.breakUndoCoalescing()
         if let undoManager = self.undoManager, undoManager.groupingLevel > 0 {
@@ -319,24 +324,13 @@ final class ComposerNSTextView: NSTextView {
         return menu
     }
 
-    private static func formatAction(for event: NSEvent) -> ComposerFormatAction? {
+    static func formatAction(for event: NSEvent) -> ComposerFormatAction? {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        let key = event.charactersIgnoringModifiers?.lowercased()
-        if flags == .command {
-            switch key {
-            case "b": return .bold
-            case "i": return .italic
-            case "e": return .code
-            case "k": return .link
-            default: return nil
-            }
-        }
-        if flags == [.command, .shift] {
-            if key == "x" { return .strikethrough }
-            // ⇧⌘7: the character is "&" on US layouts, so match the physical key.
-            if event.keyCode == 26 { return .bulletList }
-        }
-        return nil
+        // The unmodified character, so ⇧⌘7 is "7" (not "&") on any layout.
+        guard let combo = KeyCombo(
+            macKeyCode: event.keyCode, unmodifiedCharacters: event.characters(byApplyingModifiers: []), eventModifierFlags: flags.rawValue)
+        else { return nil }
+        return ComposerFormatAction.action(for: combo)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -524,7 +518,10 @@ extension PlatformComposerTextView: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
-            (textView as? ComposerNSTextView)?.typedBacktickLocation = replacementString == "`" && !textView.hasMarkedText() ? range.location : nil
+            guard let composer = textView as? ComposerNSTextView, !composer.isApplyingEdit, !textView.hasMarkedText() else { return true }
+            composer.typedFenceLocation = replacementString == "`" || replacementString == "~" ? range.location : nil
+            composer.pendingRenumber = ComposerTextFixups.renumberRange(
+                in: textView.string as NSString, replacing: range, with: replacementString ?? "")
             return true
         }
 
@@ -534,9 +531,14 @@ extension PlatformComposerTextView: NSViewRepresentable {
             self.reportCaret(textView.selectedRange(), length: textView.textStorage?.length, hasMarkedText: textView.hasMarkedText())
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
-            if let composer = textView as? ComposerNSTextView, let location = composer.typedBacktickLocation {
-                composer.typedBacktickLocation = nil
-                if !textView.hasMarkedText(), let edit = ComposerFormatting.autoCloseFence(in: textView.string as NSString, typedAt: location) {
+            if let composer = textView as? ComposerNSTextView, !composer.isApplyingEdit {
+                let fence = composer.typedFenceLocation
+                let renumber = composer.pendingRenumber
+                composer.typedFenceLocation = nil
+                composer.pendingRenumber = nil
+                guard !textView.hasMarkedText() else { return }
+                let text = textView.string as NSString
+                if let edit = ComposerTextFixups.edit(in: text, typedFenceAt: fence, renumber: renumber, selection: textView.selectedRange()) {
                     composer.apply(edit)
                 }
             }
@@ -648,8 +650,10 @@ final class ComposerUITextView: UITextView {
     var onSubmit: (() -> Void)?
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
-    /// Where the user just typed a backtick, so the fence auto-close can look at the line after the change lands.
-    var typedBacktickLocation: Int?
+    /// Where the user just typed a backtick or tilde, so the fence auto-close can look at the line after the change lands.
+    var typedFenceLocation: Int?
+    /// What the user just changed when it added or removed a line break, so numbered lists can be renumbered after it lands.
+    var pendingRenumber: NSRange?
     /// Bumped by the coordinator on every `textViewDidChange`, to tell whether a programmatic edit notified it.
     var didChangeCount = 0
     private(set) var isApplyingEdit = false
@@ -675,23 +679,36 @@ final class ComposerUITextView: UITextView {
         return command
     }
 
-    /// Markdown formatting shortcuts, titled so iPad's hold-⌘ overlay lists them.
-    private static let formatKeys: [(action: ComposerFormatAction, input: String, flags: UIKeyModifierFlags)] = [
-        (.bold, "b", .command), (.italic, "i", .command), (.code, "e", .command),
-        (.strikethrough, "x", [.command, .shift]), (.link, "k", .command), (.bulletList, "7", [.command, .shift]),
-    ]
-
+    /// Markdown formatting shortcuts, titled so iPad's hold-⌘ overlay lists them (aliases untitled, so they don't repeat).
     private static let formatCommands: [UIKeyCommand] = {
-        ComposerUITextView.formatKeys.map { action, input, flags in
-            let command = UIKeyCommand(title: action.title, action: #selector(ComposerUITextView.formatKey(_:)), input: input, modifierFlags: flags)
+        let titled = ComposerFormatAction.allCases.map { ($0.shortcut, $0.title as String?) }
+        let aliases = ComposerFormatAction.aliases.map { ($0.combo, nil as String?) }
+        return (titled + aliases).map { combo, title in
+            let command = UIKeyCommand(
+                input: combo.key, modifierFlags: ComposerUITextView.flags(combo.modifiers), action: #selector(ComposerUITextView.formatKey(_:)))
+            if let title { command.title = title }
             command.wantsPriorityOverSystemBehavior = true
             return command
         }
     }()
 
+    private static func flags(_ modifiers: KeyCombo.Modifiers) -> UIKeyModifierFlags {
+        var flags: UIKeyModifierFlags = []
+        if modifiers.contains(.command) { flags.insert(.command) }
+        if modifiers.contains(.shift) { flags.insert(.shift) }
+        if modifiers.contains(.option) { flags.insert(.alternate) }
+        if modifiers.contains(.control) { flags.insert(.control) }
+        return flags
+    }
+
     private func formatAction(for command: UIKeyCommand?) -> ComposerFormatAction? {
-        guard let command else { return nil }
-        return Self.formatKeys.first { $0.input == command.input && $0.flags == command.modifierFlags }?.action
+        guard let command, let input = command.input else { return nil }
+        var modifiers: KeyCombo.Modifiers = []
+        if command.modifierFlags.contains(.command) { modifiers.insert(.command) }
+        if command.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
+        if command.modifierFlags.contains(.alternate) { modifiers.insert(.option) }
+        if command.modifierFlags.contains(.control) { modifiers.insert(.control) }
+        return ComposerFormatAction.action(for: KeyCombo(input, modifiers))
     }
 
     @objc private func formatKey(_ command: UIKeyCommand) {
@@ -1036,10 +1053,14 @@ extension PlatformComposerTextView: UIViewRepresentable {
             self.reportCaret(textView.selectedRange, length: textView.textStorage.length, hasMarkedText: textView.markedTextRange != nil)
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
-            if let composer, let location = composer.typedBacktickLocation {
-                composer.typedBacktickLocation = nil
+            if let composer, !composer.isApplyingEdit {
+                let fence = composer.typedFenceLocation
+                let renumber = composer.pendingRenumber
+                composer.typedFenceLocation = nil
+                composer.pendingRenumber = nil
                 if textView.markedTextRange == nil,
-                   let edit = ComposerFormatting.autoCloseFence(in: textView.text as NSString, typedAt: location)
+                   let edit = ComposerTextFixups.edit(
+                       in: textView.text as NSString, typedFenceAt: fence, renumber: renumber, selection: textView.selectedRange)
                 {
                     composer.apply(edit)
                 }
@@ -1065,18 +1086,19 @@ extension PlatformComposerTextView: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-            guard textView.markedTextRange == nil, (textView as? ComposerUITextView)?.isApplyingEdit != true else { return true }
-            (textView as? ComposerUITextView)?.typedBacktickLocation = text == "`" ? range.location : nil
+            guard textView.markedTextRange == nil, let composer = textView as? ComposerUITextView, !composer.isApplyingEdit else { return true }
+            composer.typedFenceLocation = text == "`" || text == "~" ? range.location : nil
+            composer.pendingRenumber = ComposerTextFixups.renumberRange(in: textView.text as NSString, replacing: range, with: text)
             guard text == "\n" else { return true }
             // Return picks the highlighted suggestion (or sends a finished command) while the menu is open.
             if self.parent.menuActive {
+                composer.pendingRenumber = nil
                 self.parent.onSubmit()
                 return false
             }
-            // The on-screen Return continues lists and quotes.
-            guard let composer = textView as? ComposerUITextView,
-                  let edit = ComposerFormatting.newline(in: textView.text as NSString, selection: range)
-            else { return true }
+            // The on-screen Return continues lists and quotes (renumbering as part of the same edit).
+            guard let edit = ComposerFormatting.newline(in: textView.text as NSString, selection: range) else { return true }
+            composer.pendingRenumber = nil
             composer.apply(edit)
             return false
         }

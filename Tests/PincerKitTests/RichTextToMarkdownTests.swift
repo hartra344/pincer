@@ -126,4 +126,14 @@ struct RichTextToMarkdownTests {
         #expect(RichTextToMarkdown.markdown(from: NSAttributedString(string: "bare")) == nil)
         #expect(RichTextToMarkdown.markdown(from: NSAttributedString()) == nil)
     }
+
+    /// #1069: a link that goes through RTF (how some apps put rich text on the pasteboard) keeps its exact URL.
+    @Test func rtfRoundTripKeepsLinksExact() throws {
+        for url in ["https://x.dev", "https://x.dev/a", "https://x.dev?q=1", "mailto:a@b.c"] {
+            let s = Self.attributed([("x ", [.font: Self.font()]), ("site", [.font: Self.font(), .link: URL(string: url)!])])
+            let rtf = try s.data(from: NSRange(location: 0, length: s.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+            let parsed = try NSAttributedString(data: rtf, options: [.documentType: NSAttributedString.DocumentType.rtf], documentAttributes: nil)
+            #expect(RichTextToMarkdown.markdown(from: parsed)?.contains("[site](\(url))") == true, "\(url)")
+        }
+    }
 }

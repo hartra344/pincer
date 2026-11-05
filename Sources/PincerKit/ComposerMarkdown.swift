@@ -11,9 +11,9 @@ public enum ComposerMarkdownKind: Equatable, Hashable, Sendable {
     case listItem
     /// markerRanges = `>` plus a space.
     case blockquote
-    /// A ``` line (opening or closing); the whole line is marker.
+    /// A ``` or ~~~ line (opening or closing); the whole line is marker.
     case codeFence
-    /// A content line inside a fence.
+    /// A content line inside a fence, or an indented (4+ columns) code line.
     case codeBlock
 }
 
@@ -44,7 +44,7 @@ public enum ComposerMarkdown {
         guard length > 0 else { return [] }
         return withBuffer(ns, NSRange(location: 0, length: length)) { p in
             var scanner = MarkdownScanner(p: p, base: 0)
-            scanner.scanLines(start: 0, end: length, inside: false)
+            scanner.scanLines(start: 0, end: length, open: nil, indent: MarkdownIndentState())
             return scanner.out
         }
     }
@@ -93,25 +93,29 @@ public enum ComposerMarkdown {
 
 // MARK: Incremental index
 
-/// Fence state for incremental restyling. Value type; `update` is O(edited paragraphs + log fences)
-/// plus an O(fences) offset shift on ordinary keystrokes.
+/// Fence state for incremental restyling. Value type; `update` is O(edited paragraphs) plus an O(fences)
+/// offset shift and re-pairing on ordinary keystrokes.
 public struct ComposerMarkdownIndex: Sendable {
-    /// Sorted line ranges (excluding the terminator) of every ``` line.
-    var fences: [NSRange]
+    /// Every ``` / ~~~ line in order, whether or not it pairs.
+    var candidates: [MarkdownFence]
+    /// The fence lines that open or close a block, in order: opening, closing, opening…
+    var fences: [MarkdownFence]
     var length: Int
 
     /// O(n); run off main for big text.
     public init(text: NSString) {
         let length = text.length
         self.length = length
-        self.fences = length == 0 ? [] : ComposerMarkdown.withBuffer(text, NSRange(location: 0, length: length)) { p in
+        self.candidates = length == 0 ? [] : ComposerMarkdown.withBuffer(text, NSRange(location: 0, length: length)) { p in
             MarkdownScanner.fenceLines(p, 0, length, base: 0)
         }
+        self.fences = Self.pair(self.candidates)
     }
 
     /// Call after every text-storage edit (`editedRange` in the NEW text, `changeInLength` delta).
     /// Returns the range of NEW text whose styling must be recomputed: the edited paragraph(s), extended
-    /// to the end of the document when fence membership changed.
+    /// to the end of the document when fence state changed, or over the following blank and indented lines
+    /// when the edit may change which of them are indented code.
     public mutating func update(text: NSString, editedRange: NSRange, changeInLength: Int) -> NSRange {
         let len = text.length
         let loc = editedRange.location
@@ -130,25 +134,36 @@ public struct ComposerMarkdownIndex: Sendable {
             return NSRange(location: 0, length: len)
         }
 
-        let lo = self.lowerBound(paragraph.location)
-        let hi = self.lowerBound(oldEnd)
-        if changeInLength != 0, hi < self.fences.count {
-            for k in hi..<self.fences.count { self.fences[k].location += changeInLength }
+        let oldOpen = self.openFence(before: oldEnd)
+        let lo = Self.lowerBound(self.candidates, paragraph.location)
+        let hi = Self.lowerBound(self.candidates, oldEnd)
+        if changeInLength != 0, hi < self.candidates.count {
+            for k in hi..<self.candidates.count { self.candidates[k].range.location += changeInLength }
         }
-        let fresh: [NSRange] = paragraph.length == 0 ? [] : ComposerMarkdown.withBuffer(text, paragraph) { p in
+        let fresh: [MarkdownFence] = paragraph.length == 0 ? [] : ComposerMarkdown.withBuffer(text, paragraph) { p in
             MarkdownScanner.fenceLines(p, 0, paragraph.length, base: paragraph.location)
         }
-        let removed = hi - lo
-        if removed != 0 || !fresh.isEmpty { self.fences.replaceSubrange(lo..<hi, with: fresh) }
+        if hi > lo || !fresh.isEmpty { self.candidates.replaceSubrange(lo..<hi, with: fresh) }
+        self.fences = Self.pair(self.candidates)
         self.length = len
 
-        if (fresh.count - removed) & 1 != 0 {
+        let newOpen = self.openFence(before: pEnd)
+        if oldOpen?.marker != newOpen?.marker || oldOpen?.count != newOpen?.count {
             return NSRange(location: paragraph.location, length: len - paragraph.location)
         }
-        return paragraph
+        guard newOpen == nil, !Self.isIndentedInsertion(text, editedRange: editedRange, changeInLength: changeInLength, line: a)
+        else { return paragraph }
+        var end = pEnd
+        while end < len {
+            let line = text.lineRange(for: NSRange(location: end, length: 0))
+            guard Self.isBlankOrIndented(text, line) else { break }
+            end = NSMaxRange(line)
+        }
+        return NSRange(location: paragraph.location, length: end - paragraph.location)
     }
 
-    /// Spans inside `range` (paragraph-aligned), honouring fence state. O(|range|).
+    /// Spans inside `range` (paragraph-aligned), honouring fence and indented-code state. O(|range|) plus a walk
+    /// back over any blank or indented lines just above it.
     public func spans(in text: NSString, range: NSRange) -> [ComposerMarkdownSpan] {
         let len = text.length
         guard len > 0 else { return [] }
@@ -156,33 +171,158 @@ public struct ComposerMarkdownIndex: Sendable {
         let upper = min(max(NSMaxRange(range), clamped.location), len)
         let aligned = text.lineRange(for: NSRange(location: clamped.location, length: upper - clamped.location))
         guard aligned.length > 0 else { return [] }
-        let inside = self.lowerBound(aligned.location) & 1 == 1
+        let open = self.openFence(before: aligned.location)
+        let indent = open == nil ? self.indentState(in: text, before: aligned.location) : MarkdownIndentState()
         return ComposerMarkdown.withBuffer(text, aligned) { p in
             var scanner = MarkdownScanner(p: p, base: aligned.location)
-            scanner.scanLines(start: 0, end: aligned.length, inside: inside)
+            scanner.scanLines(start: 0, end: aligned.length, open: open, indent: indent)
             return scanner.out
         }
     }
 
     /// True for fence lines and the lines between an opening and its closing fence (or the end of the text).
     public func isInsideCodeBlock(_ location: Int) -> Bool {
-        let k = self.lowerBound(location + 1)
+        let k = Self.lowerBound(self.fences, location + 1)
         if k == 0 { return false }
         if k & 1 == 1 { return true }
-        let last = self.fences[k - 1]
-        return location <= NSMaxRange(last)
+        return location <= NSMaxRange(self.fences[k - 1].range)
+    }
+
+    /// `isInsideCodeBlock(_:)`, plus indented code blocks.
+    public func isInsideCodeBlock(_ location: Int, in text: NSString) -> Bool {
+        if self.isInsideCodeBlock(location) { return true }
+        let length = text.length
+        guard length > 0 else { return false }
+        let line = text.lineRange(for: NSRange(location: min(max(location, 0), length), length: 0))
+        guard line.length > 0 else { return false }
+        var state = self.indentState(in: text, before: line.location)
+        return ComposerMarkdown.withBuffer(text, line) { p in
+            let end = MarkdownScanner.lineBounds(p, 0, line.length).lineEnd
+            return MarkdownScanner.step(&state, p, 0, end)
+        }
+    }
+
+    /// The fence a line starting at `location` would be inside, or nil.
+    private func openFence(before location: Int) -> MarkdownFence? {
+        let k = Self.lowerBound(self.fences, location)
+        return k & 1 == 1 ? self.fences[k - 1] : nil
+    }
+
+    /// Indented-code state just before the line at `location` (outside fences): replays from the nearest line
+    /// above that isn't blank or indented.
+    private func indentState(in text: NSString, before location: Int) -> MarkdownIndentState {
+        var anchor = 0
+        var found = false
+        var pos = location
+        while pos > 0 {
+            let line = text.lineRange(for: NSRange(location: pos - 1, length: 0))
+            pos = line.location
+            if !Self.isBlankOrIndented(text, line) {
+                anchor = line.location
+                found = true
+                break
+            }
+        }
+        guard location > anchor else { return MarkdownIndentState() }
+        let anchorIsFence = found && self.fences.contains { $0.location == anchor }
+        return ComposerMarkdown.withBuffer(text, NSRange(location: anchor, length: location - anchor)) { p in
+            var state = MarkdownIndentState()
+            var i = 0
+            let end = location - anchor
+            while i < end {
+                let (le, next) = MarkdownScanner.lineBounds(p, i, end)
+                if i == 0, anchorIsFence { state = .afterFence } else { _ = MarkdownScanner.step(&state, p, i, le) }
+                i = next
+            }
+            return state
+        }
+    }
+
+    /// Typing (no line break) after the first non-blank character of an indented line can't change which lines
+    /// below are indented code, so the restyle can stay on that line.
+    private static func isIndentedInsertion(_ text: NSString, editedRange: NSRange, changeInLength: Int, line: NSRange) -> Bool {
+        guard changeInLength == editedRange.length, editedRange.length > 0 else { return false }
+        for k in editedRange.location..<NSMaxRange(editedRange) where mdIsLineBreak(text.character(at: k)) { return false }
+        var columns = 0
+        var k = line.location
+        while k < editedRange.location {
+            let c = text.character(at: k)
+            if c == 32 { columns += 1 } else if c == 9 { columns += 4 } else { break }
+            k += 1
+        }
+        return columns >= 4 && k < editedRange.location
+    }
+
+    /// Blank, or indented 4+ columns.
+    static func isBlankOrIndented(_ text: NSString, _ line: NSRange) -> Bool {
+        var columns = 0
+        var k = line.location
+        let end = NSMaxRange(line)
+        while k < end {
+            let c = text.character(at: k)
+            if c == 32 { columns += 1 } else if c == 9 { columns += 4 } else { return mdIsLineBreak(c) || columns >= 4 }
+            if columns >= 4 { return true }
+            k += 1
+        }
+        return true
+    }
+
+    /// Pairs candidates the CommonMark way: a block closes on a bare fence of the same character, at least as long.
+    static func pair(_ candidates: [MarkdownFence]) -> [MarkdownFence] {
+        var out: [MarkdownFence] = []
+        var open: MarkdownFence?
+        for fence in candidates {
+            if let o = open {
+                if o.isClosed(by: fence) {
+                    out.append(fence)
+                    open = nil
+                }
+            } else {
+                out.append(fence)
+                open = fence
+            }
+        }
+        return out
     }
 
     /// First index whose location is >= `value`.
-    private func lowerBound(_ value: Int) -> Int {
+    private static func lowerBound(_ fences: [MarkdownFence], _ value: Int) -> Int {
         var lo = 0
-        var hi = self.fences.count
+        var hi = fences.count
         while lo < hi {
             let mid = (lo + hi) >> 1
-            if self.fences[mid].location < value { lo = mid + 1 } else { hi = mid }
+            if fences[mid].location < value { lo = mid + 1 } else { hi = mid }
         }
         return lo
     }
+}
+
+/// A ``` or ~~~ line (3+ markers after at most 3 spaces).
+struct MarkdownFence: Equatable, Sendable {
+    /// The line, excluding its terminator.
+    var range: NSRange
+    /// 96 (`) or 126 (~).
+    var marker: unichar
+    var count: Int
+    /// Nothing but spaces or tabs after the markers, so it can close a block.
+    var isBare: Bool
+    var location: Int { range.location }
+
+    func isClosed(by other: MarkdownFence) -> Bool {
+        other.marker == self.marker && other.count >= self.count && other.isBare
+    }
+}
+
+/// What an indented (4+ columns) line means, given the lines above it (outside fences).
+struct MarkdownIndentState: Equatable, Sendable {
+    /// The last unindented line allows a code block after a blank line (not a list item or indented text).
+    var anchorAllows = true
+    /// A blank line (or the start of the text, or a closing fence) came after that line.
+    var blankSince = true
+    /// Inside an indented code block (blank lines don't end it).
+    var inCode = false
+
+    static let afterFence = MarkdownIndentState()
 }
 
 // MARK: Scanner
@@ -223,45 +363,79 @@ struct MarkdownScanner {
         return (t, next)
     }
 
-    static func isFenceLine(_ p: UnsafePointer<unichar>, _ s: Int, _ e: Int) -> Bool {
+    /// The fence on line [s, e), if it is one.
+    static func fence(_ p: UnsafePointer<unichar>, _ s: Int, _ e: Int, base: Int) -> MarkdownFence? {
         var i = s
         while i < e, p[i] == 32 { i += 1 }
-        if i - s > 3 { return false }
+        guard i - s <= 3, i < e, p[i] == 96 || p[i] == 126 else { return nil }
+        let marker = p[i]
         var n = 0
-        while i < e, p[i] == 96 { i += 1; n += 1 }
-        if n < 3 { return false }
+        while i < e, p[i] == marker { i += 1; n += 1 }
+        guard n >= 3 else { return nil }
+        var bare = true
         while i < e {
-            if p[i] == 96 { return false }
+            // A backtick fence's info string can't hold a backtick (it would be inline code).
+            if marker == 96, p[i] == 96 { return nil }
+            if p[i] != 32, p[i] != 9 { bare = false }
             i += 1
         }
-        return true
+        return MarkdownFence(range: NSRange(location: base + s, length: e - s), marker: marker, count: n, isBare: bare)
     }
 
-    static func fenceLines(_ p: UnsafePointer<unichar>, _ start: Int, _ end: Int, base: Int) -> [NSRange] {
-        var result: [NSRange] = []
+    static func fenceLines(_ p: UnsafePointer<unichar>, _ start: Int, _ end: Int, base: Int) -> [MarkdownFence] {
+        var result: [MarkdownFence] = []
         var i = start
         while i < end {
             let (le, next) = lineBounds(p, i, end)
-            if le - i >= 3, isFenceLine(p, i, le) {
-                result.append(NSRange(location: base + i, length: le - i))
-            }
+            if le - i >= 3, let fence = fence(p, i, le, base: base) { result.append(fence) }
             i = next
         }
         return result
     }
 
-    mutating func scanLines(start: Int, end: Int, inside startInside: Bool) {
-        var inside = startInside
+    /// Advances `state` past line [s, e) (outside fences); true when that line is indented code. Conservative:
+    /// a 4+ column line is code only after a blank line (or at the start, or after a closing fence) and never
+    /// under a list item or indented text, where it's more likely list content.
+    static func step(_ state: inout MarkdownIndentState, _ p: UnsafePointer<unichar>, _ s: Int, _ e: Int) -> Bool {
+        var columns = 0
+        var i = s
+        while i < e, p[i] == 32 || p[i] == 9 {
+            columns += p[i] == 9 ? 4 : 1
+            i += 1
+        }
+        if i == e {
+            state.blankSince = true
+            return false
+        }
+        if columns >= 4 {
+            guard state.inCode || (state.anchorAllows && state.blankSince) else { return false }
+            state.inCode = true
+            return true
+        }
+        state.inCode = false
+        state.blankSince = false
+        state.anchorAllows = columns == 0 && listMarkerEnd(p, i, e) == nil
+        return false
+    }
+
+    mutating func scanLines(start: Int, end: Int, open startOpen: MarkdownFence?, indent: MarkdownIndentState) {
+        var open = startOpen
+        var indent = indent
         var i = start
         while i < end {
             let (le, next) = Self.lineBounds(p, i, end)
-            if le - i >= 3, Self.isFenceLine(p, i, le) {
-                let r = NSRange(location: base + i, length: le - i)
+            let fence = le - i >= 3 ? Self.fence(p, i, le, base: base) : nil
+            if let fence, open == nil || open!.isClosed(by: fence) {
                 out.append(ComposerMarkdownSpan(
-                    kind: .codeFence, range: r,
-                    contentRange: NSRange(location: base + le, length: 0), markerRanges: [r]))
-                inside.toggle()
-            } else if inside {
+                    kind: .codeFence, range: fence.range,
+                    contentRange: NSRange(location: base + le, length: 0), markerRanges: [fence.range]))
+                if open == nil {
+                    open = fence
+                } else {
+                    open = nil
+                    indent = .afterFence
+                }
+            } else if open != nil || Self.step(&indent, p, i, le) {
                 if le > i {
                     let r = NSRange(location: base + i, length: le - i)
                     out.append(ComposerMarkdownSpan(kind: .codeBlock, range: r, contentRange: r, markerRanges: []))

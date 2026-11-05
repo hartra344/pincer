@@ -117,6 +117,7 @@ enum Suites {
             Section("Generated files: scan, merge, filter") { await runSessionAssetsOfflineChecks() },
             Section("Composer sizing") { runComposerSizingChecks() },
             Section("Composer Markdown") { runComposerMarkdownChecks() },
+            Section("Composer Markdown nits") { runComposerMarkdownNitsChecks() },
             Section("Memory bounds") { await runMemoryBoundsChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },

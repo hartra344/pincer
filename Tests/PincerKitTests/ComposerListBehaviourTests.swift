@@ -54,8 +54,9 @@ struct ComposerListBehaviourTests {
         #expect(F.newline("1. a\n2. |") == "1. a\n|")
     }
 
-    @Test func enterDoesNotRenumberFollowingLines() {
-        #expect(F.newline("1. a\n   1. |\n2. c") == "1. a\n2. |\n2. c")
+    @Test func enterRenumbersFollowingLines() {
+        #expect(F.newline("1. a\n   1. |\n2. c") == "1. a\n2. |\n3. c")
+        #expect(F.newline("1. a|\n2. b\n3. c") == "1. a\n2. |\n3. b\n4. c")
     }
 
     /// The reported sequence: Enter, Tab, type, Enter, Enter.

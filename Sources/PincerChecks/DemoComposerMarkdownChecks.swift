@@ -39,4 +39,11 @@ func runDemoComposerMarkdownChecks() async {
     check(spans.filter { $0.kind == .strong }.allSatisfy { span in
         !spans.contains { $0.kind == .codeBlock && NSIntersectionRange($0.range, span.range).length > 0 }
     }, "no inline span lands inside the code block")
+
+    // #1069: Return in the middle of the demo's numbered sublist renumbers the item below it.
+    let draft = text as NSString
+    let caret = NSMaxRange(draft.range(of: "1. Press `Tab` to indent"))
+    let continued = ComposerFormatting.newline(in: draft, selection: NSRange(location: caret, length: 0))
+        .map { draft.replacingCharacters(in: $0.range, with: $0.replacement) }
+    check(continued?.contains("  2. \n  3. Press `⇧Tab` to outdent") == true, "Return mid-list in the demo draft renumbers the next item")
 }

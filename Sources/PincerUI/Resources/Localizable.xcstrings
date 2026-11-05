@@ -2963,6 +2963,16 @@
         }
       }
     },
+    "Bold in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bold in the composer"
+          }
+        }
+      }
+    },
     "Bold, italic, code and lists show as you write. Your message is still sent as plain Markdown.": {
       "localizations": {
         "en": {
@@ -3139,6 +3149,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bulleted List"
+          }
+        }
+      }
+    },
+    "Bulleted List in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulleted List in the composer"
           }
         }
       }
@@ -4039,6 +4059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Code"
+          }
+        }
+      }
+    },
+    "Code in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code in the composer"
           }
         }
       }
@@ -8193,6 +8223,26 @@
         }
       }
     },
+    "Heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heading"
+          }
+        }
+      }
+    },
+    "Heading in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heading in the composer"
+          }
+        }
+      }
+    },
     "Health": {
       "localizations": {
         "en": {
@@ -8929,6 +8979,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Italic"
+          }
+        }
+      }
+    },
+    "Italic in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Italic in the composer"
           }
         }
       }
@@ -11583,6 +11643,26 @@
         }
       }
     },
+    "Numbered List": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numbered List"
+          }
+        }
+      }
+    },
+    "Numbered List in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Numbered List in the composer"
+          }
+        }
+      }
+    },
     "OAuth options": {
       "localizations": {
         "en": {
@@ -13499,6 +13579,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quit Pincer"
+          }
+        }
+      }
+    },
+    "Quote": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quote"
+          }
+        }
+      }
+    },
+    "Quote in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quote in the composer"
           }
         }
       }
@@ -17639,6 +17739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Strikethrough"
+          }
+        }
+      }
+    },
+    "Strikethrough in the composer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strikethrough in the composer"
           }
         }
       }
