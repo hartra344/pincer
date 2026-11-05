@@ -6,7 +6,6 @@ import Testing
 @Suite("Composer Markdown nits")
 struct ComposerMarkdownNitsTests {
     typealias F = ComposerFormattingTests
-    typealias Kind = ComposerMarkdownKind
 
     static func run(_ marked: String, _ command: (NSString, NSRange) -> ComposerEdit) -> String {
         let (text, sel) = F.parse(marked)
