@@ -105,9 +105,7 @@ private struct CompactChatGraduatedBackdrop: View {
     private static func material(_ kind: Layout.FadeMaterial) -> Material {
         switch kind {
         case .ultraThin: .ultraThinMaterial
-        case .thin: .thinMaterial
         case .regular: .regularMaterial
-        case .thick: .thickMaterial
         }
     }
 

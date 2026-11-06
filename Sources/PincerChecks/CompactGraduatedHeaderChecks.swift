@@ -18,7 +18,7 @@ func runCompactGraduatedHeaderChecks() {
     }
     let standard = CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22)
     let accessible = CompactChatHeaderLayout.reservation(measuredTitleHeight: 76, scaledTitleAllowance: 48)
-    check(standard == 44 && CompactChatHeaderLayout.avatarSize == 48,
+    check(standard == 44 && CompactChatHeaderLayout.avatarSize == 48 && CompactChatHeaderLayout.minimumReservation == standard,
           "actual compact header policy reduces avatar and default reservation")
     check(accessible > standard && CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22) == standard,
           "actual finished-title policy expands and shrinks without accumulating height")

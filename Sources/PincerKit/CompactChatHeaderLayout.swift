@@ -27,7 +27,7 @@ package enum CompactChatHeaderLayout {
     // above the reservation. On an iPhone 17 Pro that is 10 pt below the status bar.
     // These are the tuning knobs.
 
-    package enum FadeMaterial: Sendable { case ultraThin, thin, regular, thick }
+    package enum FadeMaterial: Sendable { case ultraThin, regular }
     package static let fadeMaterial: FadeMaterial = .ultraThin
     /// Chat-background wash inside the base blur, following its ramp, so the material's grey tint
     /// never shows as a band once the top wash has faded.
