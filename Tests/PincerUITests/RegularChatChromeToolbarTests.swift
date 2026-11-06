@@ -150,9 +150,16 @@ struct RegularChatChromeToolbarTests {
             // When the group doesn't fit, UIKit folds the model and thinking items into the overflow, leaving three controls.
             return findBar() != nil && labels().count >= min(3, expectedLabels.count)
         }
+        // Wait for every control, or for the count to hold: a group folded into the overflow never shows
+        // them all, and `eventually`'s deadline is at least 30 s.
+        var lastCount = -1
+        var countSince = ContinuousClock.now
         _ = await eventually(timeout: .seconds(3)) {
             window.layoutIfNeeded()
-            return labels().count >= expectedLabels.count
+            let count = labels().count
+            if count >= expectedLabels.count { return true }
+            if count != lastCount { (lastCount, countSince) = (count, .now) }
+            return ContinuousClock.now - countSince >= .milliseconds(1500)
         }
         // Let the glass group settle after its items change size.
         try await Task.sleep(for: .milliseconds(600))
@@ -233,6 +240,10 @@ struct RegularChatChromeToolbarTests {
     static let branchedKey = "agent:main:dashboard:garden"
     static let runningKey = "agent:research:dashboard:launch-plan"
     static let longModel = "anthropic/claude-opus-5.5-extended-thinking-preview-2026-10-29"
+    /// The regular-width trailing controls, left to right: the inspector buttons (Generated Files is always
+    /// there at regular width since #1090), then the chat's branch chip, pickers and menu.
+    static let runsLabels = ["Runs", "Browser", "Generated Files", "Model", "Thinking", "Chat Options"]
+    static let branchLabels = ["Browser", "Generated Files", "Branch", "Model", "Thinking", "Chat Options"]
     /// Detail-column widths: full-screen iPad Pro 13" landscape, 11" landscape, 13" with sidebar,
     /// 11" portrait, mini portrait, Split View halves and Slide Over-ish.
     static let widths: [CGFloat] = [1366, 1194, 1024, 834, 744, 507]
@@ -279,8 +290,8 @@ struct RegularChatChromeToolbarTests {
         let gateway = try await Self.connected(app)
 
         let cases: [(key: String, name: String, labels: [String])] = [
-            (Self.runningKey, "runs", ["Runs", "Browser", "Model", "Thinking", "Chat Options"]),
-            (Self.branchedKey, "branch", ["Browser", "Branch", "Model", "Thinking", "Chat Options"]),
+            (Self.runningKey, "runs", Self.runsLabels),
+            (Self.branchedKey, "branch", Self.branchLabels),
         ]
         for width in Self.widths {
             for c in cases {
@@ -299,10 +310,10 @@ struct RegularChatChromeToolbarTests {
         gateway.setSession(SessionRow(.object(fields)), for: Self.runningKey)
         for width in Self.widths {
             let geometry = try await Self.measure(app: app, gateway: gateway, key: Self.runningKey, width: width,
-                                                  expectedLabels: ["Runs", "Browser", "Model", "Thinking", "Chat Options"], name: "long-model")
+                                                  expectedLabels: Self.runsLabels, name: "long-model")
             Self.expectAligned(geometry, "long model @\(Int(width))pt")
             if width >= 744 {
-                #expect(geometry.items.count == 5,
+                #expect(geometry.items.count == Self.runsLabels.count,
                         "long model @\(Int(width))pt: a long model name truncates instead of pushing the model and thinking pickers into the overflow menu (\(geometry.items.count) trailing controls, group \(geometry.group))")
             }
             if let model = geometry.items.first(where: { $0.label == "Model" }) {

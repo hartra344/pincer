@@ -60,6 +60,7 @@ enum Suites {
             Section("Settings notice") { checkSettingsNotice() },
             Section("Thinking level picker") { runThinkingLevelChecks() },
             Section("Chat toolbar layout") { runChatToolbarLayoutChecks() },
+            Section("SVG render retry (#1095)") { runSVGRasterizerRetryChecks() },
             Section("Panel empty states (#1093)") { await runPanelEmptyStateLayoutChecks() },
             Section("Check gate") { await checkCheckGate(); await checkMethodDeliveryGate(); await checkRawConnectionSupport(); await checkStartStoreSupport() },
             Section("Payload & identity") { runIdentityChecks() },

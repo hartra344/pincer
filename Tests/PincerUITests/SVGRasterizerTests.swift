@@ -26,6 +26,28 @@ struct SVGRasterizerTests {
         #expect(Self.centerPixelIsRed(image))
     }
 
+    /// #1095: a cold WebKit on CI stalled twice in a row before the next render finished at once, so
+    /// stalls get a third web view; cancellations, failed loads and finished renders never retry, and
+    /// every attempt together stays inside one total budget that still covers that CI trace.
+    @Test func onlyAStallTriesAgainWithinTheTotalBudget() {
+        let left = Duration.seconds(60)
+        #expect(SVGWebRenderRetry.maxAttempts == 3)
+        #expect(SVGWebRenderRetry.totalBudget > .seconds(180 + 45 + 30) && SVGWebRenderRetry.totalBudget <= .seconds(2 * (180 + 45)))
+        #expect(SVGWebRenderRetry.triesAgain(afterAttempt: 1, gotImage: false, stalled: true, cancelled: false, remaining: left))
+        #expect(SVGWebRenderRetry.triesAgain(afterAttempt: 2, gotImage: false, stalled: true, cancelled: false, remaining: left))
+        #expect(!SVGWebRenderRetry.triesAgain(afterAttempt: 3, gotImage: false, stalled: true, cancelled: false, remaining: left))
+        #expect(!SVGWebRenderRetry.triesAgain(afterAttempt: 1, gotImage: false, stalled: true, cancelled: false, remaining: .zero))
+        #expect(!SVGWebRenderRetry.triesAgain(afterAttempt: 1, gotImage: true, stalled: false, cancelled: false, remaining: left))
+        #expect(!SVGWebRenderRetry.triesAgain(afterAttempt: 1, gotImage: false, stalled: false, cancelled: false, remaining: left))
+        #expect(!SVGWebRenderRetry.triesAgain(afterAttempt: 1, gotImage: false, stalled: true, cancelled: true, remaining: left))
+    }
+
+    @Test func aStepNeverOutlastsTheRender() {
+        let now = ContinuousClock.now
+        #expect(SVGWebRenderRetry.stepDeadline(now: now, timeout: .seconds(45), renderDeadline: now + .seconds(300)) == now + .seconds(45))
+        #expect(SVGWebRenderRetry.stepDeadline(now: now, timeout: .seconds(180), renderDeadline: now + .seconds(10)) == now + .seconds(10))
+    }
+
     #if os(iOS)
     /// Cancelling once WebKit has the page (the continuation is set synchronously before the first
     /// suspension) stops the load and returns nil instead of snapshotting.
@@ -36,7 +58,7 @@ struct SVGRasterizerTests {
         #expect(await task.value == nil)
     }
 
-    /// A web content process that never commits the page gives up (twice, with a fresh web view)
+    /// A web content process that never commits the page gives up (three times, each with a fresh web view)
     /// instead of hanging the render.
     @Test func aStalledLaunchGivesUp() async {
         let started = ContinuousClock.now

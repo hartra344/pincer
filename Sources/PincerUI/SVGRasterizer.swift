@@ -69,6 +69,32 @@ public struct SVGRasterizer: SVGRasterizing {
     }
 }
 
+/// When an iOS web render gives up, whether a fresh web view tries again (#1095). Only a stall (WebKit never
+/// answered, or its process died) is retried, never a cancellation or a page that failed to load. A cold
+/// WebKit on a loaded CI simulator stalled twice in a row (the launch budget, then a step after the
+/// commit), while the very next render finished in under 2 s, so a stalled render gets a third web view.
+/// `totalBudget` caps all the attempts together, so the retries don't stretch a render's worst case.
+enum SVGWebRenderRetry {
+    static let maxAttempts = 3
+    /// Two full attempts (180 s launch + 45 s step each), the worst case before the third attempt existed, so
+    /// the retry never makes a render slower than it was; it covers the CI trace (two stalls, then a quick render).
+    static let totalBudget = Duration.seconds(2 * (180 + 45))
+
+    /// `attempt` counts from 1; `remaining` is what's left of `totalBudget`.
+    static func triesAgain(
+        afterAttempt attempt: Int, gotImage: Bool, stalled: Bool, cancelled: Bool, remaining: Duration) -> Bool
+    {
+        !gotImage && stalled && !cancelled && attempt < self.maxAttempts && remaining > .zero
+    }
+
+    /// A step's deadline, never past the render's overall one.
+    static func stepDeadline(
+        now: ContinuousClock.Instant, timeout: Duration, renderDeadline: ContinuousClock.Instant) -> ContinuousClock.Instant
+    {
+        min(now + timeout, renderDeadline)
+    }
+}
+
 #if os(iOS)
 @MainActor
 private final class WebSnapshotter: NSObject, WKNavigationDelegate {
@@ -76,9 +102,12 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     /// When the current step's watchdog gives up; the commit moves it from the launch budget to the step budget.
     private var deadline = ContinuousClock.now
     private var stepTimeout = Duration.zero
+    /// When the whole render (every attempt) gives up: `SVGWebRenderRetry.totalBudget` from its start.
+    private var renderDeadline = ContinuousClock.now
     private var image: CGImage?
     /// WebKit never answered a step, or its web content process died. A loaded simulator once left
-    /// a render pending for over nine minutes; now the step gives up and a fresh web view tries again.
+    /// a render pending for over nine minutes; now the step gives up and a fresh web view tries again
+    /// (`SVGWebRenderRetry`).
     private var stalled = false
     /// Shared so every render after the first reuses a warm web content process; a fresh data store per
     /// render cold-started a new process each time.
@@ -87,17 +116,23 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
     static func snapshot(
         svg: Data, size: CGSize, pixels: CGSize, launchTimeout: Duration, stepTimeout: Duration) async -> CGImage?
     {
-        for _ in 0..<2 {
+        let renderDeadline = ContinuousClock.now + SVGWebRenderRetry.totalBudget
+        var attempt = 0
+        while true {
+            attempt += 1
             let (image, stalled) = await self.render(
-                svg: svg, size: size, pixels: pixels, launchTimeout: launchTimeout, stepTimeout: stepTimeout)
-            if image != nil || !stalled || Task.isCancelled { return image }
+                svg: svg, size: size, pixels: pixels, launchTimeout: launchTimeout, stepTimeout: stepTimeout,
+                renderDeadline: renderDeadline)
+            guard SVGWebRenderRetry.triesAgain(
+                afterAttempt: attempt, gotImage: image != nil, stalled: stalled, cancelled: Task.isCancelled,
+                remaining: ContinuousClock.now.duration(to: renderDeadline))
+            else { return image }
         }
-        return nil
     }
 
     private static func render(
-        svg: Data, size: CGSize, pixels: CGSize, launchTimeout: Duration, stepTimeout: Duration) async
-        -> (CGImage?, stalled: Bool)
+        svg: Data, size: CGSize, pixels: CGSize, launchTimeout: Duration, stepTimeout: Duration,
+        renderDeadline: ContinuousClock.Instant) async -> (CGImage?, stalled: Bool)
     {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = self.dataStore
@@ -117,6 +152,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
 
         let delegate = WebSnapshotter()
         delegate.stepTimeout = stepTimeout
+        delegate.renderDeadline = renderDeadline
         view.navigationDelegate = delegate
         let html = """
         <!doctype html><html><head><meta name="viewport" content="width=\(Int(size.width)), initial-scale=1">
@@ -146,7 +182,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
 
     /// Runs `start` and waits for `finish`, giving up (and calling `stop`) on cancellation or after `timeout`.
     private func step(timeout: Duration, stop: @escaping @MainActor @Sendable () -> Void, _ start: () -> Void) async -> Bool {
-        self.deadline = .now + timeout
+        self.deadline = SVGWebRenderRetry.stepDeadline(now: .now, timeout: timeout, renderDeadline: self.renderDeadline)
         let watchdog = Task { [weak self] in
             while let deadline = self?.deadline, ContinuousClock.now < deadline {
                 // Wakes at least every second: the commit can pull the deadline in.
@@ -180,7 +216,7 @@ private final class WebSnapshotter: NSObject, WKNavigationDelegate {
 
     /// The web content process is up and has the page: from here on, only a hang is slow.
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        self.deadline = .now + self.stepTimeout
+        self.deadline = SVGWebRenderRetry.stepDeadline(now: .now, timeout: self.stepTimeout, renderDeadline: self.renderDeadline)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { self.finish(true) }

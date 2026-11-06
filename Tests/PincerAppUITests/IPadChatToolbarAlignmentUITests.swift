@@ -1,6 +1,6 @@
 import XCTest
 
-/// #1088: on iPad (regular width, sidebar visible) the chat header's trailing toolbar group (Runs, Browser,
+/// #1088: on iPad (regular width, sidebar visible) the chat header's trailing toolbar group (Runs, Browser, Generated Files,
 /// branch, model, thinking level, Chat Options) must sit inside the navigation bar with every control
 /// inside the window and the group's controls laid out in order, without overlapping each other.
 @MainActor
