@@ -18,12 +18,25 @@ func runCompactGraduatedHeaderChecks() {
     }
     let standard = CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22)
     let accessible = CompactChatHeaderLayout.reservation(measuredTitleHeight: 76, scaledTitleAllowance: 48)
-    check(standard == 44 && CompactChatHeaderLayout.avatarSize == 48,
+    check(standard == 44 && CompactChatHeaderLayout.avatarSize == 48 && CompactChatHeaderLayout.minimumReservation == standard,
           "actual compact header policy reduces avatar and default reservation")
     check(accessible > standard && CompactChatHeaderLayout.reservation(measuredTitleHeight: 32, scaledTitleAllowance: 22) == standard,
           "actual finished-title policy expands and shrinks without accumulating height")
-    check(CompactChatHeaderLayout.fadeMidpointOpacity == 0.45 && CompactChatHeaderLayout.fadeHeight == 32,
-          "actual header protects upper controls and uses a wider graduated lower fade")
+    let stops = CompactChatHeaderLayout.defaultFadeStops
+    let drops = zip(stops, stops.dropFirst()).map { $0.opacity - $1.opacity }
+    check(stops.count == CompactChatHeaderLayout.fadeStopCount && stops.first?.opacity == 1 && stops.last?.opacity == 0 &&
+          drops.allSatisfy { $0 >= 0 } && drops.first! < drops[drops.count / 2] / 3 && drops.last! < drops[drops.count / 2] / 3,
+          "actual header fade eases from full protection to clear without a band edge")
+    let blur = CompactChatHeaderLayout.blurRamp(reservation: standard)
+    let wash = CompactChatHeaderLayout.washRamp()
+    check(blur.length > 32 && blur.end == CompactChatHeaderLayout.backdropDepth(reservation: standard) &&
+          blur.end > CompactChatHeaderLayout.navigationOverlap + standard && blur.start < CompactChatHeaderLayout.avatarSize + 4,
+          "actual header blur eases from above the title pill to past the reservation")
+    check(wash.start == CompactChatHeaderLayout.avatarSize && wash.end <= blur.end &&
+          CompactChatHeaderLayout.fadeOpacity(at: (CompactChatHeaderLayout.avatarSize + 4 - CompactChatHeaderLayout.progressiveRamp.start) / CompactChatHeaderLayout.progressiveRamp.length) < 0.01 &&
+          CompactChatHeaderLayout.washOpacity(dark: false) < 1 && CompactChatHeaderLayout.washOpacity(dark: true) < 1 &&
+          CompactChatHeaderLayout.fadeMaterialWashOpacity > 0 && CompactChatHeaderLayout.fadeMaterialWashOpacity < 1,
+          "actual header washes to the chat background only above the pill, with a stronger blur only near the top")
     check(CompactChatHeaderLayout.backdrop(reduceTransparency: true) == .opaque,
           "actual compact backdrop policy honors Reduce Transparency")
 }
