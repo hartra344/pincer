@@ -10,6 +10,8 @@ struct CompactChatIdentityHeader: View {
     let row: SessionRow?
     @AppStorage(ChatHeaderAvatarSize.defaultsKey) private var avatarSizePreference = ChatHeaderAvatarSize.small.rawValue
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
     #if DEBUG
     @Environment(\.compactChatHeaderGeometryProbe) private var geometryProbe
     #endif
@@ -39,20 +41,11 @@ struct CompactChatIdentityHeader: View {
                     Color(uiColor: .systemBackground)
                         .ignoresSafeArea(.container, edges: .top)
                 case .graduatedMaterial:
-                    Rectangle().fill(.ultraThinMaterial)
+                    CompactChatGraduatedBackdrop(wash: self.theme.color(.chatBackground), dark: self.colorScheme == .dark,
+                                                 reservation: Double(self.reservedHeight), size: self.selectedSize)
+                        .padding(.bottom, -CGFloat(CompactChatHeaderLayout.fadeExtension))
                         .ignoresSafeArea(.container, edges: .top)
-                        .mask {
-                            VStack(spacing: 0) {
-                                Color.black
-                                LinearGradient(stops: [
-                                    .init(color: .black, location: 0),
-                                    .init(color: .black.opacity(CompactChatHeaderLayout.fadeMidpointOpacity), location: 0.5),
-                                    .init(color: .clear, location: 1)
-                                ], startPoint: .top, endPoint: .bottom)
-                                    .frame(height: CGFloat(CompactChatHeaderLayout.fadeHeight))
-                            }
-                            .ignoresSafeArea(.container, edges: .top)
-                        }
+                        .allowsHitTesting(false)
                 }
             }
             .overlay(alignment: .top) {
@@ -95,6 +88,55 @@ struct CompactChatIdentityHeader: View {
                 self.geometryProbe?.report(.reservation, $0)
             }
             #endif
+    }
+}
+
+/// Static layers only (see `CompactChatHeaderLayout`): two backdrop materials and a chat-background
+/// wash, each under its own eased ramp. Nothing depends on scroll offset, so scrolling costs the two
+/// materials' backdrop passes and nothing is recomputed per frame (#1097).
+private struct CompactChatGraduatedBackdrop: View {
+    typealias Layout = CompactChatHeaderLayout
+    let wash: Color
+    let dark: Bool
+    let reservation: Double
+    let size: ChatHeaderAvatarSize
+    private static let stops = Layout.defaultFadeStops
+
+    private static func material(_ kind: Layout.FadeMaterial) -> Material {
+        switch kind {
+        case .ultraThin: .ultraThinMaterial
+        case .thin: .thinMaterial
+        case .regular: .regularMaterial
+        case .thick: .thickMaterial
+        }
+    }
+
+    /// Full above the ramp, eased across it, clear below it down to the backdrop's bottom edge.
+    private func ramp(_ ramp: Layout.FadeRamp, color: Color) -> some View {
+        let depth = Layout.backdropDepth(reservation: self.reservation)
+        return VStack(spacing: 0) {
+            color
+            LinearGradient(stops: Self.stops.map { .init(color: color.opacity($0.opacity), location: $0.location) },
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: CGFloat(max(0, ramp.length)))
+            Color.clear.frame(height: CGFloat(max(0, depth - ramp.end)))
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            ZStack {
+                Rectangle().fill(Self.material(Layout.fadeMaterial))
+                self.wash.opacity(Layout.fadeMaterialWashOpacity)
+            }
+            .mask { self.ramp(Layout.blurRamp(reservation: self.reservation), color: .black) }
+            ZStack {
+                Rectangle().fill(Self.material(Layout.progressiveMaterial))
+                self.wash.opacity(Layout.progressiveWashOpacity)
+            }
+            .mask { self.ramp(Layout.progressiveRamp, color: .black) }
+            self.ramp(Layout.washRamp(size: self.size), color: self.wash.opacity(Layout.washOpacity(dark: self.dark)))
+        }
     }
 }
 
