@@ -29,6 +29,9 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     #if DEBUG
     /// Observes the actual target-clear path without requiring notification permissions.
     package var clearTargetProbe: (@MainActor (Target) -> Void)?
+    /// Observes what passed every gate and is about to be posted (tests run without a bundle, so the
+    /// real center is nil; this is the observable stand-in for `center.add`).
+    package var postingProbe: (@MainActor (String) -> Void)?
     #endif
     public var appIsActive = true
     public var enabled: Bool {
@@ -71,6 +74,38 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
             NotificationPrompt.shared.isShowing = false
         }
+    }
+
+    // MARK: Agent whitelist (#1100)
+
+    /// Agent ids whose reply and activity reports notify by default. Approvals and questions are
+    /// exempt (they wait on the user, and silencing them would stall the run), and so is every
+    /// session whose key is not an agent key at all. Override with `pincer.notificationAgentWhitelist`.
+    nonisolated static let defaultNotificationAgentWhitelist = ["main", "wx-assistant"]
+
+    /// The configured reply/activity whitelist, or the default when nothing is stored.
+    nonisolated static func notificationAgentWhitelist(defaults: UserDefaults = .standard) -> [String] {
+        defaults.stringArray(forKey: "pincer.notificationAgentWhitelist") ?? Self.defaultNotificationAgentWhitelist
+    }
+
+    /// Whether a reply or activity notification for `sessionKey` may post. The whitelist governs
+    /// agent sessions only: a key that doesn't start with `agent:` ("main", "global", a custom
+    /// chat key) is not any agent's report, so it always passes. An agent session passes when its
+    /// key prefixes `agent:<agentId>:` for a whitelisted agent, so dashboard sub-sessions like
+    /// `agent:main:main:x` count as that agent's too.
+    nonisolated static func allowsReply(sessionKey: String, whitelist: [String]) -> Bool {
+        guard sessionKey.hasPrefix("agent:") else { return true }
+        return whitelist.contains { sessionKey.hasPrefix("agent:\($0):") }
+    }
+
+    /// The `postBackground` form: only report requests — a `reply:` identifier plus a session in
+    /// `userInfo` — are subject to the whitelist. `approval:`, `question:` and `refresh-summary:`
+    /// requests are interactive or aggregate, so they always pass.
+    nonisolated static func allowsReplyNotification(_ request: UNNotificationRequest, whitelist: [String]) -> Bool {
+        guard request.identifier.hasPrefix("reply:"),
+              let session = request.content.userInfo["session"] as? String, !session.isEmpty
+        else { return true }
+        return self.allowsReply(sessionKey: session, whitelist: whitelist)
     }
 
     // MARK: Categories and actions
@@ -142,7 +177,12 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     func notifyApproval(_ approval: ExecApproval, gateway: GatewayStore) {
         guard self.enabled, !self.deferredToPush(gateway.id) else { return }
+        // Approvals bypass the agent whitelist: they wait on the user, and silencing one would
+        // stall the command it belongs to.
         self.advanceRefreshCursor(gateway.id, approvalId: approval.id)
+        #if DEBUG
+        self.postingProbe?(Self.approvalIdentifier(approval.id))
+        #endif
         guard let center else { return }
         center.add(Self.approvalRequest(approval, gatewayId: gateway.id, gatewayName: gateway.profile.name))
     }
@@ -181,8 +221,12 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         if self.appIsActive, prompt.sessionKey != nil, self.isShowing(target) { return }
         guard self.enabled else { return }
         self.advanceRefreshCursor(gateway.id, questionId: prompt.id)
-        guard let center, let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
-        else { return }
+        // Questions bypass the agent whitelist, like approvals: the agent is blocked on the user.
+        guard let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat) else { return }
+        #if DEBUG
+        self.postingProbe?(request.identifier)
+        #endif
+        guard let center else { return }
         center.add(request)
     }
 
@@ -237,21 +281,37 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// Posts what a background refresh found. The app isn't running, so there is no visible chat,
     /// dedupe history or push to defer to; the requests' own identifiers dedupe against live ones.
+    /// Report requests go through the agent whitelist; approvals, questions and summaries pass.
     public func postBackground(_ requests: [UNNotificationRequest]) async {
-        guard self.enabled, let center else { return }
-        for request in requests { try? await center.add(request) }
+        guard self.enabled else { return }
+        let whitelist = Self.notificationAgentWhitelist()
+        for request in requests {
+            guard Self.allowsReplyNotification(request, whitelist: whitelist) else { continue }
+            #if DEBUG
+            self.postingProbe?(request.identifier)
+            #endif
+            // Without a center (tests run without a bundle) nothing posts; keep walking the batch.
+            guard let center else { continue }
+            try? await center.add(request)
+        }
     }
 
     private func post(id: String, title: String, body: String, target: Target, activityMs: Double) {
         guard self.enabled, !self.deferredToPush(target.gatewayId) else { return }
+        // The whitelist filters report notifications only; a filtered report must not advance the
+        // refresh cursor, or the next background refresh would count it as already seen.
+        guard Self.allowsReply(sessionKey: target.sessionKey, whitelist: Self.notificationAgentWhitelist()) else { return }
         self.advanceRefreshCursor(target.gatewayId, activityMs: activityMs)
-        guard let center else { return }
         if self.appIsActive, self.isShowing(target) { return }
         let dedupeKey = id.hasPrefix("reply:") ? "\(target.sessionKey)|\(body.prefix(80))" : id
         guard !self.recent.contains(id), !self.recent.contains(dedupeKey) else { return }
         self.recent.append(contentsOf: [id, dedupeKey])
         if self.recent.count > 200 { self.recent.removeFirst(self.recent.count - 200) }
 
+        #if DEBUG
+        self.postingProbe?(id)
+        #endif
+        guard let center else { return }
         center.add(Self.replyContent(id: id, title: title, body: body, target: target))
     }
 
