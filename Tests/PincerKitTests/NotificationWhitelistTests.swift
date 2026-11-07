@@ -30,7 +30,7 @@ struct NotificationWhitelistTests {
     }
 
     private func row(_ key: String) -> SessionRow? {
-        SessionRow(["key": key, "updatedAt": .number(1_700_000_000_000), "unread": true])
+        SessionRow(["key": .string(key), "updatedAt": .number(1_700_000_000_000), "unread": true])
     }
 
     @Test func whitelistedAgentsPostTheirReports() async throws {
